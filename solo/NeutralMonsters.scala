@@ -150,7 +150,11 @@ object NeutralMonstersExpansion extends Expansion {
                 ShamblerThreatOfCapture,
                 ShamblerThreatOfAttackOnGate,
                 ShamblerThreatOfAttackOnGOO,
-            )
+                ShamblerThreatOfLosingBattle,
+                ShamblerOpportunityEndOfPhase,
+            ) ++
+            f.enemies.has(OW).$(ShamblerThreatOfBeyondOne) ++
+            f.enemies.has(OW).$(ShamblerThreatOfDreadCurse)
 
             if (options.has(QuickGame)) {
                 f.commands :+= ShamblerSkip
@@ -194,11 +198,15 @@ sealed abstract class ShamblerPlan(val label : String) extends Plan {
     val group = "Dimensional Shambler".styled("neutral")
 }
 case object ShamblerPrompt extends ShamblerPlan("Always prompt") with DefaultPlan with OneOfPlan
-case object ShamblerSkip extends ShamblerPlan("Skip, unless...") with OneOfPlan { override val followers = $(ShamblerThreatOfCapture) }
+case object ShamblerSkip extends ShamblerPlan("Skip, unless...") with OneOfPlan { override val followers = $(ShamblerThreatOfCapture, ShamblerThreatOfAttackOnGate, ShamblerThreatOfAttackOnGOO, ShamblerThreatOfBeyondOne, ShamblerThreatOfLosingBattle, ShamblerThreatOfDreadCurse, ShamblerOpportunityEndOfPhase) }
 trait ShamblerThreat extends ShamblerPlan { override val requires = $($(ShamblerSkip)) }
 case object ShamblerThreatOfCapture extends ShamblerPlan("...threat of capture") with ShamblerThreat
 case object ShamblerThreatOfAttackOnGate extends ShamblerPlan("...credible threat to a controlled gate") with ShamblerThreat
 case object ShamblerThreatOfAttackOnGOO extends ShamblerPlan("...credible threat of battle against GOO") with ShamblerThreat
+case object ShamblerThreatOfBeyondOne extends ShamblerPlan("...threat of Beyond One against a gate") with ShamblerThreat
+case object ShamblerThreatOfLosingBattle extends ShamblerPlan("...credible threat of losing a battle") with ShamblerThreat
+case object ShamblerThreatOfDreadCurse extends ShamblerPlan("...credible threat of Dread Curse killing GOO") with ShamblerThreat
+case object ShamblerOpportunityEndOfPhase extends ShamblerPlan("...end of Action Phase") with ShamblerThreat
 
 case class ShamblerSummonMainAction(self : Faction) extends OptionFactionAction("Summon " + DimensionalShamblerUnit.styled(self) + " to Faction Card") with MainQuestion with Soft
 case class ShamblerSummonAction(self : Faction) extends BaseFactionAction(implicit g => "Summon " + DimensionalShamblerUnit.styled(self) + g.forNPowerWithTax(self.reserve, self, self.summonCost(DimensionalShamblerUnit, self.reserve)), "to " + "Faction Card".styled(self))
