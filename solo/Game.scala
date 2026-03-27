@@ -906,6 +906,7 @@ case class OutOfTurnRefresh(action : Action) extends HiddenAction
 
 case class EndAction(self : Faction) extends ForcedAction
 case class AfterAction(self : Faction) extends ForcedAction
+case class DSDeployCheckAction(actor : Faction, then : ForcedAction) extends ForcedAction
 
 case object ProceedBattlesAction extends ForcedAction
 
@@ -1153,6 +1154,54 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     def triggers() {
         expansions.foreach(_.triggers())
+    }
+
+    def dsDeployReason(f : Faction) : |[String] = {
+        var bestReason : |[String] = None
+        var bestPriority = 99
+        def consider(priority : Int, reason : String) {
+            if (priority < bestPriority) { bestPriority = priority; bestReason = Some(reason) }
+        }
+        if (f.commands.has(ShamblerPrompt))
+            consider(7, "always prompted")
+        f.enemies.foreach { e =>
+            if (f.commands.has(ShamblerThreatOfDreadCurse))
+                if (e == OW && e.has(DreadCurse)) {
+                    val dreadDice = e.all(Abomination).num + e.all(SpawnOW).num
+                    if (dreadDice > 0)
+                        f.onMap(GOO)./(_.region).%(r => e.at(r).any).%(r => dreadDice / 2 + 1 > f.at(r).notGOOs.num).some./{ l =>
+                            consider(1, "" + e + " might " + DreadCurse + " GOO " + ("in " + l.mkString(", ")).inline)
+                        }
+                }
+            if (f.commands.has(ShamblerThreatOfAttackOnGOO))
+                f.onMap(GOO)./(_.region).%(r => e.canAttack(r)(f)).%(r => e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.num).%{ r =>
+                    // Exclude Nyarlathotep with Emissary when no enemy GOO is in the battle
+                    val nyaSafe = f == CC && f.has(Emissary) && e.at(r).goos.none
+                    // Exclude Rhan-Tegoth with Eternal when WW has power to pay
+                    val rtSafe = f == WW && f.has(Eternal) && f.power >= 1
+                    !nyaSafe && !rtSafe
+                }.some./{ l =>
+                    consider(2, "GOO might be in danger from " + e + " " + ("in " + l.mkString(", ")).inline)
+                }
+            if (f.commands.has(ShamblerThreatOfAttackOnGate))
+                f.gates.%(r => e.canAttack(r)(f)).some./{ l =>
+                    consider(3, "" + e + " might attack the gate " + ("in " + l.mkString(", ")).inline)
+                }
+            if (f.commands.has(ShamblerThreatOfCapture))
+                f.onMap(Acolyte)./(_.region).distinct.%(r => e.canCapture(r)(f)).some./{ l =>
+                    consider(4, "" + e + " might capture " + ("in " + l.mkString(", ")).inline)
+                }
+            if (f.commands.has(ShamblerThreatOfBeyondOne))
+                if (e == OW && e.can(BeyondOne))
+                    f.gates.%(r => f.at(r).goos.none && e.at(r).%(_.uclass.cost >= 3).any).some./{ l =>
+                        consider(5, "" + e + " might " + BeyondOne + " " + ("from " + l.mkString(", ")).inline)
+                    }
+            if (f.commands.has(ShamblerThreatOfLosingBattle))
+                f.units.%(_.region.glyph.onMap)./(_.region).distinct.%(r => e.at(r).any && e.strength(e.at(r), f) >= f.strength(f.at(r), e)).some./{ l =>
+                    consider(6, "" + e + " could win a battle " + ("in " + l.mkString(", ")).inline)
+                }
+        }
+        bestReason
     }
 
     def checkGatesGained(self : Faction) {
@@ -1654,7 +1703,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             round = 0
 
-            CheckSpellbooksAction(MainGatesAction(game.first))
+            CheckSpellbooksAction(PreMainAction(game.first))
 
         case GameOverPhaseAction =>
             factions.%(_.needs(AnytimeGainElderSigns)).foreach { f =>
@@ -1958,7 +2007,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val asks = l./~{ f =>
                 implicit val asking = Asking(f)
 
-                + GroupAction("Before " + e + " action")
+                + GroupAction("After " + e + " action")
 
                 if (f.onMap(HighPriest).any) {
                     var reasons = f.commands.has(UnspeakableOathPrompt).$("always prompted")
@@ -2030,26 +2079,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     if (factions./(_.power).max - f.power >= f.commands.of[DragonAscendingPower].single./(_.power).|(1))
                         + DragonAscendingPromptAction(f.sure[OW], e, PreMainAction(e)).as("Rise to", factions./(_.power).max.power)(DragonAscending)
 
-                if (f.loyaltyCards.has(DimensionalShamblerCard) && f.at(ShamblerHold(f), DimensionalShamblerUnit).any) {
-                    var reasons = f.commands.has(ShamblerPrompt).$("always prompted")
-
-                    if (f.commands.has(ShamblerThreatOfCapture) && canAct)
-                        areas.%(r => e.canCapture(r)(f)).some./{ l =>
-                            reasons :+= "" + e + " might capture " + ("in " + l.mkString(", ")).inline
-                        }
-
-                    if (f.commands.has(ShamblerThreatOfAttackOnGate) && canBattle)
-                        f.gates.%(r => canBattleIn(r) && e.canAttack(r)(f) && e.strength(e.at(r), f) * 3 / 4 + 1 >= f.at(r).num).some./{ l =>
-                            reasons :+= "" + e + " might attack the gate " + ("in " + l.mkString(", ")).inline
-                        }
-
-                    if (f.commands.has(ShamblerThreatOfAttackOnGOO) && canBattle)
-                        f.onMap(GOO)./(_.region).%(r => canBattleIn(r) && e.canAttack(r)(f) && e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.not(Yothan).not(HighPriest).num).some./{ l =>
-                            reasons :+= "GOO might be in danger from " + e + " " + ("in " + l.mkString(", ")).inline
-                        }
-
-                    if (reasons.any)
-                        + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(e))).as(DimensionalShamblerUnit.styled(f), "to Map")(DimensionalShamblerCard, reasons./("<br/>(" + _ + ")").mkString(""))
+                // DS deploy: only after a real action (e.acted), checks spatial threats
+                if (e.acted && f.loyaltyCards.has(DimensionalShamblerCard) && f.at(ShamblerHold(f), DimensionalShamblerUnit).any) {
+                    val dsReason = dsDeployReason(f)
+                    if (dsReason.any)
+                        + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(e))).as(DimensionalShamblerUnit.styled(f), "to Map")("(" + dsReason.get + ")")
                 }
 
                 |(asking.ask).%(_.actions.%!(_.isInfo).any)./(_.add(NeedOk).add(OutOfTurnRefresh(PreMainAction(e))).add(SacrificeHighPriestAllowedAction).group(" ").skip(PreActionPromptsAction(e, l.but(f))))
@@ -2117,7 +2151,29 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             factions.foreach(_.oncePerAction = $)
 
-            CheckSpellbooksAction(PreMainAction(self))
+            CheckSpellbooksAction(DSDeployCheckAction(self, PreMainAction(self)))
+
+        case DSDeployCheckAction(actor, then) =>
+            // Only fire here when PreActionPromptsAction won't run (actor out of power or inactive).
+            // When actor has power and is active, PreActionPromptsAction handles DS in the enemy loop.
+            if (actor.active && actor.power > 0)
+                then
+            else {
+                val dsCandidate = factions.find(f => f.loyaltyCards.has(DimensionalShamblerCard) && f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+                dsCandidate match {
+                    case Some(f) =>
+                        val reason = dsDeployReason(f)
+                        if (reason.any)
+                            Ask(f)
+                                .add(GroupAction("After " + actor + " action"))
+                                .add(ShamblerDeployPromptAction(f, CheckSpellbooksAction(then)).as(DimensionalShamblerUnit.styled(f), "to Map")("(" + reason.get + ")"))
+                                .skip(then)
+                        else
+                            then
+                    case None =>
+                        then
+                }
+            }
 
         case EndTurnAction(f) =>
             f.acted = true
@@ -2166,6 +2222,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 if (f.onMap(HighPriest).any)
                     if (f.commands.has(UnspeakableOathOpportunityEndOfPhase) || f.commands.has(UnspeakableOathPrompt))
                         + SacrificeHighPriestPromptAction(f, PreMainAction(next)).as("Sacrifice", HighPriest.styled(f))("Unspeakable Oath".hl)
+
+                if (f.loyaltyCards.has(DimensionalShamblerCard) && f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+                    if (f.commands.has(ShamblerOpportunityEndOfPhase) || f.commands.has(ShamblerPrompt))
+                        + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(next))).as(DimensionalShamblerUnit.styled(f), "to Map")("End of Action Phase")
 
                 |(asking.ask).%(_.actions.%!(_.isInfo).any)./(_.add(NeedOk).add(OutOfTurnRefresh(EndPhasePromptsAction(next, l))).add(SacrificeHighPriestAllowedAction).group(" ").skip(EndPhasePromptsAction(next, l.but(f))))
             }
