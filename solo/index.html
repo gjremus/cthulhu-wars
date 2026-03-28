@@ -1118,5 +1118,47 @@
         <!-- { | SCRIPT | { -->
         <script id="script" type="text/javascript" src="./target/scala-2.13/cthulhu-wars-solo-hrf-fastopt.js"></script>
         <!-- } | SCRIPT | } -->
+
+        <!-- BOT OBSERVATION CONTROLS — self-contained, remove later -->
+        <script>
+        (function() {
+            var botSpeed = 'medium';
+            var botPaused = false;
+            var pendingTimeouts = [];
+            var originalSetTimeout = window.setTimeout;
+            var speedMultipliers = { fast: 1, medium: 10, slow: 50 };
+            window.setTimeout = function(fn, delay) {
+                if (botPaused) { pendingTimeouts.push({ fn: fn, delay: delay }); return -1; }
+                var adjustedDelay = Math.max(delay * speedMultipliers[botSpeed], botSpeed === 'fast' ? 0 : 50);
+                return originalSetTimeout.call(window, fn, adjustedDelay);
+            };
+            function resumePending() {
+                var p = pendingTimeouts.splice(0);
+                p.forEach(function(t) { originalSetTimeout.call(window, t.fn, Math.max(t.delay * speedMultipliers[botSpeed], 50)); });
+            }
+            function createControls() {
+                var panel = document.createElement('div');
+                panel.id = 'bot-controls';
+                panel.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:99999;background:#222;color:#fff;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:13px;display:none;gap:8px;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,0.5);';
+                var pauseBtn = document.createElement('button');
+                pauseBtn.textContent = 'Pause';
+                pauseBtn.style.cssText = 'background:#555;color:#fff;border:1px solid #888;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:monospace;';
+                pauseBtn.onclick = function() { botPaused = !botPaused; pauseBtn.textContent = botPaused ? 'Resume' : 'Pause'; pauseBtn.style.background = botPaused ? '#a33' : '#555'; if (!botPaused) resumePending(); };
+                var speedBtn = document.createElement('button');
+                speedBtn.textContent = 'Speed: Medium';
+                speedBtn.style.cssText = 'background:#555;color:#fff;border:1px solid #888;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:monospace;';
+                speedBtn.onclick = function() { if (botSpeed==='fast'){botSpeed='medium';speedBtn.textContent='Speed: Medium';}else if(botSpeed==='medium'){botSpeed='slow';speedBtn.textContent='Speed: Slow';}else{botSpeed='fast';speedBtn.textContent='Speed: Fast';} };
+                var label = document.createElement('span');
+                label.textContent = 'Bot Observer';
+                label.style.cssText = 'color:#aaa;margin-right:8px;';
+                panel.appendChild(label); panel.appendChild(pauseBtn); panel.appendChild(speedBtn);
+                document.body.appendChild(panel);
+                var gd=false,hd=false;setInterval(function(){if(hd)return;var t=document.body.innerText||'';if(t.indexOf('Turn 1')<0&&t.indexOf('ACTIONS')<0&&t.indexOf('started in')<0){panel.style.display='none';return;}if(!gd){gd=true;panel.style.display='flex';}var b=document.querySelectorAll('.but,.action,.option');for(var i=0;i<b.length;i++){if(b[i].offsetParent!==null&&b[i].onclick){panel.style.display='none';hd=true;return;}}},500);
+            }
+            if (document.readyState === 'complete') createControls();
+            else window.addEventListener('load', createControls);
+        })();
+        </script>
+        <!-- END BOT OBSERVATION CONTROLS -->
     </body>
 </html>
