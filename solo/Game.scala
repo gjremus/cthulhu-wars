@@ -907,7 +907,6 @@ case class OutOfTurnRefresh(action : Action) extends HiddenAction
 
 case class EndAction(self : Faction) extends ForcedAction
 case class AfterAction(self : Faction) extends ForcedAction
-case class DSDeployCheckAction(actor : Faction, then : ForcedAction) extends ForcedAction
 
 case object ProceedBattlesAction extends ForcedAction
 
@@ -2003,7 +2002,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             asking.ask.useIf(_.actions.exists(_.isInfo.not))(_.add(NeedOk).add(OutOfTurnRefresh(PreMainAction(f))).add(SacrificeHighPriestAllowedAction).group(" ")).skip(MainAction(f))
 
-        case PreMainAction(f) if f.active && f.power > 0 =>
+        case PreMainAction(f) if f.active =>
             PreActionPromptsAction(f, f.enemies)
 
         case PreActionPromptsAction(e, l) =>
@@ -2086,18 +2085,43 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     if (factions./(_.power).max - f.power >= f.commands.of[DragonAscendingPower].single./(_.power).|(1))
                         + DragonAscendingPromptAction(f.sure[OW], e, PreMainAction(e)).as("Rise to", factions./(_.power).max.power)(DragonAscending)
 
-                // DS deploy: only after a real action (e.acted), checks spatial threats
-                if (e.acted && f.loyaltyCards.has(DimensionalShamblerCard) && f.at(ShamblerHold(f), DimensionalShamblerUnit).any) {
-                    val dsReason = dsDeployReason(f)
-                    if (dsReason.any)
-                        + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(e))).as(DimensionalShamblerUnit.styled(f), "to Map")("(" + dsReason.get + ")")
+                // DS deploy: always show when "always prompt" is set, or when conditions match
+                if (f.loyaltyCards.has(DimensionalShamblerCard) && f.at(ShamblerHold(f), DimensionalShamblerUnit).any) {
+                    if (f.commands.has(ShamblerPrompt))
+                        + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(e))).as(DimensionalShamblerUnit.styled(f), "to Map")("(always prompted)")
+                    else {
+                        val dsReason = dsDeployReason(f)
+                        if (dsReason.any)
+                            + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(e))).as(DimensionalShamblerUnit.styled(f), "to Map")("(" + dsReason.get + ")")
+                    }
                 }
 
                 |(asking.ask).%(_.actions.%!(_.isInfo).any)./(_.add(NeedOk).add(OutOfTurnRefresh(PreMainAction(e))).add(SacrificeHighPriestAllowedAction).group(" ").skip(PreActionPromptsAction(e, l.but(f))))
             }
 
-            if (asks.any)
-                MultiAsk(asks)
+            // Also check active player's own DS (not in enemy loop)
+            val selfDsAsk = {
+                implicit val asking = Asking(e)
+
+                + GroupAction("After " + e + " action")
+
+                if (e.loyaltyCards.has(DimensionalShamblerCard) && e.at(ShamblerHold(e), DimensionalShamblerUnit).any) {
+                    if (e.commands.has(ShamblerPrompt))
+                        + ShamblerDeployPromptAction(e, CheckSpellbooksAction(PreMainAction(e))).as(DimensionalShamblerUnit.styled(e), "to Map")("(always prompted)")
+                    else {
+                        val dsReason = dsDeployReason(e)
+                        if (dsReason.any)
+                            + ShamblerDeployPromptAction(e, CheckSpellbooksAction(PreMainAction(e))).as(DimensionalShamblerUnit.styled(e), "to Map")("(" + dsReason.get + ")")
+                    }
+                }
+
+                |(asking.ask).%(_.actions.%!(_.isInfo).any)./(_.add(NeedOk).add(OutOfTurnRefresh(PreMainAction(e))).add(SacrificeHighPriestAllowedAction).group(" ").skip(MainGatesAction(e)))
+            }
+
+            val allAsks = asks ++ selfDsAsk
+
+            if (allAsks.any)
+                MultiAsk(allAsks)
             else
                 Then(MainGatesAction(e))
 
@@ -2158,29 +2182,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             factions.foreach(_.oncePerAction = $)
 
-            CheckSpellbooksAction(DSDeployCheckAction(self, PreMainAction(self)))
-
-        case DSDeployCheckAction(actor, then) =>
-            // Only fire here when PreActionPromptsAction won't run (actor out of power or inactive).
-            // When actor has power and is active, PreActionPromptsAction handles DS in the enemy loop.
-            if (actor.active && actor.power > 0)
-                then
-            else {
-                val dsCandidate = factions.find(f => f.loyaltyCards.has(DimensionalShamblerCard) && f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
-                dsCandidate match {
-                    case Some(f) =>
-                        val reason = dsDeployReason(f)
-                        if (reason.any)
-                            Ask(f)
-                                .add(GroupAction("After " + actor + " action"))
-                                .add(ShamblerDeployPromptAction(f, CheckSpellbooksAction(then)).as(DimensionalShamblerUnit.styled(f), "to Map")("(" + reason.get + ")"))
-                                .skip(then)
-                        else
-                            then
-                    case None =>
-                        then
-                }
-            }
+            CheckSpellbooksAction(PreMainAction(self))
 
         case EndTurnAction(f) =>
             f.acted = true
