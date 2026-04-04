@@ -66,6 +66,7 @@ case object UnholyGroundPhase extends BattlePhase
 case object AssignDefenderPains extends BattlePhase
 case object AssignAttackerPains extends BattlePhase
 case object AllPainsAssignedPhase extends BattlePhase
+case object OleaginousPhase extends BattlePhase
 case object HarbingerPainPhase extends BattlePhase
 case object EternalPainPhase extends BattlePhase
 case object MadnessPhase extends BattlePhase
@@ -96,6 +97,9 @@ case class RetreatAllAction(self : Faction, f : Faction, r : Region) extends Bas
 case class RetreatSeparatelyAction(self : Faction, f : Faction, destinations : $[Region]) extends BaseFactionAction(None, "Retreat separately") with More
 
 case class RetreatUnitAction(self : Faction, ur : UnitRef, r : Region) extends ForcedAction
+
+// TS
+case class OleaginousRetreatAction(self : Faction, ur : UnitRef, r : Region) extends BaseFactionAction(implicit g => "Retreat " + ur.faction.full + " " + g.unit(ur).full + " with " + Oleaginous + " to", r)
 
 
 // GC
@@ -558,6 +562,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     return jump(PostBattlePhase)
                 }
 
+                // Grasping Dead: TS fights with TombHerds only — exempt all other TS units
+                if (effect == |(GraspingDead)) {
+                    sides.%(f => f == TS).foreach { s =>
+                        s.forces.%(_.uclass != TombHerd).foreach { u => exempt(u) }
+                    }
+                    if (attackers.forces.none) {
+                        log("No Tomb-Herds left for Grasping Dead battle")
+                        return jump(PostBattlePhase)
+                    }
+                }
+
                 sides.foreach(s => s.str = s.strength(s.forces, s.opponent))
 
                 sides.foreach { s =>
@@ -628,6 +643,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 log(Voonith.styled(s), "Vicious added", extra, "Kill".s(extra).styled("kill"))
             }
         }
+    }
+
+    // TOMBSTALKER requirements
+    sides.%(f => f == TS).foreach { ts =>
+        if (ts.rolls.has(Kill))
+            ts.satisfy(TSRollKill, "Rolled a Kill in battle")
+        if (ts.rolls.count(_ == Pain) >= 3)
+            ts.satisfy(TSRoll3Pains, "Rolled 3 Pains in battle")
+        if (ts.forces.%(_.uclass == Glaaki).any && ts.opponent.forces.%(_.uclass.utype == GOO).any)
+            ts.satisfy(TSGlaakiBattlesGOO, "Gla'aki battled enemy GOO")
     }
 
     jump(AssignDefenderKills)
@@ -805,6 +830,21 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         log(pained./(_.short).mkString(", ") + (pained.num > 1).?(" were ").|(" was ") + "pained".styled("pain"))
                 }
 
+                jump(OleaginousPhase)
+
+            case OleaginousPhase =>
+                // OLEAGINOUS: pains on TS Gla'aki and Deep Tendrils become free retreats
+                sides.foreach { s =>
+                    if (s.has(Oleaginous)) {
+                        val oleagPained = s.forces.%(u => u.health == Pained && (u.uclass == Glaaki || u.uclass == DeepTendril))
+                        if (oleagPained.any) {
+                            val u = oleagPained.first
+                            val destinations = arena.connected // ANY adjacent area, no enemy restriction
+                            if (destinations.any)
+                                return Ask(s).each(destinations)(r => OleaginousRetreatAction(TS, u, r))
+                        }
+                    }
+                }
                 jump(HarbingerPainPhase)
 
             case HarbingerPainPhase =>
@@ -1008,6 +1048,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val u = f.forces.%(_.health == Pained).first
 
             Ask(self).each(l)(r => RetreatUnitAction(self, u, r).as(r)("Retreat", u, "to"))
+
+        // OLEAGINOUS (TS)
+        case OleaginousRetreatAction(self, ur, r) =>
+            val u = game.unit(ur)
+            retreat(u, r)
+            log(u, "retreated to", r, "with", Oleaginous, "(Pain became Retreat)")
+            jump(OleaginousPhase)
 
         case EliminateNoWayAction(self, u) =>
             if (self.tag(Emissary) && u.uclass == Nyarlathotep) {

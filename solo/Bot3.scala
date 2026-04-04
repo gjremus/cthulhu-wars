@@ -3,6 +3,10 @@ package cws
 import hrf.colmat._
 
 
+object Bot3 {
+    var lastEval : $[ActionEval] = $
+}
+
 case class Bot3(faction : Faction) {
     def cost(a : Action)(implicit game : Game) : Int = a match {
         case BuildGateAction(_, _) => 3
@@ -23,7 +27,9 @@ case class Bot3(faction : Faction) {
         if (actions.num == 1)
             return actions.head
 
-        eval(actions).maxBy(_.evaluations.map(_.weight).sum * (1 + error * (random() * 2 - 1))).action
+        val evaluated = eval(actions)
+        Bot3.lastEval = evaluated
+        evaluated.maxBy(_.evaluations.map(_.weight).sum * (1 + error * (random() * 2 - 1))).action
     }
 
     def eval(actions : $[Action])(implicit game : Game) : $[ActionEval] = {
@@ -477,6 +483,15 @@ case class Bot3(faction : Faction) {
                 case DoomDoneAction(_) =>
                     true |=> 0 -> "doom done"
 
+                case TSUseTomeAction(_, n) =>
+                    result ++= BotCursedTome.scoreUseTome(self, n)
+
+                case TSRemoveTomeAction(_, _) =>
+                    true |=> 300 -> "remove face-down tome to avoid end-game doom penalty"
+
+                case TSSkipRemoveTomeAction(_) =>
+                    true |=> -300 -> "keeping face-down tomes loses doom at game end"
+
                 case PassAction(_) =>
                     true |=> -500 -> "wasting power bad"
 
@@ -822,6 +837,13 @@ case class Bot3(faction : Faction) {
                     case RetreatOrderAction(_, a, b) =>
                         a == self |=> 1000 -> "retreat self first"
                         a.aprxDoom < b.aprxDoom |=> 100 -> "retreat less doom first"
+
+                    case OleaginousRetreatAction(_, u, r) =>
+                        r.foes.none |=> 200 -> "oleaginous retreat to safety"
+                        r.allies.goos.any |=> 100 -> "retreat to friendly goo"
+                        r.ownGate |=> 100 -> "retreat to own gate"
+                        r.enemyGate |=> -200 -> "avoid enemy gate"
+                        r.foes.any |=> -500 -> "avoid foes"
 
                     case RetreatUnitAction(_, u, r) =>
                         u.foe && u.cultist && r.allies.monsterly.any |=> 1000 -> "send cultist to be captured by monsters"

@@ -315,6 +315,9 @@ class GameEvaluationSL(implicit game : Game) extends GameEvaluation(SL)(game) {
                     case AN =>
                         allies.goos.any && game.cathedrals.contains(r) && AN.has(UnholyGround) |=> -50000 -> "unholy ground with goo"
                         AN.has(Extinction) && foes.num == 1 && foes(Yothan).any && ((tsa && allies.num >= 3 && ownStr >= 6) || (allies.goos.none && ownStr >= 6)) |=> 1000 -> "attack lone extinct yothan"
+
+                    case TS =>
+                        0 -> "todo"
                 }
 
                 f.has(Abhoth) && enemyStr == 0 && ownStr >= foes(Filth).num * 2 |=> 200 -> "get rid of filth"
@@ -665,6 +668,12 @@ class GameEvaluationSL(implicit game : Game) extends GameEvaluation(SL)(game) {
                     c.uclass == u.uclass |=> -1000000 -> "remain calm"
                     c.uclass == HighPriest && u.uclass == Acolyte |=> 1000 -> "high priest not on gate"
                 }
+
+            case TSRemoveTomeAction(_, _) =>
+                true |=> 300 -> "remove face-down tome to avoid end-game doom penalty"
+
+            case TSSkipRemoveTomeAction(_) =>
+                true |=> -300 -> "keeping face-down tomes loses doom at game end"
 
             case AbandonGateAction(_, _, _) =>
                 true |=> -1000000 -> "never"

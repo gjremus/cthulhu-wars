@@ -31,6 +31,7 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
 
         val ev = ge(game)
         val eas = actions./(a => ActionEval(a, ev.eval(a)))
+        Bot3.lastEval = eas
 
         val o = eas.sortWith(compare)
 
@@ -55,7 +56,8 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
                     v = o
             }
 
-        v.head.action
+        val chosen = v.head
+        chosen.action
     }
 
     def eval(game : Game, actions : $[Action]) : $[ActionEval] = {
@@ -327,6 +329,21 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
                 0
             else
                 1
+
+        case TS =>
+            var p = f.power
+
+            if (f.has(Glaaki))
+                p += 8
+
+            // TombHerds provide free power via Shepherd; Hecatomb multiplies that into doom
+            if (f.has(Hecatomb))
+                p += math.min(4, f.onMap(TombHerd).num) * 2
+
+            p / 4
+
+        case _ =>
+            0
 
     }))) >= 30 * 3
 

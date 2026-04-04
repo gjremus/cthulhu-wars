@@ -986,6 +986,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case WW => $(WWExpansion)
             case OW => $(OWExpansion)
             case AN => $(ANExpansion)
+            case TS => $(TSExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         options.of[NeutralMonsterOption].any.$(NeutralMonstersExpansion) ++
@@ -1010,6 +1011,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var cathedrals : $[Region] = $
     var desecrated : $[Region] = $
     var ritualMarker = 0
+    var ritualHistory : $[Faction] = $
+    var ritualHistoryCeremony : $[Boolean] = $
     var battle : |[Battle] = None
     var nexed : $[Region] = $
     var queue : $[Battle] = $
@@ -1021,6 +1024,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     // Solution for keeping track of use cases for dematerialization, for the AN bot.
     var demCaseMap : Map[Region, Int] = areas.map(r => r -> 0).toMap
+
+    // Tombstalker (TS) state
+    var deathsHead : Int = 0
+    var tsTomesOnCard : Int = 11
+    var cursedTomesOwned : Map[Faction, $[(Int, Boolean)]] = Map()
 
     def forNPowerWithTax(r : Region, f : Faction, n : Int) : String = { val p = n + f.taxIn(r) ; " for " + p.power }
     def for1PowerWithTax(r : Region, f : Faction) : String = { val p = 1 + f.taxIn(r) ; if (p != 1) " for " + p.power else "" }
@@ -1397,6 +1405,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         if (f.has(Recriminations))
             + RecriminationsMainAction(f)
+
+        // Cursed Tome actions: each face-up tome held by any faction is a one-time free action
+        if (factions.has(TS))
+            cursedTomesOwned.get(f).|(Nil).filter(!_._2).foreach { case (n, _) =>
+                + TSUseTomeAction(f, n)
+            }
     }
 
     def highPriests(f : Faction)(implicit w : AskWrapper) {
@@ -1497,7 +1511,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             starting += f -> r
 
             1.to(6).foreach(_ => f.place(Acolyte, r))
-
             f.at(r).one(Acolyte).onGate = true
 
             // Temp starting setup (for debug)
@@ -1540,7 +1553,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             factions.foreach { f =>
                 val hibernate = f.power
                 val cultists = f.cultists.num
-                val captured = factions./~(w => w.at(f.prison)).num
+                val allCaptured = factions./~(w => w.at(f.prison)).num
+                // GREEN DECAY: TS's captured enemy cultists give ES instead of power (requires Gla'aki awakened)
+                val greenDecayCultists = if (f == TS && factions.has(TS) && TS.has(GreenDecay) && TS.has(Glaaki))
+                    factions./~(w => w.at(f.prison)).%(_.cultist).num
+                else 0
+                val captured = allCaptured - greenDecayCultists
                 val ownGates = f.gates.num + f.unitGate.any.??(1)
                 val oceanGates = (f.has(YhaNthlei) && f.has(Cthulhu)).??(f.enemies./(f => f.allGates.%(_.glyph == Ocean).num).sum)
                 val darkYoungs = f.has(RedSign).??(f.all(DarkYoung).num)
@@ -1564,12 +1582,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val fromAbandoned = (abandoned > 0).?(abandoned.styled("region") + " abandoned")
                 val fromCultist = (cultists > 0).?(cultists.styled("region") + " cultist".s(cultists))
                 val fromCaptured = (captured > 0).?(captured.styled("region") + " captured")
+                val fromGreenDecay = (greenDecayCultists > 0).?(greenDecayCultists.styled("region") + " captured cultist".s(greenDecayCultists) + " → " + greenDecayCultists.es + " (Green Decay)")
                 val fromYhaNthlei = (oceanGates > 0).?(oceanGates.styled("region") + " enemy controlled ocean gate".s(oceanGates))
                 val fromDarkYoungs = (darkYoungs > 0).?(darkYoungs.styled("region") + " Dark Young".s(darkYoungs))
                 val fromFeast = (feast > 0).?(feast.styled("region") + " desecrated")
                 val fromWorship = (worship > 0).?(worship.styled("region") + " cathedral".s(worship))
 
                 f.log("got", f.power.power, "(" + $(fromHibernate, fromGates, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship).flatten.mkString(" + ") + ")")
+
+                if (greenDecayCultists > 0) {
+                    f.log("Green Decay:", greenDecayCultists, "captured " + "cultist".s(greenDecayCultists), "→", greenDecayCultists.es, "(not power)")
+                    f.takeES(greenDecayCultists)
+                }
             }
 
             factions.foreach { f =>
@@ -1717,6 +1741,23 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 f.doom += sum
                 f.revealed ++= f.es
                 f.es = $
+            }
+
+            // CURSED TOMES: final revelation - each face-down tome costs 1 Doom (unless instant death)
+            // TS is exempt: tomes are their pool/resource, never a penalty for them
+            if (ritualTrack(ritualMarker) != 999) {
+                factions.%(f => f != TS).foreach { f =>
+                    val faceDownCount = cursedTomesOwned.get(f).|(Nil).count { case (_, fd) => fd }
+                    if (faceDownCount > 0) {
+                        f.doom -= faceDownCount
+                        f.log("lost", faceDownCount.doom, "from", faceDownCount, "face-down " + "Cursed Tome".s(faceDownCount).styled(TS))
+                        val remaining = cursedTomesOwned.get(f).|(Nil).filter { case (_, fd) => !fd }
+                        if (remaining.any)
+                            cursedTomesOwned = cursedTomesOwned + (f -> remaining)
+                        else
+                            cursedTomesOwned = cursedTomesOwned - f
+                    }
+                }
             }
 
             val contenders = factions.%(_.hasAllSB)
@@ -1879,6 +1920,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             asking
 
         case DoomDoneAction(f) =>
+            // Hecatomb: zero any remaining Death's Head if TS didn't use it for a ritual
+            if (f == TS && factions.has(TS) && TS.has(Hecatomb) && game.deathsHead > 0) {
+                TS.log("Hecatomb: remaining", game.deathsHead.toString.styled("kill"), "Death's Head discarded")
+                game.deathsHead = 0
+            }
+
             f.acted = false
 
             f.hired = false
@@ -1921,6 +1968,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             f.acted = true
 
+            ritualHistory :+= f
+            ritualHistoryCeremony :+= false
+
+            triggers()
+
             if (ritualTrack(ritualMarker) != 999)
                 ritualMarker += 1
 
@@ -1928,7 +1980,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             f.satisfy(PerformRitual, "Perform Ritual of Annihilation")
 
-            CheckSpellbooksAction(DoomAction(f))
+            // CURSED TOMES: faction may remove one face-down tome after ritual (TS exempt — no penalty)
+            val faceDownTomes = if (f == TS) Nil else cursedTomesOwned.get(f).|(Nil).filter { case (_, fd) => fd }
+            if (faceDownTomes.any) {
+                implicit val asking = Asking(f)
+                faceDownTomes.foreach { case (n, _) => + TSRemoveTomeAction(f, n) }
+                + TSSkipRemoveTomeAction(f)
+                asking
+            } else
+                CheckSpellbooksAction(DoomAction(f))
 
         // MAIN
         case PreMainAction(f) if factions.exists(f => f.unfulfilled.num + f.spellbooks.num < f.spellbooks.num) =>
@@ -2134,7 +2194,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case MainGatesAction(f) =>
             checkGatesGained(f)
 
-            MainAction(f)
+            CheckSpellbooksAction(MainAction(f))
 
         case MainAction(f) if f.active.not =>
             implicit val asking = Asking(f)

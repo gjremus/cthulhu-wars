@@ -28,3 +28,8 @@ package hrf {
 package scala.scalajs.reflect.annotation {
     class EnableReflectiveInstantiation extends scala.annotation.StaticAnnotation
 }
+
+package scalajs {
+    package object reflect {
+    }
+}

@@ -100,6 +100,15 @@ class GameEvaluationGC(implicit game : Game) extends GameEvaluation(GC)(game) {
 
             case AN =>
                 1
+
+            case TS =>
+                var p = f.power
+                if (f.has(Glaaki))
+                    p += 8
+                if (p < 8) 0 else 1
+
+            case _ =>
+                0
         }))) >= 30 * 3
 
         def finale(extra : Int) = allSB && game.gates.contains(game.starting(self)) && ((power - extra + 2) / 6 match {
@@ -504,6 +513,12 @@ class GameEvaluationGC(implicit game : Game) extends GameEvaluation(GC)(game) {
                     c.uclass == u.uclass |=> -1000000 -> "remain calm"
                     c.uclass == HighPriest && u.uclass == Acolyte |=> 1000 -> "high priest not on gate"
                 }
+
+            case TSRemoveTomeAction(_, _) =>
+                true |=> 300 -> "remove face-down tome to avoid end-game doom penalty"
+
+            case TSSkipRemoveTomeAction(_) =>
+                true |=> -300 -> "keeping face-down tomes loses doom at game end"
 
             case AbandonGateAction(_, _, _) =>
                 true |=> -1000000 -> "never"

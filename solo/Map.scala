@@ -65,6 +65,7 @@ object EarthMap3 extends Board {
         case WW => $(ArcticOcean, Antarctica)
         case OW => regions
         case AN => nonFactionRegions
+        case TS => nonFactionRegions.%(_.glyph == Ocean)
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -156,6 +157,7 @@ object EarthMap4v35 extends Board {
         case WW => $(ArcticOcean, Antarctica)
         case OW => regions
         case AN => nonFactionRegions
+        case TS => nonFactionRegions.%(_.glyph == Ocean)
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -251,6 +253,7 @@ object EarthMap4v53 extends Board {
         case WW => $(ArcticOcean, Antarctica)
         case OW => regions
         case AN => nonFactionRegions
+        case TS => nonFactionRegions.%(_.glyph == Ocean)
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -354,6 +357,7 @@ object EarthMap5 extends Board {
         case WW => $(ArcticOcean, Antarctica)
         case OW => regions
         case AN => nonFactionRegions
+        case TS => nonFactionRegions.%(_.glyph == Ocean)
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -467,6 +471,7 @@ object EarthMap6 extends Board {
         case WW => $(ArcticOcean, MountainsOfMadness)
         case OW => regions
         case AN => nonFactionRegions
+        case TS => nonFactionRegions.%(_.glyph == Ocean)
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {

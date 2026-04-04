@@ -147,6 +147,8 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
 
                     self.gates.contains(r) && ab + sp > 0 && ownStr >= enemyStr/2 |=> 11000 -> "protect gate from beyond one"
 
+                case TS =>
+                    true |=> 0 -> "ts todo"
             }
         }
 
@@ -1061,6 +1063,12 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
                     c.uclass == u.uclass |=> -1000000 -> "remain calm"
                     c.uclass == HighPriest && u.uclass == Acolyte |=> 1000 -> "high priest not on gate"
                 }
+
+            case TSRemoveTomeAction(_, _) =>
+                true |=> 300 -> "remove face-down tome to avoid end-game doom penalty"
+
+            case TSSkipRemoveTomeAction(_) =>
+                true |=> -300 -> "keeping face-down tomes loses doom at game end"
 
             case AbandonGateAction(_, _, _) =>
                 true |=> -1000000 -> "never"

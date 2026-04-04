@@ -230,7 +230,7 @@ object OWExpansion extends Expansion {
             factions.%(_.gates.contains(o)).foreach { f =>
                 f.gates :-= o
                 f.gates :+= r
-                f.at(o).%(_.onGate).only.region = r
+                f.at(o).%(_.onGate).single.foreach(_.region = r)
             }
             self.at(o).one(uc).region = r
             self.log("moved gate with", uc.styled(self), "from", o, "to", r)

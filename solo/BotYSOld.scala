@@ -223,6 +223,9 @@ class GameEvaluationYSOld(implicit game : Game) extends GameEvaluation(YS)(game)
 
                     case AN =>
                         0 -> "todo"
+
+                    case TS =>
+                        0 -> "todo"
                 }
 
             case CaptureAction(_, r, f, _) =>

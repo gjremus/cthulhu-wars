@@ -126,9 +126,94 @@ class InfoOverlay(overlay : html.Element) {
     readjust()
 }
 
+object RitualTrackOverlay {
+    var numPlayers : Int = 4
+    var markerIndex : Int = 0
+    var trackLength : Int = 9
+    var ritualHistory : $[String] = $          // faction style strings, in order
+    var ritualHistoryCeremony : $[Boolean] = $ // true when that ritual was a Ceremony of Annihilation
+    // [2026-04-03] Pure DH hecatomb: marker indices where pure DH rituals occurred
+    var tsPureDHMarkerIndices : $[Int] = $
+    // stale field removed — positions calculated in overlay rendering from tsPureDHMarkerIndices
+
+    // Circle centers as (xPct, yPct) of image dimensions, for each track index
+    // Positions derived from pixel clustering of track images (threshold=180).
+    // Last entry = Instant Death position.
+    // Positions derived from brightness-peak analysis of track images.
+    // Upper-row y shifted ~9% below number label so numbers show above glyphs (same as 3p fix).
+    // Lower-row y set to orb-body center from analysis (~65%).
+    // Last entry = Instant Death ellipse center (x=center of ID text, y=40% to cover text).
+    // 3p: top row x equal-spacing (confirmed correct); bottom row x = original near-values +2% right shift.
+    // ID: x=90% so right edge touches track edge; y=43% (lowered from 40%).
+    val positions3p : $[(Double, Double)] = $(
+        (33.8, 47.0), (41.0, 65.0), (48.7, 47.0),
+        (56.0, 65.0), (63.6, 47.0), (71.0, 65.0), (90.0, 51.0)
+    )
+    // 4p: top row x shifted right +2% from first, spacing expanded ~1.5% per gap; y top=53% (confirmed).
+    // Bottom row y raised to 76% (was 68%: user confirmed too high by ~1/5-1/6 glyph height).
+    // ID x=89% so right edge near track edge.
+    val positions4p : $[(Double, Double)] = $(
+        (30.5, 53.0), (37.4, 76.0), (43.6, 53.0), (49.3, 76.0),
+        (55.8, 53.0), (62.0, 76.0), (69.9, 53.0), (77.7, 76.0), (89.0, 49.0)
+    )
+    // 5p: circle 1 x shifted right +3% (was at number-label position); circle 1 y raised to top-row level.
+    // Bottom row y=72% (was 68%, still a little too high per user).
+    // ID x=90% so right edge touches track edge.
+    // 5p: strict alternating pattern. Top row (odd glyphs) y=53%, bottom row (even) y=72%.
+    // Circle 1 x confirmed correct. Circles 2-10 shifted right +3.2% to give uniform ~6% gap from circle 1.
+    val positions5p : $[(Double, Double)] = $(
+        (28.0, 53.0), (34.1, 72.0), (40.6, 53.0), (46.6, 72.0),
+        (51.9, 53.0), (57.7, 72.0), (63.5, 53.0), (69.9, 72.0),
+        (76.1, 53.0), (82.6, 72.0), (90.0, 40.0)
+    )
+
+    def positions = numPlayers match {
+        case 3 => positions3p
+        case 5 => positions5p
+        case _ => positions4p
+    }
+
+    def trackImageId = "ritual-track-" + numPlayers + "p"
+}
+
+object TSCursedTomesOverlay {
+    // Map from faction style to list of (tomeNum, isFaceDown)
+    var factionTomes : scala.collection.immutable.Map[String, $[(Int, Boolean)]] = scala.collection.immutable.Map()
+    var tomesOnCard : Int = 0
+
+    val tomeTexts : scala.collection.immutable.Map[Int, String] = scala.collection.immutable.Map(
+        1  -> "Gain 1 Power. Tombstalker places a Tomb-Herd at their Controlled Gate if able.",
+        2  -> "Gain 1 Power. Tombstalker places a Tomb-Herd at their Controlled Gate if able.",
+        3  -> "Gain 1 Power. Tombstalker places a Deep Tendril at their Controlled Gate if able.",
+        4  -> "Gain 1 Power. Tombstalker places a Deep Tendril at their Controlled Gate if able.",
+        5  -> "Gain 1 Power. Tombstalker gains 1 Doom.",
+        6  -> "Gain 1 Power. Tombstalker gains 1 Doom.",
+        7  -> "Gain 1 Power. Tombstalker gains Death's Head equal to the number of Tomb-Herd in play.",
+        8  -> "Gain 1 Power. Tombstalker gains Death's Head equal to the number of Tomb-Herd in play.",
+        9  -> "Gain 1 Power. Tombstalker gains an Elder Sign.",
+        10 -> "Gain 1 Power. Tombstalker gains an Elder Sign.",
+        11 -> "Gain 1 Power. Tombstalker gains Doom equal to the Ritual Track marker minus 5."
+    )
+}
+
 object Overlays {
     val overlay = new InfoOverlay(dom.document.getElementById("overlay").asInstanceOf[html.Element])
     var temp = false
+
+    // [2026-04-03] Force-refresh the overlay if it's currently showing
+    def refreshIfShowing() {
+        if (overlay.showing.any) {
+            // Regenerate content by re-clicking with the same args
+            // Clear showing so show() doesn't early-return
+            val wasShowing = overlay.showing
+            overlay.showing = None
+            // Re-show with current data
+            val text = info($("RoA"))
+            if (text.any) {
+                overlay.show(text.get)
+            }
+        }
+    }
 
     @JSExportTopLevel("onExternalClick")
     def onExternalClick(s : Any*) {
@@ -483,6 +568,202 @@ object Overlays {
         case $("Tulzscha", spellbook : Boolean) => loyaltyCardIGOO(TulzschaCard.name, "" + TulzschaCard.power, "" + TulzschaCard.combat, spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 4 Power, and place Tulzscha in the Area containing the Gate.", "Undying Flame", "Gather Power Phase", "At the end of the Gather Power Phase: gain 1 Doom if any Faction has more Doom than you; gain 1 Elder Sign if any Faction has more Elder Signs than you; gain 1 Power if any Faction has more Power than you.", "As an Action, each enemy Faction gains 2 Power.", "Ceremony of Annihilation", "Doom Phase", "When you perform a Ritual of Annihilation, you may choose to pay nothing and instead EARN Power equal to the current Ritual marker position, then advance the marker 1 step. You earn no extra Doom or Elder Signs.")
         case $("Y'Golonac", spellbook : Boolean) => loyaltyCardIGOO(YgolonacCard.name, "" + YgolonacCard.power, "" + YgolonacCard.combat, spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 2 Power, place Y'Golonac in the Area containing the Gate.", "Orifices", "Post-Battle", "If Y'Golonac is Killed in a Battle, select a surviving enemy Terror, Monster, or Cultist. Replace it with Y'Golonac, then give Y'Golonac's Loyalty Card to that player. If no enemies survived, Y'Golonac dies normally (placing this Loyalty Card in the general Pool).", "You have just received Y'Golonac as a result of his Orifices ability.", "The Revelations", "Doom Phase", "Every player except you gets 1 Elder Sign. This is not optional.")
 
+
+        // TOMBSTALKER info cards
+        case $("TS") => faction(TS, "info:ts-background", DeathMarch, "Ongoing",
+            "Increment the Death's Head each time an enemy Unit dies in any Battle. In the Doom Phase, spend 1 Death's Head to place a Tomb-Herd in any Area; repeat as much as possible. Then reset the Death's Head to 0.",
+            $(), $(
+            (Acolyte,    6, "1",   "0", s""""""),
+            (TombHerd,   6, "2",   "3", s"""<div class=p>The first Tomb-Herd in an Area has 3 Combat. Any others have 0 Combat.</div>"""),
+            (DeepTendril, 3, "3", "1-3", s"""<div class=p>Combat: 1, +1 if Gla'aki is in the same Area, +1 if in an Ocean/Sea Area.</div>"""),
+            (Glaaki,     1, "6",   "?", s"""<div class=p>Combat: equals the number of Deep Tendrils in play.</div><div class=p>Awaken: control an Ocean/Sea gate. May spend Death's Head as Power.</div><div class=p><span class=ability-color>Shepherd of the Crypt</span> (Gather Power Phase): choose an Area and gain 1 Power per Tomb-Herd there.</div>""")
+        ))
+
+        case $("TS", TSAwakenGlaaki.text) => requirement("Awaken Tombstalker Gla'aki.")
+        case $("TS", TSTombHerdKilled.text) => requirement("A Tomb-Herd is Killed in Battle.")
+        case $("TS", TSRollKill.text) => requirement("Roll a Kill in a Battle.")
+        case $("TS", TSRoll3Pains.text) => requirement("Roll 3 or more Pains in a single Battle.")
+        case $("TS", TSGlaakiBattlesGOO.text) => requirement("Tombstalker Gla'aki is in a Battle with an enemy Great Old One.")
+        case $("TS", TSRitualOrEnemyGate.text) => requirement("Perform a Ritual of Annihilation OR Control a Gate in an enemy faction's starting Area.")
+
+        case $("TS", ElevenRevelations.name) => spellbook(ElevenRevelations.name, "Action: Cost 1", "Give an enemy your topmost Cursed Tome (I-XI) which they place on their Faction Sheet.")
+        case $("TS", Oleaginous.name) => spellbook(Oleaginous.name, "Post-Battle", "Any Pains applied to Tombstalker Gla'aki and Deep Tendrils instead become Retreats (you can move them to any adjacent Areas, regardless of the presence of enemy Units).")
+        case $("TS", GraspingDead.name) => spellbook(GraspingDead.name, "Action: Cost 1 Power or 2 Death's Head", "Resolve a Battle in each Area containing a Tomb-Herd and enemy Units, with you as the attacker, for free. Only your Tomb-Herd participate in the Battle.")
+        case $("TS", Hecatomb.name) => spellbook(Hecatomb.name, "Doom Phase", "After placing all Tomb-Herd from Death March, but before resetting the counter to 0, you may spend residual Death's Head toward the cost of a Ritual of Annihilation as Power. If you only spent Death's Head toward the cost of a Ritual, do not advance the Ritual Marker.")
+        case $("TS", GreenDecay.name) => spellbook(GreenDecay.name, "Gather Power Phase", "If Tombstalker Gla'aki is in play, captured Cultists gain you 1 Elder Sign (instead of 1 Power) during the Gather Power Phase.")
+        case $("TS", Undulate.name) => spellbook(Undulate.name, "Ongoing", "Your Units may carry one of your Units of lesser cost when moving for free. This effect stacks.")
+
+        case $("cursed-tomes", fStyle) if fStyle.toString == "ts" =>
+            val onCard = TSCursedTomesOverlay.tomesOnCard
+            val allTomes = TSCursedTomesOverlay.factionTomes
+            val onCardRows = (1 to onCard).reverse./ { n =>
+                val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
+                s"""<tr><td style="color:grey;padding:3px 12px;font-size:90%">$text</td></tr>"""
+            }.mkString("")
+            val factionRows = allTomes.toList.flatMap { case (fs, tomes) =>
+                tomes.sortBy(_._1)./ { case (n, faceDown) =>
+                    val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
+                    val color = if (faceDown) "grey" else "white"
+                    s"""<tr><td style="color:$color;padding:3px 12px;font-size:90%"><span class="$fs">[$fs]</span> $text</td></tr>"""
+                }
+            }.mkString("")
+            s"""<table class="requirement-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey">Cursed Tomes</td></tr>$onCardRows$factionRows</tbody></table>"""
+
+        case $("cursed-tomes", fStyle) =>
+            val tomes = TSCursedTomesOverlay.factionTomes.getOrElse(fStyle.toString, Nil)
+            if (tomes.isEmpty) ""
+            else {
+                val rows = tomes.sortBy(_._1)./ { case (n, faceDown) =>
+                    val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
+                    val color = if (faceDown) "grey" else "white"
+                    s"""<tr><td style="color:$color;padding:3px 12px;font-size:90%">$text</td></tr>"""
+                }.mkString("")
+                s"""<table class="requirement-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey">Cursed Tomes</td></tr>$rows</tbody></table>"""
+            }
+
+        case $("RoA") =>
+            val pos = RitualTrackOverlay.positions
+            val marker = RitualTrackOverlay.markerIndex
+            val history = RitualTrackOverlay.ritualHistory
+            val trackLen = RitualTrackOverlay.trackLength
+            val imgSrc = imageSource(RitualTrackOverlay.trackImageId)
+
+            val markerDiv = if (marker < pos.length) {
+                val (mx, my) = pos(marker)
+                val isID = marker == pos.length - 1
+                if (isID) {
+                    // Ellipse centered on the stored ID position (which points to center of "Instant Death" text).
+                    // width=20% of track width; aspect-ratio=3.0 gives correct height across all track aspect ratios.
+                    s"""<div style="
+                        position: absolute;
+                        left: ${mx}%;
+                        top: ${my}%;
+                        width: 20%;
+                        aspect-ratio: 3.0;
+                        transform: translate(-50%, -50%);
+                        border-radius: 50%;
+                        border: 0.18em solid #ff2020;
+                        box-shadow: 0 0 0.5em 0.2em rgba(255,32,32,0.8), inset 0 0 0.3em rgba(255,32,32,0.3);
+                        box-sizing: border-box;
+                        pointer-events: none;">
+                    </div>"""
+                } else {
+                    s"""<div style="
+                        position: absolute;
+                        left: ${mx}%;
+                        top: ${my}%;
+                        width: 8%;
+                        aspect-ratio: 1;
+                        transform: translate(-50%, -50%);
+                        border-radius: 50%;
+                        border: 0.18em solid #ff2020;
+                        box-shadow: 0 0 0.5em 0.2em rgba(255,32,32,0.8), inset 0 0 0.3em rgba(255,32,32,0.3);
+                        box-sizing: border-box;
+                        pointer-events: none;">
+                    </div>"""
+                }
+            } else ""
+
+            val ceremony = RitualTrackOverlay.ritualHistoryCeremony
+            val glyphs = history.indexed./ { (style, i) =>
+                val isID = i >= trackLen - 1
+                // ID glyphs anchor to circle 10 (second-to-last position) and extend right
+                val (gx, gy) =
+                    if (isID) pos(math.min(trackLen - 2, pos.length - 1))
+                    else pos(math.min(i, pos.length - 1))
+                val extraOffset = if (isID) (i - (trackLen - 1)) * 9.0 + 7.0 else 0.0
+                val finalX = gx + extraOffset
+                val isCeremony = i < ceremony.length && ceremony(i)
+                if (isCeremony) {
+                    // CSS filter applied directly to img — only affects non-transparent pixels,
+                    // no square background artifact. sepia(1) gives warm base, hue-rotate shifts to faction hue.
+                    val tintFilter = style match {
+                        case "gc" => "sepia(1) hue-rotate(67deg) saturate(3) brightness(1.0)"
+                        case "cc" => "sepia(1) hue-rotate(181deg) saturate(3) brightness(0.9)"
+                        case "bg" => "sepia(1) hue-rotate(323deg) saturate(5) brightness(1.0)"
+                        case "ys" => "sepia(1) hue-rotate(12deg) saturate(8) brightness(1.2)"
+                        case "ww" => "sepia(1) hue-rotate(168deg) saturate(2) brightness(1.2)"
+                        case "sl" => "sepia(1) hue-rotate(344deg) saturate(5) brightness(1.0)"
+                        case "ow" => "sepia(1) hue-rotate(241deg) saturate(3) brightness(0.8)"
+                        case "an" => "sepia(1) hue-rotate(156deg) saturate(3) brightness(1.0)"
+                        case "ts" => "sepia(1) hue-rotate(74deg) saturate(2) brightness(1.3)"
+                        case _    => "sepia(1)"
+                    }
+                    s"""<img src="${imageSource("n-tulzscha")}"
+                        style="
+                            position: absolute;
+                            left: ${finalX}%;
+                            top: ${gy}%;
+                            width: 6%;
+                            height: auto;
+                            transform: translate(-50%, -50%);
+                            opacity: 0.9;
+                            pointer-events: none;
+                            filter: drop-shadow(0 0 0.15em rgba(0,0,0,0.9)) ${tintFilter};" />"""
+                } else {
+                    s"""<img src="${imageSource(style + "-glyph")}"
+                        style="
+                            position: absolute;
+                            left: ${finalX}%;
+                            top: ${gy}%;
+                            width: 6%;
+                            height: auto;
+                            transform: translate(-50%, -50%);
+                            opacity: 0.9;
+                            pointer-events: none;
+                            filter: drop-shadow(0 0 0.15em rgba(0,0,0,0.9));" />"""
+                }
+            }.mkString("")
+
+            // [2026-04-03] Pure DH hecatomb glyphs — FIXED Y position (above Instant Death level)
+            // User confirmed: glyph above ID text is the correct height for all pure DH glyphs
+            val pureDHFixedY = RitualTrackOverlay.numPlayers match {
+                case 3 => 28.0   // 3p: ID Y=51, one glyph height above
+                case 5 => 17.0   // 5p: ID Y=40, one glyph height above
+                case _ => 26.0   // 4p: ID Y=49, one glyph height above
+            }
+            val glyphWidth = 6.0
+            var lastPureDHX : Double = -999.0
+            var lastPureDHY : Double = -999.0
+            val pureDHGlyphHtml = RitualTrackOverlay.tsPureDHMarkerIndices.map { idx =>
+                val (baseX, _) = if (idx < pos.length) pos(idx) else pos(pos.length - 1)
+                val dhY = pureDHFixedY
+                // Check if last pure-DH glyph is in same spot — offset right if so
+                val (finalX, finalY) =
+                    if ((lastPureDHX - baseX).abs < 1.0 && (lastPureDHY - dhY).abs < 1.0)
+                        (lastPureDHX + glyphWidth, dhY)
+                    else
+                        (baseX, dhY)
+                lastPureDHX = finalX
+                lastPureDHY = finalY
+                s"""<img src="${imageSource("ts-glyph")}"
+                    style="
+                        position: absolute;
+                        left: ${finalX}%;
+                        top: ${finalY}%;
+                        width: 6%;
+                        height: auto;
+                        transform: translate(-50%, -50%);
+                        opacity: 0.85;
+                        pointer-events: none;
+                        filter: drop-shadow(0 0 0.15em rgba(0,0,0,0.9)) drop-shadow(0 0 0.3em rgba(100,255,100,0.6));" />"""
+            }.mkString("")
+
+            s"""<table style="background: rgba(0,0,0,0.85); width: 100%;">
+              <tbody>
+                <tr>
+                  <td style="text-align: center; vertical-align: middle; padding: 1.5em 0.5em;">
+                    <div style="position: relative; display: inline-block; max-width: 100%;">
+                      <img src="${imgSrc}"
+                           style="display: block; width: 100%; height: auto;" />
+                      ${markerDiv}
+                      ${glyphs}
+                      ${pureDHGlyphHtml}
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>"""
 
         case _ =>
             // println("onExternalClick " + s.mkString(" | "))

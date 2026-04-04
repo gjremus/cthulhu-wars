@@ -14,7 +14,7 @@ object Stats {
         else
             rules.compute(f.short + ":" + rule, (_, n) => if (n == null) (0, 1) else (n._1, n._2 + 1))
 
-        import scala.collection.convert.decorateAsScala._
+        import scala.jdk.CollectionConverters._
     }
 
     def triggerI(f : Faction, rule : String, on : Boolean) {

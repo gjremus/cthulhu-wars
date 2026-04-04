@@ -10,6 +10,7 @@ object Overlays {
 
 object CthulhuWarsSolo {
     val DottedLine = "............................................................................................................................................................................................................................................"
+    val DoubleLine = "======================================================================================================================="
 }
 
 object Host {
@@ -19,6 +20,9 @@ object Host {
     def askFaction(g : Game, c : Continue) : Action = {
         c match {
             case Force(action) =>
+                action
+
+            case Then(action) =>
                 action
 
             case DelayedContinue(_, c) =>
@@ -36,6 +40,9 @@ object Host {
             case DrawES(_, es1, es2, es3, draw) =>
                 draw((es1.times(1) ++ es2.times(2) ++ es3.times(3)).maxBy(_ => random()), false)
 
+            case MultiAsk(asks) =>
+                askFaction(g, asks.head)
+
             case Ask(_, List(action)) =>
                 action
 
@@ -49,12 +56,13 @@ object Host {
                     case WW => BotWW.ask(actions, 0.03)(g)
                     case OW => BotOW.ask(actions, 0.03)(g)
                     case AN => BotAN.ask(actions, 0.03)(g)
+                    case TS => BotTS.ask(actions, 0.03)(g)
                 }
         }
     }
 
     def main(args : Array[String]) {
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS)
 
         val numberOfPlayers = 4
 
@@ -84,10 +92,10 @@ object Host {
         var results : $[$[Faction]] = $
 
         //val base = repeat
-        val base = allComb.shuffle
+        val base = allComb.filter(_.contains(TS)).shuffle
         //val base = customComb
 
-        1.to(100).foreach { i =>
+        1.to(10).foreach { i =>
             results ++= base.par.map { ff =>
                 var log : $[String] = $
                 def writeLog(s : String) {
@@ -141,6 +149,11 @@ object Host {
                     }
                     val w = c.asInstanceOf[GameOver].winners
                     println(w.any.?(w./(_.name).mkString(", ")).|("Humanity") + " won (" + n + ")")
+                    if (ff.contains(TS)) {
+                        implicit val g = game
+                        val ts = factionToState(TS)
+                        println("  TS: doom=" + ts.doom + " sb=" + ts.spellbooks.num + " gates=" + ts.gates.num + " tombherds=" + ts.onMap(TombHerd).num + " deeptendrils=" + ts.onMap(DeepTendril).num + " glaaki=" + ts.has(Glaaki) + " dh=" + game.deathsHead + " won=" + w.contains(TS))
+                    }
                     w
                 }
                 catch {
@@ -190,7 +203,7 @@ object Host {
             println()
         }
 
-        import scala.collection.JavaConverters._
+        import scala.jdk.CollectionConverters._
 
         println()
         println("RULES")

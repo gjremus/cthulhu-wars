@@ -631,6 +631,7 @@ object CthulhuWarsSolo {
                                         case WW => BotWW   .ask(actions, 0.2)(game)
                                         case OW => BotOW   .ask(actions, 0.2)(game)
                                         case AN => BotAN   .ask(actions, 0.2)(game)
+                                        case TS => BotTS   .ask(actions, 0.2)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -642,6 +643,7 @@ object CthulhuWarsSolo {
                                         case WW => BotWW   .ask(actions, 0.03)(game)
                                         case OW => BotOW   .ask(actions, 0.03)(game)
                                         case AN => BotAN   .ask(actions, 0.03)(game)
+                                        case TS => BotTS   .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -656,6 +658,7 @@ object CthulhuWarsSolo {
                                         case WW => BotWW   .ask(as, 0.03)(game)
                                         case OW => BotOW   .ask(as, 0.03)(game)
                                         case AN => BotAN   .ask(as, 0.03)(game)
+                                        case TS => BotTS   .ask(as, 0.03)(game)
                                     })
 
 
@@ -711,6 +714,7 @@ object CthulhuWarsSolo {
                     case SL => Processing(|("#db6a33"), |("#4a1a1a"), None)
                     case OW => Processing(|("#6c4296"), None, |("#4c4c4c"))
                     case AN => Processing(|("#47a5bc"), |("#333333"), None)
+                    case TS => Processing(|("#BDE0BC"), |("#333333"), None)
                     case _  => defaultProcessing
                 }
 
@@ -726,6 +730,7 @@ object CthulhuWarsSolo {
                         case WW => DrawRect("ww-acolyte", None, x - 17, y - 52, 40, 58)
                         case OW => DrawRect("ow-acolyte", None, x - 17, y - 54, 38, 60)
                         case AN => DrawRect("an-acolyte", None, x - 17, y - 54, 39, 60)
+                        case TS => DrawRect("ts-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -750,6 +755,7 @@ object CthulhuWarsSolo {
                         case WW => DrawRect("ww-glyph", None, x - 50, y - 50, 100, 100)
                         case OW => DrawRect("ow-glyph", None, x - 50, y - 50, 100, 100)
                         case AN => DrawRect("an-glyph", None, x - 50, y - 50, 100, 101)
+                        case TS => DrawRect("ts-glyph", None, x - 50, y - 50, 100, 100)
                         case _ => null
                     }
 
@@ -791,6 +797,10 @@ object CthulhuWarsSolo {
                     case UnMan         => DrawRect("an-un-man", None, x - 24, y - 60, 48, 65)
                     case Reanimated    => DrawRect("an-reanimated", None, x - 28, y - 62, 57, 65)
                     case Yothan        => DrawRect("an-yothan", None, x - 61, y - 85, 122, 90)
+
+                    case TombHerd      => DrawRect("ts-tomb-herd", |(tint), x - 30, y - 70, 60, 80)
+                    case DeepTendril   => DrawRect("ts-tendril",    |(tint), x - 30, y - 75, 60, 85)
+                    case Glaaki        => DrawRect("ts-glaaki",     |(tint), x - 45, y - 120, 90, 130)
 
                     case DesecrationToken => DrawRect("ys-desecration", None, x - 20, y - 20, 41, 40)
                     case IceAgeToken      => DrawRect("ww-ice-age", None, x - 44, y - 67, 91, 75)
@@ -1072,11 +1082,24 @@ object CthulhuWarsSolo {
 
                 val name = div("name")("" + f + "")
                 val nameS = div("name")(f.short.styled(f) + "")
-                val power = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")))
-                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")))
-                val doom = div()(("" + f.doom + " Doom").styled("doom") + f.es.any.?(" + " + (f.es.num == 1).?("ES").|("" + f.es.num + " ES").styled("es")).|(""))
-                val doomL = div()(("" + f.doom + " Doom").styled("doom") + f.es.any.?(" + " + (f.es.num == 1).?("Elder Sign").|("" + f.es.num + " Elder Signs").styled("es")).|(""))
-                val doomS = div()(("" + f.doom + "D").styled("doom") + f.es.any.?("+" + ("" + f.es.num + "ES").styled("es")).|(""))
+                val dhStr = (f == TS).?(" | " + (game.deathsHead.toString + " Death's Head").styled(TS)).|("")
+                val power = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr)
+                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|(""))
+                val faceDownTomes = game.cursedTomesOwned.get(f).|(Nil).count { case (_, fd) => fd }
+                val totalTomes = game.cursedTomesOwned.get(f).|(Nil).num
+                val fStyle = f.style
+                val tomeImgSrc = Overlays.imageSource("ts-cursed-tome")
+                val tomeBadge = s"""<span style="position:absolute;top:-0.5em;right:-0.5em;font-size:65%;font-weight:bold;line-height:1;" class="ts">$totalTomes</span>"""
+                val tomeImgSpan = s"""<span style="position:relative;display:inline-block;vertical-align:middle;"><img src="$tomeImgSrc" style="height:1.2em;display:block;"/>$tomeBadge</span>"""
+                val tomeStr = (totalTomes > 0).?(" " + "- ".styled(TS) + s"""<span onclick='event.stopPropagation(); onExternalClick("cursed-tomes", "$fStyle")' onpointerover='event.stopPropagation(); onExternalOver("cursed-tomes", "$fStyle")' onpointerout='event.stopPropagation(); onExternalOut("cursed-tomes", "$fStyle")' style='cursor:pointer'>""" + faceDownTomes.toString.styled(TS) + " " + tomeImgSpan + "</span>").|("")
+                val tomeSStr = (totalTomes > 0).?(" " + "-".styled(TS) + faceDownTomes.toString.styled(TS) + "T".styled(TS)).|("")
+                val tsStack = (f == TS && game.tsTomesOnCard > 0).?(
+                    s"""<span onclick='event.stopPropagation(); onExternalClick("cursed-tomes", "$fStyle")' onpointerover='event.stopPropagation(); onExternalOver("cursed-tomes", "$fStyle")' onpointerout='event.stopPropagation(); onExternalOut("cursed-tomes", "$fStyle")' style='cursor:pointer; float:right; margin-left:0.5em;'>${tomeNumToRoman(game.tsTomesOnCard).styled(TS)}<img src='${Overlays.imageSource("ts-cursed-tome")}' style='height:1.2em; vertical-align:middle;'/></span>"""
+                ).|("")
+
+                val doom = div()(tsStack + ("" + f.doom + " Doom").styled("doom") + f.es.any.?(" + " + (f.es.num == 1).?("ES").|("" + f.es.num + " ES").styled("es")).|("") + tomeStr)
+                val doomL = div()(tsStack + ("" + f.doom + " Doom").styled("doom") + f.es.any.?(" + " + (f.es.num == 1).?("Elder Sign").|("" + f.es.num + " Elder Signs").styled("es")).|("") + tomeStr)
+                val doomS = div()(("" + f.doom + "D").styled("doom") + f.es.any.?("+" + ("" + f.es.num + "ES").styled("es")).|("") + tomeSStr)
 
                 val sb = f.spellbooks./{ sb =>
                     val full = sb.elem
@@ -1090,7 +1113,7 @@ object CthulhuWarsSolo {
                 }.mkString("") +
                 (1.to(6 - f.spellbooks.num - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") +
                 f.unfulfilled./{ r =>
-                    val s = r.text.replace("\\", "\\\\") // "
+                    val s = r.text.replace("\\", "\\\\").replace("'", "&#39;") // "
                     val d = s"""<div class='spellbook'
                         onclick='event.stopPropagation(); onExternalClick("${f.short}", "${s}")'
                         onpointerover='event.stopPropagation(); onExternalOver("${f.short}", "${s}")'
@@ -1493,6 +1516,26 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     factionStatus(displayGame.setup(n), statusBitmaps(n))(displayGame)
                 }
 
+                val prevHistLen = RitualTrackOverlay.ritualHistory.length
+                val prevMarker = RitualTrackOverlay.markerIndex
+                val prevPureDH = RitualTrackOverlay.tsPureDHMarkerIndices.length
+                RitualTrackOverlay.numPlayers = seating.num
+                RitualTrackOverlay.markerIndex = displayGame.ritualMarker
+                RitualTrackOverlay.trackLength = displayGame.ritualTrack.length
+                RitualTrackOverlay.ritualHistory = displayGame.ritualHistory./(_.style)
+                RitualTrackOverlay.ritualHistoryCeremony = displayGame.ritualHistoryCeremony
+                RitualTrackOverlay.tsPureDHMarkerIndices = TSExpansion.pureDHMarkerIndices
+                // [2026-04-03] Auto-refresh overlay when ritual data changes
+                if (RitualTrackOverlay.ritualHistory.length != prevHistLen ||
+                    RitualTrackOverlay.markerIndex != prevMarker ||
+                    RitualTrackOverlay.tsPureDHMarkerIndices.length != prevPureDH)
+                    Overlays.refreshIfShowing()
+
+                TSCursedTomesOverlay.factionTomes = displayGame.cursedTomesOwned.map { case (f, tomes) => f.style -> tomes }
+                TSCursedTomesOverlay.tomesOnCard = displayGame.tsTomesOnCard
+
+                dom.document.getElementById("roa-cost-num").?.foreach(_.innerHTML = displayGame.ritualCost.toString)
+
                 mapWest.innerHTML = (board.west :+ GC.deep)./(r => processStatus(displayGame.regionStatus(r), "p8")).mkString("")
                 mapEast.innerHTML = board.east./(r => processStatus(displayGame.regionStatus(r), "p8")).mkString("")
 
@@ -1500,6 +1543,62 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             }
 
             dom.window.onresize = e => updateStatus()
+
+            if (hash == "") {
+                val localTitle = dom.document.createElement("div")
+                localTitle.innerHTML = s"""
+                    <div style="
+                        position: absolute;
+                        left: 0%;
+                        top: 0%;
+                        width: 100%;
+                        height: 100%;
+                        z-index: 1;
+                        pointer-events: none;
+                    ">
+                        <div style="
+                            color: rgb(255, 255, 255);
+                            font-size: 100%;
+                            font-weight: bold;
+                            filter: drop-shadow(rgb(0, 0, 0) 0px 0px 6px) drop-shadow(rgb(0, 0, 0) 0px 0px 6px) drop-shadow(rgb(0, 0, 0) 0px 0px 6px);
+                            text-align: left;
+                            display: flex;
+                            align-items: center;
+                            flex-wrap: nowrap;
+                        ">
+                            <span
+                                style="
+                                    pointer-events: auto;
+                                    cursor: pointer;
+                                    display: inline-flex;
+                                    align-items: center;
+                                    position: relative;
+                                    vertical-align: middle;
+                                    flex-shrink: 0;
+                                "
+                                onclick="event.stopPropagation(); onExternalClick('RoA')"
+                                onpointerover="event.stopPropagation(); onExternalOver('RoA')"
+                                onpointerout="event.stopPropagation(); onExternalOut('RoA')">
+                                <img src="${Overlays.imageSource("roa-icon")}"
+                                     style="height: 1.7em; width: auto; display: block;" />
+                                <span id="roa-cost-num"
+                                      style="
+                                          position: absolute;
+                                          bottom: 0;
+                                          left: 50%;
+                                          transform: translateX(-50%);
+                                          color: white;
+                                          font-size: 110%;
+                                          font-weight: bold;
+                                          line-height: 1;
+                                          text-shadow: 0 0 3px black, 0 0 3px black, 0 0 3px black;
+                                          pointer-events: none;
+                                      ">5</span>
+                            </span>
+                        </div>
+                    </div>"""
+                mapSmall.appendChild(localTitle)
+            }
 
             var token : Double = 0.0
 
@@ -1966,8 +2065,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                 val aa = Explode.explode(g, actions)
 
-                                val sorted = if (f == BG)
-                                    Bot3(BG).eval(aa)(g).sortBy(-_.evaluations.map(_.weight).sum)
+                                val sorted = if (f == BG || f == TS)
+                                    Bot3(f).eval(aa)(g).sortBy(-_.evaluations.map(_.weight).sum)
                                 else
                                 if (f == null) {
                                     (BotYS.eval(g, aa).sortWith(BotYS.compare).take(1) ++ BotYSOld.eval(g, aa).sortWith(BotYSOld.compare).take(1))./(ae => ae.copy(evaluations = ae.evaluations.%(_.desc != "random"))).distinct
@@ -2506,7 +2605,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             askTop()
         }
 
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS)
 
         val replay = getElem("replay").?./(_.innerHTML).|("")
 
@@ -2581,9 +2680,42 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     font-weight: bold;
                                     filter: drop-shadow(rgb(0, 0, 0) 0px 0px 6px) drop-shadow(rgb(0, 0, 0) 0px 0px 6px) drop-shadow(rgb(0, 0, 0) 0px 0px 6px);
                                     text-align: left;
+                                    display: flex;
+                                    align-items: center;
+                                    flex-wrap: nowrap;
                                 ">
-                                    <span data-elem="text">
+                                    <span data-elem="text" style="white-space: nowrap;">
                                         ${logs(1)}
+                                    </span>
+                                    <span
+                                        style="
+                                            pointer-events: auto;
+                                            cursor: pointer;
+                                            display: inline-flex;
+                                            align-items: center;
+                                            position: relative;
+                                            margin-left: 0.5em;
+                                            vertical-align: middle;
+                                            flex-shrink: 0;
+                                        "
+                                        onclick="event.stopPropagation(); onExternalClick('RoA')"
+                                        onpointerover="event.stopPropagation(); onExternalOver('RoA')"
+                                        onpointerout="event.stopPropagation(); onExternalOut('RoA')">
+                                        <img src="${Overlays.imageSource("roa-icon")}"
+                                             style="height: 0.85em; width: auto; display: block;" />
+                                        <span id="roa-cost-num"
+                                              style="
+                                                  position: absolute;
+                                                  bottom: 0;
+                                                  left: 50%;
+                                                  transform: translateX(-50%);
+                                                  color: white;
+                                                  font-size: 55%;
+                                                  font-weight: bold;
+                                                  line-height: 1;
+                                                  text-shadow: 0 0 3px black, 0 0 3px black, 0 0 3px black;
+                                                  pointer-events: none;
+                                              ">5</span>
                                     </span>
                                 </div>
                             </div>"""

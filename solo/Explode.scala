@@ -19,6 +19,12 @@ object Explode {
                 c match {
                     case Ask(_, actions) => process(actions)
                     case Then(then) => process($(then))
+                    case Force(action) => process($(action))
+                    case DrawES(_, 0, 0, 0, draw) => process($(draw(0, true)))
+                    case DrawES(_, es1, es2, es3, draw) => process($(draw((es1.times(1) ++ es2.times(2) ++ es3.times(3)).maxBy(_ => random()), false)))
+                    case MultiAsk(asks) => asks.foreach { case Ask(_, actions) => process(actions); case _ => }
+                    case DelayedContinue(_, inner) => // skip delayed continues in exploration
+                    case _ => // ignore other continue types (GameOver, etc.)
                 }
             }
 
