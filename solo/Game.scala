@@ -1027,7 +1027,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     // Tombstalker (TS) state
     var deathsHead : Int = 0
-    var tsTomesOnCard : Int = 11
+    var tsTomesOnCard : Int = 0
     var cursedTomesOwned : Map[Faction, $[(Int, Boolean)]] = Map()
 
     def forNPowerWithTax(r : Region, f : Faction, n : Int) : String = { val p = n + f.taxIn(r) ; " for " + p.power }

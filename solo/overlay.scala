@@ -594,12 +594,16 @@ object Overlays {
         case $("TS", Undulate.name) => spellbook(Undulate.name, "Ongoing", "Your Units may carry one of your Units of lesser cost when moving for free. This effect stacks.")
 
         case $("cursed-tomes", fStyle) if fStyle.toString == "ts" =>
-            val onCard = TSCursedTomesOverlay.tomesOnCard
+            // [2026-04-04] tomesOnCard = # given away. Show I→XI ascending, white=remaining, grey=given.
+            val givenAway = TSCursedTomesOverlay.tomesOnCard
             val allTomes = TSCursedTomesOverlay.factionTomes
-            val onCardRows = (1 to onCard).reverse./ { n =>
+            // Show all 11 tomes in ascending order — white if still on card, grey if given away
+            val onCardRows = (1 to 11)./ { n =>
                 val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
-                s"""<tr><td style="color:grey;padding:3px 12px;font-size:90%">$text</td></tr>"""
+                val color = if (n <= givenAway) "grey" else "white"
+                s"""<tr><td style="color:$color;padding:3px 12px;font-size:90%">$text</td></tr>"""
             }.mkString("")
+            // Show tomes held by other factions
             val factionRows = allTomes.toList.flatMap { case (fs, tomes) =>
                 tomes.sortBy(_._1)./ { case (n, faceDown) =>
                     val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")

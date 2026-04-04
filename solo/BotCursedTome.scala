@@ -154,7 +154,8 @@ object BotCursedTome {
             def |=>(e : (Int, String)) { if (bool) result :+= Evaluation(e._1, e._2) }
         }
 
-        val tomeNum    = game.tsTomesOnCard
+        // [2026-04-04] tsTomesOnCard = # given away. Next tome to give = given + 1.
+        val tomeNum    = game.tsTomesOnCard + 1
         val ritualCost = game.ritualCost
         val others     = game.factions.but(f)
         val avgOtherPower = if (others.any) others./(_.power).sum.toDouble / others.num else 0.0

@@ -324,19 +324,19 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 true |=> 933 -> "#625 doom done"
 
             case LoyaltyCardDoomAction(_) =>
-                // Soft: opens NM card selection (each card costs 2 doom); cancel always available
-                allSB && self.doom >= 20 |=> 200 -> "#426 nm menu: allSB flush doom, can spare 2"
-                self.doom >= 15           |=> 10 -> "#452 nm menu: decent doom reserve"
-                true                      |=> -2000 -> "#497 nm menu: doom too precious by default"
+                // [NU-TEST 2026-04-04] Very restrictive: 2 doom is huge for TS. Only with massive surplus.
+                val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
+                hasNMCard |=> -100000 -> "NU: already have NM card"
+                !hasNMCard && allSB && self.doom >= 25 |=> 5000 -> "NU: loyalty card, endgame surplus"
+                true |=> -10000 -> "NU: doom too precious for loyalty card"
 
             case SacrificeHighPriestDoomAction(_) =>
-                // PowerNeutral free action: sacrifice HP, gain +2 power for next turn
+                // [NU-TEST 2026-04-04] HP sacrifice is free (PowerNeutral) — moderate scores
                 val hpDoom    = self.all(HighPriest).num
                 val gateHPD   = self.gates.%(r => self.at(r, HighPriest).any).num
-                (hpDoom > gateHPD) |=> 1054 -> "#622 hp doom: spare HP not on gate"
-                hpDoom > 1         |=> 900 -> "#626 hp doom: multiple HPs available"
-                power <= 2         |=> 700 -> "#640 hp doom: low power, +2 power very useful"
-                have(Glaaki) && power < 4 |=> 500 -> "#629 hp doom: glaaki needs power for actions"
+                (hpDoom > gateHPD) |=> 1200 -> "NU: hp doom: spare HP not on gate"
+                hpDoom > 1         |=> 1000 -> "NU: hp doom: multiple HPs"
+                power <= 2         |=> 1500 -> "NU: hp doom: low power, +2 useful"
                 true               |=> 1100 -> "#621 hp doom: sacrifices an HP unit"
 
             case TSDeathMarchDoomAction(_, _) =>
@@ -436,26 +436,27 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 true |=> -800 -> "#570 main done"
 
             case NeutralMonstersAction(_, lc) =>
-                // All NM cards cost 2 doom — expensive for TS (doom = winning resource)
-                true |=> -928 -> "#485 nm: 2 doom cost is steep for TS"
-                allSB && self.doom >= 20 |=> -900 -> "#480 nm: allSB flush doom, can spare 2"
-                self.doom >= 15          |=> 1500 -> "#241 nm: adequate doom reserve"
-                // Per-card combat/utility value (tunable)
-                (lc.unit == Gug)        |=> 1300 -> "#259 nm: gug 3 combat each, powerful fighters"
-                (lc.unit == Ghast)      |=> 1099 -> "#282 nm: ghast 4 units, 2 combat swarm"
-                (lc.unit == Voonith)    |=> 1234 -> "#262 nm: voonith 3 combat"
-                (lc.unit == Shantak)    |=> 525 -> "#372 nm: shantak mobility, carries cultists"
-                (lc.unit == StarVampire) |=> 1200 -> "#265 nm: star vampire many units"
+                // [NU-TEST 2026-04-04] Very restrictive — 2 doom cost is huge. Only endgame surplus.
+                val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
+                hasNMCard |=> -100000 -> "NU: already have NM card"
+                true |=> -5000 -> "NU: nm 2 doom cost is huge"
+                allSB && self.doom >= 25 |=> 3000 -> "NU: nm endgame surplus doom"
+                (lc.unit == Gug)        |=> 1300 -> "NU: gug 3 combat fighters"
+                (lc.unit == Ghast)      |=> 1100 -> "NU: ghast swarm defense"
+                (lc.unit == Voonith)    |=> 1200 -> "NU: voonith 3 combat battle"
+                (lc.unit == Shantak)    |=> 800 -> "NU: shantak carry mobility"
+                (lc.unit == StarVampire) |=> 1200 -> "NU: star vampire battle"
+                (lc.unit == DimensionalShamblerUnit) |=> 1500 -> "NU: shambler deploy versatility"
+                (lc.unit == Gnorri)     |=> 1000 -> "NU: gnorri summons"
 
             case SacrificeHighPriestMainAction(_) =>
-                // Sacrifice HP during main phase: costs 1 power to initiate, gains +2 power (net +1)
+                // [NU-TEST 2026-04-04] HP main sacrifice: costs 1 power, gains +2 (net +1). Moderate.
                 val hpMain  = self.all(HighPriest).num
                 val gateHPM = self.gates.%(r => self.at(r, HighPriest).any).num
-                (hpMain > gateHPM) |=> 700 -> "#345 hp main: spare HP not guarding gate"
-                hpMain > 1         |=> 500 -> "#374 hp main: multiple HPs available"
-                power <= 1         |=> 600 -> "#359 hp main: stall rescue, +2 power critical"
-                power <= 2         |=> 300 -> "#568 hp main: low power, net +1 power"
-                have(Glaaki)       |=> 400 -> "#391 hp main: glaaki needs power"
+                (hpMain > gateHPM) |=> 700 -> "NU: hp main: spare HP not guarding gate"
+                hpMain > 1         |=> 500 -> "NU: hp main: multiple HPs"
+                power <= 1         |=> 800 -> "NU: hp main: low power rescue"
+                enemiesExhausted   |=> 1500 -> "NU: hp main: enemies out, safe to use"
                 true               |=> 1300 -> "#260 hp main: sacrifices an HP unit"
 
             case SacrificeHighPriestAction(_, r, _) =>
@@ -467,22 +468,24 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 true                    |=>  100 -> "#441 hp: any"
 
             case IndependentGOOMainAction(_, lc, _) =>
-                // Awaken an iGOO — costs lc.power (2-6 power), major commitment
+                // [NU-TEST 2026-04-04] Gated: only if no iGOO yet. Weak — core engine first.
+                val hasIGOO = self.loyaltyCards.of[IGOOLoyaltyCard].any
                 val remaining = self.power - lc.power
+                hasIGOO    |=> -100000 -> "NU: already have an iGOO"
                 remaining < 0  |=> -99999 -> "#525 igoo: cannot afford"
-                remaining >= 3 |=> 777 -> "#337 igoo: comfortable power budget"
-                remaining >= 1 |=> 736 -> "#338 igoo: affordable with power left"
-                remaining == 0 |=> 500 -> "#375 igoo: spends all remaining power"
-                lateGame       |=> 208 -> "#424 igoo: late game extra GOO useful"
-                earlyGame      |=> 209 -> "#423 igoo: early game, need power for expansion"
-                // Per-iGOO value (tunable)
-                (lc == YgolonacCard) |=> 30 -> "#450 igoo: ygolonac cheapest at 2 power"
-                (lc == TulzschaCard) |=> 1000 -> "#562 igoo: tulzscha undying flame passive"
-                (lc == ByatisCard)   |=> 700 -> "#347 igoo: byatis strong immobile anchor"
-                (lc == AbhothCard)   |=> 1100 -> "#279 igoo: abhoth filth generation"
-                (lc == NyogthaCard)  |=> 805 -> "#320 igoo: nyogtha powerful fighter"
-                (lc == DaolothCard)  |=> 1039 -> "#287 igoo: daoloth gate builder"
-                true                 |=> 585 -> "#369 igoo: expensive, avoid by default"
+                // Only consider after Glaaki is awakened and gates >= 2
+                !have(Glaaki) |=> -5000 -> "NU: igoo: awaken Glaaki first"
+                self.gates.num < 2 |=> -3000 -> "NU: igoo: need 2+ gates first"
+                remaining >= 3 |=> 800 -> "NU: igoo comfortable power"
+                remaining >= 1 |=> 600 -> "NU: igoo affordable"
+                remaining == 0 |=> 300 -> "NU: igoo spends all power"
+                (lc == YgolonacCard) |=> 200 -> "NU: ygolonac cheapest"
+                (lc == TulzschaCard) |=> 1000 -> "NU: tulzscha undying flame"
+                (lc == ByatisCard)   |=> 700 -> "NU: byatis anchor"
+                (lc == AbhothCard)   |=> 900 -> "NU: abhoth filth"
+                (lc == NyogthaCard)  |=> 800 -> "NU: nyogtha fighter"
+                (lc == DaolothCard)  |=> 900 -> "NU: daoloth gate builder"
+                true                 |=> 500 -> "NU: igoo base"
 
             case IndependentGOOAction(_, lc, r, _) =>
                 // Choose where to place the iGOO
@@ -494,6 +497,99 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 (lc.unit == Byatis) && r.ownGate  |=> 851 -> "#318 byatis: at own gate (immobile anchor)"
                 (lc.unit == Byatis) && !r.ownGate |=> 800 -> "#322 byatis: avoid non-gate (cant move)"
                 true |=> 500 -> "#377 igoo place: any valid region"
+
+            // ══════════════════════════════════════════════════════════════════
+            // ── NEUTRAL UNIT SCORES (2026-04-04) ─────────────────────────────
+            // Weak supplementary scores (500-2000 range). Core TS engine first.
+            // See: TS Neutral Unit Testing and Rollback Guide.md
+            // ══════════════════════════════════════════════════════════════════
+
+            // ── HP: Recruit High Priest in AP3+ ──────────────────────────────
+            case RecruitAction(_, HighPriest, r) =>
+                firstAP || secondAP |=> -5000 -> "NU: dont recruit HP early, gates first"
+                r.ownGate && r.allies.goos.any |=> 1500 -> "NU: recruit HP at Glaaki gate"
+                r.ownGate |=> 1000 -> "NU: recruit HP at own gate"
+                true |=> 500 -> "NU: recruit HP base"
+
+            // ── HP: Sacrifice out of turn ────────────────────────────────────
+            case SacrificeHighPriestOutOfTurnMainAction(_) =>
+                enemiesExhausted |=> 1500 -> "NU: HP sacrifice, enemies exhausted"
+                power <= 1 |=> 1200 -> "NU: HP sacrifice when low power"
+                true |=> 800 -> "NU: HP out-of-turn sacrifice"
+
+            // ── NM: Placement of summoned NM units ───────────────────────────
+            case LoyaltyCardSummonAction(_, uc, r) =>
+                r.ownGate && r.allies.goos.any |=> 2000 -> "NU: place NM at Glaaki gate"
+                r.ownGate && r.allies.cultists.any |=> 1500 -> "NU: place NM at own gate"
+                r.ownGate |=> 1000 -> "NU: place NM at gate"
+                true |=> 500 -> "NU: place NM anywhere"
+
+            // ── NM: Ghast free summon (defend battles) ───────────────────────
+            case FreeSummonAction(_, Ghast, r, _) =>
+                r.allies.goos.any |=> 1500 -> "NU: ghast at Glaaki"
+                r.ownGate |=> 1200 -> "NU: ghast at gate"
+                true |=> 800 -> "NU: ghast free summon"
+
+            // ── NM: Shantak carry cultist ────────────────────────────────────
+            case ShantakCarryCultistAction(_, o, ur, r) =>
+                r.ownGate && r.allies.cultists.none |=> 2000 -> "NU: shantak carry to empty gate"
+                r.enemyGate && r.foes.goos.none |=> 1500 -> "NU: shantak carry to steal gate"
+                true |=> 800 -> "NU: shantak carry base"
+
+            // ── NM: Shambler deploy to map ───────────────────────────────────
+            case ShamblerDeployMainAction(_, _) =>
+                true |=> 1500 -> "NU: deploy shambler"
+
+            case ShamblerDeployAction(_, r, _) =>
+                r.foes.cultists.any && r.foes.goos.none && r.foes.monsterly.none |=> 2000 -> "NU: shambler to capture"
+                r.ownGate && r.allies.monsterly.none |=> 1500 -> "NU: shambler defend gate"
+                true |=> 800 -> "NU: shambler deploy"
+
+            // ── NM: Shambler summon to faction card ──────────────────────────
+            case ShamblerSummonMainAction(_) =>
+                true |=> 1000 -> "NU: summon shambler to card"
+
+            case ShamblerSummonAction(_) =>
+                true |=> 1000 -> "NU: summon shambler"
+
+            // ── iGOO abilities (weak — use when nothing better to do) ────────
+            case GodOfForgetfulnessMainAction(_, _, _) =>
+                true |=> 1200 -> "NU: byatis pull cultists"
+
+            case GodOfForgetfulnessAction(_, d, r) =>
+                r.foes.cultists.num >= 2 |=> 1500 -> "NU: byatis pull many"
+                r.foes.cultists.any |=> 1000 -> "NU: byatis pull"
+                true |=> 500 -> "NU: byatis base"
+
+            case FilthMainAction(_, _) =>
+                true |=> 800 -> "NU: abhoth filth"
+
+            case FilthAction(_, r) =>
+                r.enemyGate |=> 1200 -> "NU: filth at enemy gate"
+                true |=> 600 -> "NU: filth base"
+
+            case NightmareWebMainAction(_, _) =>
+                true |=> 1000 -> "NU: nyogtha nightmare web"
+
+            case NightmareWebAction(_, r) =>
+                r.ownGate |=> 1500 -> "NU: nightmare web at gate"
+                r.foes.any |=> 1000 -> "NU: nightmare web near enemies"
+                true |=> 600 -> "NU: nightmare web base"
+
+            case TulzschaGivePowerMainAction(_) =>
+                !allSB |=> 1500 -> "NU: tulzscha give power for SB"
+                true |=> 500 -> "NU: tulzscha give power"
+
+            case TulzschaGivePowerAction(_) =>
+                true |=> 800 -> "NU: tulzscha confirm"
+
+            case CeremonyOfAnnihilationChoiceAction(_) =>
+                power <= 2 |=> 1500 -> "NU: ceremony, need power"
+                true |=> 800 -> "NU: ceremony base"
+
+            // ══════════════════════════════════════════════════════════════════
+            // ── END NEUTRAL UNIT SCORES ──────────────────────────────────────
+            // ══════════════════════════════════════════════════════════════════
 
             // ── MOVEMENT ─────────────────────────────────────────────────────
             case MoveAction(_, u, o, d, _) if u.uclass == Glaaki =>
@@ -1376,9 +1472,10 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
 
             // ── ELEVEN REVELATIONS ────────────────────────────────────────────
             case TSElevenRevelationsMainAction(_) =>
-                val tomeNum    = game.tsTomesOnCard
+                // [2026-04-04] tsTomesOnCard = # given away. Next tome = given + 1.
+                val tomeNum    = game.tsTomesOnCard + 1
                 val goodTargets = others.%(f => f.power >= 1 && !ofinale(f))
-                // Tome XI (first given): doom = ritualCost-5; at ritual cost 7+ that's 2+ doom for 1 power
+                // Tome XI (last given now): doom = ritualCost-5; at ritual cost 7+ that's 2+ doom for 1 power
                 val xiValueTome   = tomeNum == 11 && game.ritualCost >= 7
                 // Tomes IX-X: TS gains 1 ES (~1.67 doom) — always high value
                 val esTome        = tomeNum >= 9 && tomeNum <= 10
@@ -1468,6 +1565,15 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 // Removing face-down tomes prevents doom loss; always do this
                 // [DEAD] true |=> 1598 -> "#236 remove tome prevents doom loss"
 
+            // [2026-04-04] Tome unit placement — TS chooses which gate
+            case TSPlaceTomeUnitAction(_, uc, r, _) =>
+                // Prefer gates that need defense, or Glaaki's gate for Undulate combo
+                r.allies.goos.any |=> 3000 -> "tome place: at Glaaki gate for Undulate"
+                r.allies.monsterly.none && r.allies.cultists.any |=> 2500 -> "tome place: undefended gate"
+                r.foes.active.any |=> 1500 -> "tome place: threatened gate"
+                r.allies.cultists.num >= 3 |=> 2000 -> "tome place: fortress gate"
+                true |=> 1000 -> "tome place: any gate"
+
             // ── UNDULATE (carry chain) ────────────────────────────────────────
             // Combo: Glaaki + DT + TombHerd in one area = up to 4 SBs from a single battle
             case TSUndulateCarryAction(_, u, _, to, _) =>
@@ -1554,11 +1660,17 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 // [DEAD] canRitual |=> 1195 -> "#275 ritual first"
 
             case ControlGateAction(_, r, u, _) =>
-                true |=> 1000000 -> "#106 always"
+                // [NU-TEST 2026-04-04] Fixed infinite gate control swap loop with HPs
+                // ORIGINAL: true |=> 1000000 -> "#106 always" (caused infinite HP/Acolyte oscillation)
+                // Now: only swap if the new unit is better at controlling (Acolyte preferred over HP on gate)
                 r.allies.%(_.onGate).foreach { c =>
-                    c.uclass == u.uclass |=> -1000000 -> "#541 remain calm"
-                    c.uclass == HighPriest && u.uclass == Acolyte |=> 857 -> "#317 high priest off gate"
+                    c.uclass == u.uclass |=> -1000000 -> "#541 remain calm: no swap needed"
+                    // Prefer keeping Acolyte on gate (HP is more valuable to sacrifice)
+                    c.uclass == HighPriest && u.uclass == Acolyte |=> 5000 -> "NU-TEST: swap HP off gate, acolyte controls"
+                    // Don't swap Acolyte off for HP
+                    c.uclass == Acolyte && u.uclass == HighPriest |=> -5000 -> "NU-TEST: keep acolyte on gate"
                 }
+                true |=> 0 -> "#106 gate control base"
 
             case AbandonGateAction(_, _, _) =>
                 true |=> -1000000 -> "#542 never"

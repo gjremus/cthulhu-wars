@@ -1093,8 +1093,10 @@ object CthulhuWarsSolo {
                 val tomeImgSpan = s"""<span style="position:relative;display:inline-block;vertical-align:middle;"><img src="$tomeImgSrc" style="height:1.2em;display:block;"/>$tomeBadge</span>"""
                 val tomeStr = (totalTomes > 0).?(" " + "- ".styled(TS) + s"""<span onclick='event.stopPropagation(); onExternalClick("cursed-tomes", "$fStyle")' onpointerover='event.stopPropagation(); onExternalOver("cursed-tomes", "$fStyle")' onpointerout='event.stopPropagation(); onExternalOut("cursed-tomes", "$fStyle")' style='cursor:pointer'>""" + faceDownTomes.toString.styled(TS) + " " + tomeImgSpan + "</span>").|("")
                 val tomeSStr = (totalTomes > 0).?(" " + "-".styled(TS) + faceDownTomes.toString.styled(TS) + "T".styled(TS)).|("")
-                val tsStack = (f == TS && game.tsTomesOnCard > 0).?(
-                    s"""<span onclick='event.stopPropagation(); onExternalClick("cursed-tomes", "$fStyle")' onpointerover='event.stopPropagation(); onExternalOver("cursed-tomes", "$fStyle")' onpointerout='event.stopPropagation(); onExternalOut("cursed-tomes", "$fStyle")' style='cursor:pointer; float:right; margin-left:0.5em;'>${tomeNumToRoman(game.tsTomesOnCard).styled(TS)}<img src='${Overlays.imageSource("ts-cursed-tome")}' style='height:1.2em; vertical-align:middle;'/></span>"""
+                // [2026-04-04] tsTomesOnCard = # given away. Show next tome (given+1) if any remain.
+                val tsNextTome = game.tsTomesOnCard + 1
+                val tsStack = (f == TS && game.tsTomesOnCard < 11).?(
+                    s"""<span onclick='event.stopPropagation(); onExternalClick("cursed-tomes", "$fStyle")' onpointerover='event.stopPropagation(); onExternalOver("cursed-tomes", "$fStyle")' onpointerout='event.stopPropagation(); onExternalOut("cursed-tomes", "$fStyle")' style='cursor:pointer; float:right; margin-left:0.5em;'>${tomeNumToRoman(tsNextTome).styled(TS)}<img src='${Overlays.imageSource("ts-cursed-tome")}' style='height:1.2em; vertical-align:middle;'/></span>"""
                 ).|("")
 
                 val doom = div()(tsStack + ("" + f.doom + " Doom").styled("doom") + f.es.any.?(" + " + (f.es.num == 1).?("ES").|("" + f.es.num + " ES").styled("es")).|("") + tomeStr)

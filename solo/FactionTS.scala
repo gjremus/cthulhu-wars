@@ -96,6 +96,9 @@ case class TSSkipRemoveTomeAction(self : Faction) extends OptionFactionAction("K
     def question(implicit game : Game) = "Ritual of Annihilation"
 }
 
+// [2026-04-04] TOME UNIT PLACEMENT — TS chooses which gate to place TH/Tendril from tomes 1-4
+case class TSPlaceTomeUnitAction(self : Faction, uc : UnitClass, r : Region, tomeNum : Int) extends BaseFactionAction("Place " + uc.styled(TS) + " from Tome " + tomeNumToRoman(tomeNum) + " at", r)
+
 // UNDULATE (carry chain: moved unit can carry lesser-cost units for free)
 case class TSUndulateCarryPhaseAction(self : Faction, from : Region, to : Region, carrierCost : Int) extends ForcedAction with PowerNeutral
 case class TSUndulateCarryAction(self : Faction, u : UnitRef, from : Region, to : Region, newCarrierCost : Int) extends BaseFactionAction(
@@ -345,7 +348,8 @@ object TSExpansion extends Expansion {
             game.independents(f)
 
             // ELEVEN REVELATIONS: give topmost tome to enemy (cost 1)
-            if (f.can(ElevenRevelations) && game.tsTomesOnCard > 0 && f.enemies.any && f.power >= 1)
+            // [2026-04-04] tsTomesOnCard now tracks # given away (0=none, 11=all)
+            if (f.can(ElevenRevelations) && game.tsTomesOnCard < 11 && f.enemies.any && f.power >= 1)
                 + TSElevenRevelationsMainAction(f)
 
             // GRASPING DEAD: battle with only Tomb-Herds
@@ -397,8 +401,9 @@ object TSExpansion extends Expansion {
 
         case TSElevenRevelationsAction(self, f) =>
             self.power -= 1
+            // [2026-04-04] Reversed: give tomes I→XI (ascending). tsTomesOnCard tracks # given away.
+            game.tsTomesOnCard += 1
             val tomeNum = game.tsTomesOnCard
-            game.tsTomesOnCard -= 1
             // Add face-up tome (false = face-up) to target faction
             val existing = game.cursedTomesOwned.get(f).|(Nil)
             game.cursedTomesOwned = game.cursedTomesOwned + (f -> (existing :+ (tomeNum, false)))
@@ -421,34 +426,45 @@ object TSExpansion extends Expansion {
             val ts = TS
             tomeNum match {
                 case 1 | 2 =>
-                    // TS places Tomb-Herd at controlled gate
-                    ts.gates.onMap.%(r => ts.pool(TombHerd).any).headOption.foreach { r =>
-                        ts.place(TombHerd, r)
-                        ts.log("placed", TombHerd.styled(TS), "at", r, "from Tome", tomeNumToRoman(tomeNum))
-                    }
+                    // [2026-04-04] TS chooses which gate to place Tomb-Herd
+                    val gates = ts.gates.onMap.distinct
+                    if (ts.pool(TombHerd).any && gates.any)
+                        Ask(ts).each(gates)(r => TSPlaceTomeUnitAction(ts, TombHerd, r, tomeNum))
+                    else
+                        Force(EndAction(self))
                 case 3 | 4 =>
-                    // TS places Deep Tendril at controlled gate
-                    ts.gates.onMap.%(r => ts.pool(DeepTendril).any).headOption.foreach { r =>
-                        ts.place(DeepTendril, r)
-                        ts.log("placed", DeepTendril.styled(TS), "at", r, "from Tome", tomeNumToRoman(tomeNum))
-                    }
+                    // [2026-04-04] TS chooses which gate to place Deep Tendril
+                    val gates = ts.gates.onMap.distinct
+                    if (ts.pool(DeepTendril).any && gates.any)
+                        Ask(ts).each(gates)(r => TSPlaceTomeUnitAction(ts, DeepTendril, r, tomeNum))
+                    else
+                        Force(EndAction(self))
                 case 5 | 6 =>
                     ts.doom += 1
                     ts.log("gained", 1.doom, "from Tome", tomeNumToRoman(tomeNum))
+                    EndAction(self)
                 case 7 | 8 =>
                     val dhGain = ts.onMap(TombHerd).num
                     game.deathsHead += dhGain
                     ts.log("gained", dhGain.toString.styled("kill"), "Death's Head from Tome", tomeNumToRoman(tomeNum))
+                    EndAction(self)
                 case 9 | 10 =>
                     ts.takeES(1)
                     ts.log("gained", 1.es, "from Tome", tomeNumToRoman(tomeNum))
+                    EndAction(self)
                 case 11 =>
                     val doomGain = max(0, game.ritualCost - 5)
                     ts.doom += doomGain
                     ts.log("gained", doomGain.doom, "from Tome XI (Ritual Cost", game.ritualCost.toString, "minus 5)")
+                    EndAction(self)
                 case _ =>
+                    EndAction(self)
             }
 
+        // [2026-04-04] Handle TS's choice of gate for tome unit placement
+        case TSPlaceTomeUnitAction(self, uc, r, tomeNum) =>
+            self.place(uc, r)
+            self.log("placed", uc.styled(TS), "at", r, "from Tome", tomeNumToRoman(tomeNum))
             EndAction(self)
 
         // CURSED TOME - ritual removal
