@@ -15,9 +15,24 @@ case object AbhothIcon extends UnitClass(Abhoth.name + " Icon", Token, 0)
 case object DaolothIcon extends UnitClass(Daoloth.name + " Icon", Token, 0)
 case object NyogthaIcon extends UnitClass(Nyogtha.name + " Icon", Token, 0)
 
+// ── TULZSCHA ──
+// Cost 4 to awaken, combat 1. Tulzscha's ongoing ability "Undying Flame" fires once per
+// turn at Gather Power: if any enemy has more Doom, ES (face-down only), or Power than
+// the Tulzscha owner, the owner gains +1 of whichever they're behind on (each checked
+// independently). Spellbook requirement: give each enemy 2 Power. Spellbook "Ceremony of
+// Annihilation": during the doom phase, the owner may take the current ritual cost as Power
+// instead of performing a normal ritual (no Doom or ES gained, but ritual track advances).
 case object TulzschaCard extends IGOOLoyaltyCard(TulzschaIcon, Tulzscha, power = 4, combat = 1)
 case object TulzschaIcon extends UnitClass(Tulzscha.name + " Icon", Token, 0)
 
+// ── Y'GOLONAC ──
+// Cost 2 to awaken, combat 1. Y'Golonac's battle ability "Orifices" triggers when Y'Golonac
+// is killed in battle: before elimination, the owner may choose an enemy Monster, Terror, or
+// Cultist in the same battle. That unit is eliminated and Y'Golonac is placed under the
+// target's faction's control with the loyalty card and spellbook transferred. Spellbook
+// "The Revelations" (ongoing): during the doom phase, every enemy faction gains 1 Elder Sign.
+// The spellbook requirement is satisfied automatically when a faction receives Y'Golonac
+// (either by awakening or via Orifices transfer).
 case object YgolonacCard extends IGOOLoyaltyCard(YgolonacIcon, Ygolonac, power = 2, combat = 1)
 case object YgolonacIcon extends UnitClass(Ygolonac.name + " Icon", Token, 0)
 
@@ -58,10 +73,12 @@ case object NyogthaMourning extends NeutralSpellbook("Nyogtha Mourning")
 
 case object NightmareWeb extends NeutralSpellbook("Nightmare Web")
 
-// Tulzscha
+// Tulzscha spellbook: during the doom phase, the owner may take the current ritual cost
+// as Power instead of performing a normal ritual (no Doom or ES, but ritual track advances)
 case object CeremonyOfAnnihilation extends NeutralSpellbook("Ceremony of Annihilation")
 
-// Y'Golonac
+// Y'Golonac spellbook: during the doom phase, every enemy faction gains 1 Elder Sign.
+// Auto-satisfied when a faction receives Y'Golonac (via awakening or Orifices transfer).
 case object TheRevelations extends NeutralSpellbook("The Revelations")
 
 
@@ -101,11 +118,19 @@ case class FilthAction(self : Faction, r : Region) extends BaseFactionAction(g =
 case class NightmareWebMainAction(self : Faction, l : $[Region]) extends OptionFactionAction("Awaken " + Nyogtha.styled(self) + " with " + NightmareWeb.styled(self)) with MainQuestion with Soft
 case class NightmareWebAction(self : Faction, r : Region) extends BaseFactionAction(g => "Awaken " + Nyogtha.styled(self) + g.forNPowerWithTax(r, self, 2) + " in", implicit g => r + self.iced(r))
 
+// Y'Golonac Orifices: when Y'Golonac is killed in battle, this action lets the owner
+// choose an enemy unit to replace. The target is eliminated, Y'Golonac transfers to the
+// target's faction, and the loyalty card + spellbook transfer with it.
 case class YgolonacOrificesAction(self : Faction, target : UnitRef) extends ForcedAction
 
+// Tulzscha spellbook requirement: the owner voluntarily gives each enemy faction 2 Power.
+// Once done, the owner gains the Ceremony of Annihilation spellbook.
 case class TulzschaGivePowerMainAction(self : Faction) extends OptionFactionAction("Give each enemy 2 Power (Tulzscha SBR)".styled(self)) with MainQuestion with Soft
 case class TulzschaGivePowerAction(self : Faction) extends BaseFactionAction(g => "Give each enemy 2 Power for " + Tulzscha.styled(self) + " Spellbook Requirement", g => "Give 2 Power")
 
+// Ceremony of Annihilation: doom-phase option. Instead of a normal ritual, the owner
+// earns Power equal to the current ritual cost. No Doom or Elder Signs are gained, but
+// the ritual track still advances. Offered in the DoomAction handler alongside normal rituals.
 case class CeremonyOfAnnihilationChoiceAction(self : Faction) extends OptionFactionAction(
     g => "Use " + CeremonyOfAnnihilation.styled(self) + " (earn " + g.ritualCost.power + ", no Doom/ES)"
 ) with DoomQuestion
@@ -142,20 +167,33 @@ object IGOOsExpansion extends Expansion {
         }
     }
 
+    // ── TULZSCHA: UNDYING FLAME (ongoing ability) ──
+    // Fires once per turn during Gather Power (called via triggers()). Compares the
+    // Tulzscha owner's Doom, Elder Signs, and Power against all enemies. For each
+    // category where any enemy is strictly ahead, the owner gains +1 of that resource.
+    // Guard: tulzschaFlameTurn tracks the last turn this fired. triggers() is called
+    // from multiple places (gate checks, power gather, ritual), but the guard ensures
+    // Undying Flame only activates once per turn — at the first triggers() call after
+    // the turn counter increments (which happens in PowerGatherAction).
     def checkTulzschaUndyingFlame()(implicit game : Game) {
         if (game.tulzschaFlameTurn >= game.turn) return
         game.tulzschaFlameTurn = game.turn
         factions.foreach { f =>
             if (f.has(Tulzscha)) {
                 val others = factions.but(f)
+                // Doom: if any enemy has strictly more doom, gain +1 doom
                 if (others.exists(_.doom > f.doom)) {
                     f.doom += 1
                     f.log(Tulzscha.styled(f), "gained 1 Doom from", "Undying Flame".styled(f))
                 }
-                if (others.exists(o => (o.es.num + o.revealed.num) > (f.es.num + f.revealed.num))) {
+                // Elder Signs: compare only face-down (unspent) ES via es.num.
+                // Bug fix: was (o.es.num + o.revealed.num) which counted revealed ES that
+                // had already been converted to Doom, inflating both sides' totals.
+                if (others.exists(o => o.es.num > f.es.num)) {
                     f.takeES(1)
                     f.log(Tulzscha.styled(f), "gained 1 Elder Sign from", "Undying Flame".styled(f))
                 }
+                // Power: if any enemy has strictly more power, gain +1 power
                 if (others.exists(_.power > f.power)) {
                     f.power += 1
                     f.log(Tulzscha.styled(f), "gained 1 Power from", "Undying Flame".styled(f))
@@ -211,12 +249,18 @@ object IGOOsExpansion extends Expansion {
                 game.loyaltyCards :+= NyogthaCard
 
 
+            // Tulzscha eliminated: remove unit, revoke Ceremony of Annihilation spellbook,
+            // return loyalty card to the available pool so another faction can awaken it later
             case Tulzscha =>
                 f.units :-= u
                 f.upgrades :-= CeremonyOfAnnihilation
                 f.loyaltyCards :-= TulzschaCard
                 game.loyaltyCards :+= TulzschaCard
 
+            // Y'Golonac eliminated: remove unit, revoke The Revelations spellbook,
+            // return loyalty card to pool. Guard on loyaltyCards.has because Orifices
+            // can transfer the card to another faction — if the card already moved,
+            // don't try to return it from the original owner.
             case Ygolonac =>
                 f.units :-= u
                 f.upgrades :-= TheRevelations
@@ -339,12 +383,20 @@ object IGOOsExpansion extends Expansion {
 
             EndAction(self)
 
-        // Y'GOLONAC - Orifices
+        // ── Y'GOLONAC: ORIFICES (battle ability) ──
+        // Triggered from Battle.scala YgolonacOrificesPhase when Y'Golonac is killed.
+        // The owner chooses an enemy Monster, Terror, or Cultist in the same battle.
+        // That unit is eliminated, and Y'Golonac is placed under the victim's faction's
+        // control. The loyalty card and spellbook (The Revelations) transfer with it.
+        // If the receiving faction didn't already have The Revelations, they gain it
+        // automatically (satisfies the spellbook requirement). After the transfer,
+        // battle resumes at EliminatePhase to process the original Y'Golonac kill.
         case YgolonacOrificesAction(self, target) =>
             val targetFaction = target.faction
             val region = target.region
 
-            // Eliminate the replaced unit (exempt from battle forces first)
+            // Eliminate the replaced unit (exempt from battle forces first so it's
+            // removed cleanly without double-processing in EliminatePhase)
             val targetFigure = game.unit(target)
             game.battle.foreach(_.exempt(targetFigure))
             game.eliminate(targetFigure)
@@ -353,17 +405,17 @@ object IGOOsExpansion extends Expansion {
             val newYg = new UnitFigure(targetFaction, Ygolonac, 1, region)
             targetFaction.units :+= newYg
 
-            // Transfer loyalty card
+            // Transfer loyalty card from old owner to new owner
             self.loyaltyCards :-= YgolonacCard
             targetFaction.loyaltyCards :+= YgolonacCard
 
-            // Transfer spellbook if already earned
+            // Transfer spellbook if the old owner already earned it
             if (self.upgrades.has(TheRevelations)) {
                 self.upgrades :-= TheRevelations
                 targetFaction.upgrades :+= TheRevelations
             }
 
-            // Receiving Y'Golonac via Orifices satisfies the spellbook requirement
+            // Receiving Y'Golonac via Orifices automatically satisfies the SBR
             if (targetFaction.upgrades.has(TheRevelations).not) {
                 targetFaction.upgrades :+= TheRevelations
                 targetFaction.log("gained", TheRevelations.styled(targetFaction), "for receiving", Ygolonac.styled(targetFaction))
@@ -371,9 +423,16 @@ object IGOOsExpansion extends Expansion {
 
             self.log(Ygolonac.styled(self), "used Orifices:", Ygolonac, "now belongs to", targetFaction)
 
+            // Resume battle at EliminatePhase to process Y'Golonac's original kill
             BattleProceedAction(EliminatePhase)
 
 
+        // ── CEREMONY OF ANNIHILATION (Tulzscha spellbook, doom-phase action) ──
+        // Instead of a normal ritual, the owner gains Power equal to the current ritual
+        // cost. No Doom or Elder Signs are awarded. The ritual track still advances (so
+        // future rituals cost more). Counts as "performing the ritual" for spellbook
+        // requirements (PerformRitual). Offered in the DoomAction handler when the owner
+        // has CeremonyOfAnnihilation and hasn't already acted this doom phase.
         case CeremonyOfAnnihilationChoiceAction(self) =>
             val earned = game.ritualCost
             self.power += earned
@@ -385,8 +444,10 @@ object IGOOsExpansion extends Expansion {
             self.log("used", CeremonyOfAnnihilation.styled(self), "and earned", earned.power, "(no Doom or Elder Signs)")
             CheckSpellbooksAction(DoomAction(self))
 
-
-        // TULZSCHA
+        // ── TULZSCHA SPELLBOOK REQUIREMENT ──
+        // The owner voluntarily gives each enemy faction 2 Power. Once done, the owner
+        // receives the Ceremony of Annihilation spellbook. Offered in the MainAction
+        // handler when the owner has Tulzscha in play but hasn't earned the spellbook yet.
         case TulzschaGivePowerMainAction(self) =>
             Ask(self).add(TulzschaGivePowerAction(self)).cancel
 
