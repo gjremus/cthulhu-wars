@@ -436,8 +436,6 @@ object IGOOsExpansion extends Expansion {
         case CeremonyOfAnnihilationChoiceAction(self) =>
             val earned = game.ritualCost
             self.power += earned
-            game.ritualHistory :+= self
-            game.ritualHistoryCeremony :+= true
             if (game.ritualTrack(game.ritualMarker) != 999)
                 game.ritualMarker += 1
             game.showROAT()
