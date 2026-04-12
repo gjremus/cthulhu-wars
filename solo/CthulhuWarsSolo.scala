@@ -673,32 +673,23 @@ object CthulhuWarsSolo {
             val mapBitmapBig = new CachedBitmap(mapBig)
             var map = mapBitmapSmall
 
-            val findAnother = {
-                var mplace = getAsset(board.id + "-place")
-
-                val placeb = new Bitmap(mplace.width, mplace.height)
-                placeb.context.drawImage(mplace, 0, 0)
-                val placed = placeb.context.getImageData(0, 0, placeb.width, placeb.height).data
-                val place = Array.tabulate(placeb.width, placeb.height)((x, y) => placed((y * placeb.width + x) * 4) * 0x010000 + placed((y * placeb.width + x) * 4 + 1) * 0x0100 + placed((y * placeb.width + x) * 4 + 2))
-
-                (x : Int, y : Int) => {
-                    val p = place(x)(y)
-                    var xx = 0
-                    var yy = 0
-                    do {
-                        xx = (placeb.width * math.random()).toInt
-                        yy = (placeb.height * math.random()).toInt
-                    }
-                    while (place(xx)(yy) != p)
-                    (xx, yy)
-                }
-            }
+            // Round 8 Bug 53: shared GlyphPlacement engine. Used by findAnother (random
+            // valid placement for unit layout) and findStaticGlyphPos (deterministic
+            // position for dynamic-start faction glyphs — TS).
+            val glyphPlacer = new GlyphPlacement(board.id)
+            val place = glyphPlacer.place
+            val findAnother = (x : Int, y : Int) => glyphPlacer.findAnother(x, y)
+            def findStaticGlyphPos(gx : Int, gy : Int) : (Int, Int) = glyphPlacer.findStaticGlyphPos(gx, gy, halfGlyph = 33, halfGate = 38)
 
             case object DesecrationToken extends FactionUnitClass(YS, "Desecration", Token, 0)
             case object IceAgeToken extends FactionUnitClass(WW, "Ice Age", Token, 0)
             case object Cathedral extends FactionUnitClass(AN, "Cathedral", Token, 0)
             case object Gate extends UnitClass("Gate", Token, 3)
             case object FactionGlyph extends UnitClass("Faction Glyph", Token, 0)
+            // Round 8 Bug 53: separate UnitClass for the on-map dynamic-start glyph render.
+            // TS uses this to draw its starting glyph at 66x66 (smaller than the 100x100
+            // FactionGlyph used in faction status panels).
+            case object StartingGlyph extends UnitClass("Starting Glyph", Token, 0)
 
             case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0)
 
@@ -755,6 +746,8 @@ object CthulhuWarsSolo {
                         case WW => DrawRect("ww-glyph", None, x - 50, y - 50, 100, 100)
                         case OW => DrawRect("ow-glyph", None, x - 50, y - 50, 100, 100)
                         case AN => DrawRect("an-glyph", None, x - 50, y - 50, 100, 101)
+                        // Tombstalker (TS): faction glyph sprite (100x100, matches all other factions).
+                        // Used by the faction status panel. On-map dynamic-start render uses StartingGlyph instead.
                         case TS => DrawRect("ts-glyph", None, x - 50, y - 50, 100, 100)
                         case _ => null
                     }
@@ -839,6 +832,10 @@ object CthulhuWarsSolo {
                     case NyogthaIcon      => DrawRect("nyogtha-icon", None, x - 17, y - 55, 50, 50)
                     case TulzschaIcon     => DrawRect("tulzscha-icon", None, x - 17, y - 55, 50, 50)
                     case HighPriestIcon   => DrawRect("high-priest-icon", None, x - 17, y - 55, 50, 50)
+
+                    // Round 8 Bug 53: dedicated 66x66 render for the on-map starting glyph of TS.
+                    // Smaller than the 100x100 FactionGlyph used in faction status panels.
+                    case StartingGlyph if faction == TS => DrawRect("ts-glyph", None, x - 33, y - 33, 66, 66)
 
                     case _ => null
                 }
@@ -978,6 +975,17 @@ object CthulhuWarsSolo {
 
                     if (game.cathedrals.has(r))
                         all +:= DrawItem(r, null, Cathedral, Alive, $, 0, 0)
+
+                    // Tombstalker (TS): draw TS faction glyph at starting region if TS is in the game
+                    // (dynamic-start ocean faction — same pattern as FB). Uses findStaticGlyphPos for
+                    // smart positioning that avoids region borders and the gate. Uses `game.setup`
+                    // (not `game.factions`) so the glyph appears as soon as TS picks its region,
+                    // not after play order is decided.
+                    if (game.setup.has(TS) && game.starting.get(TS).contains(r)) {
+                        val (glyphX, glyphY) = findStaticGlyphPos(px, py)
+                        // Use StartingGlyph (66x66) instead of FactionGlyph (100x100) for the on-map render
+                        fixed +:= DrawItem(r, TS, StartingGlyph, Alive, $, glyphX, glyphY)
+                    }
 
                     if (game.setup.%(_.iceAge.?(_ == r)).any)
                         all +:= DrawItem(r, null, IceAgeToken, Alive, $, 0, 0)
