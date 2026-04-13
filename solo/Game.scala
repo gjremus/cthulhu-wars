@@ -987,7 +987,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case WW => $(WWExpansion)
             case OW => $(OWExpansion)
             case AN => $(ANExpansion)
+            // Tombstalker (TS): register TS expansion handler for Death March, Hecatomb, tomes, and all TS actions
             case TS => $(TSExpansion)
+            // Firstborn (FB): register FB expansion handler for action dispatch, triggers, and state
+            case FB => $(FBExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         options.of[NeutralMonsterOption].any.$(NeutralMonstersExpansion) ++
@@ -1026,10 +1029,51 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Solution for keeping track of use cases for dematerialization, for the AN bot.
     var demCaseMap : Map[Region, Int] = areas.map(r => r -> 0).toMap
 
-    // Tombstalker (TS) state
+    // Tombstalker (TS) state: Death's Head counter, Cursed Tome stack index, and per-faction tome ownership
     var deathsHead : Int = 0
     var tsTomesOnCard : Int = 0
     var cursedTomesOwned : Map[Faction, $[(Int, Boolean)]] = Map()
+
+    // Firstborn (FB) state — all stored on Game so undo (which creates a new Game and replays
+    // recorded actions) properly resets it. NEVER use FBExpansion singleton vars for state
+    // that needs to survive undo, as the singleton persists across `new Game()` instances.
+    var fbAuguryKills : Int = 0
+    var fbGhatnothoaAwakenings : Int = 0
+    var fbCraters : $[Region] = $
+    var fbInfernalPactDiscount : Int = 0
+    var fbInfernalPactPowerAdded : Int = 0
+    var fbInfernalPactStartPower : Int = -1
+    // Round 8 Bug 40: widened from $[FactionSpellbook] to $[Spellbook] to support
+    // IGOO spellbooks (NeutralSpellbook) being flipped facedown via Infernal Pact
+    var fbInfernalPactFlipped : $[Spellbook] = $
+    var fbDevilsMarkUsedThisDoom : Boolean = false
+    var fbWritheUsedUnits : $[UnitRef] = $
+    var fbWritheRerolled : Boolean = false
+    // Bug fix Round 6: track last Writhe pain destination for "join" UI hint when paining separately
+    var fbWritheLastPainRegion : |[Region] = None
+    var fbWritheLastPainedUnit : String = ""
+    // Bug fix: Ghatanothoa combat = FB power BEFORE the battle began (not current power, which decreases as battle costs are paid)
+    var fbPowerAtBattleStart : Int = 0
+    // Bug fix: Cyclopean Gaze must only fire when an action MOVED enemy units into FB ghato/revenant regions,
+    // not merely when units happen to be present. Snapshot enemy unit counts at PreMainAction; AfterAction compares.
+    var fbCyclopeanGazeSnapshot : Map[(Faction, Region), Int] = Map()
+    // Round 8 Bug 54: unified edge-case region list. Replaces the 3 separate vars
+    // (fbCyclopeanGazeIceAgeRegion, fbCyclopeanGazeLethargyRegion, fbCyclopeanGazeDreadCurseRegion).
+    // Action handlers that perform a "zero-delta" action — one that targets a region
+    // without moving units — append the target region here. The AfterAction CG handler
+    // reads this list, fires CG for any region that's a gaze region with actor units,
+    // and clears the list.
+    //
+    // Zero-delta actions tracked:
+    //   - WW IceAgeAction (FactionWW.scala)
+    //   - SL LethargyMainAction (FactionSL.scala)
+    //   - OW DreadCurseAction (FactionOW.scala)
+    //   - Game.scala BuildGateAction (any faction)
+    //   - AN BuildCathedralAction (FactionAN.scala)
+    //
+    // Pattern for new zero-delta actions: in the action handler, after the state mutation,
+    //   if (factions.has(FB)) game.fbCyclopeanGazeActionRegions :+= r
+    var fbCyclopeanGazeActionRegions : $[Region] = $
 
     def forNPowerWithTax(r : Region, f : Faction, n : Int) : String = { val p = n + f.taxIn(r) ; " for " + p.power }
     def for1PowerWithTax(r : Region, f : Faction) : String = { val p = 1 + f.taxIn(r) ; if (p != 1) " for " + p.power else "" }
@@ -1336,7 +1380,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def recruits(f : Faction)(implicit w : AskWrapper) {
-        f.pool.cultists./(_.uclass).distinct.reverse.foreach { uc =>
+        // Firstborn (FB): FB cannot recruit High Priests, so filter them out of available cultists
+        val availableCultists = if (f == FB) f.pool.cultists.%(_.uclass != HighPriest) else f.pool.cultists
+        availableCultists./(_.uclass).distinct.reverse.foreach { uc =>
             areas.%(f.present).some.|(areas).nex.%(r => f.affords(f.recruitCost(uc, r))(r)).some.foreach { l =>
                 + RecruitMainAction(f, uc, l)
             }
@@ -1381,7 +1427,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
         }
 
-        if (f.has(NightmareWeb) && f.pool(Nyogtha).any) {
+        // Round 8 Bug 40: also check facedown state for IGOO spellbooks
+        if (f.has(NightmareWeb) && !f.oncePerGame.has(NightmareWeb) && f.pool(Nyogtha).any) {
             areas.nex.%(f.affords(2)).%(f.present).some.foreach { l =>
                 + NightmareWebMainAction(f, l)
             }
@@ -1391,13 +1438,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             + TulzschaGivePowerMainAction(f)
         }
 
-        if (f.has(GodOfForgetfulness) && f.has(Byatis)) {
+        // Round 8 Bug 40: also check facedown state for IGOO spellbooks
+        if (f.has(GodOfForgetfulness) && !f.oncePerGame.has(GodOfForgetfulness) && f.has(Byatis)) {
             $(f.goo(Byatis).region).nex.%(f.affords(1)).foreach { br =>
                 board.connected(br).%(r => factionlike.but(f).exists(_.at(r).cultists.any)).some.foreach { l =>
                     + GodOfForgetfulnessMainAction(f, br, l)
                 }
             }
         }
+
     }
 
     def neutralSpellbooks(f : Faction)(implicit w : AskWrapper) {
@@ -1407,7 +1456,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (f.has(Recriminations))
             + RecriminationsMainAction(f)
 
-        // Cursed Tome actions: each face-up tome held by any faction is a one-time free action
+        // Tombstalker (TS): Cursed Tome actions — each face-up tome held by any faction is a one-time free action
         if (factions.has(TS))
             cursedTomesOwned.get(f).|(Nil).filter(!_._2).foreach { case (n, _) =>
                 + TSUseTomeAction(f, n)
@@ -1444,7 +1493,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (f.power >= cost && f.acted.not)
             + RitualAction(f, cost, 1)
 
-        if (f.upgrades.has(CeremonyOfAnnihilation) && f.acted.not)
+        // Round 8 Bug 40: also check that CeremonyOfAnnihilation is not flipped facedown
+        // via Infernal Pact (oncePerGame tracks facedown state for IGOO spellbooks)
+        if (f.upgrades.has(CeremonyOfAnnihilation) && !f.oncePerGame.has(CeremonyOfAnnihilation) && f.acted.not)
             + CeremonyOfAnnihilationChoiceAction(f)
 
         + SacrificeHighPriestAllowedAction
@@ -1555,7 +1606,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val hibernate = f.power
                 val cultists = f.cultists.num
                 val allCaptured = factions./~(w => w.at(f.prison)).num
-                // GREEN DECAY: TS's captured enemy cultists give ES instead of power (requires Gla'aki awakened)
+                // Tombstalker (TS) Green Decay: captured enemy cultists give ES instead of power (requires Gla'aki awakened)
                 val greenDecayCultists = if (f == TS && factions.has(TS) && TS.has(GreenDecay) && TS.has(Glaaki))
                     factions./~(w => w.at(f.prison)).%(_.cultist).num
                 else 0
@@ -1575,7 +1626,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 if (factions.%(_.has(WorshipServices)).num > 0)
                     areas.%(cathedrals.contains).%(f.gates.has).some.foreach { l => worship += l.num }
 
-                f.power = hibernate + ownGates * 2 + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship
+                // Firstborn (FB): grant +1 power during Gather Power if the High Priests game option is enabled
+                val fbHPBonus = (f == FB && options.has(HighPriests)).??(1)
+
+                f.power = hibernate + ownGates * 2 + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship + fbHPBonus
                 f.hibernating = false
 
                 val fromHibernate = (hibernate > 0).?(hibernate.styled("region") + " hibernate")
@@ -1588,8 +1642,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val fromDarkYoungs = (darkYoungs > 0).?(darkYoungs.styled("region") + " Dark Young".s(darkYoungs))
                 val fromFeast = (feast > 0).?(feast.styled("region") + " desecrated")
                 val fromWorship = (worship > 0).?(worship.styled("region") + " cathedral".s(worship))
+                // Firstborn (FB): log line for the High Priest power bonus
+                val fromFBHP = (fbHPBonus > 0).?(fbHPBonus.styled("region") + " High Priest bonus")
 
-                f.log("got", f.power.power, "(" + $(fromHibernate, fromGates, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship).flatten.mkString(" + ") + ")")
+                f.log("got", f.power.power, "(" + $(fromHibernate, fromGates, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP).flatten.mkString(" + ") + ")")
 
                 if (greenDecayCultists > 0) {
                     f.log("Green Decay:", greenDecayCultists, "captured " + "cultist".s(greenDecayCultists), "→", greenDecayCultists.es, "(not power)")
@@ -1677,7 +1733,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             doomPhase = true
 
             factions.foreach { f =>
-                val brood = f.enemies.%(_.has(TheBrood))
+                // Round 8 Bug 40: also check facedown state for IGOO spellbooks
+                val brood = f.enemies.%(e => e.has(TheBrood) && !e.oncePerGame.has(TheBrood))
                 val gates = f.gates ++ f.unitGate./(_.region)
                 val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
 
@@ -1703,7 +1760,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     }
                 }
 
-                if (f.upgrades.has(TheRevelations)) {
+                // Round 8 Bug 40: also check facedown state for IGOO spellbooks
+                if (f.upgrades.has(TheRevelations) && !f.oncePerGame.has(TheRevelations)) {
                     f.enemies.foreach { e =>
                         e.takeES(1)
                         e.log("gained", 1.es, "from", TheRevelations.styled(f))
@@ -1713,6 +1771,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             log(CthulhuWarsSolo.DottedLine)
             showROAT()
+
+            // Firstborn (FB) Bug fix Round 3: after doom is distributed at the start of the
+            // doom phase, check FBMostDoomOrMoreGates so the requirement can be satisfied
+            // immediately (not delayed until FB's next action-phase turn).
+            FBExpansion.checkMostDoomOrGates()
 
             CheckSpellbooksAction(DoomNextPlayerAction(game.first))
 
@@ -1744,8 +1807,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 f.es = $
             }
 
-            // CURSED TOMES: final revelation - each face-down tome costs 1 Doom (unless instant death)
-            // TS is exempt: tomes are their pool/resource, never a penalty for them
+            // Tombstalker (TS) Cursed Tomes: at final revelation, each face-down tome costs its holder 1 Doom
+            // TS itself is exempt since tomes are their pool/resource, never a penalty for them
             if (ritualTrack(ritualMarker) != 999) {
                 factions.%(f => f != TS).foreach { f =>
                     val faceDownCount = cursedTomesOwned.get(f).|(Nil).count { case (_, fd) => fd }
@@ -1921,11 +1984,24 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             asking
 
         case DoomDoneAction(f) =>
-            // Hecatomb: zero any remaining Death's Head if TS didn't use it for a ritual
+            // Tombstalker (TS) Hecatomb: zero any remaining Death's Head if TS didn't use it for a ritual
             if (f == TS && factions.has(TS) && TS.has(Hecatomb) && game.deathsHead > 0) {
                 TS.log("Hecatomb: remaining", game.deathsHead.toString.styled("kill"), "Death's Head discarded")
                 game.deathsHead = 0
             }
+
+            // Firstborn (FB) Bug fix Round 3: after FB (or any faction whose doom turn could have
+            // affected gate/doom totals) finishes the doom phase, re-check FBMostDoomOrMoreGates.
+            // This catches rituals, gate destruction, or other doom-phase effects that shift the
+            // comparison without waiting for FB's next action-phase EndTurnAction.
+            FBExpansion.checkMostDoomOrGates()
+
+            // Firstborn (FB) Bug fix Round 6: check FBTwoFacedownSpellbooks at end of doom phase.
+            // Infernal Pact flips spellbooks facedown to pay for rituals, so by DoomDone the
+            // facedown count may have reached 2. Without this check the requirement wouldn't
+            // be satisfied until the next action-phase EndTurnAction.
+            if (game.factions.has(FB) && FB.needs(FBTwoFacedownSpellbooks) && FBExpansion.faceDownCount >= 2)
+                FB.satisfy(FBTwoFacedownSpellbooks, "2 Facedown Spellbooks")
 
             f.acted = false
 
@@ -1952,7 +2028,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case RitualAction(f, cost, k) =>
             f.power -= cost
 
-            val brood = f.enemies.%(_.has(TheBrood))
+            // Round 8 Bug 40: also check facedown state for IGOO spellbooks
+            val brood = f.enemies.%(e => e.has(TheBrood) && !e.oncePerGame.has(TheBrood))
             val gates = f.allGates
             val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
 
@@ -1981,7 +2058,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             f.satisfy(PerformRitual, "Perform Ritual of Annihilation")
 
-            // CURSED TOMES: faction may remove one face-down tome after ritual (TS exempt — no penalty)
+            // Tombstalker (TS) Cursed Tomes: faction may remove one face-down tome after performing a ritual (TS exempt)
             val faceDownTomes = if (f == TS) Nil else cursedTomesOwned.get(f).|(Nil).filter { case (_, fd) => fd }
             if (faceDownTomes.any) {
                 implicit val asking = Asking(f)
@@ -2355,6 +2432,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             else
                 f.log("changed control of the gate in", r, "to", u)
 
+            // Round 8 Bug 63: gaining/changing gate control is a zero-delta action
+            // (no unit movement), so the snapshot delta won't fire CG. Register
+            // it as a CG edge case so CG triggers when an enemy takes control of
+            // a gate in a region that contains FB Revenants/Ghatanothoa.
+            if (factions.has(FB))
+                fbCyclopeanGazeActionRegions :+= r
+
             Force(AdjustGateControlAction(f, true, then))
 
         case AbandonGateAction(f, r, then) =>
@@ -2364,6 +2448,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             f.abandoned :+= r
 
             f.log("abandoned gate in", r)
+
+            // Round 8 Bug 63: abandoning a gate is a zero-delta action; register
+            // as a CG edge case (same reason as ControlGateAction above).
+            if (factions.has(FB))
+                fbCyclopeanGazeActionRegions :+= r
 
             Force(AdjustGateControlAction(f, true, then))
 
@@ -2465,6 +2554,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 .skipIf(effect.has(FromBelow))(ProceedBattlesAction)
 
         case AttackAction(self, r, f, effect) =>
+            // Round 8 Bug 60: snapshot FB.power BEFORE the 1-power attack cost is deducted,
+            // so Ghatanothoa's combat strength uses the pre-battle power (not post-cost).
+            // The original snapshot was in ProceedBattlesAction (line ~2570), but that runs
+            // AFTER this handler — by which time `self.power -= 1` has already executed.
+            // For FB-attacker: snapshot here is pre-deduct (correct). For non-FB attacker:
+            // FB.power isn't being changed by this action, so snapshot is also correct.
+            if (factions.has(FB))
+                fbPowerAtBattleStart = FB.power
+
             if (effect.has(FromBelow).not)
                 self.power -= 1
 
@@ -2476,7 +2574,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             else
                 game.queue = game.queue.take(0) ++ $(new Battle(r, self, f, effect)) ++ game.queue.drop(0)
 
-            if (effect.has(FromBelow).not && self.has(FromBelow) && self.at(r)(Nyogtha).any) {
+            // Round 8 Bug 40: also check facedown state for IGOO spellbooks
+            if (effect.has(FromBelow).not && self.has(FromBelow) && !self.oncePerGame.has(FromBelow) && self.at(r)(Nyogtha).any) {
                 val l = self.all(Nyogtha)./(_.region).but(r).diff(self.battled)
                 if (l.any)
                     return Force(AttackMainAction(self, l, |(FromBelow)))
@@ -2492,6 +2591,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
 
             battle = queue.starting
+
+            // Round 8 Bug 60: removed the fbPowerAtBattleStart snapshot here. It used to
+            // capture FB.power at battle proceed time, but that's AFTER AttackAction deducted
+            // the 1 power for the attack. The snapshot is now taken in AttackAction BEFORE
+            // the deduct (line ~2537), giving the correct pre-battle value.
 
             queue = queue.drop(1)
 
@@ -2554,6 +2658,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             gates :+= r
             self.oncePerAction :+= UmrAtTawil
             self.log("built a gate in", r)
+            // Firstborn (FB): Crater building ability -- any gate built in a Crater region is immediately destroyed
+            if (factions.has(FB) && fbCraters.has(r)) {
+                FBExpansion.checkCraterDestroysGate(r)
+            }
+            // Round 8 Bug 54: building a gate is a zero-delta action (no unit movement),
+            // so it doesn't trigger CG via the snapshot delta. Register it as a CG edge case.
+            if (factions.has(FB))
+                fbCyclopeanGazeActionRegions :+= r
             EndAction(self)
 
         // RECRUIT

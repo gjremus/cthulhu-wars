@@ -2,6 +2,7 @@ package cws
 
 import hrf.colmat._
 
+// Tombstalker (TS) BOT: AI evaluation logic for all TS-specific actions.
 object BotTS extends BotX(implicit g => new GameEvaluationTS) {
     var traceWeights = false
     // Testing/tracking fields removed — see Backup/pre-cleanup-code/BotTS.scala for original
@@ -18,6 +19,8 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
         val unwrapped = a.unwrap
         result ++= evalMain(unwrapped)
         result ++= evalBattle(unwrapped)
+        // Round 8 (FB): score CG/Eye Opens prompts that get asked of this faction
+        result ++= fbPromptedEvals(a)
 
         result.none |=> 0 -> "#455 none"
         true |=> (math.random() * 4).round.toInt -> "#453 random"
@@ -131,9 +134,14 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
         val powerAdvantage = power >= maxEnemyPower + 2
         // [2026-04-02] NS: faction tier preference for gate targeting: SL>GC>CC>BG>OW>WW>YS>AN
         // [2026-04-02] NS: faction tier — 25 per step: SL=200, GC=175, CC=150, BG=125, OW=100, WW=75, YS=50, AN=25
+        // Round 8 (FB): FB inserted between BG and OW (tier ~115) — Ghatanothoa is a strong
+        // GOO and FB applies steady CG pressure, but starting in early game its threat is
+        // closer to mid-tier. Without this entry FB fell into `case _ => 0` and TS's bot
+        // gave no preference to attacking FB-held gates.
         def factionTierBonus(r : Region) : Int = {
             others.%(ef => r.gateOf(ef) || ef.at(r).any)./(f => f match {
                 case SL => 200; case GC => 175; case CC => 150; case BG => 125
+                case FB => 115
                 case OW => 100; case WW => 75; case YS => 50; case AN => 25
                 case _ => 0
             }).headOption.getOrElse(0)
@@ -1662,13 +1670,25 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
             case ControlGateAction(_, r, u, _) =>
                 // [NU-TEST 2026-04-04] Fixed infinite gate control swap loop with HPs
                 // ORIGINAL: true |=> 1000000 -> "#106 always" (caused infinite HP/Acolyte oscillation)
-                // Now: only swap if the new unit is better at controlling (Acolyte preferred over HP on gate)
+                // Round 8 Bug 69: the previous "fix" was incomplete and still produced
+                // an HP↔Acolyte oscillation that hit the 7000-turn safety guard. The
+                // problem was that "keep acolyte on gate" was scored -5000 but "remain
+                // calm" was scored -1000000, so when Acolyte was already on the gate,
+                // the bot picked "swap to HP" (score -5000) over "remain calm" (-1000000)
+                // because -5000 > -1000000. Then HP was on gate, so it picked "swap to
+                // Acolyte" (+5000), then "swap to HP" again, forever. The fix is to
+                // make BOTH no-op swap directions score -1000000 (i.e. tie with "remain
+                // calm"), so the bot can never pick a swap that just reverses the
+                // previous swap. The +5000 for "swap HP off gate" is preserved as the
+                // ONE legitimate swap (HP→Acolyte is a one-time setup move, not a
+                // recurring swap).
                 r.allies.%(_.onGate).foreach { c =>
                     c.uclass == u.uclass |=> -1000000 -> "#541 remain calm: no swap needed"
                     // Prefer keeping Acolyte on gate (HP is more valuable to sacrifice)
                     c.uclass == HighPriest && u.uclass == Acolyte |=> 5000 -> "NU-TEST: swap HP off gate, acolyte controls"
-                    // Don't swap Acolyte off for HP
-                    c.uclass == Acolyte && u.uclass == HighPriest |=> -5000 -> "NU-TEST: keep acolyte on gate"
+                    // Don't swap Acolyte off for HP — match "remain calm" so the bot
+                    // never picks a reverse-swap over a no-op (Bug 69).
+                    c.uclass == Acolyte && u.uclass == HighPriest |=> -1000000 -> "NU-TEST: keep acolyte on gate"
                 }
                 true |=> 0 -> "#106 gate control base"
 

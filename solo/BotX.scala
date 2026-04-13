@@ -342,10 +342,81 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
 
             p / 4
 
+        // Round 8 (FB): same pattern as GC — Ghatanothoa is FB's GOO and acts
+        // as a power-generating engine via Writhe / Eye Opens / etc. Without
+        // this case, FB falls into `case _ => 0` and the bots under-estimate
+        // FB's endgame doom potential, allowing FB to ritual unopposed.
+        case FB =>
+            var p = f.power
+
+            if (f.has(Ghatanothoa))
+                p += 4
+
+            p / 4
+
         case _ =>
             0
 
     }))) >= 30 * 3
 
     def eval(a : Action) : $[Evaluation]
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Round 8 (FB): Default scoring for the three FB-prompted choices that
+    // get asked of *non-FB* factions:
+    //
+    //   1. FBCyclopeanGazePainUnitAction      — pick which of OUR units gets
+    //                                           painted (relocated by CG).
+    //   2. FBCyclopeanGazeKillChoiceAction    — pick which of OUR units to
+    //                                           lose when CG has no legal pain
+    //                                           destination.
+    //   3. FBTheEyeOpensChooseCultistAction   — pick which cultist to lose to
+    //                                           Eye Opens.
+    //
+    // Each non-FB bot calls `fbPromptedEvals(a)` from its eval and merges the
+    // returned scores into its result. BotFB has its own custom logic for the
+    // same actions and does NOT call this helper.
+    //
+    // Strategy: protect valuable units (GOOs, HighPriest, gate keepers,
+    // monsters), prefer to sacrifice cheap/expendable off-gate units. Mirrors
+    // BotFB's `FBCyclopeanGazeKillChoiceAction` "don't sacrifice valuable"
+    // logic but applied from the painted faction's point of view.
+    // ────────────────────────────────────────────────────────────────────────
+    def fbPromptedEvals(a : Action) : $[Evaluation] = {
+        var r : $[Evaluation] = $
+        def add(w : Int, d : String) { r +:= Evaluation(w, d) }
+
+        a.unwrap match {
+            case FBCyclopeanGazePainUnitAction(_, _, uRef, _, _, _, _) =>
+                val u = game.unit(uRef)
+                if (u.goo)                              add(-5000, "don't pain own GOO")
+                if (u.uclass == HighPriest)             add(-3000, "don't pain own HP")
+                if (u.gateKeeper)                       add(-2000, "don't pain own gate keeper")
+                if (u.monster)                          add(-1000, "avoid painting own monster")
+                if (u.is(Acolyte) && !u.region.ownGate) add( 1000, "pain off-gate acolyte")
+                if (u.cultist && !u.region.ownGate)     add(  500, "pain off-gate cultist")
+                add(0, "default CG pain target")
+
+            case FBCyclopeanGazeKillChoiceAction(_, _, killRef, _, _, _, _, _) =>
+                val k = game.unit(killRef)
+                if (k.goo)                              add(-5000, "don't sacrifice own GOO to CG")
+                if (k.uclass == HighPriest)             add(-3000, "don't sacrifice own HP to CG")
+                if (k.gateKeeper)                       add(-2000, "don't sacrifice own gate keeper to CG")
+                if (k.monster)                          add(-1500, "avoid sacrificing own monster to CG")
+                if (k.is(Acolyte) && !k.region.ownGate) add( 1000, "sacrifice off-gate acolyte to CG")
+                if (k.cultist && !k.region.ownGate)     add(  500, "sacrifice off-gate cultist to CG")
+                add(0, "default CG kill choice")
+
+            case FBTheEyeOpensChooseCultistAction(_, _, _, uRef) =>
+                val u = game.unit(uRef)
+                if (u.uclass == HighPriest)             add(-2000, "don't sacrifice HP to eye opens")
+                if (u.region.ownGate)                   add(-1500, "keep gate keeper from eye opens")
+                if (u.is(Acolyte) && !u.region.ownGate) add( 1000, "lose off-gate acolyte to eye opens")
+                add(0, "default eye opens cultist choice")
+
+            case _ =>
+        }
+
+        r
+    }
 }

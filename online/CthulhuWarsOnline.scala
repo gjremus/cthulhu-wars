@@ -115,6 +115,18 @@ object CthulhuWarsOnline {
             pathPrefix("hrf") {
                 getFromDirectory("../solo")
             } ~
+            // FB Round 8: serve solo assets at the same relative paths the
+            // index.html uses (webp/, fonts/, target/) so the unbuilt solo/index.html
+            // works in online mode without needing assets baked into a single HTML.
+            pathPrefix("webp") {
+                getFromDirectory("../solo/webp")
+            } ~
+            pathPrefix("fonts") {
+                getFromDirectory("../solo/fonts")
+            } ~
+            pathPrefix("target") {
+                getFromDirectory("../solo/target")
+            } ~
             (get & path("play" / Segment)) { name =>
                 rdr("/#" + name)
             } ~

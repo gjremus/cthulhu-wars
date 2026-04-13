@@ -10,3 +10,13 @@ solo/info/*
 solo/fonts/*
 solo/webp/*
 solo/web.config
+
+# Firstborn (Round 8) — sim build directory artifacts and run output
+sim/target/
+sim/project/target/
+sim/project/project/
+sim/game-error*
+sim/win-logs/
+
+# macOS finder metadata
+**/.DS_Store

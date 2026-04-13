@@ -205,6 +205,16 @@ object WWExpansion extends Expansion {
             self.power -= 1
             self.iceAge = |(r)
             game.anyIceAge = true
+
+            // Round 8 Bug 33/54: record Ice Age region for Cyclopean Gaze.
+            // Ice Age places a token without moving WW units (snapshot delta = 0),
+            // but CG should fire if the region has FB Revenants/Ghatanothoa and WW units.
+            // Recorded here (not in FBExpansion) because WWExpansion handles IceAgeAction
+            // before FBExpansion in the expansion dispatch order.
+            // Bug 54: now appends to the unified fbCyclopeanGazeActionRegions list.
+            if (game.factions.has(FB))
+                game.fbCyclopeanGazeActionRegions :+= r
+
             self.log("started", IceAge, "in", r)
             EndAction(self)
 

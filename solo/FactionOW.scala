@@ -243,6 +243,16 @@ object OWExpansion extends Expansion {
         case DreadCurseAction(self, n, r) =>
             self.power -= 2
             self.payTax(r)
+
+            // Round 8 Bug 37/54: record Dread Curse target region for Cyclopean Gaze.
+            // Dread Curse targets a region without moving OW units there (snapshot delta = 0),
+            // but CG should fire if the region has FB Revenants/Ghatanothoa and OW units.
+            // Recorded here (not in FBExpansion) because OWExpansion handles DreadCurseAction
+            // before FBExpansion in the expansion dispatch order.
+            // Bug 54: now appends to the unified fbCyclopeanGazeActionRegions list.
+            if (game.factions.has(FB))
+                game.fbCyclopeanGazeActionRegions :+= r
+
             self.log("sent", DreadCurse, "to", r)
             RollBattle(self, "" + DreadCurse, n, x => DreadCurseRollAction(self, r, x))
 

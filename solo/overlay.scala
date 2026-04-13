@@ -132,9 +132,8 @@ object RitualTrackOverlay {
     var trackLength : Int = 9
     var ritualHistory : $[String] = $          // faction style strings, in order
     var ritualHistoryCeremony : $[Boolean] = $ // true when that ritual was a Ceremony of Annihilation
-    // [2026-04-03] Pure DH hecatomb: marker indices where pure DH rituals occurred
+    // Tombstalker (TS): indices on the ritual track where pure Death's Head hecatomb rituals occurred (no marker advance)
     var tsPureDHMarkerIndices : $[Int] = $
-    // stale field removed — positions calculated in overlay rendering from tsPureDHMarkerIndices
 
     // Circle centers as (xPct, yPct) of image dimensions, for each track index
     // Positions derived from pixel clustering of track images (threshold=180).
@@ -176,6 +175,7 @@ object RitualTrackOverlay {
     def trackImageId = "ritual-track-" + numPlayers + "p"
 }
 
+// Tombstalker (TS) Cursed Tomes overlay: tracks tome ownership per faction and tome text descriptions (I-XI)
 object TSCursedTomesOverlay {
     // Map from faction style to list of (tomeNum, isFaceDown)
     var factionTomes : scala.collection.immutable.Map[String, $[(Int, Boolean)]] = scala.collection.immutable.Map()
@@ -561,6 +561,14 @@ object Overlays {
     case $("Dimensional Shambler") => loyaltyCard(DimensionalShamblerCard.name, DimensionalShamblerCard.quantity, DimensionalShamblerCard.cost, DimensionalShamblerCard.combat, "Pay 2 Doom to obtain this Loyalty Card, then place 1 Dimensional Shambler onto your Faction Card.", "Walk Between Worlds", "Ongoing", "When Summoning a Dimensional Shambler, place it onto your Faction Card. After any Action (by any player), you may place one or more Dimensional Shamblers from your Faction Card into any Area. Once placed, Dimensional Shamblers remain on the Map (until Killed or otherwise Eliminated).")
     case $("High Priest") => loyaltyCard(HighPriestCard.name, HighPriestCard.quantity, HighPriestCard.cost, HighPriestCard.combat, "The High Priest is a new type of Cultist, it is Recruited like an Acolyte. Each High Priest generates 1 Power during the Gather Power Phase, can Create and Control a Gate, and can be Captured.", "Unspeakable Oath", "Ongoing", "At the end of any player's Action (even if it is not your turn), Sacrifice your High Priest (return him to your Pool) and gain 2 Power. This may also be done during the Gather Power and Doom Phases.")
 
+        // Round 8 Bug 40: third parameter (facedown : Boolean) added for Infernal Pact strikethrough
+        case $("Byatis", spellbook : Boolean, facedown : Boolean) => loyaltyCardIGOO(ByatisCard.name, "" + ByatisCard.cost, "" + ByatisCard.combat, spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 4 Power, and place Byatis in the Area containing the Gate.", "Toad of Berkeley", "Ongoing", "Byatis may not Move, nor can he be moved with movement-type abilities (such as Arctic Winds or Submerge). He can still be Pained. If there are no enemy Units in Byatis' Area during the Doom Phase, earn 1 Elder Sign.", "Byatis survives a Battle in which at least one enemy Unit is Killed", "God of Forgetfulness", "Action: Cost 1", "Select all enemy Cultists in an Area adjacent to Byatis. Those Cultists are moved into Byatis' Area.", facedown)
+        case $("Abhoth", spellbook : Boolean, facedown : Boolean) => loyaltyCardIGOO(AbhothCard.name, "" + AbhothCard.cost, "Equals the number of Filth Tokens in play (0-12)", spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 4 Power, and place Abhoth in the Area containing the Gate.", "Filth", "Action: Cost 1", "Place a Filth Token in any Area.", "Choose One: EITHER your Faction has 4+ different Monster types in play, including Filth Tokens, OR Your faction has 8+ total Monsters in play, including Filth Tokens", "The Brood", "Ongoing", "Gates in Areas containing Filth Tokens do not count during the Doom phase. Does not apply to Abhoth's Faction.", facedown)
+        case $("Daoloth", spellbook : Boolean, facedown : Boolean) => loyaltyCardIGOO(DaolothCard.name, "" + DaolothCard.cost, "" + DaolothCard.combat, spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 6 Power, and place Daoloth in the Area containing the Gate.", "Cosmic Unity", "Pre-Battle", "In a Battle involving Daoloth, choose one enemy Great Old One. It rolls no Combat dice (it still gets its Battle Ability, if any).", "A Great Old One is Killed (anywhere on the map)", "Interdimensional", "Ongoing", "When Daoloth enters an Area without a Gate, immediately place a Gate there.", facedown)
+        case $("Nyogtha", spellbook : Boolean, facedown : Boolean) => loyaltyCardIGOO(NyogthaCard.name, "" + NyogthaCard.cost, "4 if Nyogtha's Faction declared the Battle, 1 if not.", spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 6 Power, and place all Nyogtha Units from your Pool to the Area containing the Gate.", "From Below", "Ongoing", "Nyogtha is two Units. Any Common Action involving one of these Units can be applied simultaneously to the other as part of the same Action and at no extra cost. When one Nyogtha Unit Moves, so may the other. When one Captures a Cultist, so may the other. If Battle is declared in one's Area, you can also declare a Battle in the other's Area, for free. You only lose this Loyalty Card if both Nyogtha Units have been Killed.", "Nyogtha survives a Battle against an enemy Great Old One", "Nightmare Web", "Ongoing", "If one of the Nyogtha Units is in your pool, you can Awaken it for 2 Power, placing it in any Area in which you have at least one Unit.", facedown)
+        case $("Tulzscha", spellbook : Boolean, facedown : Boolean) => loyaltyCardIGOO(TulzschaCard.name, "" + TulzschaCard.power, "" + TulzschaCard.combat, spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 4 Power, and place Tulzscha in the Area containing the Gate.", "Undying Flame", "Gather Power Phase", "At the end of the Gather Power Phase: gain 1 Doom if any Faction has more Doom than you; gain 1 Elder Sign if any Faction has more Elder Signs than you; gain 1 Power if any Faction has more Power than you.", "As an Action, each enemy Faction gains 2 Power.", "Ceremony of Annihilation", "Doom Phase", "When you perform a Ritual of Annihilation, you may choose to pay nothing and instead EARN Power equal to the current Ritual marker position, then advance the marker 1 step. You earn no extra Doom or Elder Signs.", facedown)
+        case $("Y'Golonac", spellbook : Boolean, facedown : Boolean) => loyaltyCardIGOO(YgolonacCard.name, "" + YgolonacCard.power, "" + YgolonacCard.combat, spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 2 Power, place Y'Golonac in the Area containing the Gate.", "Orifices", "Post-Battle", "If Y'Golonac is Killed in a Battle, select a surviving enemy Terror, Monster, or Cultist. Replace it with Y'Golonac, then give Y'Golonac's Loyalty Card to that player. If no enemies survived, Y'Golonac dies normally (placing this Loyalty Card in the general Pool).", "You have just received Y'Golonac as a result of his Orifices ability.", "The Revelations", "Doom Phase", "Every player except you gets 1 Elder Sign. This is not optional.", facedown)
+        // Backwards compatibility: old overlays without facedown parameter
         case $("Byatis", spellbook : Boolean) => loyaltyCardIGOO(ByatisCard.name, "" + ByatisCard.cost, "" + ByatisCard.combat, spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 4 Power, and place Byatis in the Area containing the Gate.", "Toad of Berkeley", "Ongoing", "Byatis may not Move, nor can he be moved with movement-type abilities (such as Arctic Winds or Submerge). He can still be Pained. If there are no enemy Units in Byatis' Area during the Doom Phase, earn 1 Elder Sign.", "Byatis survives a Battle in which at least one enemy Unit is Killed", "God of Forgetfulness", "Action: Cost 1", "Select all enemy Cultists in an Area adjacent to Byatis. Those Cultists are moved into Byatis' Area.")
         case $("Abhoth", spellbook : Boolean) => loyaltyCardIGOO(AbhothCard.name, "" + AbhothCard.cost, "Equals the number of Filth Tokens in play (0-12)", spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 4 Power, and place Abhoth in the Area containing the Gate.", "Filth", "Action: Cost 1", "Place a Filth Token in any Area.", "Choose One: EITHER your Faction has 4+ different Monster types in play, including Filth Tokens, OR Your faction has 8+ total Monsters in play, including Filth Tokens", "The Brood", "Ongoing", "Gates in Areas containing Filth Tokens do not count during the Doom phase. Does not apply to Abhoth's Faction.")
         case $("Daoloth", spellbook : Boolean) => loyaltyCardIGOO(DaolothCard.name, "" + DaolothCard.cost, "" + DaolothCard.combat, spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 6 Power, and place Daoloth in the Area containing the Gate.", "Cosmic Unity", "Pre-Battle", "In a Battle involving Daoloth, choose one enemy Great Old One. It rolls no Combat dice (it still gets its Battle Ability, if any).", "A Great Old One is Killed (anywhere on the map)", "Interdimensional", "Ongoing", "When Daoloth enters an Area without a Gate, immediately place a Gate there.")
@@ -569,7 +577,7 @@ object Overlays {
         case $("Y'Golonac", spellbook : Boolean) => loyaltyCardIGOO(YgolonacCard.name, "" + YgolonacCard.power, "" + YgolonacCard.combat, spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 2 Power, place Y'Golonac in the Area containing the Gate.", "Orifices", "Post-Battle", "If Y'Golonac is Killed in a Battle, select a surviving enemy Terror, Monster, or Cultist. Replace it with Y'Golonac, then give Y'Golonac's Loyalty Card to that player. If no enemies survived, Y'Golonac dies normally (placing this Loyalty Card in the general Pool).", "You have just received Y'Golonac as a result of his Orifices ability.", "The Revelations", "Doom Phase", "Every player except you gets 1 Elder Sign. This is not optional.")
 
 
-        // TOMBSTALKER info cards
+        // Tombstalker (TS): faction info card showing Death March ability, units (TombHerd, DeepTendril, Gla'aki)
         case $("TS") => faction(TS, "info:ts-background", DeathMarch, "Ongoing",
             "Increment the Death's Head each time an enemy Unit dies in any Battle. In the Doom Phase, spend 1 Death's Head to place a Tomb-Herd in any Area; repeat as much as possible. Then reset the Death's Head to 0.",
             $(), $(
@@ -579,6 +587,7 @@ object Overlays {
             (Glaaki,     1, "6",   "?", s"""<div class=p>Combat: equals the number of Deep Tendrils in play.</div><div class=p>Awaken: control an Ocean/Sea gate. May spend Death's Head as Power.</div><div class=p><span class=ability-color>Shepherd of the Crypt</span> (Gather Power Phase): choose an Area and gain 1 Power per Tomb-Herd there.</div>""")
         ))
 
+        // Tombstalker (TS): spellbook requirement info card overlays
         case $("TS", TSAwakenGlaaki.text) => requirement("Awaken Tombstalker Gla'aki.")
         case $("TS", TSTombHerdKilled.text) => requirement("A Tomb-Herd is Killed in Battle.")
         case $("TS", TSRollKill.text) => requirement("Roll a Kill in a Battle.")
@@ -586,6 +595,7 @@ object Overlays {
         case $("TS", TSGlaakiBattlesGOO.text) => requirement("Tombstalker Gla'aki is in a Battle with an enemy Great Old One.")
         case $("TS", TSRitualOrEnemyGate.text) => requirement("Perform a Ritual of Annihilation OR Control a Gate in an enemy faction's starting Area.")
 
+        // Tombstalker (TS): spellbook info card overlays
         case $("TS", ElevenRevelations.name) => spellbook(ElevenRevelations.name, "Action: Cost 1", "Give an enemy your topmost Cursed Tome (I-XI) which they place on their Faction Sheet.")
         case $("TS", Oleaginous.name) => spellbook(Oleaginous.name, "Post-Battle", "Any Pains applied to Tombstalker Gla'aki and Deep Tendrils instead become Retreats (you can move them to any adjacent Areas, regardless of the presence of enemy Units).")
         case $("TS", GraspingDead.name) => spellbook(GraspingDead.name, "Action: Cost 1 Power or 2 Death's Head", "Resolve a Battle in each Area containing a Tomb-Herd and enemy Units, with you as the attacker, for free. Only your Tomb-Herd participate in the Battle.")
@@ -593,8 +603,36 @@ object Overlays {
         case $("TS", GreenDecay.name) => spellbook(GreenDecay.name, "Gather Power Phase", "If Tombstalker Gla'aki is in play, captured Cultists gain you 1 Elder Sign (instead of 1 Power) during the Gather Power Phase.")
         case $("TS", Undulate.name) => spellbook(Undulate.name, "Ongoing", "Your Units may carry one of your Units of lesser cost when moving for free. This effect stacks.")
 
+
+        // Firstborn (FB): faction info card showing unique ability (Writhe), units, and Crater building
+        case $("FB") => faction(FB, "info:fb-background", Writhe, "Action: Cost 2",
+            "Roll dice equal to your Power. For each Kill: Eliminate a Unit you control, any of your Acolytes Eliminated are instead replaced with Desiccated. For each Pain, relocate your Unit to any Area. Before applying these results, you may reroll ALL these dice once.<br/><br/><span class=ability-color>Crater</span> <span class=cost-color>(Building):</span> Any Gate (other than Yog-Sothoth) that coexists in an Area with a Crater is immediately destroyed.",
+            $(), $(
+            (Acolyte,        6, "1", "0", s""""""),
+            (Desiccated,     6, "2", "0+", s"""<div class=p>Combat is 1 if in a land Area, 0 if in a sea Area.</div>"""),
+            (RevenantOfKnaa, 2, "3", "?", s"""<div class=p>Combat equals the number of Desiccated in play.</div>"""),
+            (Ghatanothoa,    1, "?", "?", s"""<div class=p>Cost: 11 minus Ritual cost. Combat equals your Power.</div><div class=p><span class=ability-color>Infernal Pact</span> (Ongoing): You may discount the cost of any Action you perform by flipping any number of your faceup spellbooks, reducing that cost by 1 per spellbook flipped.</div>""")
+        ))
+
+        // Firstborn (FB): spellbook requirement info card overlays
+        case $("FB", FBNoAcolytesInStart.text) => requirement("None of your Acolytes are in your Start Area.")
+        case $("FB", FBAwakenGhatanothoa.text) => requirement("Awaken Ghatanothoa.")
+        case $("FB", FBTwoFacedownSpellbooks.text) => requirement("Have two facedown spellbooks.")
+        case $("FB", FBSecondAwakening.text) => requirement("Awaken Ghatanothoa a second time.")
+        case $("FB", FBMostDoomOrMoreGates.text) => requirement("Have more Doom than any other player OR Control more Gates than the First Player.")
+        case $("FB", FBThirdAwakening.text) => requirement("Awaken Ghatanothoa a third time.")
+
+        // Firstborn (FB): spellbook info card overlays
+        case $("FB", Augury.name) => spellbook("Augury", "Ongoing", "Put a Kill on this spellbook for each Kill that was cancelled or unapplied in a Battle you were in. Whenever you roll a blank (for Battle or Writhe) you may replace it with a Kill from this Spellbook. If this spellbook is flipped, discard all dice on it.")
+        case $("FB", Carnage.name) => spellbook("Carnage", "Post-Battle", "If you AND your opponent Killed or Eliminated Units in the Battle, you may pay 1 Power or flip any of your spellbooks facedown (including this one) to gain an Elder Sign.")
+        case $("FB", TheEyeOpens.name) => spellbook("The Eye Opens", "Action: Cost 1", "For each Area containing a Desiccated and enemy Cultist(s): choose an Enemy Faction to Eliminate one of their Cultists in that Area then Eliminate your Desiccated in that Area to gain a Power.")
+        case $("FB", CyclopeanGaze.name) => spellbook("Cyclopean Gaze", "Ongoing", "Whenever an opponent ends an Action in any Area(s) containing Revenant(s) and/or Ghatanothoa, they must Pain one of their Units from those Areas for each Revenant and/or Ghatanothoa present, with Firstborn choosing where the Units are Pained, following normal Pain rules.")
+        case $("FB", DevilsMark.name) => spellbook("Devil's Mark", "Doom Phase", "Place a Crater in a LAND AREA with your Controlled Gate. Destroy all Gates you Control there &amp; gain an Elder Sign for each Gate destroyed. If the Crater was placed in an Area with a Faction Glyph (even your own) gain 1 Power for each Crater in play (including that one).")
+        case $("FB", CallOfTheFaithful.name) => spellbook("Call of the Faithful", "Unlimited Action: Cost 0", "Place an Acolyte from your Pool in an Area with Ghatanothoa and/or a Revenant. You may not use this ability in an Area containing one of your Acolytes.")
+
+
+        // Tombstalker (TS): Cursed Tomes overlay for TS's own card — shows all 11 tomes (white=remaining, grey=given away)
         case $("cursed-tomes", fStyle) if fStyle.toString == "ts" =>
-            // [2026-04-04] tomesOnCard = # given away. Show I→XI ascending, white=remaining, grey=given.
             val givenAway = TSCursedTomesOverlay.tomesOnCard
             val allTomes = TSCursedTomesOverlay.factionTomes
             // Show all 11 tomes in ascending order — white if still on card, grey if given away
@@ -613,6 +651,7 @@ object Overlays {
             }.mkString("")
             s"""<table class="requirement-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey">Cursed Tomes</td></tr>$onCardRows$factionRows</tbody></table>"""
 
+        // Tombstalker (TS): Cursed Tomes overlay for other factions — shows tomes held (white=face-up, grey=face-down)
         case $("cursed-tomes", fStyle) =>
             val tomes = TSCursedTomesOverlay.factionTomes.getOrElse(fStyle.toString, Nil)
             if (tomes.isEmpty) ""
@@ -678,6 +717,12 @@ object Overlays {
                 val extraOffset = if (isID) (i - (trackLen - 1)) * 9.0 + 7.0 else 0.0
                 val finalX = gx + extraOffset
                 val isCeremony = i < ceremony.length && ceremony(i)
+                // Firstborn (FB) Bug fix Round 3: FB map glyph was shrunk to 60x60 (60% of normal)
+                // so the faction icon on the map wouldn't dominate the region, but the RoA track
+                // uses a separate render context — the map size change left FB's RoA track marker
+                // looking tiny next to every other faction's glyph. Bump FB's RoA track glyph width
+                // by 30% (6% -> 7.8%) ONLY on the RoA track; the map render still uses 60x60.
+                val glyphWidthPct = if (style == "fb") "7.8%" else "6%"
                 if (isCeremony) {
                     // CSS filter applied directly to img — only affects non-transparent pixels,
                     // no square background artifact. sepia(1) gives warm base, hue-rotate shifts to faction hue.
@@ -691,6 +736,8 @@ object Overlays {
                         case "ow" => "sepia(1) hue-rotate(241deg) saturate(3) brightness(0.8)"
                         case "an" => "sepia(1) hue-rotate(156deg) saturate(3) brightness(1.0)"
                         case "ts" => "sepia(1) hue-rotate(74deg) saturate(2) brightness(1.3)"
+                        // Firstborn (FB): magenta/pink tint for RoA track ceremony glyphs
+                        case "fb" => "sepia(1) hue-rotate(295deg) saturate(4) brightness(1.0)"
                         case _    => "sepia(1)"
                     }
                     s"""<img src="${imageSource("n-tulzscha")}"
@@ -698,7 +745,7 @@ object Overlays {
                             position: absolute;
                             left: ${finalX}%;
                             top: ${gy}%;
-                            width: 6%;
+                            width: ${glyphWidthPct};
                             height: auto;
                             transform: translate(-50%, -50%);
                             opacity: 0.9;
@@ -710,7 +757,7 @@ object Overlays {
                             position: absolute;
                             left: ${finalX}%;
                             top: ${gy}%;
-                            width: 6%;
+                            width: ${glyphWidthPct};
                             height: auto;
                             transform: translate(-50%, -50%);
                             opacity: 0.9;
@@ -719,8 +766,7 @@ object Overlays {
                 }
             }.mkString("")
 
-            // [2026-04-03] Pure DH hecatomb glyphs — FIXED Y position (above Instant Death level)
-            // User confirmed: glyph above ID text is the correct height for all pure DH glyphs
+            // Tombstalker (TS) Pure DH Hecatomb: render TS glyph markers on RoA track for rituals paid entirely with Death's Head
             val pureDHFixedY = RitualTrackOverlay.numPlayers match {
                 case 3 => 28.0   // 3p: ID Y=51, one glyph height above
                 case 5 => 17.0   // 5p: ID Y=40, one glyph height above
@@ -829,8 +875,12 @@ object Overlays {
             </tbody>
         </table>"""
 
-    def loyaltyCardIGOO(name : String, cost : String, combat : String, hasSpellbook : Boolean, obtainText : String, ability : String, abilityPhase : String, abilityText : String, spellbookRequirement : String, spellbook : String, spellbookPhase : String, spellbookText : String) = {
+    // Round 8 Bug 40: added facedown parameter. When true, spellbook title and text
+    // are shown with strikethrough (text-decoration: line-through) to indicate the
+    // spellbook has been flipped facedown via Infernal Pact and its power is disabled.
+    def loyaltyCardIGOO(name : String, cost : String, combat : String, hasSpellbook : Boolean, obtainText : String, ability : String, abilityPhase : String, abilityText : String, spellbookRequirement : String, spellbook : String, spellbookPhase : String, spellbookText : String, facedown : Boolean = false) = {
         val dimmedClass = if (hasSpellbook) "" else " dimmed"
+        val strikeStyle = if (facedown) " style=\"text-decoration: line-through\"" else ""
         s"""<table class="loyalty-card-table">
             <thead>
                 <tr>
@@ -881,7 +931,7 @@ object Overlays {
                             <span class="nt">${spellbookRequirement}:</span>
                         </div>
                         <div>&nbsp;</div>
-                        <div class="black-border">
+                        <div class="black-border"${strikeStyle}>
                             <span class="ability-color$dimmedClass">${spellbook}</span>
                             <span class="cost-color$dimmedClass"> (${spellbookPhase})</span>
                             <span class="nt$dimmedClass">: ${spellbookText}</span>

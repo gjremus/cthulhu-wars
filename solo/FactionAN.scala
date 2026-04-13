@@ -182,6 +182,10 @@ object ANExpansion extends Expansion {
                 case GlyphWW => self.satisfy(CathedralWW, "Cathedral in |||")
                 case _ => self.satisfy(CathedralNG, "Cathedral in no-glyph Area")
             }
+            // Round 8 Bug 54: building a cathedral is a zero-delta action (no unit movement),
+            // so it doesn't trigger CG via the snapshot delta. Register it as a CG edge case.
+            if (game.factions.has(FB))
+                game.fbCyclopeanGazeActionRegions :+= r
             EndAction(self)
 
         // GIVE WORST MONSTER
@@ -221,6 +225,20 @@ object ANExpansion extends Expansion {
             self.place(uc, r)
             // self.payTax(r) // Not sure if Ice Age affects this // probably doesn't HRF
             self.log("summoned", uc, "in", r, "for free")
+            // Round 8 Bug 56: AN SBR forced summons need special CG handling.
+            // (1) The receiving faction (`self`) didn't take an action — AN did. The
+            //     monster placement should NOT trigger CG against the receiving faction.
+            //     We suppress the delta-based CG check by updating the receiving
+            //     faction's snapshot to the new (post-placement) count.
+            // (2) However, the AN SBR is AN's action, and if AN has units in a gaze
+            //     region where the SBR placed a monster, CG should fire against AN
+            //     (the SBR-taker). We register the region in fbCyclopeanGazeActionRegions
+            //     so the AfterAction CG handler treats it as a zero-delta edge case for AN.
+            if (game.factions.has(FB)) {
+                val currentCount = self.at(r).%(_.uclass.utype != Building).num
+                game.fbCyclopeanGazeSnapshot += (self, r) -> currentCount
+                game.fbCyclopeanGazeActionRegions :+= r
+            }
             Force(GiveWorstMonsterContinueAction(f, rest))
 
         // GIVE BEST MONSTER
@@ -260,6 +278,14 @@ object ANExpansion extends Expansion {
             self.place(uc, r)
             // self.payTax(r) // Not sure if Ice Age affects this // probably doesn't HRF
             self.log("summoned", uc, "in", r, "for free")
+            // Round 8 Bug 56: same CG handling as GiveWorstMonsterAskAction.
+            // Suppress receiver's delta-based CG trigger; register region as zero-delta
+            // edge case for AN (so AN gets CG-triggered if they have units there).
+            if (game.factions.has(FB)) {
+                val currentCount = self.at(r).%(_.uclass.utype != Building).num
+                game.fbCyclopeanGazeSnapshot += (self, r) -> currentCount
+                game.fbCyclopeanGazeActionRegions :+= r
+            }
             Force(GiveBestMonsterContinueAction(f, rest))
 
         // SUMMONING UN-MAN WITH FESTIVAL

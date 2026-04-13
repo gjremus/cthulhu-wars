@@ -152,7 +152,9 @@ object IGOOsExpansion extends Expansion {
 
     def checkInterdimensional()(implicit game : Game) {
         factions.foreach { f =>
-            if (f.has(Interdimensional)) {
+            // Round 8 Bug 40: check facedown state — IGOO spellbooks flipped via
+            // FB Infernal Pact are disabled (tracked in oncePerGame)
+            if (f.has(Interdimensional) && !f.oncePerGame.has(Interdimensional)) {
                 val r = f.goo(Daoloth).region
 
                 if (game.lastDaolothRegion.has(r).not) {
@@ -363,6 +365,18 @@ object IGOOsExpansion extends Expansion {
             log(Abhoth.styled(self), "placed", Filth.styled(self), "in", r)
 
             EndAction(self)
+
+        // DAOLOTH — Round 8 Bug 49 (FB CG ordering): when Daoloth moves to a new region
+        // and the owner has Interdimensional, place the gate IMMEDIATELY here in the
+        // MovedAction hook (before EndAction → AfterAction). This ensures the gate
+        // exists before FB Cyclopean Gaze fires in AfterAction. Otherwise CG would
+        // pain Daoloth out of the destination region BEFORE checkInterdimensional runs
+        // (which only fires in the base AfterAction handler via checkGatesGained →
+        // triggers()), causing the gate to be placed in the WRONG region (the pained-to
+        // destination, not the originally intended move destination).
+        case MovedAction(self, u, o, r) if u.uclass == Daoloth && self.has(Interdimensional) =>
+            checkInterdimensional()
+            MoveContinueAction(self, true)
 
         // NYOGTHA
         case MovedAction(self, u, o, r) if u.uclass == Nyogtha =>

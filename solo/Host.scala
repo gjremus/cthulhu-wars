@@ -56,13 +56,17 @@ object Host {
                     case WW => BotWW.ask(actions, 0.03)(g)
                     case OW => BotOW.ask(actions, 0.03)(g)
                     case AN => BotAN.ask(actions, 0.03)(g)
+                    // Tombstalker (TS): AI bot decision-making for headless simulation
                     case TS => BotTS.ask(actions, 0.03)(g)
+                    // Firstborn (FB): AI bot decision-making for headless simulation
+                    case FB => BotFB.ask(actions, 0.03)(g)
                 }
         }
     }
 
     def main(args : Array[String]) {
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS)
+        // Tombstalker (TS) and Firstborn (FB): included in the master faction list for headless simulation runs
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB)
 
         val numberOfPlayers = 4
 
@@ -92,6 +96,7 @@ object Host {
         var results : $[$[Faction]] = $
 
         //val base = repeat
+        // Tombstalker (TS): filter simulation combos to only include games with TS for targeted testing
         val base = allComb.filter(_.contains(TS)).shuffle
         //val base = customComb
 
@@ -149,10 +154,17 @@ object Host {
                     }
                     val w = c.asInstanceOf[GameOver].winners
                     println(w.any.?(w./(_.name).mkString(", ")).|("Humanity") + " won (" + n + ")")
+                    // Tombstalker (TS): print end-of-game stats (doom, spellbooks, gates, units, Death's Head, win)
                     if (ff.contains(TS)) {
                         implicit val g = game
                         val ts = factionToState(TS)
                         println("  TS: doom=" + ts.doom + " sb=" + ts.spellbooks.num + " gates=" + ts.gates.num + " tombherds=" + ts.onMap(TombHerd).num + " deeptendrils=" + ts.onMap(DeepTendril).num + " glaaki=" + ts.has(Glaaki) + " dh=" + game.deathsHead + " won=" + w.contains(TS))
+                    }
+                    // Firstborn (FB): print end-of-game stats (doom, spellbooks, gates, units, craters, augury)
+                    if (ff.contains(FB)) {
+                        implicit val g = game
+                        val fb = factionToState(FB)
+                        println("  FB: doom=" + fb.doom + " sb=" + fb.spellbooks.num + " gates=" + fb.gates.num + " desiccated=" + fb.onMap(Desiccated).num + " revenants=" + fb.onMap(RevenantOfKnaa).num + " goo=" + fb.has(Ghatanothoa) + " craters=" + game.fbCraters.num + " augury=" + game.fbAuguryKills + " won=" + w.contains(FB))
                     }
                     w
                 }

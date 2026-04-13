@@ -1,0 +1,1351 @@
+package cws
+
+import hrf.colmat._
+
+import html._
+
+
+// ============================================================================
+// Firstborn (FB) UNITS: Desiccated (monster, created by Writhe from Acolytes),
+// Revenant of K'Naa (monster, combat = number of Desiccated in play),
+// Ghatanothoa (GOO, combat = player's current Power)
+// ============================================================================
+case object Desiccated extends FactionUnitClass(FB, "Desiccated", Monster, 2)
+case object RevenantOfKnaa extends FactionUnitClass(FB, "Revenant of K'Naa", Monster, 3)
+case object Ghatanothoa extends FactionUnitClass(FB, "Ghatanothoa", GOO, 6)
+
+// Firstborn (FB) Crater building: placed by Devil's Mark, destroys any non-Yog gate in its region
+case object Crater extends FactionUnitClass(FB, "Crater", Building, 0) {
+    override def canMove(u : UnitFigure)(implicit game : Game) = false
+    override def canBattle(u : UnitFigure)(implicit game : Game) = false
+    override def canCapture(u : UnitFigure)(implicit game : Game) = false
+}
+
+
+// ============================================================================
+// Firstborn (FB) SPELLBOOKS: Writhe (unique ability), Augury, Carnage,
+// The Eye Opens, Cyclopean Gaze, Devil's Mark, Call of the Faithful
+// FB spellbooks can be flipped facedown by Infernal Pact / Carnage and restored on awakening
+// ============================================================================
+case object Writhe extends FactionSpellbook(FB, "Writhe")
+case object Augury extends FactionSpellbook(FB, "Augury")
+case object Carnage extends FactionSpellbook(FB, "Carnage") with BattleSpellbook
+case object TheEyeOpens extends FactionSpellbook(FB, "The Eye Opens")
+case object CyclopeanGaze extends FactionSpellbook(FB, "Cyclopean Gaze")
+case object DevilsMark extends FactionSpellbook(FB, "Devil's Mark")
+case object CallOfTheFaithful extends FactionSpellbook(FB, "Call of the Faithful")
+
+
+// ============================================================================
+// Firstborn (FB) SPELLBOOK REQUIREMENTS: conditions checked by FBExpansion.triggers()
+// to unlock spellbook slots (6 requirements for 6 spellbooks)
+// ============================================================================
+case object FBNoAcolytesInStart extends Requirement("No Acolytes in Start Area")
+case object FBAwakenGhatanothoa extends Requirement("Awaken Ghatanothoa")
+case object FBTwoFacedownSpellbooks extends Requirement("2 Facedown Spellbooks")
+case object FBSecondAwakening extends Requirement("2nd Ghatanothoa Awakening")
+case object FBMostDoomOrMoreGates extends Requirement("Most Doom or More Gates than 1stP")
+case object FBThirdAwakening extends Requirement("3rd Ghatanothoa Awakening")
+
+
+// ============================================================================
+// Firstborn (FB) FACTION OBJECT: defines faction identity, unit roster,
+// summon/awaken costs, combat strength calculation, and High Priest restriction
+// ============================================================================
+case object FB extends Faction { f =>
+    def name = "Firstborn"
+    def short = "FB"
+    def style = "fb"
+
+    override def abilities = $(Writhe)
+    override def library = $(Augury, Carnage, TheEyeOpens, CyclopeanGaze, DevilsMark, CallOfTheFaithful)
+    override def requirements(options : $[GameOption]) = $(FBNoAcolytesInStart, FBAwakenGhatanothoa, FBTwoFacedownSpellbooks, FBSecondAwakening, FBMostDoomOrMoreGates, FBThirdAwakening)
+
+    // Crater is NOT in allUnits — it's tracked as a region list in game.fbCraters
+    // (same pattern as Ancients' Cathedral, which uses game.cathedrals)
+    val allUnits =
+        1.times(Ghatanothoa) ++
+        2.times(RevenantOfKnaa) ++
+        6.times(Desiccated) ++
+        6.times(Acolyte)
+
+    override def summonCost(u : UnitClass, r : Region)(implicit game : Game) = u match {
+        case _ => u.cost
+    }
+
+    override def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = u match {
+        case Ghatanothoa => |(max(1, 11 - game.ritualCost))
+        case _ => None
+    }
+
+    // Firstborn cannot recruit High Priests - handled in Game.scala recruits()
+
+    def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
+        if (units.none) return 0
+        // Bug fix Round 4: Revenant combat = (number of Desiccated on map) per Revenant.
+        // Previously this used `f.onMap(Desiccated).num`, which includes Zeroed units (units
+        // that have been eliminated mid-battle but not yet removed). Mirroring the TS Glaaki
+        // pattern (`f.onMap(DeepTendril).not(Zeroed).num`), we exclude Zeroed Desiccated so
+        // a Desiccated killed earlier in the same battle no longer contributes to Revenant combat.
+        val desiccatedInPlay = f.onMap(Desiccated).not(Zeroed).num
+        val arena = game.battle./(_.arena)
+        val onLand = arena./(_.glyph != Ocean).|(units.head.region.glyph != Ocean)
+
+        units(Desiccated).not(Zeroed).num * (onLand.?(1).|(0)) +
+        units(RevenantOfKnaa).not(Zeroed).num * desiccatedInPlay +
+        // Bug fix: Ghatanothoa combat is power BEFORE the battle began (snapshot taken
+        // at battle start in Battle.scala). f.power decreases during a battle as costs are
+        // paid, which would otherwise reduce his combat unfairly.
+        units(Ghatanothoa).not(Zeroed).num * (if (game.battle.any && f == FB) game.fbPowerAtBattleStart else f.power) +
+        neutralStrength(units, opponent)
+    }
+}
+
+
+// ============================================================================
+// Firstborn (FB) ACTION CLASSES: data types for all FB-specific game actions.
+// Each case class represents one step in an action sequence.
+// ============================================================================
+
+// ── WRITHE ACTIONS ── Roll dice equal to Power; Kills eliminate own units
+// (Acolytes become Desiccated), Pains relocate own units anywhere
+case class FBWritheMainAction(self : Faction) extends OptionFactionAction(Writhe.toString + " (Cost 2)") with MainQuestion
+case class FBWritheRollAction(self : Faction, numDice : Int) extends ForcedAction
+case class FBWritheRollResultAction(self : Faction, numDice : Int, rolls : $[BattleRoll]) extends ForcedAction
+case class FBWritheRerollAction(self : Faction, rolls : $[BattleRoll]) extends OptionFactionAction("Reroll ALL dice with " + Writhe.styled(FB)) with PowerNeutral { def question(implicit game : Game) = Writhe.styled(FB) }
+case class FBWritheKeepAction(self : Faction, rolls : $[BattleRoll]) extends OptionFactionAction("Keep current " + Writhe.styled(FB) + " results") with PowerNeutral { def question(implicit game : Game) = Writhe.styled(FB) }
+case class FBWritheApplyAction(self : Faction, rolls : $[BattleRoll]) extends ForcedAction with PowerNeutral
+
+// Augury replacement during Writhe
+case class FBWritheAuguryCancelAction(self : Faction, rolls : $[BattleRoll]) extends OptionFactionAction("Skip " + Augury.styled(FB)) with PowerNeutral { def question(implicit game : Game) = Writhe.styled(FB) }
+case class FBWritheAuguryReplaceAction(self : Faction, rolls : $[BattleRoll], n : Int) extends OptionFactionAction(
+    "Replace " + n + " Miss" + (n > 1).?("es").|(("")) + " with " + n + " Kill" + (n > 1).?("s").|(("")) + " with " + Augury.styled(FB)
+) with PowerNeutral { def question(implicit game : Game) = Writhe.styled(FB) }
+
+// Kill assignment from Writhe - menu: "Writhe: Choose units to eliminate", options show unit + region
+case class FBWritheAssignKillAction(self : Faction, remainingKills : Int, remainingPains : Int, rolls : $[BattleRoll]) extends ForcedAction with PowerNeutral
+case class FBWritheKillUnitAction(self : Faction, u : UnitRef, remainingKills : Int, remainingPains : Int) extends BaseFactionAction(
+    Writhe.styled(FB) + ": Choose units to eliminate", implicit g => g.unit(u).full + " in " + g.unit(u).region
+) with PowerNeutral
+// Pain assignment from Writhe - Phase 1: "Writhe: Choose units to pain", options show unit + region
+case class FBWritheAssignPainAction(self : Faction, remainingPains : Int) extends ForcedAction with PowerNeutral
+case class FBWritheChoosePainUnitAction(self : Faction, u : UnitRef, remainingPains : Int, chosen : $[UnitRef]) extends BaseFactionAction(
+    Writhe.styled(FB) + ": Choose units to pain", implicit g => g.unit(u).full + " in " + g.unit(u).region
+) with PowerNeutral
+// Pain assignment from Writhe - Phase 2: "Writhe all units to:" with region list
+case class FBWritheMoveAllAction(self : Faction, chosen : $[UnitRef]) extends ForcedAction with PowerNeutral
+case class FBWritheMoveAllToRegionAction(self : Faction, r : Region, chosen : $[UnitRef]) extends BaseFactionAction(
+    Writhe.styled(FB) + " all units to:", r
+) with PowerNeutral
+case class FBWritheMoveSeparatelyAction(self : Faction, chosen : $[UnitRef]) extends OptionFactionAction(
+    Writhe.styled(FB) + " units separately"
+) with PowerNeutral { def question(implicit game : Game) = Writhe.styled(FB) + " all units to:" }
+// Pain assignment from Writhe - Phase 3: "Writhe [unit] to:" with region list
+case class FBWritheMoveOneAction(self : Faction, u : UnitRef, remaining : $[UnitRef]) extends ForcedAction with PowerNeutral
+case class FBWritheMoveOneToRegionAction(self : Faction, u : UnitRef, r : Region, remaining : $[UnitRef]) extends BaseFactionAction(
+    implicit g => Writhe.styled(FB) + " " + g.unit(u).full + " in " + g.unit(u).region + " to:", r
+) with PowerNeutral
+// Bug fix Round 6: "join" variant shown at top of region list when paining separately.
+// Displays "Region - join UnitName" so the player can quickly send the next unit to the same region.
+case class FBWritheMoveOneJoinAction(self : Faction, u : UnitRef, r : Region, remaining : $[UnitRef], joinUnit : String) extends BaseFactionAction(
+    implicit g => Writhe.styled(FB) + " " + g.unit(u).full + " in " + g.unit(u).region + " to:",
+    implicit g => r.toString + " - join " + joinUnit.styled(FB)
+) with PowerNeutral
+
+// ── INFERNAL PACT ACTIONS ── Ghatanothoa's innate: flip faceup spellbooks to reduce action costs by 1 each
+case class FBInfernalPactMainAction(self : Faction) extends OptionFactionAction("Discount with " + "Infernal Pact".styled(FB)) with MainQuestion with Soft with PowerNeutral
+// Widened from FactionSpellbook to Spellbook so IGOO spellbooks (NeutralSpellbook) can
+// also be flipped facedown via Infernal Pact (Round 8, Bug 40).
+case class FBInfernalPactChooseAction(self : Faction, sb : Spellbook) extends BaseFactionAction("Flip facedown", sb.name.styled(FB)) with PowerNeutral
+case class FBInfernalPactDoneAction(self : Faction) extends OptionFactionAction("Done".styled("power")) with Soft with PowerNeutral { def question(implicit game : Game) = "Infernal Pact" }
+// Bug fix: Infernal Pact cancel actions are Hard, not Soft. They mutate state (flip spellbooks back up,
+// restore faction power, reset game.fbInfernalPact* vars). Soft would prevent undo from replaying them.
+case class FBInfernalPactCancelAction(self : Faction) extends OptionFactionAction("Cancel " + "Infernal Pact".styled(FB)) with PowerNeutral { def question(implicit game : Game) = "Infernal Pact" }
+case class FBInfernalPactCancelMainAction(self : Faction) extends OptionFactionAction("Cancel " + "Infernal Pact".styled(FB)) with MainQuestion with PowerNeutral
+// Bug fix Round 4 (Bug 4): doom-phase variants of Infernal Pact. Discount abilities should be
+// available in every phase where they apply. The doom-phase variants flip spellbooks and add
+// power exactly like the main-action versions, but Done/Cancel return to DoomAction(f) instead
+// of MainAction(f) so the player stays in the doom phase after activating the discount.
+case class FBInfernalPactDoomMainAction(self : Faction) extends OptionFactionAction("Discount with " + "Infernal Pact".styled(FB)) with DoomQuestion with Soft with PowerNeutral
+// Widened from FactionSpellbook to Spellbook for IGOO support (Round 8, Bug 40)
+case class FBInfernalPactDoomChooseAction(self : Faction, sb : Spellbook) extends BaseFactionAction("Flip facedown", sb.name.styled(FB)) with PowerNeutral
+case class FBInfernalPactDoomDoneAction(self : Faction) extends OptionFactionAction("Done".styled("power")) with Soft with PowerNeutral { def question(implicit game : Game) = "Infernal Pact" }
+case class FBInfernalPactDoomCancelAction(self : Faction) extends OptionFactionAction("Cancel " + "Infernal Pact".styled(FB)) with PowerNeutral { def question(implicit game : Game) = "Infernal Pact" }
+case class FBInfernalPactCancelDoomAction(self : Faction) extends OptionFactionAction("Cancel " + "Infernal Pact".styled(FB)) with DoomQuestion with PowerNeutral
+
+// ── AWAKEN GHATANOTHOA ── Cost is 11 minus current Ritual cost; placed in start area, no gate needed
+case class FBAwakenGhatanothoaAction(self : Faction, cost : Int) extends OptionFactionAction(
+    "Awaken " + Ghatanothoa.styled(FB) + " for " + cost.power + " in Start Area"
+) with MainQuestion
+
+// ── THE EYE OPENS ACTIONS ── Cost 1: eliminate enemy cultists in areas with Desiccated, gain power
+// Round 8 Bug 42: was `with Soft` but the handler mutates state (deducts power via
+// consumeDiscount + power -= cost). Soft excludes the action from undo replay, so undoing
+// across The Eye Opens corrupted state (lost power changes, eliminated units lost track).
+// Now Hard — undo will correctly reverse the power deduction and elimination chain.
+case class FBTheEyeOpensMainAction(self : Faction) extends OptionFactionAction(TheEyeOpens) with MainQuestion
+case class FBTheEyeOpensTargetAction(self : Faction, r : Region, f : Faction) extends BaseFactionAction(
+    Desiccated.styled(FB) + " and " + f.name.styled(f) + " Cultist in", r
+)
+// Round 8 Bug 50: parameter changed from `uc : UnitClass` to `u : UnitRef` so the
+// enemy can choose between specific cultists (e.g., on-gate vs off-gate Acolyte)
+// rather than just by unit class. Per-unit selection lets the painted faction
+// preserve their gate-controlling unit if they prefer.
+case class FBTheEyeOpensChooseCultistAction(self : Faction, f : Faction, r : Region, u : UnitRef) extends BaseFactionAction(
+    TheEyeOpens.styled(FB) + ": eliminate", implicit g => g.unit(u).full
+)
+
+// ── CYCLOPEAN GAZE ACTIONS ── Ongoing: after opponent actions/battles, pain enemy units in areas with Revenants/Ghatanothoa
+// Bug fix Round 4: each Revenant and each Ghatanothoa is its own pain source — sourcesPending tracks
+// the queue of (region, sourceUnitClass) tuples so each pain logs the originating unit type separately.
+// Replaces the old `regions : $[(Region, Int)]` shape which only tracked total pains per region.
+// `fromBattle` indicates this chain was triggered from a post-battle hook (Battle.scala) rather
+// than from the AfterAction expansion handler — when true the chain ends with FBCyclopeanGazeBattleDoneAction
+// which Battle.scala catches to resume battle flow via proceed().
+case class FBCyclopeanGazePhaseAction(self : Faction, actor : Faction, sourcesPending : $[(Region, UnitClass)], fromBattle : Boolean) extends ForcedAction with PowerNeutral
+case class FBCyclopeanGazeAssignPainAction(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[(Region, UnitClass)], fromBattle : Boolean) extends ForcedAction with PowerNeutral
+// Firstborn (FB): Cyclopean Gaze — actor chooses which of their units to pain.
+// Round 8 Bug 57: the painted faction (NOT FB) picks which of their units to pain.
+// `self` is set to the painted faction so:
+//   - The Ask in the dispatcher (FBCyclopeanGazeAssignPainAction) targets the painted
+//     faction → menu border colored in painted faction's color.
+//   - The action's `self.style` matches the menu styling.
+// Title format includes the painted faction name styled in their color so it's
+// visually obvious WHO is being asked to choose.
+case class FBCyclopeanGazePainUnitAction(self : Faction, actor : Faction, u : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[(Region, UnitClass)], fromBattle : Boolean) extends BaseFactionAction(
+    implicit g => CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + self.name.styled(self) + " choose unit to pain",
+    implicit g => g.unit(u).full + " in " + r
+) with PowerNeutral
+// Round 8 Bug 61: FIRSTBORN chooses the destination region (the painter directs the pain).
+// `self` is FB (set by the dispatcher in FBCyclopeanGazePainUnitAction), so the menu border
+// is in FB's color and the title is attributed to FB. The title shows the unit being
+// retreated and FB as the chooser.
+case class FBCyclopeanGazeDestinationAction(self : Faction, u : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[(Region, UnitClass)], actor : Faction, fromBattle : Boolean) extends BaseFactionAction(
+    implicit g => CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + FB.name.styled(FB) + " retreat " + g.unit(u).full + " to", r
+) with PowerNeutral
+// Round 8 Bug 51: when CG pain has no legal destinations, the painted faction's owner
+// chooses which of their units in the region to eliminate (rather than auto-killing the
+// FB-selected unit). This is a "soak" choice — the painted faction can preserve their
+// most valuable unit by sacrificing a cheaper one.
+// Round 8 Bug 57: title format updated for consistency with the unit-pick menu.
+// `self` should be the painted faction so the menu border is in their color (set by
+// the dispatcher in FBCyclopeanGazePainUnitAction's no-destinations branch).
+case class FBCyclopeanGazeKillChoiceAction(self : Faction, painedFaction : Faction, killRef : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[(Region, UnitClass)], actor : Faction, fromBattle : Boolean) extends BaseFactionAction(
+    implicit g => CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + painedFaction.name.styled(painedFaction) + " choose unit to eliminate (no retreat)",
+    implicit g => g.unit(killRef).full
+) with PowerNeutral
+// Marker action: emitted by FBCyclopeanGazePhaseAction when all battle-mode pains are done.
+// Battle.scala catches this in its action dispatcher and calls proceed() to resume battle flow.
+case class FBCyclopeanGazeBattleDoneAction(self : Faction) extends ForcedAction with PowerNeutral
+
+// ── DEVIL'S MARK ACTIONS ── Doom phase: place Crater on controlled gate (land only), gain ES, destroy gates
+// Bug fix: Devil's Mark must NOT be Soft. Soft actions are not recorded in the undo log,
+// and Devil's Mark triggers state changes (place crater, destroy gate, take ES, gain power).
+// If marked Soft, undoing across the doom phase loses the state changes and breaks subsequent rituals.
+case class FBDevilsMarkDoomAction(self : Faction) extends OptionFactionAction("Devil's Mark".styled(FB)) with DoomQuestion with PowerNeutral
+case class FBDevilsMarkChooseRegionAction(self : Faction, regions : $[Region]) extends ForcedAction with PowerNeutral
+case class FBDevilsMarkPlaceCraterAction(self : Faction, r : Region) extends BaseFactionAction(
+    "Devil's Mark".styled(FB) + ": place Crater in", r
+) with PowerNeutral
+
+// ── CALL OF THE FAITHFUL ACTIONS ── Free action: place Acolyte from pool in area with Ghatanothoa/Revenant
+case class FBCallOfTheFaithfulMainAction(self : Faction) extends OptionFactionAction(CallOfTheFaithful) with MainQuestion with Soft with PowerNeutral
+case class FBCallOfTheFaithfulAction(self : Faction, r : Region) extends BaseFactionAction(
+    CallOfTheFaithful.styled(FB) + ": place Acolyte in", r
+) with PowerNeutral
+
+// ── CARNAGE ACTIONS ── Post-battle: if both sides lost units, pay 1 power or flip spellbook for ES
+case class FBCarnagePostBattleAction(self : Faction) extends ForcedAction with PowerNeutral
+case class FBCarnagePayPowerAction(self : Faction) extends OptionFactionAction("Pay " + 1.power + " for an " + "Elder Sign".styled("es") + " with " + Carnage.styled(FB)) with PowerNeutral { def question(implicit game : Game) = "Carnage" }
+case class FBCarnageFlipSpellbookAction(self : Faction) extends OptionFactionAction("Flip a Spellbook facedown for an " + "Elder Sign".styled("es") + " with " + Carnage.styled(FB)) with PowerNeutral { def question(implicit game : Game) = "Carnage" }
+case class FBCarnageChooseSpellbookAction(self : Faction, sb : FactionSpellbook) extends BaseFactionAction(Carnage.styled(FB) + ": flip facedown", sb.name.styled(FB)) with PowerNeutral
+// Round 8 Bug 67: FBCarnageCancelAction is NOT Soft. Its perform falls through
+// FBExpansion (UnknownContinue) to base Game's battle.perform → proceed(), which
+// advances the battle past PostBattlePhase to BattleEnd and sets game.battle = None.
+// Soft actions are required to be pure menu-navigation with NO state mutation.
+// Marking cancel as Soft caused Explode to perform it during action enumeration,
+// clearing battle as a side effect, and the subsequent real perform of
+// FBCarnageChooseSpellbookAction then crashed in base Game.perform with a
+// MatchError because `case action if battle.any` no longer matched.
+case class FBCarnageCancelAction(self : Faction) extends OptionFactionAction("Cancel") with PowerNeutral { def question(implicit game : Game) = "Carnage" }
+
+// ── AUGURY BATTLE ACTIONS ── Replace Miss dice with stored Kill results from the Augury spellbook
+case class FBAuguryBattleAction(self : Faction, rolls : $[BattleRoll]) extends ForcedAction with PowerNeutral
+case class FBAuguryBattleReplaceAction(self : Faction, n : Int) extends OptionFactionAction(
+    "Replace " + n + " Miss" + (n > 1).?("es").|(("")) + " with " + n + " Kill" + (n > 1).?("s").|(("")) + " with " + Augury.styled(FB)
+) with PowerNeutral { def question(implicit game : Game) = "Augury" }
+// Round 8 Bug 67: NOT Soft, same reason as FBCarnageCancelAction. Battle.scala
+// dispatches FBAuguryBattleCancelAction to `jump(AssignDefenderKills)`, which
+// mutates the battle phase. Soft actions must be pure menu navigation.
+case class FBAuguryBattleCancelAction(self : Faction) extends OptionFactionAction("Skip " + Augury.styled(FB)) with PowerNeutral { def question(implicit game : Game) = "Augury" }
+
+
+// ============================================================================
+// Firstborn (FB) EXPANSION OBJECT: manages all FB-specific game state (awakenings,
+// augury kills, infernal pact discount, craters, writhe tracking) and dispatches
+// all FB action handlers. Registered via Game.expansions for the FB faction.
+// ============================================================================
+object FBExpansion extends Expansion {
+    // NOTE: All mutable FB state has been moved to Game.scala (fbAuguryKills, fbGhatnothoaAwakenings,
+    // fbCraters, fbInfernalPactDiscount, fbInfernalPactPowerAdded, fbInfernalPactStartPower,
+    // fbInfernalPactFlipped, fbDevilsMarkUsedThisDoom, fbWritheUsedUnits, fbWritheRerolled)
+    // so that the undo mechanism (which creates a new Game and replays recorded actions)
+    // properly resets state. NEVER store per-game mutable state as singleton vars here.
+
+    // Gate destruction from Crater ability
+    def destroyGatesInCraterRegions()(implicit game : Game) {
+        game.fbCraters.foreach { r =>
+            // Find all gates in this region (normal gates, chaos gates, etc.)
+            val gatesHere = game.factions.%(f => f.gates.has(r))
+            gatesHere.foreach { f =>
+                // Don't destroy Yog-Sothoth gate (handled separately if ever relevant)
+                f.gates = f.gates.but(r)
+                f.log("Gate in", r, "destroyed by", "Crater".styled(FB))
+            }
+        }
+    }
+
+    // Bug fix Round 3: helper for FBMostDoomOrMoreGates spellbook requirement.
+    // Previously this check only ran at EndTurnAction (end of FB's action phase turn),
+    // so doom earned in the doom phase (or gates taken during doom-phase rituals) weren't
+    // counted until FB's next action turn — delaying satisfaction by a whole round.
+    // This helper is now called from: (1) EndTurnAction, (2) after doom is distributed
+    // at DoomPhaseAction, (3) after DoomDoneAction for FB.
+    // Uses visible doom only (doom track), NOT unrevealed Elder Signs — must STRICTLY
+    // have more doom than every enemy (no ties).
+    def checkMostDoomOrGates()(implicit game : Game) {
+        if (game.factions.has(FB) && FB.needs(FBMostDoomOrMoreGates)) {
+            val fbDoom = FB.doom
+            val mostEnemyDoom = game.factions.but(FB)./(_.doom).maxOr(0)
+            val hasMostDoom = fbDoom > mostEnemyDoom && fbDoom > 0
+            val firstPlayer = game.first
+            val hasMoreGates = FB.gates.num > firstPlayer.gates.num
+            if (hasMostDoom || hasMoreGates)
+                FB.satisfy(FBMostDoomOrMoreGates, (hasMostDoom).?("Most Doom").|("More Gates than First Player"))
+        }
+    }
+
+    // Check if a gate was just placed/moved to a crater region
+    // Crater ability: destroy any gate in a crater region (both faction and global lists)
+    def checkCraterDestroysGate(r : Region)(implicit game : Game) {
+        if (game.fbCraters.has(r)) {
+            game.factions.%(f => f.gates.has(r)).foreach { f =>
+                f.gates = f.gates.but(r)
+                f.log("Gate in", r, "immediately destroyed by", "Crater".styled(FB))
+            }
+            game.gates = game.gates.but(r)
+        }
+    }
+
+    override def eliminate(u : UnitFigure)(implicit game : Game) {
+        // Nothing special on eliminate for FB
+    }
+
+    override def triggers()(implicit game : Game) {
+        if (game.factions.has(FB)) {
+            // Check: No Acolytes in Start Area
+            // Follows the OW SBR pattern (e.g., EightGates) — checked in triggers() so it
+            // fires on any action by any faction, not just FB's turn.
+            val startArea = game.starting.get(FB)
+            startArea.foreach { start =>
+                FB.satisfyIf(FBNoAcolytesInStart, "No Acolytes in Start Area",
+                    FB.at(start, Acolyte).none && FB.at(start, HighPriest).none)
+            }
+
+            // Round 8 bug fix (Bug 41): Most Doom or More Gates than First Player.
+            // Previously checked only at EndTurnAction (end of FB's turn). Now follows
+            // the OW SBR pattern — checked here in triggers() so it fires on any action
+            // by any faction (e.g., another faction destroys a gate, performs a ritual
+            // changing doom totals, etc.). The condition is a STRICT "more than" — ties
+            // do not satisfy the requirement (matches the spellbook card text).
+            checkMostDoomOrGates()
+
+            // Check: Awaken Ghatanothoa (1st time)
+            FB.satisfyIf(FBAwakenGhatanothoa, "Awaken Ghatanothoa",
+                game.fbGhatnothoaAwakenings >= 1)
+
+            // Check: 2nd Ghatanothoa Awakening
+            FB.satisfyIf(FBSecondAwakening, "2nd Ghatanothoa Awakening",
+                game.fbGhatnothoaAwakenings >= 2)
+
+            // Check: 3rd Ghatanothoa Awakening
+            FB.satisfyIf(FBThirdAwakening, "3rd Ghatanothoa Awakening",
+                game.fbGhatnothoaAwakenings >= 3)
+        }
+    }
+
+    // Flip a spellbook facedown (for Infernal Pact or Carnage)
+    // Flip a spellbook facedown (disable it). Accepts both FactionSpellbook and
+    // NeutralSpellbook (IGOO spellbooks) — Round 8 Bug 40 widened from FactionSpellbook.
+    def flipSpellbookDown(sb : Spellbook)(implicit game : Game) {
+        FB.oncePerGame :+= sb
+        FB.log(sb.name.styled(FB), "flipped facedown")
+    }
+
+    // Flip a spellbook faceup (restore from facedown). Widened to Spellbook for IGOO support.
+    def flipSpellbookUp(sb : Spellbook)(implicit game : Game) {
+        FB.oncePerGame = FB.oncePerGame.but(sb)
+        FB.log(sb.name.styled(FB), "flipped faceup")
+    }
+
+    // Get currently faceup (active) FB faction spellbooks
+    def faceUpSpellbooks(implicit game : Game) : $[FactionSpellbook] =
+        FB.spellbooks.%(sb => sb.isInstanceOf[FactionSpellbook]).map(_.asInstanceOf[FactionSpellbook]).%(sb => !FB.oncePerGame.has(sb))
+
+    // Get currently facedown FB faction spellbooks
+    def faceDownSpellbooks(implicit game : Game) : $[FactionSpellbook] =
+        FB.spellbooks.%(sb => sb.isInstanceOf[FactionSpellbook]).map(_.asInstanceOf[FactionSpellbook]).%(sb => FB.oncePerGame.has(sb))
+
+    // Round 8 Bug 40: IGOO spellbooks that FB has earned and are currently faceup.
+    // These are NeutralSpellbook instances stored in FB.upgrades, not FB.spellbooks.
+    // Flipping them facedown adds them to oncePerGame; their effects are gated by
+    // f.has(sb) which checks upgrades, so we need separate tracking.
+    def faceUpIGOOSpellbooks(implicit game : Game) : $[NeutralSpellbook] =
+        FB.upgrades.%(_.isInstanceOf[NeutralSpellbook]).map(_.asInstanceOf[NeutralSpellbook]).%(sb => !FB.oncePerGame.has(sb))
+
+    // IGOO spellbooks that FB has earned but are currently facedown
+    def faceDownIGOOSpellbooks(implicit game : Game) : $[NeutralSpellbook] =
+        FB.upgrades.%(_.isInstanceOf[NeutralSpellbook]).map(_.asInstanceOf[NeutralSpellbook]).%(sb => FB.oncePerGame.has(sb))
+
+    // Count facedown spellbooks (faction + IGOO combined, for FBTwoFacedownSpellbooks requirement)
+    def faceDownCount(implicit game : Game) : Int = faceDownSpellbooks.num + faceDownIGOOSpellbooks.num
+
+    // Effective cost after Infernal Pact discount
+    def effectiveCost(baseCost : Int)(implicit game : Game) : Int = max(0, baseCost - game.fbInfernalPactDiscount)
+
+    // Consume Infernal Pact discount for an action cost
+    // Infernal Pact discount is now added as real power when activated.
+    // This function just tracks how much discount has been used and logs it.
+    // Returns the full baseCost (power deduction handles it since discount is in power).
+    def consumeDiscount(baseCost : Int)(implicit game : Game) : Int = {
+        val discount = min(game.fbInfernalPactDiscount, baseCost)
+        game.fbInfernalPactDiscount -= discount
+        if (discount > 0)
+            FB.log("Infernal Pact".styled(FB), "discounted", discount.power)
+        baseCost
+    }
+
+
+    def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
+
+        // Firstborn (FB): reset per-turn flags at start of each gather power phase
+        case PowerGatherAction(_) if game.factions.has(FB) =>
+            game.fbDevilsMarkUsedThisDoom = false
+            UnknownContinue
+
+        // ── DOOM PHASE ──
+        case DoomAction(f) if f == FB =>
+            implicit val asking = Asking(f)
+
+            game.rituals(f)
+
+            // Bug fix Round 4 (Bug 4): Infernal Pact must also be offered in the doom phase so the
+            // player can discount Ritual of Annihilation costs. The doom-phase variant flips
+            // spellbooks and bumps power identically to the main-action version; rituals
+            // re-evaluate against the bumped power when the menu re-renders. Cancel button shows
+            // separately if there's an active discount, mirroring the main-action UI.
+            // Bug fix Round 6: only show cancel if there's an active discount to cancel
+            // Round 8 Bug 66: ALSO require !f.acted so cancel disappears after a ritual is enacted.
+            // Without this check, FB could flip e.g. 4 spellbooks (discount=4), perform a ritual
+            // costing 2 (consumes 2 of the discount → discount=2), then click Cancel to refund
+            // the leftover 2 power AND unflip ALL 4 spellbooks — getting both the ritual discount
+            // and all the spellbooks back. Once a ritual is enacted, the IP context is committed
+            // for the rest of this doom phase, regardless of whether discount remains.
+            if (game.fbInfernalPactDiscount > 0 && !f.acted)
+                + FBInfernalPactCancelDoomAction(f)
+            // Bug fix Round 6: only show Infernal Pact if faction hasn't acted yet (no ritual enacted).
+            // After a ritual, f.acted is true and offering more discounts is pointless.
+            if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && faceUpSpellbooks.any && !f.acted)
+                + FBInfernalPactDoomMainAction(f)
+
+            // Firstborn (FB): Devil's Mark — place crater at controlled land gate (once per doom phase)
+            if (f.has(DevilsMark) && !FB.oncePerGame.has(DevilsMark) && !game.fbDevilsMarkUsedThisDoom) {
+                val landGates = f.gates.%(r => r.glyph != Ocean)
+                if (landGates.any)
+                    + FBDevilsMarkDoomAction(f)
+            }
+
+            game.reveals(f)
+
+            game.highPriests(f)
+
+            game.hires(f)
+
+            + DoomDoneAction(f)
+
+            asking
+
+        // ── DEVIL'S MARK ──
+        case FBDevilsMarkDoomAction(self) =>
+            val landGates = self.gates.%(r => r.glyph != Ocean)
+            Ask(self).each(landGates)(r => FBDevilsMarkPlaceCraterAction(self, r)).cancel
+
+        case FBDevilsMarkPlaceCraterAction(self, r) =>
+            // Mark Devil's Mark as used this doom phase
+            game.fbDevilsMarkUsedThisDoom = true
+
+            // Bug fix: log crater placement FIRST, then gate destruction
+            // (matches the order users expect to read events in the log)
+            // Place crater — tracked as region list, NOT as unit figure
+            // (same pattern as Ancients' Cathedral using game.cathedrals)
+            game.fbCraters :+= r
+            self.log("placed", "Crater".styled(FB), "in", r, "with", "Devil's Mark".styled(FB))
+
+            // Remove gate from both faction gates AND global game gates
+            self.gates = self.gates.but(r)
+            game.gates = game.gates.but(r)
+            self.log("Gate in", r, "destroyed by", "Crater".styled(FB))
+
+            // Elder sign for destroyed gate
+            self.takeES(1)
+            self.log("gained", 1.es, "from", "Devil's Mark".styled(FB))
+
+            // Check if region has any faction glyph
+            val hasGlyph = game.factions.exists(f => game.starting.get(f).has(r))
+            if (hasGlyph) {
+                val craterCount = game.fbCraters.num
+                self.power += craterCount
+                self.log("gained", craterCount.power, "from", "Devil's Mark".styled(FB), "(" + craterCount + " Craters, glyph region)")
+            }
+
+            // Destroy any other gates in this region (from Crater ability)
+            checkCraterDestroysGate(r)
+
+            CheckSpellbooksAction(DoomAction(self))
+
+        // ── MAIN ACTIONS ──
+        case MainAction(f) if f == FB && f.active.not =>
+            UnknownContinue
+
+        case MainAction(f) if f == FB && f.acted =>
+            UnknownContinue
+
+        case MainAction(f) if f == FB =>
+            implicit val asking = Asking(f)
+
+            // Cancel Infernal Pact from main menu
+            if (game.fbInfernalPactDiscount > 0)
+                + FBInfernalPactCancelMainAction(f)
+
+            // Infernal Pact: discount actions by flipping spellbooks
+            // Bug fix Round 4 (Bug 5): only show when there's at least one power-costing action
+            // available. After f.acted is true (faction has spent its action this turn), only
+            // Soft / PowerNeutral options remain, so Infernal Pact discount cannot be applied
+            // and the menu entry would be a dead end. Suppress it in that state.
+            if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && faceUpSpellbooks.any && !f.acted)
+                + FBInfernalPactMainAction(f)
+
+            game.moves(f)
+
+            game.captures(f)
+
+            game.recruits(f)
+
+            game.battles(f)
+
+            game.controls(f)
+
+            game.builds(f)
+
+            game.summons(f)
+
+            // Awaken Ghatanothoa - special: no gate required, appears in start area
+            val awakenCost = max(1, 11 - game.ritualCost)
+            val effectiveAwakenCost = effectiveCost(awakenCost)
+            if (f.pool(Ghatanothoa).any && f.power + game.fbInfernalPactDiscount >= awakenCost)
+                + FBAwakenGhatanothoaAction(f, awakenCost)
+
+            game.independents(f)
+
+            // Writhe (Cost 2)
+            val writheCost = effectiveCost(2)
+            if (f.power >= writheCost || (game.fbInfernalPactDiscount > 0 && f.power + game.fbInfernalPactDiscount >= 2))
+                + FBWritheMainAction(f)
+
+            // The Eye Opens (Cost 1)
+            if (f.has(TheEyeOpens) && !FB.oncePerGame.has(TheEyeOpens)) {
+                val eyeCost = effectiveCost(1)
+                if (f.power >= eyeCost || game.fbInfernalPactDiscount >= 1) {
+                    val eligible = areas.%(r => f.at(r, Desiccated).any && f.enemies.exists(_.at(r).%(_.uclass.utype == Cultist).any))
+                    if (eligible.any)
+                        + FBTheEyeOpensMainAction(f)
+                }
+            }
+
+            // Call of the Faithful (Unlimited, Cost 0)
+            if (f.has(CallOfTheFaithful) && !FB.oncePerGame.has(CallOfTheFaithful) && f.pool(Acolyte).any) {
+                val eligible = areas.%(r => (f.at(r, Ghatanothoa).any || f.at(r, RevenantOfKnaa).any) && f.at(r, Acolyte).none)
+                if (eligible.any)
+                    + FBCallOfTheFaithfulMainAction(f)
+            }
+
+            game.neutralSpellbooks(f)
+
+            // No High Priests for Firstborn
+            // game.highPriests(f)
+
+            game.reveals(f)
+
+            game.endTurn(f)(f.battled.any)
+
+            asking
+
+        // ── AWAKEN GHATANOTHOA ──
+        case FBAwakenGhatanothoaAction(self, cost) =>
+            val actualCost = consumeDiscount(cost)
+            self.power -= actualCost
+            val startArea = game.starting(FB)
+            self.place(Ghatanothoa, startArea)
+            game.fbGhatnothoaAwakenings += 1
+            self.log("awakened", Ghatanothoa.styled(FB), "in", startArea, "for", cost.power)
+
+            // Flip all facedown spellbooks faceup (faction + IGOO spellbooks).
+            // Round 8 Bug 40: also flip IGOO spellbooks back up when Ghatanothoa is
+            // re-awakened. This re-enables their powers but does NOT re-earn them —
+            // only spellbooks already in FB.upgrades are affected.
+            faceDownSpellbooks.foreach { sb =>
+                flipSpellbookUp(sb)
+            }
+            faceDownIGOOSpellbooks.foreach { sb =>
+                flipSpellbookUp(sb)
+            }
+
+            game.triggers()
+            // Check spellbook requirements (awakening is a requirement)
+            CheckSpellbooksAction(EndAction(self))
+
+        // ── WRITHE ──
+        // Writhe can be used by any faction that has it (FB natively, or via SL Ancient
+        // Sorcery borrowing). Non-FB factions have 0 Desiccated in pool, so killed
+        // Acolytes are simply eliminated (line ~664 checks pool(Desiccated).any).
+        // Augury integration is gated by self.has(Augury), which is false for non-FB.
+        // Infernal Pact discount is gated by game.fbInfernalPactDiscount, which is 0
+        // for non-FB. All three cases are safe — no special non-FB handling needed.
+        case FBWritheMainAction(self) =>
+            val writheCost = 2
+            val actualCost = consumeDiscount(writheCost)
+            self.power -= actualCost
+            val numDice = self.power + actualCost  // dice = power before spending
+            game.fbWritheRerolled = false
+            game.fbWritheUsedUnits = $
+            // Bug fix Round 6: reset Writhe "join" tracking at start of each Writhe activation
+            game.fbWritheLastPainRegion = None
+            game.fbWritheLastPainedUnit = ""
+            self.log("used", Writhe.styled(FB), "rolling", numDice, "dice")
+            // Use RollBattle continuation so dice are rolled by the game engine
+            // and stored in replay log (consistent on undo, with dice animation)
+            RollBattle(self, Writhe.styled(FB), numDice, rolls => FBWritheRollResultAction(self, numDice, rolls))
+
+        // FBWritheRollAction is kept for reroll dispatch only
+        case FBWritheRollAction(self, numDice) =>
+            RollBattle(self, Writhe.styled(FB), numDice, rolls => FBWritheRollResultAction(self, numDice, rolls))
+
+        case FBWritheRollResultAction(self, numDice, rolls) =>
+            val kills = rolls.count(_ == Kill)
+            val pains = rolls.count(_ == Pain)
+            val misses = rolls.count(_ == Miss)
+            self.log("rolled", kills, Kill, pains, Pain, misses, "Miss" + (misses != 1).?("es").|(("")))
+
+            // Offer reroll if not yet rerolled
+            if (!game.fbWritheRerolled) {
+                implicit val asking = Asking(self)
+                + FBWritheRerollAction(self, rolls)
+                + FBWritheKeepAction(self, rolls)
+
+                // Augury: offer to replace misses with kills before deciding reroll
+                if (self.has(Augury) && !FB.oncePerGame.has(Augury) && game.fbAuguryKills > 0 && misses > 0) {
+                    val maxReplace = min(misses, game.fbAuguryKills)
+                    (1 to maxReplace).foreach { n =>
+                        + FBWritheAuguryReplaceAction(self, rolls, n)
+                    }
+                }
+
+                asking
+            } else {
+                // After reroll, offer Augury then apply
+                if (self.has(Augury) && !FB.oncePerGame.has(Augury) && game.fbAuguryKills > 0 && misses > 0) {
+                    implicit val asking = Asking(self)
+                    val maxReplace = min(misses, game.fbAuguryKills)
+                    (1 to maxReplace).foreach { n =>
+                        + FBWritheAuguryReplaceAction(self, rolls, n)
+                    }
+                    + FBWritheAuguryCancelAction(self, rolls)
+                    asking
+                } else
+                    Force(FBWritheApplyAction(self, rolls))
+            }
+
+        case FBWritheRerollAction(self, oldRolls) =>
+            game.fbWritheRerolled = true
+            self.log("rerolled ALL dice with", Writhe.styled(FB))
+            Force(FBWritheRollAction(self, oldRolls.num))  // re-roll same number of dice
+
+        case FBWritheKeepAction(self, rolls) =>
+            Force(FBWritheApplyAction(self, rolls))
+
+        case FBWritheAuguryReplaceAction(self, rolls, n) =>
+            game.fbAuguryKills -= n
+            // Replace n misses with kills
+            var newRolls = rolls
+            var replaced = 0
+            newRolls = newRolls.map { r =>
+                if (r == Miss && replaced < n) {
+                    replaced += 1
+                    Kill
+                } else r
+            }
+            self.log(Augury.styled(FB) + ": replaced", n, "Miss" + (n > 1).?("es").|(("")), "with", n, "Kill" + (n > 1).?("s").|(("")))
+            Force(FBWritheApplyAction(self, newRolls))
+
+        case FBWritheAuguryCancelAction(self, rolls) =>
+            Force(FBWritheApplyAction(self, rolls))
+
+        case FBWritheApplyAction(self, rolls) =>
+            val kills = rolls.count(_ == Kill)
+            val pains = rolls.count(_ == Pain)
+            if (kills > 0)
+                Force(FBWritheAssignKillAction(self, kills, pains, rolls))
+            else if (pains > 0)
+                Force(FBWritheAssignPainAction(self, pains))
+            else
+                EndAction(self)
+
+        case FBWritheAssignKillAction(self, remainingKills, remainingPains, rolls) =>
+            if (remainingKills <= 0) {
+                if (remainingPains > 0)
+                    Force(FBWritheAssignPainAction(self, remainingPains))
+                else
+                    EndAction(self)
+            } else {
+                // Sort by region name, then by unit cost descending
+                val units = self.units.%(u => u.region.onMap && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref))
+                    .sortBy(u => (u.region.toString, -u.uclass.cost))
+                if (units.none)
+                    EndAction(self)
+                else
+                    Ask(self).each(units)(u => FBWritheKillUnitAction(self, u.ref, remainingKills, remainingPains))
+            }
+
+        case FBWritheKillUnitAction(self, uRef, remainingKills, remainingPains) =>
+            val u = game.unit(uRef)
+            val r = u.region
+            game.fbWritheUsedUnits :+= uRef
+            if (u.uclass == Acolyte && self.pool(Desiccated).any) {
+                // Acolyte killed by Writhe: replace with Desiccated
+                game.eliminate(u)
+                self.place(Desiccated, r)
+                self.log(Writhe.styled(FB) + ": Acolyte replaced with", Desiccated.styled(FB), "in", r)
+            } else {
+                game.eliminate(u)
+                self.log(Writhe.styled(FB) + ": eliminated", u.uclass.styled(self), "in", r)
+            }
+            Force(FBWritheAssignKillAction(self, remainingKills - 1, remainingPains, $))
+
+        // ── WRITHE PAIN: Phase 1 - Choose units ──
+        case FBWritheAssignPainAction(self, remainingPains) =>
+            if (remainingPains <= 0)
+                EndAction(self)
+            else {
+                // Sort by region name, then by unit cost descending
+                val units = self.units.%(u => u.region.onMap && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref))
+                    .sortBy(u => (u.region.toString, -u.uclass.cost))
+                if (units.none)
+                    EndAction(self)
+                else if (remainingPains >= units.num) {
+                    // More pains than units — auto-select all, skip choose menu
+                    val chosen = units./(_.ref)
+                    Force(FBWritheMoveAllAction(self, chosen))
+                } else {
+                    // Player chooses which units to pain
+                    Ask(self).each(units)(u => FBWritheChoosePainUnitAction(self, u.ref, remainingPains, $))
+                }
+            }
+
+        case FBWritheChoosePainUnitAction(self, uRef, remainingPains, chosen) =>
+            val newChosen = chosen :+ uRef
+            val remaining = remainingPains - 1
+            if (remaining <= 0) {
+                // All pains assigned, move to relocation phase
+                Force(FBWritheMoveAllAction(self, newChosen))
+            } else {
+                // Sort by region name, then by unit cost descending
+                val units = self.units.%(u => u.region.onMap && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref) && !newChosen.has(u.ref))
+                    .sortBy(u => (u.region.toString, -u.uclass.cost))
+                if (units.none) {
+                    // No more units to choose, move with what we have
+                    Force(FBWritheMoveAllAction(self, newChosen))
+                } else {
+                    Ask(self).each(units)(u => FBWritheChoosePainUnitAction(self, u.ref, remaining, newChosen))
+                }
+            }
+
+        // ── WRITHE PAIN: Phase 2 - Move all to one region or separately ──
+        case FBWritheMoveAllAction(self, chosen) =>
+            if (chosen.num == 1) {
+                // Single unit: go straight to "Writhe [unit] to:" menu, no "separately" option
+                Force(FBWritheMoveOneAction(self, chosen.head, $))
+            } else {
+                implicit val asking = Asking(self)
+                + FBWritheMoveSeparatelyAction(self, chosen)
+                areas.foreach { r =>
+                    + FBWritheMoveAllToRegionAction(self, r, chosen)
+                }
+                asking
+            }
+
+        case FBWritheMoveAllToRegionAction(self, r, chosen) =>
+            chosen.foreach { uRef =>
+                val u = game.unit(uRef)
+                val from = u.region
+                u.region = r
+                u.onGate = false
+                game.fbWritheUsedUnits :+= uRef
+                self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
+            }
+            EndAction(self)
+
+        case FBWritheMoveSeparatelyAction(self, chosen) =>
+            // Sort by cost descending
+            val sorted = chosen.sortBy(uRef => -uRef.uclass.cost)
+            if (sorted.any)
+                Force(FBWritheMoveOneAction(self, sorted.head, sorted.tail))
+            else
+                EndAction(self)
+
+        // ── WRITHE PAIN: Phase 3 - Move each unit separately ──
+        case FBWritheMoveOneAction(self, uRef, remaining) =>
+            val u = game.unit(uRef)
+            // Round 8: per user request, show ALL regions where FB has any unit as
+            // "join <unit>" options at the top of the menu. This includes:
+            //   - the region the current unit is being pained FROM (its source),
+            //   - any region where previously-pained units now sit (was the only
+            //     case the old code handled — `fbWritheLastPainRegion`),
+            //   - any region that already had FB presence before Writhe started.
+            // Below those, the remaining regions follow as normal "writhe to" entries.
+            // Earlier-round behavior only listed `fbWritheLastPainRegion` as a join
+            // hint; this expansion gives the player a one-click way to keep clusters
+            // together regardless of which region the cluster is in.
+            implicit val asking = Asking(self)
+            val fbRegionRefs = areas.%(r => self.at(r).any).sortBy(_.toString)
+            fbRegionRefs.foreach { r =>
+                // Pick a representative FB unit in this region for the "join <X>"
+                // label. Prefer a unit other than the one being pained (so the label
+                // names a unit that will still be there after the move). Fall back to
+                // the unit being pained itself if it's the only FB unit in the source.
+                val candidates = self.at(r).%!(_.ref == uRef)
+                val rep = candidates.sortBy(-_.uclass.cost).headOption
+                val label = rep./(_.uclass.name).|(u.uclass.name)
+                + FBWritheMoveOneJoinAction(self, uRef, r, remaining, label)
+            }
+            areas.%!(fbRegionRefs.has).foreach(r => + FBWritheMoveOneToRegionAction(self, uRef, r, remaining))
+            asking
+
+        case FBWritheMoveOneToRegionAction(self, uRef, r, remaining) =>
+            val u = game.unit(uRef)
+            val from = u.region
+            u.region = r
+            u.onGate = false
+            // Bug fix Round 6: store destination for "join" hint on next unit's region list
+            game.fbWritheLastPainRegion = |(r)
+            game.fbWritheLastPainedUnit = u.uclass.name
+            self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
+            if (remaining.any)
+                Force(FBWritheMoveOneAction(self, remaining.head, remaining.tail))
+            else
+                EndAction(self)
+
+        // Bug fix Round 6: "join" variant dispatches identically to normal region move
+        case FBWritheMoveOneJoinAction(self, uRef, r, remaining, _) =>
+            val u = game.unit(uRef)
+            val from = u.region
+            u.region = r
+            u.onGate = false
+            game.fbWritheLastPainRegion = |(r)
+            game.fbWritheLastPainedUnit = u.uclass.name
+            self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
+            if (remaining.any)
+                Force(FBWritheMoveOneAction(self, remaining.head, remaining.tail))
+            else
+                EndAction(self)
+
+        // ── INFERNAL PACT ──
+        case FBInfernalPactMainAction(self) =>
+            // Round 8 Bug 40: offer both faction spellbooks and IGOO spellbooks for flipping
+            val available : $[Spellbook] = faceUpSpellbooks ++ faceUpIGOOSpellbooks
+            if (available.any) {
+                implicit val asking = Asking(self)
+                available.foreach { sb =>
+                    + FBInfernalPactChooseAction(self, sb)
+                }
+                + FBInfernalPactDoneAction(self)
+                + FBInfernalPactCancelAction(self)
+                asking
+            } else
+                Force(MainAction(self))
+
+        case FBInfernalPactChooseAction(self, sb) =>
+            // On first flip this turn, snapshot starting power so end-of-turn can remove
+            // only unspent discount (allowing "spent" discount to persist as used power).
+            if (game.fbInfernalPactStartPower < 0)
+                game.fbInfernalPactStartPower = self.power
+            flipSpellbookDown(sb)
+            game.fbInfernalPactDiscount += 1
+            game.fbInfernalPactPowerAdded += 1
+            // Add discount as real power so core game action checks see it
+            // (otherwise actions that would take power to 0 trigger end-of-turn before discount applies)
+            self.power += 1
+            game.fbInfernalPactFlipped :+= sb
+            self.log("Infernal Pact".styled(FB) + ": flipped", sb.name.styled(FB), "facedown, discount now", game.fbInfernalPactDiscount.power)
+            // Return to Infernal Pact sub menu
+            Force(FBInfernalPactMainAction(self))
+
+        case FBInfernalPactDoneAction(self) =>
+            // Done - return to main action menu with discount active
+            Force(MainAction(self))
+
+        case FBInfernalPactCancelAction(self) =>
+            // Undo all flips and restore power to before this Infernal Pact activation
+            game.fbInfernalPactFlipped.foreach { sb =>
+                flipSpellbookUp(sb)
+            }
+            self.power -= game.fbInfernalPactDiscount
+            if (self.power < 0) self.power = 0
+            game.fbInfernalPactDiscount = 0
+            game.fbInfernalPactPowerAdded = 0
+            game.fbInfernalPactStartPower = -1
+            game.fbInfernalPactFlipped = $
+            self.log("Cancelled", "Infernal Pact".styled(FB))
+            Force(MainAction(self))
+
+        case FBInfernalPactCancelMainAction(self) =>
+            // Cancel from main menu — restore power to before Infernal Pact activation
+            game.fbInfernalPactFlipped.foreach { sb =>
+                flipSpellbookUp(sb)
+            }
+            self.power -= game.fbInfernalPactDiscount
+            if (self.power < 0) self.power = 0
+            game.fbInfernalPactDiscount = 0
+            game.fbInfernalPactPowerAdded = 0
+            game.fbInfernalPactStartPower = -1
+            game.fbInfernalPactFlipped = $
+            self.log("Cancelled", "Infernal Pact".styled(FB))
+            Force(MainAction(self))
+
+        // Bug fix Round 4 (Bug 4): doom-phase Infernal Pact handlers. Mirror the main-action
+        // versions exactly except for the return path — Done/Cancel route to DoomAction(self)
+        // so the player stays in the doom phase. State mutations (flip spellbooks, bump power,
+        // update game.fbInfernalPact* vars) are identical so the existing end-of-turn cleanup
+        // in EndTurnAction works for both phases without modification.
+        case FBInfernalPactDoomMainAction(self) =>
+            // Round 8 Bug 40: offer both faction spellbooks and IGOO spellbooks for flipping
+            val available : $[Spellbook] = faceUpSpellbooks ++ faceUpIGOOSpellbooks
+            if (available.any) {
+                implicit val asking = Asking(self)
+                available.foreach { sb =>
+                    + FBInfernalPactDoomChooseAction(self, sb)
+                }
+                + FBInfernalPactDoomDoneAction(self)
+                + FBInfernalPactDoomCancelAction(self)
+                asking
+            } else
+                Force(DoomAction(self))
+
+        case FBInfernalPactDoomChooseAction(self, sb) =>
+            if (game.fbInfernalPactStartPower < 0)
+                game.fbInfernalPactStartPower = self.power
+            flipSpellbookDown(sb)
+            game.fbInfernalPactDiscount += 1
+            game.fbInfernalPactPowerAdded += 1
+            self.power += 1
+            game.fbInfernalPactFlipped :+= sb
+            self.log("Infernal Pact".styled(FB) + ": flipped", sb.name.styled(FB), "facedown, discount now", game.fbInfernalPactDiscount.power)
+            Force(FBInfernalPactDoomMainAction(self))
+
+        case FBInfernalPactDoomDoneAction(self) =>
+            // Done - return to doom action menu with discount active
+            Force(DoomAction(self))
+
+        case FBInfernalPactDoomCancelAction(self) =>
+            // Cancel from sub-menu - restore power to before Infernal Pact activation
+            game.fbInfernalPactFlipped.foreach { sb =>
+                flipSpellbookUp(sb)
+            }
+            self.power -= game.fbInfernalPactDiscount
+            if (self.power < 0) self.power = 0
+            game.fbInfernalPactDiscount = 0
+            game.fbInfernalPactPowerAdded = 0
+            game.fbInfernalPactStartPower = -1
+            game.fbInfernalPactFlipped = $
+            self.log("Cancelled", "Infernal Pact".styled(FB))
+            Force(DoomAction(self))
+
+        case FBInfernalPactCancelDoomAction(self) =>
+            // Cancel from doom main menu - restore power to before Infernal Pact activation
+            game.fbInfernalPactFlipped.foreach { sb =>
+                flipSpellbookUp(sb)
+            }
+            self.power -= game.fbInfernalPactDiscount
+            if (self.power < 0) self.power = 0
+            game.fbInfernalPactDiscount = 0
+            game.fbInfernalPactPowerAdded = 0
+            game.fbInfernalPactStartPower = -1
+            game.fbInfernalPactFlipped = $
+            self.log("Cancelled", "Infernal Pact".styled(FB))
+            Force(DoomAction(self))
+
+        // ── END TURN: reset Infernal Pact and check gate requirement ──
+        case EndTurnAction(self) if self == FB =>
+            // Infernal Pact cleanup: discount applies ONLY during this turn.
+            // Spent discount was already consumed via action costs; any unspent discount
+            // is removed here. Math: final power = min(current, starting_before_pact).
+            // This preserves discount that was spent (current < starting) but removes
+            // unspent discount (current > starting → clamp to starting).
+            if (game.fbInfernalPactPowerAdded > 0 && game.fbInfernalPactStartPower >= 0) {
+                self.power = min(self.power, game.fbInfernalPactStartPower)
+                if (self.power < 0) self.power = 0
+            }
+            game.fbInfernalPactDiscount = 0
+            game.fbInfernalPactPowerAdded = 0
+            game.fbInfernalPactStartPower = -1
+            game.fbInfernalPactFlipped = $
+            // Check Most Doom OR More Gates at end of turn (not mid-turn)
+            // Bug fix Round 3: delegate to FBExpansion.checkMostDoomOrGates so the exact same
+            // condition is also applied from DoomPhaseAction and DoomDoneAction (see Game.scala).
+            FBExpansion.checkMostDoomOrGates()
+
+            // Check 2 Facedown Spellbooks at end of turn (uses CURRENT total facedown count)
+            if (FB.needs(FBTwoFacedownSpellbooks) && faceDownCount >= 2)
+                FB.satisfy(FBTwoFacedownSpellbooks, "2 Facedown Spellbooks")
+
+            UnknownContinue
+
+        // ── THE EYE OPENS ──
+        case FBTheEyeOpensMainAction(self) =>
+            // Pay cost first
+            val eyeCost = 1
+            val actualCost = consumeDiscount(eyeCost)
+            self.power -= actualCost
+
+            val eligible = areas./~{ r =>
+                if (self.at(r, Desiccated).any) {
+                    self.enemies.%(e => e.at(r).%(_.uclass.utype == Cultist).any)./(f => (r, f))
+                } else
+                    Nil
+            }
+            implicit val asking = Asking(self)
+            eligible.foreach { case (r, f) => + FBTheEyeOpensTargetAction(self, r, f) }
+            asking
+
+        case FBTheEyeOpensTargetAction(self, r, f) =>
+            // Round 8 Bug 50: prompt the enemy to pick the SPECIFIC unit to eliminate
+            // (per-unit, not per-class) so they can choose between on-gate and off-gate
+            // cultists of the same class. Only auto-pick if there's exactly 1 cultist.
+            val cultists = f.at(r).%(_.uclass.utype == Cultist)
+            if (cultists.num == 1) {
+                val u = cultists.head
+                game.eliminate(u)
+                f.log(u.uclass.styled(f), "eliminated in", r, "by", TheEyeOpens.styled(FB))
+                val d = self.at(r, Desiccated).head
+                game.eliminate(d)
+                // Net power: cost 1 paid above, gain 1 here = flat
+                self.power += 1
+                self.log(TheEyeOpens.styled(FB) + ": eliminated", u.uclass.styled(f), "and", Desiccated.styled(FB), "in", r)
+                EndAction(self)
+            } else {
+                Ask(f).each(cultists)(u => FBTheEyeOpensChooseCultistAction(self, f, r, u.ref))
+            }
+
+        case FBTheEyeOpensChooseCultistAction(self, f, r, uRef) =>
+            val u = game.unit(uRef)
+            val ucName = u.uclass.styled(f)
+            game.eliminate(u)
+            f.log(ucName, "eliminated in", r, "by", TheEyeOpens.styled(FB))
+            val d = self.at(r, Desiccated).head
+            game.eliminate(d)
+            self.power += 1
+            self.log(TheEyeOpens.styled(FB) + ": eliminated", ucName, "and", Desiccated.styled(FB), "in", r)
+            EndAction(self)
+
+        // ── CALL OF THE FAITHFUL ──
+        case FBCallOfTheFaithfulMainAction(self) =>
+            val eligible = areas.%(r => (self.at(r, Ghatanothoa).any || self.at(r, RevenantOfKnaa).any) && self.at(r, Acolyte).none)
+            Ask(self).each(eligible)(r => FBCallOfTheFaithfulAction(self, r)).cancel
+
+        case FBCallOfTheFaithfulAction(self, r) =>
+            self.place(Acolyte, r)
+            self.log(CallOfTheFaithful.styled(FB) + ": placed Acolyte in", r)
+            // Round 8 bug fix (Bug 39): Call of the Faithful is an unlimited action —
+            // it does not consume the turn or count as the faction's action. Return to
+            // MainAction so the player can continue taking actions (same pattern as
+            // gate diplomacy's AdjustGateControlAction).
+            //
+            // Note on Soft vs Hard: only the MAIN ACTION class (FBCallOfTheFaithfulMainAction,
+            // the menu entry) has `with Soft` because it's pure navigation. This action class
+            // (FBCallOfTheFaithfulAction) does NOT have `with Soft` — it's Hard because it
+            // mutates state (places an Acolyte). Hard means it IS recorded in the undo log,
+            // so undo correctly reverses the Acolyte placement. PowerNeutral just means it
+            // doesn't deduct power.
+            Force(MainAction(self))
+
+        // ── CYCLOPEAN GAZE ──
+        // Bug fix: only trigger when an action MOVED/PLACED/CREATED enemy units in FB ghato/rev regions,
+        // not merely when units are PRESENT. Snapshot enemy counts at PreMainAction (start of action phase
+        // turn) and compare against the post-action count. Restricting the snapshot hook to PreMainAction
+        // ensures Cyclopean Gaze only fires during the action phase, never during the doom phase.
+        case PreMainAction(f) if f != FB && game.factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze) =>
+            val gazeRegions = areas.%(r => FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any)
+            game.fbCyclopeanGazeSnapshot = (for {
+                r <- gazeRegions
+                ef <- game.factions.but(FB)
+            } yield (ef, r) -> ef.at(r).%(_.uclass.utype != Building).num).toMap
+            UnknownContinue
+
+        // ── CYCLOPEAN GAZE EDGE CASES: ICE AGE, LETHARGY, DREAD CURSE ──
+        // All three are zero-delta actions (no unit movement) that should trigger CG.
+        // Each owning expansion records its target region in a game var because it
+        // handles the action before FBExpansion in the dispatch order:
+        //   Ice Age → game.fbCyclopeanGazeIceAgeRegion (set in FactionWW.scala)
+        //   Lethargy → game.fbCyclopeanGazeLethargyRegion (set in FactionSL.scala)
+        //   Dread Curse → game.fbCyclopeanGazeDreadCurseRegion (set in FactionOW.scala)
+        // The AfterAction handler below checks all three vars.
+
+        // ── CYCLOPEAN GAZE EDGE CASE: LETHARGY ──
+        // Round 8 bug fix (Bug 36): Lethargy region is now recorded in SLExpansion's
+        // LethargyMainAction handler (FactionSL.scala) because SLExpansion runs before
+        // FBExpansion in the dispatch order. See game.fbCyclopeanGazeLethargyRegion.
+
+        // ── CYCLOPEAN GAZE EDGE CASE: DREAD CURSE OF AZATHOTH ──
+        // Round 8 bug fix (Bug 37): Dread Curse region is now recorded in OWExpansion's
+        // DreadCurseAction handler (FactionOW.scala) because OWExpansion runs before
+        // FBExpansion in the dispatch order. See game.fbCyclopeanGazeDreadCurseRegion.
+
+        case AfterAction(actor) if actor != FB && game.factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze) =>
+            // Bug fix Round 4 (Bugs 1 & 2): build per-source pain queue.
+            // Each Revenant in a gaze region contributes 1 pain; each Ghatanothoa contributes 1 pain.
+            // Each pain is logged with the originating source unit class (Revenant or Ghatanothoa),
+            // and the per-source iteration replaces the old "total pains per region" model.
+            // Battle hook (see Battle.scala PostBattlePhase) bypasses this AfterAction path entirely.
+            //
+            // Round 8 bug fix (Bug 33 - Ice Age): also check fbCyclopeanGazeIceAgeRegion.
+            // IceAgeAction doesn't move units so the snapshot delta is always 0, but if
+            // WW placed Ice Age in a gaze region where WW has non-Building units, CG fires.
+            //
+            // Round 8 bug fix (Bug 34 - double-counting): after CG pains are applied, the
+            // chain returns here via Then(AfterAction(actor)). If 2+ enemy units arrived but
+            // only 1 source pain was dealt, the delta is still positive and CG would re-fire.
+            // Fix: update the snapshot to current counts BEFORE checking deltas, so that
+            // pains already dealt are reflected and the re-check finds delta = 0.
+            //
+            val gazeRegions = areas.%(r => FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any)
+
+            // Check for zero-delta edge cases: actions that target a region but don't move
+            // units (snapshot delta = 0). Each action handler appends its target region to
+            // game.fbCyclopeanGazeActionRegions; we check the list here, fire CG if applicable,
+            // and clear it.
+            //
+            // Tracked zero-delta actions (Bugs 33, 36, 37, 54):
+            //   - WW IceAgeAction
+            //   - SL LethargyMainAction
+            //   - OW DreadCurseAction
+            //   - Game.scala BuildGateAction (any faction)
+            //   - AN BuildCathedralAction
+            val edgeCaseRegions : $[Region] = game.fbCyclopeanGazeActionRegions.distinct
+            game.fbCyclopeanGazeActionRegions = $
+            val edgeCaseSources : $[(Region, UnitClass)] = edgeCaseRegions./~ { r =>
+                if (gazeRegions.has(r) && actor.at(r).%(_.uclass.utype != Building).any) {
+                    val sourceUnits : $[UnitClass] =
+                        FB.at(r, RevenantOfKnaa).num.times(RevenantOfKnaa : UnitClass) ++
+                        FB.at(r, Ghatanothoa).num.times(Ghatanothoa : UnitClass)
+                    sourceUnits./((r, _))
+                } else $
+            }
+
+            // Standard snapshot delta check for movement/summoning/placement actions.
+            //
+            // Round 8 bug fix (Bug 35 - Avatar false positive): only check regions that
+            // WERE gaze regions at PreMainAction snapshot time. If a region is a gaze
+            // region NOW but has no snapshot entry, it means a Revenant/Ghatanothoa was
+            // moved there mid-action (e.g. by BG Avatar swapping the Revenant to Shub's
+            // origin). The enemy units in that region were already present — they didn't
+            // arrive this action. Using getOrElse(0) would make all existing units look
+            // like "new arrivals" and falsely trigger CG. Skip these new gaze regions.
+            //
+            // Round 8 bug fix (Bug 47 - GoF): check ALL non-FB factions' deltas, not just
+            // the actor's. Byatis God of Forgetfulness moves enemy cultists belonging to
+            // factions OTHER than the actor (Byatis owner) into the gaze region. The
+            // actor's count doesn't change, but other factions' counts do. We now iterate
+            // every non-FB faction and trigger CG if any of them had units arrive in a
+            // gaze region. Snapshots are updated for all factions (not just actor) to
+            // prevent re-entry double-counting.
+            val moveSources : $[(Region, UnitClass)] = gazeRegions./~ { r =>
+                // Check all non-FB factions for arrivals in this gaze region
+                var anyArrived = false
+                game.factions.but(FB).foreach { ef =>
+                    if (game.fbCyclopeanGazeSnapshot.contains((ef, r))) {
+                        val current = ef.at(r).%(_.uclass.utype != Building).num
+                        val before = game.fbCyclopeanGazeSnapshot((ef, r))
+                        // Round 8 fix: update snapshot to current count so re-entry via
+                        // Then(AfterAction) won't re-fire for the same arrivals
+                        game.fbCyclopeanGazeSnapshot += (ef, r) -> current
+                        if (current > before)
+                            anyArrived = true
+                    }
+                }
+                if (anyArrived) {
+                    val sourceUnits : $[UnitClass] =
+                        FB.at(r, RevenantOfKnaa).num.times(RevenantOfKnaa : UnitClass) ++
+                        FB.at(r, Ghatanothoa).num.times(Ghatanothoa : UnitClass)
+                    // Each source (Revenant/Ghatanothoa) causes exactly 1 pain regardless
+                    // of how many enemy units arrived — do NOT cap at the arrival count
+                    sourceUnits./((r, _))
+                } else $
+            }
+
+            val sources = edgeCaseSources ++ moveSources
+            if (sources.any)
+                Force(FBCyclopeanGazePhaseAction(FB, actor, sources, fromBattle = false))
+            else
+                UnknownContinue
+
+        case FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle) =>
+            // Bug fix Round 4: pop one (region, sourceUnit) per step and dispatch a single pain.
+            // Round 8 Bug 58: only the actor's units are valid CG targets (CG triggers
+            // against the faction that took the action ending in a gaze region). Skip
+            // sources whose region has no actor units.
+            if (sourcesPending.any) {
+                val (r, srcUnit) = sourcesPending.head
+                val rest = sourcesPending.tail
+                val units = actor.at(r).%(u => u.uclass.utype != Building)
+                if (units.any)
+                    Force(FBCyclopeanGazeAssignPainAction(self, actor, r, srcUnit, rest, fromBattle))
+                else
+                    Force(FBCyclopeanGazePhaseAction(self, actor, rest, fromBattle))
+            } else {
+                // No more sources to process. Battle-mode hands control back to Battle.scala
+                // via the marker action; action-phase mode re-fires AfterAction. The AfterAction
+                // handler updates the snapshot before checking deltas (Round 8 fix), so the
+                // re-entry is a no-op and normal flow resumes.
+                if (fromBattle)
+                    Force(FBCyclopeanGazeBattleDoneAction(self))
+                else
+                    Then(AfterAction(actor))
+            }
+
+        case FBCyclopeanGazeAssignPainAction(self, actor, r, sourceUnit, sourcesPending, fromBattle) =>
+            // Round 8 Bug 58: CG only triggers against the FACTION THAT TOOK THE ACTION
+            // (the actor). Other factions' units in the same gaze region (e.g., a previously-
+            // deployed Dimensional Shambler from another faction) are NOT valid CG targets.
+            // Per the user: "CG should only trigger against the faction that took an action
+            // ending in a CG region." If the actor has no non-Building units in the region,
+            // no CG fires for this source — skip to the next source.
+            //
+            // Round 8 Bug 57: the painted faction (= the actor) chooses which of their units
+            // gets pained. Ask(actor) → menu border in actor's color. Action's self = actor
+            // → menu title styled in actor's color. The painted faction's name appears in
+            // the title.
+            val units = actor.at(r).%(u => u.uclass.utype != Building)
+            if (units.any)
+                Ask(actor).each(units)(u => FBCyclopeanGazePainUnitAction(actor, actor, u.ref, r, sourceUnit, sourcesPending, fromBattle))
+            else
+                // Actor has no paintable units in this region — skip this source
+                Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
+
+        case FBCyclopeanGazePainUnitAction(self, actor, uRef, r, sourceUnit, sourcesPending, fromBattle) =>
+            // Round 8 Bug 46: CG pains follow standard pain rules — destination region
+            // cannot contain FB (the painer's faction) units (Buildings excepted).
+            // Round 8 Bug 48: if no legal destinations exist, the unit is ELIMINATED
+            // (auto-kill), matching standard battle pain rules (see Battle.scala line ~470
+            // EliminateNoWayAction).
+            // Round 8 Bug 51: if the painted faction has multiple non-Building units in
+            // the region, prompt them to choose which to eliminate (a "soak" choice).
+            // Round 8 Bug 61: FIRSTBORN chooses the destination region (not the painted
+            // faction). This matches CW pain rules where the painter directs the pain
+            // motion. Use Ask(FB) and pass FB as the destination action's `self` so the
+            // menu is bordered in FB's color and the title is attributed to FB.
+            val u = game.unit(uRef)
+            val destinations = game.board.connected(u.region).%(_.glyph.onMap).%(d => FB.at(d).%(_.uclass.utype != Building).none)
+            if (destinations.any)
+                Ask(FB).each(destinations)(dest => FBCyclopeanGazeDestinationAction(FB, uRef, dest, sourceUnit, sourcesPending, actor, fromBattle))
+            else {
+                // No legal destinations — the painted faction must lose a unit. If they
+                // have multiple non-Building units in the region, let them choose which.
+                val painedFaction = u.faction
+                val killCandidates = painedFaction.at(r).%(_.uclass.utype != Building)
+                if (killCandidates.num <= 1) {
+                    // Only the FB-selected unit (or no other choices) — eliminate it directly
+                    val from = u.region
+                    game.eliminate(u)
+                    self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + u.uclass.styled(painedFaction) + " in " + from + " had nowhere to retreat and was eliminated")
+                    Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
+                } else {
+                    // Multiple units — painted faction chooses which to lose
+                    Ask(painedFaction).each(killCandidates)(k => FBCyclopeanGazeKillChoiceAction(self, painedFaction, k.ref, r, sourceUnit, sourcesPending, actor, fromBattle))
+                }
+            }
+
+        case FBCyclopeanGazeKillChoiceAction(self, painedFaction, killRef, r, sourceUnit, sourcesPending, actor, fromBattle) =>
+            // Round 8 Bug 51: painted faction's "soak" choice — eliminate the chosen unit
+            val k = game.unit(killRef)
+            val ucName = k.uclass.styled(painedFaction)
+            game.eliminate(k)
+            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + ucName + " in " + r + " had nowhere to retreat and was eliminated")
+            Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
+
+        case FBCyclopeanGazeDestinationAction(self, uRef, dest, sourceUnit, sourcesPending, actor, fromBattle) =>
+            // Bug fix Round 4: log the source unit class so the player sees which Revenant/Ghatanothoa
+            // caused the pain. After applying, continue with remaining sources via FBCyclopeanGazePhaseAction.
+            val u = game.unit(uRef)
+            val from = u.region
+            u.region = dest
+            u.onGate = false
+            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": pained", u.uclass.styled(u.faction), "from", from, "to", dest)
+            Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
+
+        // Bug fix Round 4: marker that battle-mode Cyclopean Gaze is finished. Battle.scala's
+        // action dispatcher catches this and calls proceed(); the FB expansion just acknowledges it.
+        case FBCyclopeanGazeBattleDoneAction(self) =>
+            UnknownContinue
+
+        // ── CARNAGE (handled in Battle.scala post-battle phase) ──
+        case FBCarnagePostBattleAction(self) =>
+            implicit val asking = Asking(self)
+            if (self.power >= 1)
+                + FBCarnagePayPowerAction(self)
+            if (faceUpSpellbooks.any)
+                + FBCarnageFlipSpellbookAction(self)
+            + FBCarnageCancelAction(self)
+            asking
+
+        case FBCarnagePayPowerAction(self) =>
+            self.power -= 1
+            self.takeES(1)
+            self.log(Carnage.styled(FB) + ": paid", 1.power, "for", 1.es)
+            UnknownContinue
+
+        case FBCarnageFlipSpellbookAction(self) =>
+            val available = faceUpSpellbooks
+            Ask(self).each(available)(sb => FBCarnageChooseSpellbookAction(self, sb))
+
+        case FBCarnageChooseSpellbookAction(self, sb) =>
+            flipSpellbookDown(sb)
+            self.takeES(1)
+            self.log(Carnage.styled(FB) + ": flipped", sb.name.styled(FB), "facedown for", 1.es)
+            UnknownContinue
+
+        case FBCarnageCancelAction(self) =>
+            UnknownContinue
+
+        // ── AUGURY IN BATTLE (handled in Battle.scala) ──
+        // These are dispatched from Battle.scala after dice are rolled
+        case FBAuguryBattleReplaceAction(self, n) =>
+            game.fbAuguryKills -= n
+            self.log(Augury.styled(FB) + ": replaced", n, "Miss" + (n > 1).?("es").|(("")), "with Kills in battle")
+            UnknownContinue
+
+        case FBAuguryBattleCancelAction(self) =>
+            UnknownContinue
+
+        // ...
+        case _ => UnknownContinue
+    }
+}

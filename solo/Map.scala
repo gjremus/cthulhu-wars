@@ -65,7 +65,15 @@ object EarthMap3 extends Board {
         case WW => $(ArcticOcean, Antarctica)
         case OW => regions
         case AN => nonFactionRegions
+        // Tombstalker (TS): starting areas are ocean-only non-faction regions (Gla'aki requires ocean gate)
         case TS => nonFactionRegions.%(_.glyph == Ocean)
+        // Firstborn (FB): starting areas are ANY area on the map. The faction card only
+        // requires "an empty area" — meaning any area not already chosen by another faction.
+        // The .diff(starting.values.$) in Game.scala (line ~1554) filters out areas already
+        // taken. Bug 43 fix: was nonFactionRegions which incorrectly excluded printed-glyph
+        // areas (e.g., Europe, Africa) even when those factions weren't in the game.
+        // Same pattern as OW which uses `regions`.
+        case FB => regions
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -157,7 +165,15 @@ object EarthMap4v35 extends Board {
         case WW => $(ArcticOcean, Antarctica)
         case OW => regions
         case AN => nonFactionRegions
+        // Tombstalker (TS): starting areas are ocean-only non-faction regions (Gla'aki requires ocean gate)
         case TS => nonFactionRegions.%(_.glyph == Ocean)
+        // Firstborn (FB): starting areas are ANY area on the map. The faction card only
+        // requires "an empty area" — meaning any area not already chosen by another faction.
+        // The .diff(starting.values.$) in Game.scala (line ~1554) filters out areas already
+        // taken. Bug 43 fix: was nonFactionRegions which incorrectly excluded printed-glyph
+        // areas (e.g., Europe, Africa) even when those factions weren't in the game.
+        // Same pattern as OW which uses `regions`.
+        case FB => regions
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -253,7 +269,15 @@ object EarthMap4v53 extends Board {
         case WW => $(ArcticOcean, Antarctica)
         case OW => regions
         case AN => nonFactionRegions
+        // Tombstalker (TS): starting areas are ocean-only non-faction regions (Gla'aki requires ocean gate)
         case TS => nonFactionRegions.%(_.glyph == Ocean)
+        // Firstborn (FB): starting areas are ANY area on the map. The faction card only
+        // requires "an empty area" — meaning any area not already chosen by another faction.
+        // The .diff(starting.values.$) in Game.scala (line ~1554) filters out areas already
+        // taken. Bug 43 fix: was nonFactionRegions which incorrectly excluded printed-glyph
+        // areas (e.g., Europe, Africa) even when those factions weren't in the game.
+        // Same pattern as OW which uses `regions`.
+        case FB => regions
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -357,7 +381,15 @@ object EarthMap5 extends Board {
         case WW => $(ArcticOcean, Antarctica)
         case OW => regions
         case AN => nonFactionRegions
+        // Tombstalker (TS): starting areas are ocean-only non-faction regions (Gla'aki requires ocean gate)
         case TS => nonFactionRegions.%(_.glyph == Ocean)
+        // Firstborn (FB): starting areas are ANY area on the map. The faction card only
+        // requires "an empty area" — meaning any area not already chosen by another faction.
+        // The .diff(starting.values.$) in Game.scala (line ~1554) filters out areas already
+        // taken. Bug 43 fix: was nonFactionRegions which incorrectly excluded printed-glyph
+        // areas (e.g., Europe, Africa) even when those factions weren't in the game.
+        // Same pattern as OW which uses `regions`.
+        case FB => regions
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -471,7 +503,15 @@ object EarthMap6 extends Board {
         case WW => $(ArcticOcean, MountainsOfMadness)
         case OW => regions
         case AN => nonFactionRegions
+        // Tombstalker (TS): starting areas are ocean-only non-faction regions (Gla'aki requires ocean gate)
         case TS => nonFactionRegions.%(_.glyph == Ocean)
+        // Firstborn (FB): starting areas are ANY area on the map. The faction card only
+        // requires "an empty area" — meaning any area not already chosen by another faction.
+        // The .diff(starting.values.$) in Game.scala (line ~1554) filters out areas already
+        // taken. Bug 43 fix: was nonFactionRegions which incorrectly excluded printed-glyph
+        // areas (e.g., Europe, Africa) even when those factions weren't in the game.
+        // Same pattern as OW which uses `regions`.
+        case FB => regions
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {

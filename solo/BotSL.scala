@@ -318,6 +318,10 @@ class GameEvaluationSL(implicit game : Game) extends GameEvaluation(SL)(game) {
 
                     case TS =>
                         0 -> "todo"
+
+                    // Firstborn (FB): opponent combat evaluation
+                    case FB =>
+                        0 -> "todo"
                 }
 
                 f.has(Abhoth) && enemyStr == 0 && ownStr >= foes(Filth).num * 2 |=> 200 -> "get rid of filth"
@@ -771,6 +775,9 @@ class GameEvaluationSL(implicit game : Game) extends GameEvaluation(SL)(game) {
                 }
             }
         }
+
+        // Round 8 (FB): score CG/Eye Opens prompts that get asked of this faction
+        result ++= fbPromptedEvals(a)
 
         result.none |=> 0 -> "none"
 

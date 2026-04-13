@@ -66,6 +66,7 @@ case object UnholyGroundPhase extends BattlePhase
 case object AssignDefenderPains extends BattlePhase
 case object AssignAttackerPains extends BattlePhase
 case object AllPainsAssignedPhase extends BattlePhase
+// Tombstalker (TS): Oleaginous post-battle phase where Gla'aki/Deep Tendril pains become retreats
 case object OleaginousPhase extends BattlePhase
 case object HarbingerPainPhase extends BattlePhase
 case object EternalPainPhase extends BattlePhase
@@ -98,7 +99,7 @@ case class RetreatSeparatelyAction(self : Faction, f : Faction, destinations : $
 
 case class RetreatUnitAction(self : Faction, ur : UnitRef, r : Region) extends ForcedAction
 
-// TS
+// Tombstalker (TS): Oleaginous retreat action — pained Gla'aki/Deep Tendrils retreat to adjacent area instead
 case class OleaginousRetreatAction(self : Faction, ur : UnitRef, r : Region) extends BaseFactionAction(implicit g => "Retreat " + ur.faction.full + " " + g.unit(ur).full + " with " + Oleaginous + " to", r)
 
 
@@ -201,6 +202,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     var phase : BattlePhase = BattleStart
 
     var exempted : $[UnitFigure] = $
+
+    // Round 8 Bug 45: flag preventing the post-battle Cyclopean Gaze hook from
+    // re-firing each time the battle re-enters PostBattlePhase. After CG completes,
+    // it calls proceed() which resumes the battle from PostBattlePhase, which would
+    // otherwise hit the CG hook again with the same Ghatanothoa/Revenant sources.
+    var fbCyclopeanGazeFiredThisBattle : Boolean = false
 
     def exempt(u : UnitFigure) {
         exempted :+= u
@@ -336,7 +343,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             if (game.options.has(DemandTsathoggua).?(s.forces(Tsathoggua).any).|(s.has(Tsathoggua)))
                 options :+= DemandSacrificePreBattleAction(s)
 
-        if (s.has(CosmicUnity) && s.tag(CosmicUnity).not && s.forces(Daoloth).any && s.opponent.forces.goos.any)
+        // Round 8 Bug 40: also check facedown state for IGOO spellbooks
+        if (s.has(CosmicUnity) && !s.oncePerGame.has(CosmicUnity) && s.tag(CosmicUnity).not && s.forces(Daoloth).any && s.opponent.forces.goos.any)
             options :+= CosmicUnityPreBattleAction(s)
 
         Ask(s).list(options).add(PreBattleDoneAction(s, next))
@@ -562,7 +570,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     return jump(PostBattlePhase)
                 }
 
-                // Grasping Dead: TS fights with TombHerds only — exempt all other TS units
+                // Tombstalker (TS) Grasping Dead: only TombHerds participate in battle, exempt all other TS units
                 if (effect == |(GraspingDead)) {
                     sides.%(f => f == TS).foreach { s =>
                         s.forces.%(_.uclass != TombHerd).foreach { u => exempt(u) }
@@ -645,7 +653,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
     }
 
-    // TOMBSTALKER requirements
+    // Tombstalker (TS): check spellbook requirements after dice roll (Kill, 3 Pains, Gla'aki vs enemy GOO)
     sides.%(f => f == TS).foreach { ts =>
         if (ts.rolls.has(Kill))
             ts.satisfy(TSRollKill, "Rolled a Kill in battle")
@@ -653,6 +661,27 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             ts.satisfy(TSRoll3Pains, "Rolled 3 Pains in battle")
         if (ts.forces.%(_.uclass == Glaaki).any && ts.opponent.forces.%(_.uclass.utype == GOO).any)
             ts.satisfy(TSGlaakiBattlesGOO, "Gla'aki battled enemy GOO")
+    }
+
+    // Firstborn (FB) Augury spellbook: after dice are rolled, offer FB the option to
+    // replace some of their Miss results with Kill results drawn from the stored augury pool.
+    // Round 5 bug fix: explicitly handle BOTH FB-as-attacker and FB-as-defender cases.
+    // The offer must trigger whenever FB is any participant in the battle and rolled at least
+    // one Miss, not only when FB is the attacker. Pick FB's own Side directly via attacker/
+    // defender comparison rather than relying on an implicit Faction->Side conversion inside
+    // a sides.filter loop, so the behaviour is obviously symmetric across attacker/defender.
+    if (factions.has(FB) && sides.has(FB) && FB.has(Augury) && game.fbAuguryKills > 0) {
+        val fbSide : Side = if (attacker == FB) attackers else defenders
+        if (fbSide.rolls.has(Miss)) {
+            val misses = fbSide.rolls.count(_ == Miss)
+            val maxReplace = min(misses, game.fbAuguryKills)
+            implicit val asking = Asking(FB)
+            (1 to maxReplace).reverse.foreach { n =>
+                + FBAuguryBattleReplaceAction(FB, n)
+            }
+            + FBAuguryBattleCancelAction(FB)
+            return asking
+        }
     }
 
     jump(AssignDefenderKills)
@@ -833,7 +862,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(OleaginousPhase)
 
             case OleaginousPhase =>
-                // OLEAGINOUS: pains on TS Gla'aki and Deep Tendrils become free retreats
+                // Tombstalker (TS) Oleaginous: pains on Gla'aki and Deep Tendrils become free retreats to any adjacent area
                 sides.foreach { s =>
                     if (s.has(Oleaginous)) {
                         val oleagPained = s.forces.%(u => u.health == Pained && (u.uclass == Glaaki || u.uclass == DeepTendril))
@@ -947,9 +976,86 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         .skip(BattleDoneAction(f))
                 }
 
+                // Firstborn (FB) Carnage spellbook: if both FB and the opponent lost units in
+                // this battle, FB may pay 1 power or flip a spellbook facedown to gain an Elder Sign
+                // Carnage must not trigger if it has been flipped facedown (tracked in oncePerGame)
+                if (factions.has(FB) && FB.has(Carnage) && sides.has(FB) && !FB.oncePerAction.has(Carnage) && !FB.oncePerGame.has(Carnage)) {
+                    val opponent = if (attacker == FB) defender else attacker
+                    val opLostUnits = exempted.%(_.faction == opponent).any
+                    val fbLostUnits = exempted.%(_.faction == FB).any
+                    if (opLostUnits && fbLostUnits) {
+                        FB.oncePerAction :+= Carnage
+                        return Force(FBCarnagePostBattleAction(FB))
+                    }
+                }
+
+                // Bug fix Round 4 (Bug 1): Cyclopean Gaze must also fire when an enemy battles FB
+                // in a region containing FB's Revenants/Ghatanothoa. The action that triggered the
+                // battle "ends" in the arena, so any enemy units still present in the arena after
+                // the battle qualify as targets. Build the per-source pain queue from the FB
+                // Revenants and Ghatanothoa in the arena and dispatch FBCyclopeanGazePhaseAction
+                // with fromBattle=true so it returns to battle flow via FBCyclopeanGazeBattleDoneAction.
+                // Round 8 Bug 45: guard with fbCyclopeanGazeFiredThisBattle flag so the
+                // CG hook only fires ONCE per battle. After CG completes, FBCyclopeanGazeBattleDoneAction
+                // calls proceed() which resumes the battle from PostBattlePhase — this hook would
+                // otherwise re-fire with the same sources, causing CG to loop until the enemy
+                // had no units left to pain. Set the flag before dispatching CG.
+                //
+                // Round 8 Bug 59: removed the `sides.has(FB)` check. CG now fires when ANY
+                // battle happens in a gaze region (a region with FB Revenants/Ghatanothoa),
+                // not just battles where FB is one of the two sides. Per the user: if two
+                // non-FB factions battle in a gaze region, CG should still trigger against
+                // the attacker. The arena's rev/ghato presence (`revsHere + ghatosHere > 0`)
+                // is the only requirement for CG; FB doesn't need to be a battle participant.
+                // The `attacker != FB` check remains so FB can't pain themselves if they
+                // somehow attacked into a gaze region they own.
+                if (factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze) && attacker != FB && !fbCyclopeanGazeFiredThisBattle) {
+                    // Only count surviving (non-Zeroed) FB Revenants/Ghatanothoa as pain sources.
+                    val revsHere = FB.at(arena, RevenantOfKnaa).not(Zeroed).num
+                    val ghatosHere = FB.at(arena, Ghatanothoa).not(Zeroed).num
+                    val enemyHere = attacker.at(arena).not(Zeroed).%(u => u.uclass.utype != Building).any
+                    if ((revsHere + ghatosHere) > 0 && enemyHere) {
+                        fbCyclopeanGazeFiredThisBattle = true
+                        // One source per Revenant + one per Ghatanothoa, all in the arena
+                        val sources : $[(Region, UnitClass)] =
+                            revsHere.times((arena, RevenantOfKnaa : UnitClass)) ++
+                            ghatosHere.times((arena, Ghatanothoa : UnitClass))
+                        return Force(FBCyclopeanGazePhaseAction(FB, attacker, sources, fromBattle = true))
+                    }
+                }
+
                 jump(BattleEnd)
 
             case BattleEnd =>
+                // Firstborn (FB): reset the Carnage once-per-battle flag at end of battle
+                if (factions.has(FB))
+                    FB.oncePerAction :-= Carnage
+
+                // Firstborn (FB) Augury: after battle ends, count Kill results that were not applied
+                // (e.g. more kills than enemy units) and store them on the Augury spellbook for later use.
+                // Round 5 bug fix: surplus kills must be computed PER SIDE SEPARATELY, then summed,
+                // with each per-side surplus clamped at zero so one side's undercount doesn't cancel
+                // the other side's surplus. By the time BattleEnd runs, EliminatePhase has already moved
+                // every killed unit into the battle-level `exempted` list (see EliminatePhase, line ~768),
+                // so counting `exempted` units by faction gives the true per-side kill/elimination total.
+                if (factions.has(FB) && FB.has(Augury) && sides.has(FB)) {
+                    // Attacker side: kills rolled minus defender units actually killed/eliminated
+                    val attackerKillsRolled = attackers.rolls.count(_ == Kill)
+                    val defenderUnitsKilled = exempted.count(_.faction == defender)
+                    val attackerSurplus = max(0, attackerKillsRolled - defenderUnitsKilled)
+
+                    // Defender side: kills rolled minus attacker units actually killed/eliminated
+                    val defenderKillsRolled = defenders.rolls.count(_ == Kill)
+                    val attackerUnitsKilled = exempted.count(_.faction == attacker)
+                    val defenderSurplus = max(0, defenderKillsRolled - attackerUnitsKilled)
+
+                    val unapplied = attackerSurplus + defenderSurplus
+                    if (unapplied > 0) {
+                        game.fbAuguryKills += unapplied
+                        log(FB, Augury.styled(FB) + ": stored", unapplied, "Kill" + (unapplied > 1).?("s").|(("")), "(" + game.fbAuguryKills, "total)")
+                    }
+                }
+
                 sides.foreach(_.forces.foreach(_.remove(Retreated)))
                 sides.foreach(_.forces.foreach(_.remove(Zeroed)))
 
@@ -1049,7 +1155,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
             Ask(self).each(l)(r => RetreatUnitAction(self, u, r).as(r)("Retreat", u, "to"))
 
-        // OLEAGINOUS (TS)
+        // Tombstalker (TS) Oleaginous: execute retreat for a pained Gla'aki or Deep Tendril, then re-check for more
         case OleaginousRetreatAction(self, ur, r) =>
             val u = game.unit(ur)
             retreat(u, r)
@@ -1263,17 +1369,24 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 .bail(Then(BattleDoneAction(self)))
 
         case UnholyGroundEliminateAction(self, f, u) =>
+            // Round 8 Bug 68: log BEFORE eliminate. For IGOO units (Nyogtha,
+            // Tulzscha, Ygolonac), `IGOOsExpansion.eliminate()` actually REMOVES
+            // the unit from `f.units` (it doesn't just move it to reserve like
+            // normal eliminate). So if we logged after eliminating, the log's
+            // attempt to render the UnitRef back to a unit (`Game.unit(ur)`)
+            // would throw `None.get` from `.only` because the unit is no longer
+            // in `f.units`. Pre-format the log line first, then eliminate.
             if (u.uclass == Nyogtha && self.all(Nyogtha).num > 1) {
+                log("All", u, "were eliminated with", UnholyGround)
+
                 self.forces(Nyogtha).foreach(eliminate)
 
                 self.all(Nyogtha).foreach(game.eliminate)
-
-                log("All", u, "were eliminated with", UnholyGround)
             }
             else {
-                eliminate(u)
-
                 log(u, "was eliminated with", UnholyGround)
+
+                eliminate(u)
             }
 
             proceed()
@@ -1314,6 +1427,38 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 self.log("targeted", u, "with", CosmicUnity.styled(self))
             }
 
+            proceed()
+
+        // Firstborn (FB) Augury in battle: replace n Miss dice with Kills from the augury pool
+        case FBAuguryBattleReplaceAction(self, n) =>
+            val fbSide : Side = if (attacker == FB) attackers else defenders
+            var remaining = n
+            fbSide.rolls = fbSide.rolls.map { r =>
+                if (r == Miss && remaining > 0) { remaining -= 1; Kill }
+                else r
+            }
+            // Skip back to PostRoll re-entry would loop; jump directly to kill assignment
+            jump(AssignDefenderKills)
+
+        // Firstborn (FB) Augury: player declined to use augury in battle
+        case FBAuguryBattleCancelAction(self) =>
+            jump(AssignDefenderKills)
+
+        // Firstborn (FB) Carnage post-battle: FBExpansion handles the Ask/ES logic and returns
+        // UnknownContinue; these cases resume battle flow by calling proceed()
+        case FBCarnagePayPowerAction(self) =>
+            proceed()
+
+        case FBCarnageChooseSpellbookAction(self, _) =>
+            proceed()
+
+        case FBCarnageCancelAction(self) =>
+            proceed()
+
+        // Bug fix Round 4 (Bug 1): Cyclopean Gaze battle-mode dispatchers. The FB expansion
+        // handles the actual chain (FBCyclopeanGazePhaseAction etc.); we just resume battle
+        // flow when the marker FBCyclopeanGazeBattleDoneAction fires at the end of the chain.
+        case FBCyclopeanGazeBattleDoneAction(self) =>
             proceed()
 
     }

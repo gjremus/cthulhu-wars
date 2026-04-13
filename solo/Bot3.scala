@@ -717,6 +717,42 @@ case class Bot3(faction : Faction) {
                 case ControlGateAction(_, _, _, _) =>
                     true |=> 1000000 -> "always"
 
+                // ────────────────────────────────────────────────────────────
+                // Round 8 (FB): score the three FB-prompted choices that get
+                // asked of *non-FB* factions. Bot3 can't share BotX's
+                // GameEvaluation.fbPromptedEvals helper because it doesn't
+                // extend GameEvaluation, so the same logic is inlined here.
+                // Strategy mirrors BotX: protect valuable units, sacrifice
+                // cheap off-gate units. See `BotX.fbPromptedEvals` for the
+                // canonical version.
+                // ────────────────────────────────────────────────────────────
+                case FBCyclopeanGazePainUnitAction(_, _, uRef, _, _, _, _) =>
+                    val u = game.unit(uRef)
+                    u.goo                                  |=> -5000 -> "don't pain own GOO"
+                    (u.uclass == HighPriest)               |=> -3000 -> "don't pain own HP"
+                    u.gateKeeper                           |=> -2000 -> "don't pain own gate keeper"
+                    u.monster                              |=> -1000 -> "avoid painting own monster"
+                    (u.is(Acolyte) && !u.region.ownGate)   |=>  1000 -> "pain off-gate acolyte"
+                    (u.cultist && !u.region.ownGate)       |=>   500 -> "pain off-gate cultist"
+                    true                                   |=>     0 -> "default CG pain target"
+
+                case FBCyclopeanGazeKillChoiceAction(_, _, killRef, _, _, _, _, _) =>
+                    val k = game.unit(killRef)
+                    k.goo                                  |=> -5000 -> "don't sacrifice own GOO to CG"
+                    (k.uclass == HighPriest)               |=> -3000 -> "don't sacrifice own HP to CG"
+                    k.gateKeeper                           |=> -2000 -> "don't sacrifice own gate keeper to CG"
+                    k.monster                              |=> -1500 -> "avoid sacrificing own monster to CG"
+                    (k.is(Acolyte) && !k.region.ownGate)   |=>  1000 -> "sacrifice off-gate acolyte to CG"
+                    (k.cultist && !k.region.ownGate)       |=>   500 -> "sacrifice off-gate cultist to CG"
+                    true                                   |=>     0 -> "default CG kill choice"
+
+                case FBTheEyeOpensChooseCultistAction(_, _, _, uRef) =>
+                    val u = game.unit(uRef)
+                    (u.uclass == HighPriest)               |=> -2000 -> "don't sacrifice HP to eye opens"
+                    u.region.ownGate                       |=> -1500 -> "keep gate keeper from eye opens"
+                    (u.is(Acolyte) && !u.region.ownGate)   |=>  1000 -> "lose off-gate acolyte to eye opens"
+                    true                                   |=>     0 -> "default eye opens cultist choice"
+
                 case _ =>
             }
 

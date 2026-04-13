@@ -107,6 +107,14 @@ class GameEvaluationGC(implicit game : Game) extends GameEvaluation(GC)(game) {
                     p += 8
                 if (p < 8) 0 else 1
 
+            // Round 8 (FB): mirror BotX.ofinale FB pattern. Without this case
+            // BotGC under-estimates FB's endgame doom potential.
+            case FB =>
+                var p = f.power
+                if (f.has(Ghatanothoa))
+                    p += 4
+                p / 4
+
             case _ =>
                 0
         }))) >= 30 * 3
@@ -636,6 +644,9 @@ class GameEvaluationGC(implicit game : Game) extends GameEvaluation(GC)(game) {
                 }
             }
         }
+
+        // Round 8 (FB): score CG/Eye Opens prompts that get asked of this faction
+        result ++= fbPromptedEvals(a)
 
         result.none |=> 0 -> "none"
 

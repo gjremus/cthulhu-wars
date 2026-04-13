@@ -179,6 +179,14 @@ object SLExpansion extends Expansion {
             if (f.has(AncientSorcery) && f.onMap(SerpentMan).nex.any && f.borrowed.num < factions.num - 1)
                 + AncientSorceryMainAction(f)
 
+            // Round 8 bug fix (Bug 38): Writhe borrowed via Ancient Sorcery. Offered here
+            // in SL's MainAction (same pattern as Beyond One on line ~147) because FBExpansion
+            // can't add to SLExpansion's Asking context — SLExpansion handles MainAction(SL)
+            // before FBExpansion sees it. Non-FB factions have 0 Desiccated in pool, so
+            // killed Acolytes are eliminated instead of replaced. No Infernal Pact discount.
+            if (f.has(Writhe) && f.power >= 2)
+                + FBWritheMainAction(f)
+
             if (f.needs(Pay3SomeoneGains3) && f.power >= 3)
                 + Pay3SomeoneGains3MainAction(f)
 
@@ -231,6 +239,15 @@ object SLExpansion extends Expansion {
         case LethargyMainAction(self) =>
             if (options.has(IceAgeAffectsLethargy))
                 self.payTax(self.goo(Tsathoggua).region)
+
+            // Round 8 Bug 36/54: record Tsathoggua's region for Cyclopean Gaze.
+            // Lethargy moves no units (snapshot delta = 0), but CG should fire if
+            // Tsathoggua's region has FB Revenants/Ghatanothoa and SL non-Building units.
+            // Recorded here (not in FBExpansion) because SLExpansion handles LethargyMainAction
+            // before FBExpansion in the expansion dispatch order.
+            // Bug 54: now appends to the unified fbCyclopeanGazeActionRegions list.
+            if (game.factions.has(FB))
+                game.fbCyclopeanGazeActionRegions :+= self.goo(Tsathoggua).region
 
             self.log("was sleeping")
             self.battled = areas

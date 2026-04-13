@@ -5,10 +5,14 @@ import hrf.colmat._
 import html._
 
 
+// Tombstalker (TS) UNITS: TombHerd (monster, placed via Death March from Death's Head),
+// DeepTendril (monster, combat bonus in ocean and with Gla'aki), Gla'aki (GOO, combat = Deep Tendrils in play)
 case object TombHerd extends FactionUnitClass(TS, "Tomb-Herd", Monster, 2)
 case object DeepTendril extends FactionUnitClass(TS, "Deep Tendril", Monster, 3)
 case object Glaaki extends FactionUnitClass(TS, "Gla'aki", GOO, 6)
 
+// Tombstalker (TS) SPELLBOOKS: Death March (unique ability), Eleven Revelations, Oleaginous,
+// Grasping Dead, Hecatomb, Green Decay, Undulate
 case object DeathMarch extends FactionSpellbook(TS, "Death March")
 case object ElevenRevelations extends FactionSpellbook(TS, "Eleven Revelations")
 case object Oleaginous extends FactionSpellbook(TS, "Oleaginous") with BattleSpellbook
@@ -17,6 +21,7 @@ case object Hecatomb extends FactionSpellbook(TS, "Hecatomb")
 case object GreenDecay extends FactionSpellbook(TS, "Green Decay")
 case object Undulate extends FactionSpellbook(TS, "Undulate")
 
+// Tombstalker (TS) SPELLBOOK REQUIREMENTS: conditions checked by TSExpansion.triggers()
 case object TSAwakenGlaaki extends Requirement("Awaken Gla'aki")
 case object TSTombHerdKilled extends Requirement("Tomb-Herd Killed")
 case object TSRollKill extends Requirement("Roll a Kill")
@@ -25,6 +30,8 @@ case object TSGlaakiBattlesGOO extends Requirement("Gla'aki battles GOO")
 case object TSRitualOrEnemyGate extends Requirement("Ritual OR Control Enemy Gate")
 
 
+// Tombstalker (TS) FACTION OBJECT: defines faction identity, unit roster,
+// awaken costs (Gla'aki uses Death's Head to supplement power), and combat strength formula
 case object TS extends Faction { f =>
     def name = "Tombstalker"
     def short = "TS"
@@ -63,6 +70,8 @@ case object TS extends Faction { f =>
     }
 }
 
+
+// Tombstalker (TS) ACTION CLASSES: data types for all TS-specific game actions.
 
 // DEATH MARCH DOOM ACTIONS
 case class TSDeathMarchDoomAction(self : Faction, dh : Int) extends OptionFactionAction("Death March: place " + TombHerd.styled(TS) + " (" + dh.toString.styled("kill") + " Death's Head remaining)") with DoomQuestion with Soft with PowerNeutral
@@ -126,6 +135,8 @@ case class GraspingDeadChooseRegionAction(self : Faction) extends ForcedAction w
 case class GraspingDeadBattleAction(self : Faction, r : Region, f : Faction) extends BaseFactionAction(GraspingDead.toString + " battle " + f + " with " + TombHerd.styled(TS) + " in", r)
 
 
+// Tombstalker (TS) EXPANSION OBJECT: manages all TS-specific game state (Death March, Hecatomb,
+// Grasping Dead, Shepherd, Eleven Revelations, Undulate, tomes) and action dispatch
 object TSExpansion extends Expansion {
     // Sentinel: prevents Shepherd of the Crypt from firing twice in one power-gather phase
     var shepherdDoneThisGather : Boolean = false

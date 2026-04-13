@@ -33,7 +33,7 @@ import java.nio.charset.StandardCharsets
  */
 object SimRunner {
     def main(args : Array[String]) {
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB)
 
         // ── Flag parsing ───────────────────────────────────────────────────
         val withHP    = args.contains("--hp")
@@ -57,6 +57,7 @@ object SimRunner {
             case "ow" => Some(OW)
             case "an" => Some(AN)
             case "ts" => Some(TS)
+            case "fb" => Some(FB)
             case _    => None
         }
 
@@ -85,6 +86,7 @@ object SimRunner {
             case GC => "gc" ; case CC => "cc" ; case BG => "bg"
             case YS => "ys" ; case SL => "sl" ; case WW => "ww"
             case OW => "ow" ; case AN => "an" ; case TS => "ts"
+            case FB => "fb"
             case _  => "xx"
         }
 
@@ -143,6 +145,27 @@ object SimRunner {
             }
 
             var aa : $[Action] = $
+
+            // ── Firstborn (FB) telemetry ─────────────────────────────────────
+            // Round 8: track basic FB activity per game so we can verify the
+            // bot exercises every faction-defining ability at least once.
+            // Each counter is incremented when the corresponding log line is
+            // matched. The "max" counters snapshot the highest seen value of
+            // a game-state field. The boolean flags become true if the action
+            // ever happened in this game.
+            var fbWritheCount     = 0   // # of Writhe activations (logged "used Writhe")
+            var fbEyeOpensCount   = 0   // # of Eye Opens activations
+            var fbCarnageCount    = 0   // # of Carnage triggers (paid power OR flipped SB)
+            var fbDevilsMarkCount = 0   // # of Devil's Mark crater placements
+            var fbCallFaithfulCount = 0 // # of Call of the Faithful summons
+            var fbCyclopeanCount  = 0   // # of Cyclopean Gaze fires
+            var fbInfernalPactCount = 0 // # of Infernal Pact activations (any flip)
+            var fbRevenantsMax    = 0   // peak # of Revenants on map
+            var fbDesiccatedMax   = 0   // peak # of Desiccated on map
+            var fbAuguryKillsMax  = 0   // peak fbAuguryKills value
+            var fbRituals         = 0   // # of FB rituals performed
+            var fbAwakenings      = 0   // # of Ghatanothoa awakenings (1 = mandatory, 2-3 = bonus)
+
             var tsPeakGates = 0
             // AP-by-AP milestone tracking for TS
             var tsAPCount = 0       // counts APs completed (increments at POWER GATHER)
@@ -450,6 +473,42 @@ object SimRunner {
                         val tsRevealMatch = "Tombstalker revealed.*?for (\\d+) Doom".r.findFirstMatchIn(llText)
                         tsRevealMatch.foreach(m => tsESDoom += m.group(1).toInt)
                     }
+
+                    // ── Firstborn (FB) per-turn telemetry ────────────────────
+                    // Round 8: count basic FB activities so we can verify the
+                    // bot exercises every faction ability. Uses the same
+                    // log-text-matching pattern as TS above. Patterns are
+                    // tuned to match the actual ABILITY USE log line, not the
+                    // receive / flip-state-change lines that share the same
+                    // spellbook name.
+                    if (ff.contains(FB)) {
+                        val fb = factionToState(FB)(game)
+                        val fbText = ll.mkString(" ").replaceAll("<[^>]+>", "")
+                        // Snapshot peak counts
+                        val revs = fb.onMap(RevenantOfKnaa).num
+                        val descs = fb.onMap(Desiccated).num
+                        if (revs > fbRevenantsMax) fbRevenantsMax = revs
+                        if (descs > fbDesiccatedMax) fbDesiccatedMax = descs
+                        if (game.fbAuguryKills > fbAuguryKillsMax) fbAuguryKillsMax = game.fbAuguryKills
+                        // Activity counters via log matching
+                        if (fbText.contains("Firstborn used Writhe"))                       fbWritheCount += 1
+                        // Eye Opens use: "<unit> eliminated in <region> by The Eye Opens"
+                        if (fbText.contains("by The Eye Opens"))                            fbEyeOpensCount += 1
+                        // Carnage use: "Carnage: paid 1 Power" or "Carnage: flipped <SB> facedown for 1 Elder Sign"
+                        if (fbText.contains("Carnage: paid") ||
+                            fbText.contains("Carnage: flipped"))                            fbCarnageCount += 1
+                        // Devil's Mark use: "placed Crater in <region> with Devil's Mark"
+                        if (fbText.contains("with Devil's Mark"))                           fbDevilsMarkCount += 1
+                        // Call of the Faithful use: "Call of the Faithful: placed Acolyte in <region>"
+                        if (fbText.contains("Call of the Faithful: placed"))                fbCallFaithfulCount += 1
+                        // Cyclopean Gaze fire: "Cyclopean Gaze - <source>: pained <unit> from <r> to <r>"
+                        if (fbText.contains("Cyclopean Gaze - "))                           fbCyclopeanCount += 1
+                        // Infernal Pact use: "Infernal Pact: flipped <SB> facedown, discount now ..."
+                        if (fbText.contains("Infernal Pact: flipped"))                      fbInfernalPactCount += 1
+                        if (fbText.contains("Firstborn awakened Ghatanothoa"))              fbAwakenings += 1
+                        if (fbText.contains("Firstborn performed the ritual"))              fbRituals += 1
+                    }
+
                     if (n > 7000)
                         throw null
                 }
@@ -478,6 +537,35 @@ object SimRunner {
                         "|" + code + "_gates=" + fs.gates.num +
                         "|" + code + "_goo="   + gooUp +
                         "|" + code + "_won="   + w.contains(f)
+                    if (f == FB) {
+                        // Round 8: per-game FB activity telemetry. These let
+                        // us check whether the bot is exercising every basic
+                        // faction ability or only a subset. A healthy bot
+                        // should show non-zero counts for every column over a
+                        // batch of games (some — like Carnage — may be 0 in
+                        // games without battles).
+                        line +=
+                            "|fb_revenants_max="   + fbRevenantsMax +
+                            "|fb_desiccated_max="  + fbDesiccatedMax +
+                            "|fb_writhe="          + fbWritheCount +
+                            "|fb_eye_opens="       + fbEyeOpensCount +
+                            "|fb_carnage="         + fbCarnageCount +
+                            "|fb_devils_mark="     + fbDevilsMarkCount +
+                            "|fb_call_faithful="   + fbCallFaithfulCount +
+                            "|fb_cyclopean_gaze="  + fbCyclopeanCount +
+                            "|fb_infernal_pact="   + fbInfernalPactCount +
+                            "|fb_augury_max="      + fbAuguryKillsMax +
+                            "|fb_awakenings="      + fbAwakenings +
+                            "|fb_rituals="         + fbRituals +
+                            "|fb_craters="         + game.fbCraters.num
+                        println("  FB activity: writhe=" + fbWritheCount +
+                            " eye=" + fbEyeOpensCount + " carn=" + fbCarnageCount +
+                            " mark=" + fbDevilsMarkCount + " cof=" + fbCallFaithfulCount +
+                            " cg=" + fbCyclopeanCount + " ip=" + fbInfernalPactCount +
+                            " awake=" + fbAwakenings + " rituals=" + fbRituals +
+                            " revs(max)=" + fbRevenantsMax + " desc(max)=" + fbDesiccatedMax +
+                            " craters=" + game.fbCraters.num + " augury(max)=" + fbAuguryKillsMax)
+                    }
                     if (f == TS) {
                         // Total face-down tomes held by non-TS factions at game end
                         val totalFaceDown = game.cursedTomesOwned.filter(_._1 != TS).values
@@ -486,8 +574,7 @@ object SimRunner {
                             "|ts_tombherds="    + fs.onMap(TombHerd).num +
                             "|ts_deeptendrils=" + fs.onMap(DeepTendril).num +
                             "|ts_dh="           + game.deathsHead +
-                            // [2026-04-04] tsTomesOnCard now = # given away (was 11-remaining)
-                            "|ts_tomes_given="  + game.tsTomesOnCard +
+                            "|ts_tomes_given="  + (11 - game.tsTomesOnCard) +
                             "|ts_facedown="     + totalFaceDown +
                             "|ts_peak_gates="   + tsPeakGates +
                             "|ts_gates_ap1="    + tsGatesAP1 +
@@ -512,12 +599,7 @@ object SimRunner {
                             "|ts_tomes_used="   + tsTomesUsed +
                             "|ts_tome_doom="    + tsTomeDoom +
                             "|ts_tome_es="      + tsTomeES +
-                            "|ts_tome_power="   + tsTomePower +
-                            // [2026-04-04] Neutral unit tracking
-                            "|ts_nm_card="      + fs.loyaltyCards.of[NeutralMonsterLoyaltyCard].headOption.map(_.unit.name).getOrElse("none") +
-                            "|ts_igoo_card="    + fs.loyaltyCards.of[IGOOLoyaltyCard].headOption.map(_.unit.name).getOrElse("none") +
-                            "|ts_hp_count="     + fs.all(HighPriest).num +
-                            "|ts_nm_units="     + fs.loyaltyCards.of[NeutralMonsterLoyaltyCard].headOption.map(c => fs.onMap(c.unit).num).getOrElse(0)
+                            "|ts_tome_power="   + tsTomePower
                     }
                 }
 

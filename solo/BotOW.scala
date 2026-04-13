@@ -130,6 +130,10 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
 
                 case TS =>
                     true |=> 0 -> "ts"
+
+                // Firstborn (FB): opponent combat evaluation
+                case FB =>
+                    true |=> 0 -> "fb"
             }
         }
 
@@ -684,6 +688,9 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
                 }
             }
         }
+
+        // Round 8 (FB): score CG/Eye Opens prompts that get asked of this faction
+        result ++= fbPromptedEvals(a)
 
         result.none |=> 0 -> "none"
 

@@ -233,9 +233,16 @@ object CthulhuWarsSolo {
         val menu = cwsOptions./~(_.getAttribute("data-menu").?)./~(_.toIntOption).|(5)
         // val menu = cwsOptions./~(_.getAttribute("data-menu").?)./~(_.toIntOption).|(6) // Temp for test (comment out before deploying)
         val scroll = cwsOptions./~(_.getAttribute("data-scroll").?)./(_ == "true").|(false)
-        val server = cwsOptions./~(_.getAttribute("data-server").?).|("###SERVER-URL###")
-        val redirect = origin != server
-        // val redirect = false // making online games work with AN, as per hauntrollfail's advice
+        // Round 8: if data-server isn't set (local dev), fall back to origin (the URL the
+        // page is loaded from) instead of the literal "###SERVER-URL###" placeholder. This
+        // makes online game API calls go to the local server during local testing.
+        val rawServer = cwsOptions./~(_.getAttribute("data-server").?).|("###SERVER-URL###")
+        val server = if (rawServer == "###SERVER-URL###") origin else rawServer
+        // Round 8: forced to false for local online testing — when redirect=false the
+        // "Online game" button runs the local logic (post to `server + "create"` etc.)
+        // instead of opening a hyperlink to the production server.
+        // Original line: val redirect = origin != server
+        val redirect = false
         val localReplay = false
 
         val logDiv = getElem("log")
@@ -631,7 +638,10 @@ object CthulhuWarsSolo {
                                         case WW => BotWW   .ask(actions, 0.2)(game)
                                         case OW => BotOW   .ask(actions, 0.2)(game)
                                         case AN => BotAN   .ask(actions, 0.2)(game)
+                                        // Tombstalker (TS): AI bot decision-making at Easy difficulty
                                         case TS => BotTS   .ask(actions, 0.2)(game)
+                                        // Firstborn (FB): AI bot decision-making at Easy difficulty
+                                        case FB => BotFB   .ask(actions, 0.2)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -643,7 +653,10 @@ object CthulhuWarsSolo {
                                         case WW => BotWW   .ask(actions, 0.03)(game)
                                         case OW => BotOW   .ask(actions, 0.03)(game)
                                         case AN => BotAN   .ask(actions, 0.03)(game)
+                                        // Tombstalker (TS): AI bot decision-making at Normal difficulty
                                         case TS => BotTS   .ask(actions, 0.03)(game)
+                                        // Firstborn (FB): AI bot decision-making at Normal difficulty
+                                        case FB => BotFB   .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -658,7 +671,10 @@ object CthulhuWarsSolo {
                                         case WW => BotWW   .ask(as, 0.03)(game)
                                         case OW => BotOW   .ask(as, 0.03)(game)
                                         case AN => BotAN   .ask(as, 0.03)(game)
+                                        // Tombstalker (TS): AI bot decision-making at AllVsHuman difficulty
                                         case TS => BotTS   .ask(as, 0.03)(game)
+                                        // Firstborn (FB): AI bot decision-making at AllVsHuman difficulty
+                                        case FB => BotFB   .ask(as, 0.03)(game)
                                     })
 
 
@@ -675,7 +691,7 @@ object CthulhuWarsSolo {
 
             // Round 8 Bug 53: shared GlyphPlacement engine. Used by findAnother (random
             // valid placement for unit layout) and findStaticGlyphPos (deterministic
-            // position for dynamic-start faction glyphs — TS).
+            // position for dynamic-start faction glyphs — FB, TS, etc.).
             val glyphPlacer = new GlyphPlacement(board.id)
             val place = glyphPlacer.place
             val findAnother = (x : Int, y : Int) => glyphPlacer.findAnother(x, y)
@@ -689,11 +705,14 @@ object CthulhuWarsSolo {
             case object DesecrationToken extends FactionUnitClass(YS, "Desecration", Token, 0)
             case object IceAgeToken extends FactionUnitClass(WW, "Ice Age", Token, 0)
             case object Cathedral extends FactionUnitClass(AN, "Cathedral", Token, 0)
+            // Firstborn (FB): Crater rendered as Token (same pattern as Cathedral) so rank() doesn't crash
+            case object Crater extends FactionUnitClass(FB, "Crater", Token, 0)
             case object Gate extends UnitClass("Gate", Token, 3)
             case object FactionGlyph extends UnitClass("Faction Glyph", Token, 0)
             // Round 8 Bug 53: separate UnitClass for the on-map dynamic-start glyph render.
-            // TS uses this to draw its starting glyph at 66x66 (smaller than the 100x100
-            // FactionGlyph used in faction status panels).
+            // Used by FB and TS to draw their starting glyph on the map at 66x66 (smaller than
+            // the 100x100 used in faction status panels). The DrawRect for StartingGlyph
+            // dispatches to fb-glyph or ts-glyph based on the faction passed to DrawItem.
             case object StartingGlyph extends UnitClass("Starting Glyph", Token, 0)
 
             case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0)
@@ -710,7 +729,10 @@ object CthulhuWarsSolo {
                     case SL => Processing(|("#db6a33"), |("#4a1a1a"), None)
                     case OW => Processing(|("#6c4296"), None, |("#4c4c4c"))
                     case AN => Processing(|("#47a5bc"), |("#333333"), None)
+                    // Tombstalker (TS): faction color (pale green #BDE0BC) for unit rendering
                     case TS => Processing(|("#BDE0BC"), |("#333333"), None)
+                    // Firstborn (FB): faction color (magenta/pink #CB307E) for unit rendering
+                    case FB => Processing(|("#CB307E"), |("#333333"), None)
                     case _  => defaultProcessing
                 }
 
@@ -726,7 +748,10 @@ object CthulhuWarsSolo {
                         case WW => DrawRect("ww-acolyte", None, x - 17, y - 52, 40, 58)
                         case OW => DrawRect("ow-acolyte", None, x - 17, y - 54, 38, 60)
                         case AN => DrawRect("an-acolyte", None, x - 17, y - 54, 39, 60)
+                        // Tombstalker (TS): acolyte unit sprite
                         case TS => DrawRect("ts-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        // Firstborn (FB): acolyte unit sprite
+                        case FB => DrawRect("fb-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -739,6 +764,8 @@ object CthulhuWarsSolo {
                         case WW => DrawRect("ww-high-priest", None, x - 35, y - 60, 70, 67)
                         case OW => DrawRect("ow-high-priest", None, x - 35, y - 60, 70, 66) // Left to do
                         case AN => DrawRect("an-high-priest", None, x - 35, y - 60, 70, 66) // Left to do
+                        // Firstborn (FB): high priest unit sprite (FB cannot recruit HP, but sprite is defined)
+                        case FB => DrawRect("fb-high-priest", |(tint), x - 35, y - 60, 70, 66)
                         case _ => null
                     }
 
@@ -754,6 +781,9 @@ object CthulhuWarsSolo {
                         // Tombstalker (TS): faction glyph sprite (100x100, matches all other factions).
                         // Used by the faction status panel. On-map dynamic-start render uses StartingGlyph instead.
                         case TS => DrawRect("ts-glyph", None, x - 50, y - 50, 100, 100)
+                        // Firstborn (FB): faction glyph sprite (100x100, matches all other factions).
+                        // Used by the faction status panel. On-map dynamic-start render uses StartingGlyph instead.
+                        case FB => DrawRect("fb-glyph", None, x - 50, y - 50, 100, 100)
                         case _ => null
                     }
 
@@ -796,9 +826,17 @@ object CthulhuWarsSolo {
                     case Reanimated    => DrawRect("an-reanimated", None, x - 28, y - 62, 57, 65)
                     case Yothan        => DrawRect("an-yothan", None, x - 61, y - 85, 122, 90)
 
+                    // Tombstalker (TS): monster and GOO unit sprites (TombHerd, DeepTendril, Gla'aki)
                     case TombHerd      => DrawRect("ts-tomb-herd", |(tint), x - 30, y - 70, 60, 80)
                     case DeepTendril   => DrawRect("ts-tendril",    |(tint), x - 30, y - 75, 60, 85)
                     case Glaaki        => DrawRect("ts-glaaki",     |(tint), x - 45, y - 120, 90, 130)
+
+                    // Firstborn (FB): monster, GOO, and building unit sprites
+                    case Desiccated      => DrawRect("fb-desiccated",   |(tint), x - 30, y - 72, 60, 78)
+                    case RevenantOfKnaa  => DrawRect("fb-revenant",     |(tint), x - 45, y - 98, 90, 105)
+                    // Firstborn (FB): Ghatanothoa GOO — large unit
+                    case Ghatanothoa     => DrawRect("fb-ghatanothoa",  |(tint), x - 48, y - 160, 96, 176)
+                    case Crater          => DrawRect("fb-crater",       |(tint), x - 36, y - 36, 72, 72)
 
                     case DesecrationToken => DrawRect("ys-desecration", None, x - 20, y - 20, 41, 40)
                     case IceAgeToken      => DrawRect("ww-ice-age", None, x - 44, y - 67, 91, 75)
@@ -838,8 +876,10 @@ object CthulhuWarsSolo {
                     case TulzschaIcon     => DrawRect("tulzscha-icon", None, x - 17, y - 55, 50, 50)
                     case HighPriestIcon   => DrawRect("high-priest-icon", None, x - 17, y - 55, 50, 50)
 
-                    // Round 8 Bug 53: dedicated 66x66 render for the on-map starting glyph of TS.
-                    // Smaller than the 100x100 FactionGlyph used in faction status panels.
+                    // Round 8 Bug 53: dedicated 66x66 render for the on-map starting glyph of
+                    // dynamic-start factions (FB, TS). Dispatches by faction. Smaller than the
+                    // 100x100 FactionGlyph used in faction status panels.
+                    case StartingGlyph if faction == FB => DrawRect("fb-glyph", None, x - 33, y - 33, 66, 66)
                     case StartingGlyph if faction == TS => DrawRect("ts-glyph", None, x - 33, y - 33, 66, 66)
 
                     case _ => null
@@ -981,14 +1021,34 @@ object CthulhuWarsSolo {
                     if (game.cathedrals.has(r))
                         all +:= DrawItem(r, null, Cathedral, Alive, $, 0, 0)
 
+                    // Firstborn (FB): draw Crater token on map exactly where the gate was
+                    // (placed as fixed so the layout engine doesn't offset it like other tokens)
+                    if (game.factions.has(FB) && game.fbCraters.has(r))
+                        fixed +:= DrawItem(r, FB, Crater, Alive, $, px, py)
+
+                    // Firstborn (FB): draw FB faction glyph at starting region if FB is in the game
+                    // (dynamic-start factions don't have permanent board glyphs — render explicitly).
+                    // Round 8 Bug 44: use findStaticGlyphPos which scans the placement map to find
+                    // the position farthest from the gate where the 60x60 glyph box fits fully
+                    // within the region. Guarantees the glyph never overlaps another region
+                    // (highest priority) and minimizes gate overlap (placed in the largest empty
+                    // space). Glyph is static — same position every render.
+                    // Round 8 Bug 52: use `game.setup` (the full faction list set at game creation)
+                    // instead of `game.factions` (the play order, set only after PlayDirectionAction).
+                    // Otherwise the glyph wouldn't render until after play order was decided.
+                    if (game.setup.has(FB) && game.starting.get(FB).contains(r)) {
+                        val (glyphX, glyphY) = findStaticGlyphPos(px, py)
+                        fixed +:= DrawItem(r, FB, StartingGlyph, Alive, $, glyphX, glyphY)
+                    }
+
                     // Tombstalker (TS): draw TS faction glyph at starting region if TS is in the game
                     // (dynamic-start ocean faction — same pattern as FB). Uses findStaticGlyphPos for
                     // smart positioning that avoids region borders and the gate. Uses `game.setup`
                     // (not `game.factions`) so the glyph appears as soon as TS picks its region,
-                    // not after play order is decided.
+                    // not after play order is decided. Uses StartingGlyph (66x66, see Bug 53)
+                    // instead of FactionGlyph (100x100, used by faction panel).
                     if (game.setup.has(TS) && game.starting.get(TS).contains(r)) {
                         val (glyphX, glyphY) = findStaticGlyphPos(px, py)
-                        // Use StartingGlyph (66x66) instead of FactionGlyph (100x100) for the on-map render
                         fixed +:= DrawItem(r, TS, StartingGlyph, Alive, $, glyphX, glyphY)
                     }
 
@@ -1095,9 +1155,14 @@ object CthulhuWarsSolo {
 
                 val name = div("name")("" + f + "")
                 val nameS = div("name")(f.short.styled(f) + "")
+                // Tombstalker (TS): append Death's Head count to faction status panel
                 val dhStr = (f == TS).?(" | " + (game.deathsHead.toString + " Death's Head").styled(TS)).|("")
                 val power = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr)
                 val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|(""))
+                // Firstborn (FB): read Infernal Pact discount and stored Augury kills for the faction panel display
+                val fbIPDiscount = if (f == FB) game.fbInfernalPactDiscount else 0
+                val fbAugury = if (f == FB) game.fbAuguryKills else 0
+                // Tombstalker (TS) Cursed Tomes: display face-down tome count badge and clickable overlay for each faction
                 val faceDownTomes = game.cursedTomesOwned.get(f).|(Nil).count { case (_, fd) => fd }
                 val totalTomes = game.cursedTomesOwned.get(f).|(Nil).num
                 val fStyle = f.style
@@ -1106,7 +1171,7 @@ object CthulhuWarsSolo {
                 val tomeImgSpan = s"""<span style="position:relative;display:inline-block;vertical-align:middle;"><img src="$tomeImgSrc" style="height:1.2em;display:block;"/>$tomeBadge</span>"""
                 val tomeStr = (totalTomes > 0).?(" " + "- ".styled(TS) + s"""<span onclick='event.stopPropagation(); onExternalClick("cursed-tomes", "$fStyle")' onpointerover='event.stopPropagation(); onExternalOver("cursed-tomes", "$fStyle")' onpointerout='event.stopPropagation(); onExternalOut("cursed-tomes", "$fStyle")' style='cursor:pointer'>""" + faceDownTomes.toString.styled(TS) + " " + tomeImgSpan + "</span>").|("")
                 val tomeSStr = (totalTomes > 0).?(" " + "-".styled(TS) + faceDownTomes.toString.styled(TS) + "T".styled(TS)).|("")
-                // [2026-04-04] tsTomesOnCard = # given away. Show next tome (given+1) if any remain.
+                // Tombstalker (TS): show next available tome from the stack (tsTomesOnCard = # already given away)
                 val tsNextTome = game.tsTomesOnCard + 1
                 val tsStack = (f == TS && game.tsTomesOnCard < 11).?(
                     s"""<span onclick='event.stopPropagation(); onExternalClick("cursed-tomes", "$fStyle")' onpointerover='event.stopPropagation(); onExternalOver("cursed-tomes", "$fStyle")' onpointerout='event.stopPropagation(); onExternalOut("cursed-tomes", "$fStyle")' style='cursor:pointer; float:right; margin-left:0.5em;'>${tomeNumToRoman(tsNextTome).styled(TS)}<img src='${Overlays.imageSource("ts-cursed-tome")}' style='height:1.2em; vertical-align:middle;'/></span>"""
@@ -1117,7 +1182,15 @@ object CthulhuWarsSolo {
                 val doomS = div()(("" + f.doom + "D").styled("doom") + f.es.any.?("+" + ("" + f.es.num + "ES").styled("es")).|("") + tomeSStr)
 
                 val sb = f.spellbooks./{ sb =>
-                    val full = sb.elem
+                    // Firstborn (FB): append augury skull image and stored kill count next to the Augury spellbook entry
+                    // Bug fix Round 4: drop the `fbAugury > 0` guard so the skull (and "0") shows
+                    // as soon as FB acquires the Augury spellbook, not only after the first kill is stored.
+                    // Counter displays should appear at the moment the source ability is acquired.
+                    val auguryAddon =
+                        if (f == FB && sb == Augury)
+                            " <img src='" + getAsset("fb-augury-skull").src + "' style='height: 1em; vertical-align: middle;'/> " + fbAugury.toString.styled(FB)
+                        else ""
+                    val full = sb.elem + auguryAddon
                     val s = sb.name.replace("\\", "\\\\").replace("'", "&#39") // "
                     val d = s"""<div class='spellbook'
                         onclick='event.stopPropagation(); onExternalClick("${f.short}", "${s}")'
@@ -1151,9 +1224,21 @@ object CthulhuWarsSolo {
                         case _ => None
                     }
 
+                    // Round 8 Bug 40: check if the IGOO spellbook is facedown via Infernal Pact.
+                    // Facedown spellbooks are in f.oncePerGame. Only relevant for FB.
+                    val isFacedown = spellbook.has(true) && (lc match {
+                        case ByatisCard => f.oncePerGame.has(GodOfForgetfulness)
+                        case AbhothCard => f.oncePerGame.has(TheBrood)
+                        case DaolothCard => f.oncePerGame.has(Interdimensional)
+                        case NyogthaCard => f.oncePerGame.has(NightmareWeb)
+                        case TulzschaCard => f.oncePerGame.has(CeremonyOfAnnihilation)
+                        case YgolonacCard => f.oncePerGame.has(TheRevelations)
+                        case _ => false
+                    })
+
                     val sb = spellbook @@ {
-                        case Some(true) => ", true"
-                        case Some(false) => ", false"
+                        case Some(true) => ", true" + (if (isFacedown) ", true" else ", false")
+                        case Some(false) => ", false, false"
                         case None => ""
                     }
 
@@ -1533,12 +1618,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                 val prevHistLen = RitualTrackOverlay.ritualHistory.length
                 val prevMarker = RitualTrackOverlay.markerIndex
-                val prevPureDH = RitualTrackOverlay.tsPureDHMarkerIndices.length
+                val prevPureDH = RitualTrackOverlay.tsPureDHMarkerIndices.length // Tombstalker (TS): track pure DH marker changes for overlay refresh
                 RitualTrackOverlay.numPlayers = seating.num
                 RitualTrackOverlay.markerIndex = displayGame.ritualMarker
                 RitualTrackOverlay.trackLength = displayGame.ritualTrack.length
                 RitualTrackOverlay.ritualHistory = displayGame.ritualHistory./(_.style)
                 RitualTrackOverlay.ritualHistoryCeremony = displayGame.ritualHistoryCeremony
+                // Tombstalker (TS): sync pure Death's Head hecatomb ritual markers for RoA track overlay
                 RitualTrackOverlay.tsPureDHMarkerIndices = TSExpansion.pureDHMarkerIndices
                 // [2026-04-03] Auto-refresh overlay when ritual data changes
                 if (RitualTrackOverlay.ritualHistory.length != prevHistLen ||
@@ -1546,6 +1632,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     RitualTrackOverlay.tsPureDHMarkerIndices.length != prevPureDH)
                     Overlays.refreshIfShowing()
 
+                // Tombstalker (TS): populate Cursed Tomes overlay with per-faction tome ownership and stack state
                 TSCursedTomesOverlay.factionTomes = displayGame.cursedTomesOwned.map { case (f, tomes) => f.style -> tomes }
                 TSCursedTomesOverlay.tomesOnCard = displayGame.tsTomesOnCard
 
@@ -2080,6 +2167,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                 val aa = Explode.explode(g, actions)
 
+                                // Tombstalker (TS) and BG: use Bot3 evaluation for debug action sorting
                                 val sorted = if (f == BG || f == TS)
                                     Bot3(f).eval(aa)(g).sortBy(-_.evaluations.map(_.weight).sum)
                                 else
@@ -2095,6 +2183,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         case WW => BotWW
                                         case OW => BotOW
                                         case AN => BotAN
+                                        // Round 8 (FB): added FB case so the debug action-sort menu works for
+                                        // FB games. Without this, opening the debug menu for an FB action
+                                        // would throw a MatchError at runtime.
+                                        case FB => BotFB
                                     })
                                     bot.eval(g, aa).sortWith(bot.compare)
                                 }
@@ -2620,7 +2712,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             askTop()
         }
 
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS)
+        // Tombstalker (TS) and Firstborn (FB): included in the master faction list for game setup and replay parsing
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB)
 
         val replay = getElem("replay").?./(_.innerHTML).|("")
 
@@ -2717,7 +2810,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         onpointerover="event.stopPropagation(); onExternalOver('RoA')"
                                         onpointerout="event.stopPropagation(); onExternalOut('RoA')">
                                         <img src="${Overlays.imageSource("roa-icon")}"
-                                             style="height: 0.85em; width: auto; display: block;" />
+                                             style="height: 1.7em; width: auto; display: block;" />
                                         <span id="roa-cost-num"
                                               style="
                                                   position: absolute;
@@ -2725,7 +2818,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                                   left: 50%;
                                                   transform: translateX(-50%);
                                                   color: white;
-                                                  font-size: 55%;
+                                                  font-size: 110%;
                                                   font-weight: bold;
                                                   line-height: 1;
                                                   text-shadow: 0 0 3px black, 0 0 3px black, 0 0 3px black;
@@ -2758,7 +2851,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         }
         else {
             def topMenu() {
-                ask("Cthulhu Wars", $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='https://cwo.im/' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "Extra", "About", "Test").take(menu), {
+                // Round 8: replaced hardcoded cwo.im URL with the page's own origin so the
+                // "Online game" link goes to localhost when running locally. For production
+                // (data-server set to a real backend URL), the link still goes to that URL.
+                ask("Cthulhu Wars", $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='" + origin + "' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "Extra", "About", "Test").take(menu), {
                     case 998_0 =>
                         val setup = new Setup(randomSeating($(GC, BG, WW, OW)), Normal)
                         setup.difficulty += OW -> Debug
