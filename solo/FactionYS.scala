@@ -304,6 +304,14 @@ object YSExpansion extends Expansion {
             game.eliminate(c)
             self.place(Undead, r)
             self.log("replaced", c, "in", r, "with", Undead)
+            // Round 8 Bug 76: register as a CG edge case. Zingaya technically
+            // produces a positive YS delta in the target region (Undead placed),
+            // so the standard snapshot-delta detector should catch it — but
+            // registering it explicitly is defensive and matches the pattern for
+            // "current region" spellbooks. Harmless duplicate registration: the
+            // Bug 34 re-entry snapshot update prevents double-firing CG.
+            if (game.factions.has(FB))
+                game.fbCyclopeanGazeActionRegions :+= r
             EndAction(self)
 
         // ...

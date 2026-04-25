@@ -206,7 +206,26 @@ case object MovedForFree extends UnitState("moved-for-free")
 case object MovedForExtra extends UnitState("moved-for-extra")
 case object Eliminated extends UnitState("eliminated")
 
-class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int, var region : Region, var onGate : Boolean = false, var state : $[UnitState] = $, var health : UnitHealth = Alive) {
+class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int, initialRegion : Region, var onGate : Boolean = false, var state : $[UnitState] = $, var health : UnitHealth = Alive) {
+    // Round 9 bug fix (user-reported): every region change for an enemy unit
+    // landing in an FB Cyclopean Gaze region must fire CG, regardless of
+    // which action path caused it (MoveAction, SummonAction, self.place,
+    // Avatar sn.region, Screaming Dead, Arctic Wind, Undulate, etc.). Wrap
+    // the `region` assignment in a setter that runs the CG edge-case hook
+    // whenever an enemy non-Building unit enters a gaze region. The previous
+    // per-action hooks missed many direct-assignment paths.
+    private var _region : Region = initialRegion
+    def region : Region = _region
+    def region_=(r : Region)(implicit game : Game) : Unit = {
+        val prev = _region
+        _region = r
+        if (prev != r && faction != FB && uclass.utype != Building &&
+            !game.fbSuppressCGForPlacement &&
+            game.factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze) &&
+            (FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any))
+            game.fbCyclopeanGazeActionRegions :+= r
+    }
+
     override def toString = short
 
     def dbg = faction.short + "/" + uclass.name + "/" + index
@@ -667,6 +686,18 @@ class Player(private val f : Faction)(implicit game : Game) {
     def place(uc : UnitClass, r : Region) {
         val u = f.pool(uc).first
         u.region = r
+        // Universal CG trigger — single chokepoint for all placements. Any
+        // non-FB placement of a non-Building unit into a region with an FB
+        // Revenant or Ghatanothoa must register the region for CG dispatch.
+        // Covers: SummonAction, AwakenAction, RecruitAction (via Game.scala),
+        // StartAction's initial acolyte placement (skipped — FB check guards),
+        // plus every expansion that calls `self.place(...)` directly
+        // (BG Avatar's replacement, AN Cathedral/Festival, YS Screaming Dead,
+        // TS Undulate/Hecatomb, SL Lethargy, etc.).
+        if (f != FB && uc.utype != Building &&
+            game.factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze) &&
+            (FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any))
+            game.fbCyclopeanGazeActionRegions :+= r
     }
 
     def canAccessGate(r : Region) = gates.contains(r) || f.unitGate.?(_.region == r) || (has(TheyBreakThrough) && game.gates.contains(r))
@@ -1041,11 +1072,38 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var fbGhatnothoaAwakenings : Int = 0
     var fbCraters : $[Region] = $
     var fbInfernalPactDiscount : Int = 0
-    var fbInfernalPactPowerAdded : Int = 0
+    // Round 8 Bug 75: removed fbInfernalPactPowerAdded — discount is no longer
+    // added to self.power on flip. It's a separate pool that only becomes
+    // "power" temporarily during cost-bearing action intercepts (transient boost
+    // pattern). fbInfernalPactStartPower is still used by Cancel to clamp power
+    // back if needed, though with separate pools the clamp is a no-op.
     var fbInfernalPactStartPower : Int = -1
     // Round 8 Bug 40: widened from $[FactionSpellbook] to $[Spellbook] to support
     // IGOO spellbooks (NeutralSpellbook) being flipped facedown via Infernal Pact
     var fbInfernalPactFlipped : $[Spellbook] = $
+    // Round 8 Bug 72: snapshots of FB.spellbooks and FB.unfulfilled taken on the
+    // first flip of an IP session. Used by IP Cancel handlers to revert any
+    // spellbook awarded mid-session (when flipping the 2nd spellbook facedown
+    // satisfied FBTwoFacedownSpellbooks). Without these, cancel reverts the
+    // flipped spellbooks and refunded power but LEAVES the newly-earned
+    // spellbook in place, which breaks "cancel restores pre-IP state".
+    var fbInfernalPactSpellbooksBeforeSession : $[Spellbook] = $
+    var fbInfernalPactUnfulfilledBeforeSession : $[Requirement] = $
+    // Round 9 bug fix: IP can be used both BEFORE and AFTER the main action
+    // (the after-main IP is for unlimited actions like FBTheAllSpellbooks
+    // battles). When the main action commits, any pre-main flips must become
+    // NON-CANCELABLE — cancelling a post-main IP session must NOT undo the
+    // pre-main flips. Mechanism: this var is the "floor" discount that can't
+    // be refunded by a subsequent Cancel, set when the main action's state
+    // mutates (EndAction) and cleared at end of turn.
+    var fbInfernalPactCommittedDiscount : Int = 0
+    // Round 9 bug fix: some action handlers (e.g. AN GiveWorstMonster /
+    // GiveBestMonster SBRs) place units into other factions' pools/regions
+    // as a game-level effect, not as a region-targeting action by the
+    // receiving or summoning faction. CG must NOT fire for those. Set this
+    // flag true before a qualifying `place()` or `u.region = r` call, false
+    // after. The UnitFigure region setter skips the CG append when true.
+    var fbSuppressCGForPlacement : Boolean = false
     var fbDevilsMarkUsedThisDoom : Boolean = false
     var fbWritheUsedUnits : $[UnitRef] = $
     var fbWritheRerolled : Boolean = false
@@ -1073,7 +1131,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     //
     // Pattern for new zero-delta actions: in the action handler, after the state mutation,
     //   if (factions.has(FB)) game.fbCyclopeanGazeActionRegions :+= r
+    // Anti-ping-pong: track Ghato's last paid-move origin within this AP
+    var fbGhatoLastMoveOrigin : |[Region] = None
     var fbCyclopeanGazeActionRegions : $[Region] = $
+    // Two-pass CG: FBExpansion.AfterAction computes sources and stores here;
+    // Game.scala.AfterAction fires CG AFTER triggers()/SBRs resolve.
+    var fbCyclopeanGazePendingSources : $[(Region, UnitClass)] = $
+    var fbCyclopeanGazePendingActor : |[Faction] = None
 
     def forNPowerWithTax(r : Region, f : Faction, n : Int) : String = { val p = n + f.taxIn(r) ; " for " + p.power }
     def for1PowerWithTax(r : Region, f : Faction) : String = { val p = 1 + f.taxIn(r) ; if (p != 1) " for " + p.power else "" }
@@ -1784,6 +1848,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 return GameOverPhaseAction
 
             doomPhase = false
+            fbGhatoLastMoveOrigin = None
 
             log(CthulhuWarsSolo.DoubleLine)
             log("Turn", turn)
@@ -2320,7 +2385,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             factions.foreach(_.oncePerAction = $)
 
-            CheckSpellbooksAction(PreMainAction(self))
+            // Two-pass CG: fire pending CG sources AFTER triggers/SBRs resolved
+            if (fbCyclopeanGazePendingSources.any && fbCyclopeanGazePendingActor.isDefined) {
+                val sources = fbCyclopeanGazePendingSources
+                val actor = fbCyclopeanGazePendingActor.get
+                fbCyclopeanGazePendingSources = $
+                fbCyclopeanGazePendingActor = None
+                Force(FBCyclopeanGazePhaseAction(FB, actor, sources, fromBattle = false))
+            }
+            else
+                CheckSpellbooksAction(PreMainAction(self))
 
         case EndTurnAction(f) =>
             f.acted = true
@@ -2432,13 +2506,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             else
                 f.log("changed control of the gate in", r, "to", u)
 
-            // Round 8 Bug 63: gaining/changing gate control is a zero-delta action
-            // (no unit movement), so the snapshot delta won't fire CG. Register
-            // it as a CG edge case so CG triggers when an enemy takes control of
-            // a gate in a region that contains FB Revenants/Ghatanothoa.
-            if (factions.has(FB))
-                fbCyclopeanGazeActionRegions :+= r
-
+            // Gate occupy/abandon are unlimited free actions (place/remove
+            // cultist on gate). They do NOT trigger CG — no unit movement occurs.
             Force(AdjustGateControlAction(f, true, then))
 
         case AbandonGateAction(f, r, then) =>
@@ -2448,11 +2517,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             f.abandoned :+= r
 
             f.log("abandoned gate in", r)
-
-            // Round 8 Bug 63: abandoning a gate is a zero-delta action; register
-            // as a CG edge case (same reason as ControlGateAction above).
-            if (factions.has(FB))
-                fbCyclopeanGazeActionRegions :+= r
 
             Force(AdjustGateControlAction(f, true, then))
 
@@ -2532,7 +2596,22 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (cost + t == 0)
                 u.add(MovedForFree)
 
+            // Track Ghato paid moves for anti-ping-pong
+            if (self == FB && u.uclass == Ghatanothoa && cost > 0)
+                fbGhatoLastMoveOrigin = Some(o)
+
             self.log("moved", u, "from", o, "to", r)
+
+            // Universal CG trigger: any non-FB unit moving into a region with
+            // an FB Revenant or Ghatanothoa must fire CG. The snapshot-delta
+            // path in FBExpansion can miss sub-chain moves (multi-move actions,
+            // unlimited BG Dark Young relocations, etc.); record the destination
+            // region unconditionally so FB's AfterAction picks it up via the
+            // fbCyclopeanGazeActionRegions list.
+            if (self != FB && factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze) &&
+                u.uclass.utype != Building &&
+                (FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any))
+                fbCyclopeanGazeActionRegions :+= r
 
             MovedAction(self, u, o, r)
 
@@ -2641,6 +2720,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             f.satisfy(CaptureCultist, "Capture Cultist")
 
+            // Round 8 Bug 76: capture is a zero-delta action for the capturing
+            // faction (their units don't move — only the captured cultist is
+            // relocated to the captor's prison). The snapshot-delta detector in
+            // FB's AfterAction handler sees no new enemy units in the CG region,
+            // so CG never fires. Register the region in the unified CG edge-case
+            // list — same pattern as BuildGateAction (Bug 54) and
+            // ControlGate/AbandonGate (Bug 63).
+            if (factions.has(FB))
+                fbCyclopeanGazeActionRegions :+= r
+
             if (effect.has(FromBelow).not)
                 f.all(Nyogtha)./(_.region).diff($(r)).foreach { x =>
                     return Force(CaptureMainAction(f, $(x), |(FromBelow)))
@@ -2726,6 +2815,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 self.payTax(r)
                 self.place(uc, r)
                 self.log("summoned", uc.styled(self), "in", r)
+
+                // Universal CG trigger: non-FB summon into a gaze region.
+                if (self != FB && factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze) &&
+                    uc.utype != Building &&
+                    (FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any))
+                    fbCyclopeanGazeActionRegions :+= r
 
                 SummonedAction(self, uc, r, $)
             }

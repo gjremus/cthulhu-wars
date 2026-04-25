@@ -172,6 +172,15 @@ case class FBInfernalPactDoomChooseAction(self : Faction, sb : Spellbook) extend
 case class FBInfernalPactDoomDoneAction(self : Faction) extends OptionFactionAction("Done".styled("power")) with Soft with PowerNeutral { def question(implicit game : Game) = "Infernal Pact" }
 case class FBInfernalPactDoomCancelAction(self : Faction) extends OptionFactionAction("Cancel " + "Infernal Pact".styled(FB)) with PowerNeutral { def question(implicit game : Game) = "Infernal Pact" }
 case class FBInfernalPactCancelDoomAction(self : Faction) extends OptionFactionAction("Cancel " + "Infernal Pact".styled(FB)) with DoomQuestion with PowerNeutral
+// Round 8 Bug 72: resume actions used as the `then` for CheckSpellbooksAction after
+// a flip satisfies FBTwoFacedownSpellbooks. CheckSpellbooksAction's `then` field is
+// typed as ForcedAction, but FBInfernalPactMainAction / FBInfernalPactDoomMainAction
+// are OptionFactionAction with Soft (menu-entry actions). These tiny wrappers bridge
+// the type gap: they're ForcedAction (so CheckSpellbooksAction accepts them) and
+// Soft (pure navigation — their handler just Force-re-enters the corresponding
+// IP sub-menu).
+case class FBInfernalPactResumeAction(self : Faction) extends ForcedAction with Soft
+case class FBInfernalPactDoomResumeAction(self : Faction) extends ForcedAction with Soft
 
 // ── AWAKEN GHATANOTHOA ── Cost is 11 minus current Ritual cost; placed in start area, no gate needed
 case class FBAwakenGhatanothoaAction(self : Faction, cost : Int) extends OptionFactionAction(
@@ -240,13 +249,34 @@ case class FBCyclopeanGazeBattleDoneAction(self : Faction) extends ForcedAction 
 
 // ── DEVIL'S MARK ACTIONS ── Doom phase: place Crater on controlled gate (land only), gain ES, destroy gates
 // Bug fix: Devil's Mark must NOT be Soft. Soft actions are not recorded in the undo log,
-// and Devil's Mark triggers state changes (place crater, destroy gate, take ES, gain power).
-// If marked Soft, undoing across the doom phase loses the state changes and breaks subsequent rituals.
+// and making the menu opener Soft caused a 300-game regression (doom 20→12, rituals 3.8→1.7).
+// Reverted to Hard. The Cancel-button bug is fixed via a different mechanism below.
 case class FBDevilsMarkDoomAction(self : Faction) extends OptionFactionAction("Devil's Mark".styled(FB)) with DoomQuestion with PowerNeutral
 case class FBDevilsMarkChooseRegionAction(self : Faction, regions : $[Region]) extends ForcedAction with PowerNeutral
+// Round 9 Fix 4: dynamic label shows the power bonus preview when the target
+// region has a faction glyph. Crater placement in a glyph region grants power
+// equal to (current crater count + 1) per FBDevilsMarkPlaceCraterAction handler.
 case class FBDevilsMarkPlaceCraterAction(self : Faction, r : Region) extends BaseFactionAction(
-    "Devil's Mark".styled(FB) + ": place Crater in", r
+    "Devil's Mark".styled(FB) + ": place Crater in",
+    implicit g => {
+        val hasGlyph = g.factions.exists(f => g.starting.get(f).has(r))
+        if (hasGlyph) {
+            val preview = g.fbCraters.num + 1 // crater count AFTER placing this one
+            r.toString + " with faction glyph +" + preview.toString + " power"
+        }
+        else
+            r.toString
+    }
 ) with PowerNeutral
+
+// Custom cancel for the DM region picker: Soft so the continue cache is
+// not updated when it fires, returns Force(DoomAction(self)) so the player
+// is taken back to the doom-phase menu. The built-in `.cancel` on the Ask
+// DSL returns the cached prior state — but because FBDevilsMarkDoomAction
+// itself is Hard (must be Hard to record state-mutating crater placement
+// for undo), that cached state is the region picker itself, so the built-in
+// cancel loops.
+case class FBDevilsMarkDoomCancelAction(self : Faction) extends OptionFactionAction("Cancel " + "Devil's Mark".styled(FB)) with DoomQuestion with Soft with PowerNeutral
 
 // ── CALL OF THE FAITHFUL ACTIONS ── Free action: place Acolyte from pool in area with Ghatanothoa/Revenant
 case class FBCallOfTheFaithfulMainAction(self : Faction) extends OptionFactionAction(CallOfTheFaithful) with MainQuestion with Soft with PowerNeutral
@@ -334,6 +364,14 @@ object FBExpansion extends Expansion {
                 f.log("Gate in", r, "immediately destroyed by", "Crater".styled(FB))
             }
             game.gates = game.gates.but(r)
+            // Round 8 Bug 74: clear `onGate` on any units in this region so
+            // menu rendering doesn't still label them as "on the gate" after
+            // the gate is destroyed. Same reasoning as the fix in
+            // FBDevilsMarkPlaceCraterAction — the gate no longer exists, so
+            // nobody can be "on" it.
+            game.factions.foreach { f =>
+                f.at(r).%(_.onGate).foreach(_.onGate = false)
+            }
         }
     }
 
@@ -413,16 +451,17 @@ object FBExpansion extends Expansion {
     // Effective cost after Infernal Pact discount
     def effectiveCost(baseCost : Int)(implicit game : Game) : Int = max(0, baseCost - game.fbInfernalPactDiscount)
 
-    // Consume Infernal Pact discount for an action cost
-    // Infernal Pact discount is now added as real power when activated.
-    // This function just tracks how much discount has been used and logs it.
-    // Returns the full baseCost (power deduction handles it since discount is in power).
+    // Round 8 Bug 75: Infernal Pact discount is now a SEPARATE pool from power.
+    // consumeDiscount returns the amount of discount used (0..baseCost). Callers
+    // deduct the REMAINDER from real power: `self.power -= (baseCost - discountUsed)`.
+    // This is the "separate pool" contract: discount is spent first, real power
+    // covers the rest.
     def consumeDiscount(baseCost : Int)(implicit game : Game) : Int = {
-        val discount = min(game.fbInfernalPactDiscount, baseCost)
-        game.fbInfernalPactDiscount -= discount
-        if (discount > 0)
-            FB.log("Infernal Pact".styled(FB), "discounted", discount.power)
-        baseCost
+        val used = min(game.fbInfernalPactDiscount, baseCost)
+        game.fbInfernalPactDiscount -= used
+        if (used > 0)
+            FB.log("Infernal Pact".styled(FB), "discounted", used.power)
+        used
     }
 
 
@@ -437,6 +476,16 @@ object FBExpansion extends Expansion {
         case DoomAction(f) if f == FB =>
             implicit val asking = Asking(f)
 
+            // Round 8 Bug 75 (doom phase): transient IP boost around offer checks.
+            // Same pattern as the main-phase handlers. game.rituals(f) checks
+            // `f.power >= cost` directly and doesn't know about the IP discount
+            // pool, so without this boost an IP discount cannot unlock a ritual
+            // the faction couldn't otherwise afford (e.g. 9 power + 1 discount
+            // should unlock a 10-power ritual). Restored before return.
+            val ipBoost = game.fbInfernalPactDiscount
+            if (ipBoost > 0)
+                f.power += ipBoost
+
             game.rituals(f)
 
             // Bug fix Round 4 (Bug 4): Infernal Pact must also be offered in the doom phase so the
@@ -446,15 +495,9 @@ object FBExpansion extends Expansion {
             // separately if there's an active discount, mirroring the main-action UI.
             // Bug fix Round 6: only show cancel if there's an active discount to cancel
             // Round 8 Bug 66: ALSO require !f.acted so cancel disappears after a ritual is enacted.
-            // Without this check, FB could flip e.g. 4 spellbooks (discount=4), perform a ritual
-            // costing 2 (consumes 2 of the discount → discount=2), then click Cancel to refund
-            // the leftover 2 power AND unflip ALL 4 spellbooks — getting both the ritual discount
-            // and all the spellbooks back. Once a ritual is enacted, the IP context is committed
-            // for the rest of this doom phase, regardless of whether discount remains.
             if (game.fbInfernalPactDiscount > 0 && !f.acted)
                 + FBInfernalPactCancelDoomAction(f)
             // Bug fix Round 6: only show Infernal Pact if faction hasn't acted yet (no ritual enacted).
-            // After a ritual, f.acted is true and offering more discounts is pointless.
             if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && faceUpSpellbooks.any && !f.acted)
                 + FBInfernalPactDoomMainAction(f)
 
@@ -473,12 +516,24 @@ object FBExpansion extends Expansion {
 
             + DoomDoneAction(f)
 
+            if (ipBoost > 0)
+                f.power -= ipBoost
+
             asking
 
         // ── DEVIL'S MARK ──
         case FBDevilsMarkDoomAction(self) =>
             val landGates = self.gates.%(r => r.glyph != Ocean)
-            Ask(self).each(landGates)(r => FBDevilsMarkPlaceCraterAction(self, r)).cancel
+            implicit val asking = Asking(self)
+            landGates.foreach(r => + FBDevilsMarkPlaceCraterAction(self, r))
+            + FBDevilsMarkDoomCancelAction(self)
+            asking
+
+        case FBDevilsMarkDoomCancelAction(self) =>
+            // Just return to the doom-phase menu; no state changes. Soft
+            // means this action is not added to the continue cache, so the
+            // DoomAction(self) Force takes the player back cleanly.
+            Force(DoomAction(self))
 
         case FBDevilsMarkPlaceCraterAction(self, r) =>
             // Mark Devil's Mark as used this doom phase
@@ -490,6 +545,21 @@ object FBExpansion extends Expansion {
             // (same pattern as Ancients' Cathedral using game.cathedrals)
             game.fbCraters :+= r
             self.log("placed", "Crater".styled(FB), "in", r, "with", "Devil's Mark".styled(FB))
+
+            // Round 8 Bug 74: clear `onGate` on any units at this region BEFORE
+            // removing the gate. When the gate is destroyed by the crater, no
+            // unit is "on the gate" anymore — the gate doesn't exist. Without
+            // this update, the Acolyte (or HP) that controlled the destroyed
+            // gate still has `u.onGate = true`, and menus render it as
+            // "Acolyte (on the gate)" which is wrong (the gate is gone).
+            // Iterate all factions to be safe — normally only FB has onGate
+            // units at its own controlled gate, but this is cheap.
+            // Because FBDevilsMarkPlaceCraterAction is Hard (not Soft), undo
+            // replay reconstructs the pre-action state, so the `onGate` reset
+            // is reversed correctly.
+            game.factions.foreach { f =>
+                f.at(r).%(_.onGate).foreach(_.onGate = false)
+            }
 
             // Remove gate from both faction gates AND global game gates
             self.gates = self.gates.but(r)
@@ -517,8 +587,64 @@ object FBExpansion extends Expansion {
         case MainAction(f) if f == FB && f.active.not =>
             UnknownContinue
 
+        // Round 8: post-acted FB main menu. Call of the Faithful is an UNLIMITED
+        // action — it must be available BEFORE and AFTER any standard main action
+        // during the action phase. Mirrors BG's post-acted handler pattern
+        // (FactionBG.scala:133-147) which injects `game.summons(f)` for BG's
+        // unlimited summons. Without this override, FB's post-acted handler would
+        // fall through to Game.scala's generic `case MainAction(f) if f.acted`
+        // (Game.scala:2278) which only offers controls / battles (if allSB) /
+        // reveals / endTurn — CoF would be inaccessible after FB's main action.
+        //
+        // The CoF gate check is identical to the pre-acted handler's (line 576)
+        // so the action is offered symmetrically. Because the handler re-renders
+        // on every MainAction re-entry, CoF becomes immediately available in the
+        // same action-phase turn where it's earned via CheckSpellbooksAction.
         case MainAction(f) if f == FB && f.acted =>
-            UnknownContinue
+            implicit val asking = Asking(f)
+
+            // Round 8 Bug 75: transient IP boost — same pattern as the pre-acted
+            // handler. Post-acted unlimited actions (like CoF) don't cost power,
+            // but battles-if-allSB and gate control might, and future unlimited
+            // actions could. The boost ensures all offer checks in this block see
+            // f.power as "real + discount". Restored before return.
+            val ipBoost = game.fbInfernalPactDiscount
+            if (ipBoost > 0)
+                f.power += ipBoost
+
+            game.controls(f)
+
+            if (f.hasAllSB)
+                game.battles(f)
+
+            // Post-main IP: when FB has all 6 spellbooks and unlimited battles
+            // are available, FB can flip SBs to discount the battle cost. The
+            // pre-main IP session's flips are now committed (via EndAction
+            // commit hook), so any cancel here only reverses post-main flips.
+            if (f.hasAllSB && faceUpSpellbooks.any && game.fbInfernalPactDiscount == game.fbInfernalPactCommittedDiscount) {
+                // Only show "enter new IP session" when there's no pending
+                // uncommitted state — prevents double-entry confusion.
+                + FBInfernalPactMainAction(f)
+            }
+            // Cancel only available if there's post-commit discount to cancel
+            if (game.fbInfernalPactDiscount > game.fbInfernalPactCommittedDiscount)
+                + FBInfernalPactCancelMainAction(f)
+
+            // Call of the Faithful (Unlimited, Cost 0) — available post-action
+            if (f.has(CallOfTheFaithful) && !FB.oncePerGame.has(CallOfTheFaithful) && f.pool(Acolyte).any) {
+                val eligible = areas.%(r => (f.at(r, Ghatanothoa).any || f.at(r, RevenantOfKnaa).any) && f.at(r, Acolyte).none)
+                if (eligible.any)
+                    + FBCallOfTheFaithfulMainAction(f)
+            }
+
+            game.reveals(f)
+
+            game.endTurn(f)(true)
+
+            if (ipBoost > 0)
+                f.power -= ipBoost
+
+            asking
 
         case MainAction(f) if f == FB =>
             implicit val asking = Asking(f)
@@ -535,6 +661,17 @@ object FBExpansion extends Expansion {
             if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && faceUpSpellbooks.any && !f.acted)
                 + FBInfernalPactMainAction(f)
 
+            // ── Round 8 Bug 75: Transient power boost for offer checks ──
+            // IP discount is a separate pool; game.moves/captures/recruits/etc.
+            // check f.power >= cost directly and don't know about the discount.
+            // Temporarily add the discount to f.power so offer checks see effective
+            // purchasing power, then restore at the end of the block. The boost is
+            // scoped entirely within this synchronous menu-building block — no
+            // other handler runs in between, so the boost can't leak.
+            val ipBoost = game.fbInfernalPactDiscount
+            if (ipBoost > 0)
+                f.power += ipBoost
+
             game.moves(f)
 
             game.captures(f)
@@ -549,23 +686,21 @@ object FBExpansion extends Expansion {
 
             game.summons(f)
 
-            // Awaken Ghatanothoa - special: no gate required, appears in start area
+            // Awaken Ghatanothoa - special: no gate required, appears in start area.
+            // Inside the transient-boost scope so f.power already reflects effective power.
             val awakenCost = max(1, 11 - game.ritualCost)
-            val effectiveAwakenCost = effectiveCost(awakenCost)
-            if (f.pool(Ghatanothoa).any && f.power + game.fbInfernalPactDiscount >= awakenCost)
+            if (f.pool(Ghatanothoa).any && f.power >= awakenCost)
                 + FBAwakenGhatanothoaAction(f, awakenCost)
 
             game.independents(f)
 
-            // Writhe (Cost 2)
-            val writheCost = effectiveCost(2)
-            if (f.power >= writheCost || (game.fbInfernalPactDiscount > 0 && f.power + game.fbInfernalPactDiscount >= 2))
+            // Writhe (Cost 2) — inside boost scope, so f.power already includes discount
+            if (f.power >= 2)
                 + FBWritheMainAction(f)
 
             // The Eye Opens (Cost 1)
             if (f.has(TheEyeOpens) && !FB.oncePerGame.has(TheEyeOpens)) {
-                val eyeCost = effectiveCost(1)
-                if (f.power >= eyeCost || game.fbInfernalPactDiscount >= 1) {
+                if (f.power >= 1) {
                     val eligible = areas.%(r => f.at(r, Desiccated).any && f.enemies.exists(_.at(r).%(_.uclass.utype == Cultist).any))
                     if (eligible.any)
                         + FBTheEyeOpensMainAction(f)
@@ -588,12 +723,24 @@ object FBExpansion extends Expansion {
 
             game.endTurn(f)(f.battled.any)
 
+            // Round 8 Bug 75: restore the transient IP boost. The offer-building
+            // block above saw f.power = real + discount so game.*(f) and the
+            // FB-specific checks worked. After the menu is built, real power is
+            // restored so that subsequent handlers (when the user picks an action)
+            // see the pre-boost value. When they DO pick a cost-bearing action,
+            // FBExpansion's action intercepts re-apply the boost right before the
+            // base handler deducts cost — guaranteeing the discount is spent
+            // before real power.
+            if (ipBoost > 0)
+                f.power -= ipBoost
+
             asking
 
         // ── AWAKEN GHATANOTHOA ──
         case FBAwakenGhatanothoaAction(self, cost) =>
-            val actualCost = consumeDiscount(cost)
-            self.power -= actualCost
+            // Round 8 Bug 75: pay from discount first, then power.
+            val discountUsed = consumeDiscount(cost)
+            self.power -= (cost - discountUsed)
             val startArea = game.starting(FB)
             self.place(Ghatanothoa, startArea)
             game.fbGhatnothoaAwakenings += 1
@@ -622,10 +769,16 @@ object FBExpansion extends Expansion {
         // Infernal Pact discount is gated by game.fbInfernalPactDiscount, which is 0
         // for non-FB. All three cases are safe — no special non-FB handling needed.
         case FBWritheMainAction(self) =>
+            // Round 8 Bug 75: Writhe dice count is based on REAL power BEFORE spending.
+            // Previously, flipping spellbooks added fake power to `self.power`, so the
+            // "power before spending" figure included the fake discount. Now discount
+            // is a separate pool: capture `self.power` first (real power, untouched by
+            // discount), then pay from discount + power, then roll dice based on the
+            // captured real-power-before-spending figure.
             val writheCost = 2
-            val actualCost = consumeDiscount(writheCost)
-            self.power -= actualCost
-            val numDice = self.power + actualCost  // dice = power before spending
+            val numDice = self.power  // capture REAL power before spending
+            val discountUsed = consumeDiscount(writheCost)
+            self.power -= (writheCost - discountUsed)
             game.fbWritheRerolled = false
             game.fbWritheUsedUnits = $
             // Bug fix Round 6: reset Writhe "join" tracking at start of each Writhe activation
@@ -884,19 +1037,41 @@ object FBExpansion extends Expansion {
                 Force(MainAction(self))
 
         case FBInfernalPactChooseAction(self, sb) =>
-            // On first flip this turn, snapshot starting power so end-of-turn can remove
-            // only unspent discount (allowing "spent" discount to persist as used power).
-            if (game.fbInfernalPactStartPower < 0)
+            // Round 8 Bug 75: IP discount is now a SEPARATE counter — NOT added to
+            // self.power. This stops Writhe from reading inflated power when dice
+            // are rolled. Flipping a spellbook only increments `fbInfernalPactDiscount`.
+            // Spending it happens via the "transient boost" intercepts on cost-bearing
+            // actions (which pre-add the consumed discount to power right before the
+            // base handler deducts cost, so net power = original - (cost - consumed)).
+            //
+            // Snapshot spellbooks + unfulfilled on the first flip so Cancel (Bug 72)
+            // can still revert any spellbook awarded mid-session.
+            if (game.fbInfernalPactStartPower < 0) {
                 game.fbInfernalPactStartPower = self.power
+                game.fbInfernalPactSpellbooksBeforeSession = self.spellbooks
+                game.fbInfernalPactUnfulfilledBeforeSession = self.unfulfilled
+            }
             flipSpellbookDown(sb)
             game.fbInfernalPactDiscount += 1
-            game.fbInfernalPactPowerAdded += 1
-            // Add discount as real power so core game action checks see it
-            // (otherwise actions that would take power to 0 trigger end-of-turn before discount applies)
-            self.power += 1
             game.fbInfernalPactFlipped :+= sb
             self.log("Infernal Pact".styled(FB) + ": flipped", sb.name.styled(FB), "facedown, discount now", game.fbInfernalPactDiscount.power)
-            // Return to Infernal Pact sub menu
+            // Round 8 Bug 72: check FBTwoFacedownSpellbooks IMMEDIATELY so the player
+            // can flip the newly-earned spellbook in the same IP session.
+            // Previously this check only ran at EndTurnAction / DoomDoneAction, so
+            // the spellbook earned by the 2nd facedown was not available until next
+            // turn. Now we satisfy the requirement here and wrap the return in
+            // CheckSpellbooksAction — the game will prompt FB to pick the new
+            // spellbook before re-entering the IP sub-menu. The new spellbook is
+            // immediately in FB.spellbooks (not in oncePerGame), so faceUpSpellbooks
+            // includes it and FB can flip it for more discount. If FB later cancels,
+            // the snapshot restore in the Cancel handlers reverts the spellbook.
+            if (self.needs(FBTwoFacedownSpellbooks) && faceDownCount >= 2)
+                self.satisfy(FBTwoFacedownSpellbooks, "2 Facedown Spellbooks")
+            // Return via CheckSpellbooksAction so any newly-satisfied requirement
+            // prompts a spellbook pick before returning to the IP sub-menu.
+            CheckSpellbooksAction(FBInfernalPactResumeAction(self))
+
+        case FBInfernalPactResumeAction(self) =>
             Force(FBInfernalPactMainAction(self))
 
         case FBInfernalPactDoneAction(self) =>
@@ -904,32 +1079,46 @@ object FBExpansion extends Expansion {
             Force(MainAction(self))
 
         case FBInfernalPactCancelAction(self) =>
-            // Undo all flips and restore power to before this Infernal Pact activation
+            // Undo flips from the CURRENT (post-commit) session only. Any
+            // flips committed at main-action time stay flipped, and the
+            // committed discount floor is preserved.
             game.fbInfernalPactFlipped.foreach { sb =>
                 flipSpellbookUp(sb)
             }
-            self.power -= game.fbInfernalPactDiscount
-            if (self.power < 0) self.power = 0
-            game.fbInfernalPactDiscount = 0
-            game.fbInfernalPactPowerAdded = 0
+            if (game.fbInfernalPactStartPower >= 0) {
+                self.spellbooks = game.fbInfernalPactSpellbooksBeforeSession
+                self.unfulfilled = game.fbInfernalPactUnfulfilledBeforeSession
+            }
+            // Reset discount to the committed floor (not zero).
+            game.fbInfernalPactDiscount = game.fbInfernalPactCommittedDiscount
             game.fbInfernalPactStartPower = -1
             game.fbInfernalPactFlipped = $
+            game.fbInfernalPactSpellbooksBeforeSession = $
+            game.fbInfernalPactUnfulfilledBeforeSession = $
             self.log("Cancelled", "Infernal Pact".styled(FB))
             Force(MainAction(self))
 
+        // (doom-phase cancels use committed floor too)
+
         case FBInfernalPactCancelMainAction(self) =>
-            // Cancel from main menu — restore power to before Infernal Pact activation
+            // Same logic as FBInfernalPactCancelAction. Round 8 Bug 75: no power
+            // refund (discount never touched power).
             game.fbInfernalPactFlipped.foreach { sb =>
                 flipSpellbookUp(sb)
             }
-            self.power -= game.fbInfernalPactDiscount
-            if (self.power < 0) self.power = 0
-            game.fbInfernalPactDiscount = 0
-            game.fbInfernalPactPowerAdded = 0
+            if (game.fbInfernalPactStartPower >= 0) {
+                self.spellbooks = game.fbInfernalPactSpellbooksBeforeSession
+                self.unfulfilled = game.fbInfernalPactUnfulfilledBeforeSession
+            }
+            game.fbInfernalPactDiscount = game.fbInfernalPactCommittedDiscount
             game.fbInfernalPactStartPower = -1
             game.fbInfernalPactFlipped = $
+            game.fbInfernalPactSpellbooksBeforeSession = $
+            game.fbInfernalPactUnfulfilledBeforeSession = $
             self.log("Cancelled", "Infernal Pact".styled(FB))
             Force(MainAction(self))
+
+        // (doom-phase cancels use committed floor too)
 
         // Bug fix Round 4 (Bug 4): doom-phase Infernal Pact handlers. Mirror the main-action
         // versions exactly except for the return path — Done/Cancel route to DoomAction(self)
@@ -951,14 +1140,22 @@ object FBExpansion extends Expansion {
                 Force(DoomAction(self))
 
         case FBInfernalPactDoomChooseAction(self, sb) =>
-            if (game.fbInfernalPactStartPower < 0)
+            // Round 8 Bug 75: same separate-pool treatment as the main-action variant.
+            // Flipping only increments the discount counter; power is untouched.
+            if (game.fbInfernalPactStartPower < 0) {
                 game.fbInfernalPactStartPower = self.power
+                game.fbInfernalPactSpellbooksBeforeSession = self.spellbooks
+                game.fbInfernalPactUnfulfilledBeforeSession = self.unfulfilled
+            }
             flipSpellbookDown(sb)
             game.fbInfernalPactDiscount += 1
-            game.fbInfernalPactPowerAdded += 1
-            self.power += 1
             game.fbInfernalPactFlipped :+= sb
             self.log("Infernal Pact".styled(FB) + ": flipped", sb.name.styled(FB), "facedown, discount now", game.fbInfernalPactDiscount.power)
+            if (self.needs(FBTwoFacedownSpellbooks) && faceDownCount >= 2)
+                self.satisfy(FBTwoFacedownSpellbooks, "2 Facedown Spellbooks")
+            CheckSpellbooksAction(FBInfernalPactDoomResumeAction(self))
+
+        case FBInfernalPactDoomResumeAction(self) =>
             Force(FBInfernalPactDoomMainAction(self))
 
         case FBInfernalPactDoomDoneAction(self) =>
@@ -966,48 +1163,64 @@ object FBExpansion extends Expansion {
             Force(DoomAction(self))
 
         case FBInfernalPactDoomCancelAction(self) =>
-            // Cancel from sub-menu - restore power to before Infernal Pact activation
+            // Revert only current session flips; preserve committed floor.
             game.fbInfernalPactFlipped.foreach { sb =>
                 flipSpellbookUp(sb)
             }
-            self.power -= game.fbInfernalPactDiscount
-            if (self.power < 0) self.power = 0
-            game.fbInfernalPactDiscount = 0
-            game.fbInfernalPactPowerAdded = 0
+            if (game.fbInfernalPactStartPower >= 0) {
+                self.spellbooks = game.fbInfernalPactSpellbooksBeforeSession
+                self.unfulfilled = game.fbInfernalPactUnfulfilledBeforeSession
+            }
+            game.fbInfernalPactDiscount = game.fbInfernalPactCommittedDiscount
             game.fbInfernalPactStartPower = -1
             game.fbInfernalPactFlipped = $
+            game.fbInfernalPactSpellbooksBeforeSession = $
+            game.fbInfernalPactUnfulfilledBeforeSession = $
             self.log("Cancelled", "Infernal Pact".styled(FB))
             Force(DoomAction(self))
 
         case FBInfernalPactCancelDoomAction(self) =>
-            // Cancel from doom main menu - restore power to before Infernal Pact activation
+            // Revert only current session flips; preserve committed floor.
             game.fbInfernalPactFlipped.foreach { sb =>
                 flipSpellbookUp(sb)
             }
-            self.power -= game.fbInfernalPactDiscount
-            if (self.power < 0) self.power = 0
-            game.fbInfernalPactDiscount = 0
-            game.fbInfernalPactPowerAdded = 0
+            if (game.fbInfernalPactStartPower >= 0) {
+                self.spellbooks = game.fbInfernalPactSpellbooksBeforeSession
+                self.unfulfilled = game.fbInfernalPactUnfulfilledBeforeSession
+            }
+            game.fbInfernalPactDiscount = game.fbInfernalPactCommittedDiscount
             game.fbInfernalPactStartPower = -1
             game.fbInfernalPactFlipped = $
+            game.fbInfernalPactSpellbooksBeforeSession = $
+            game.fbInfernalPactUnfulfilledBeforeSession = $
             self.log("Cancelled", "Infernal Pact".styled(FB))
             Force(DoomAction(self))
 
+        // ── COMMIT IP FLIPS ON MAIN-ACTION FINISH ──
+        // When FB's main action completes (EndAction / AfterAction reached),
+        // any flipped SBs from the pre-main IP session must become
+        // non-cancelable — a subsequent post-main IP cancel should NOT undo
+        // them. Snapshot the current discount as the committed floor and
+        // clear the flipped list so the new session starts fresh.
+        case EndAction(self) if self == FB && (game.fbInfernalPactFlipped.any || game.fbInfernalPactCommittedDiscount != game.fbInfernalPactDiscount) =>
+            game.fbInfernalPactCommittedDiscount = game.fbInfernalPactDiscount
+            game.fbInfernalPactFlipped = $
+            game.fbInfernalPactStartPower = -1
+            game.fbInfernalPactSpellbooksBeforeSession = $
+            game.fbInfernalPactUnfulfilledBeforeSession = $
+            UnknownContinue
+
         // ── END TURN: reset Infernal Pact and check gate requirement ──
         case EndTurnAction(self) if self == FB =>
-            // Infernal Pact cleanup: discount applies ONLY during this turn.
-            // Spent discount was already consumed via action costs; any unspent discount
-            // is removed here. Math: final power = min(current, starting_before_pact).
-            // This preserves discount that was spent (current < starting) but removes
-            // unspent discount (current > starting → clamp to starting).
-            if (game.fbInfernalPactPowerAdded > 0 && game.fbInfernalPactStartPower >= 0) {
-                self.power = min(self.power, game.fbInfernalPactStartPower)
-                if (self.power < 0) self.power = 0
-            }
+            // Round 8 Bug 75: Infernal Pact discount is a separate pool from power.
+            // No power clamp is needed — power was never boosted. Just zero the
+            // session state. Any unused discount is simply discarded.
             game.fbInfernalPactDiscount = 0
-            game.fbInfernalPactPowerAdded = 0
+            game.fbInfernalPactCommittedDiscount = 0
             game.fbInfernalPactStartPower = -1
             game.fbInfernalPactFlipped = $
+            game.fbInfernalPactSpellbooksBeforeSession = $
+            game.fbInfernalPactUnfulfilledBeforeSession = $
             // Check Most Doom OR More Gates at end of turn (not mid-turn)
             // Bug fix Round 3: delegate to FBExpansion.checkMostDoomOrGates so the exact same
             // condition is also applied from DoomPhaseAction and DoomDoneAction (see Game.scala).
@@ -1021,10 +1234,10 @@ object FBExpansion extends Expansion {
 
         // ── THE EYE OPENS ──
         case FBTheEyeOpensMainAction(self) =>
-            // Pay cost first
+            // Round 8 Bug 75: pay from discount first, then power.
             val eyeCost = 1
-            val actualCost = consumeDiscount(eyeCost)
-            self.power -= actualCost
+            val discountUsed = consumeDiscount(eyeCost)
+            self.power -= (eyeCost - discountUsed)
 
             val eligible = areas./~{ r =>
                 if (self.at(r, Desiccated).any) {
@@ -1072,8 +1285,41 @@ object FBExpansion extends Expansion {
             Ask(self).each(eligible)(r => FBCallOfTheFaithfulAction(self, r)).cancel
 
         case FBCallOfTheFaithfulAction(self, r) =>
+            // Snapshot the pool acolyte BEFORE placing so we have a reliable
+            // reference (self.at(r, Acolyte).last was fragile when the menu
+            // re-renders and multiple acolytes are at r).
+            val placed = self.pool(Acolyte).first
             self.place(Acolyte, r)
-            self.log(CallOfTheFaithful.styled(FB) + ": placed Acolyte in", r)
+            // If the region has a gate and no faction has a keeper on it, the
+            // placed Acolyte should IMMEDIATELY claim the gate — matching the
+            // hand-play rule "placing a cultist on a free gate claims that
+            // gate". Mirror ControlGateAction: set onGate, add region to
+            // self.gates, clear from abandoned. Without this, the game is
+            // left in a state where gate exists, acolyte is in the region,
+            // but nothing is on the gate tile, which triggers the
+            // AdjustGateControl menu next cycle even when GateDiplomacy is
+            // off. ALSO: unconditionally run checkGatesGained at the end so
+            // any missed edge case (e.g., the placed acolyte's onGate was
+            // reset by a subsequent step) gets caught by the standard
+            // game-level gate-gain sweep.
+            val gateHere = game.gates.has(r)
+            val noGateKeeper = game.factions.%(_.at(r).%(_.onGate).any).none
+            if (gateHere && noGateKeeper) {
+                self.at(r).foreach(_.onGate = false)
+                placed.onGate = true
+                if (!self.gates.has(r)) {
+                    self.gates :+= r
+                    self.abandoned :-= r
+                    game.factions.foreach(_.abandoned :-= r)
+                }
+                self.log(CallOfTheFaithful.styled(FB) + ": placed Acolyte and took control of the gate in", r)
+            }
+            else
+                self.log(CallOfTheFaithful.styled(FB) + ": placed Acolyte in", r)
+            // Backstop: if the standard checkGatesGained sweep would have
+            // claimed the gate, run it now so state is consistent even if
+            // the conditions above didn't fire (defensive layer).
+            game.checkGatesGained(self)
             // Round 8 bug fix (Bug 39): Call of the Faithful is an unlimited action —
             // it does not consume the turn or count as the faction's action. Return to
             // MainAction so the player can continue taking actions (same pattern as
@@ -1093,6 +1339,8 @@ object FBExpansion extends Expansion {
         // turn) and compare against the post-action count. Restricting the snapshot hook to PreMainAction
         // ensures Cyclopean Gaze only fires during the action phase, never during the doom phase.
         case PreMainAction(f) if f != FB && game.factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze) =>
+            // Clear stale entries from doom phase (Death March, etc.)
+            game.fbCyclopeanGazeActionRegions = $
             val gazeRegions = areas.%(r => FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any)
             game.fbCyclopeanGazeSnapshot = (for {
                 r <- gazeRegions
@@ -1151,14 +1399,6 @@ object FBExpansion extends Expansion {
             //   - AN BuildCathedralAction
             val edgeCaseRegions : $[Region] = game.fbCyclopeanGazeActionRegions.distinct
             game.fbCyclopeanGazeActionRegions = $
-            val edgeCaseSources : $[(Region, UnitClass)] = edgeCaseRegions./~ { r =>
-                if (gazeRegions.has(r) && actor.at(r).%(_.uclass.utype != Building).any) {
-                    val sourceUnits : $[UnitClass] =
-                        FB.at(r, RevenantOfKnaa).num.times(RevenantOfKnaa : UnitClass) ++
-                        FB.at(r, Ghatanothoa).num.times(Ghatanothoa : UnitClass)
-                    sourceUnits./((r, _))
-                } else $
-            }
 
             // Standard snapshot delta check for movement/summoning/placement actions.
             //
@@ -1177,7 +1417,7 @@ object FBExpansion extends Expansion {
             // every non-FB faction and trigger CG if any of them had units arrive in a
             // gaze region. Snapshots are updated for all factions (not just actor) to
             // prevent re-entry double-counting.
-            val moveSources : $[(Region, UnitClass)] = gazeRegions./~ { r =>
+            val moveTriggeredRegions : $[Region] = gazeRegions.%{ r =>
                 // Check all non-FB factions for arrivals in this gaze region
                 var anyArrived = false
                 game.factions.but(FB).foreach { ef =>
@@ -1191,21 +1431,33 @@ object FBExpansion extends Expansion {
                             anyArrived = true
                     }
                 }
-                if (anyArrived) {
-                    val sourceUnits : $[UnitClass] =
-                        FB.at(r, RevenantOfKnaa).num.times(RevenantOfKnaa : UnitClass) ++
-                        FB.at(r, Ghatanothoa).num.times(Ghatanothoa : UnitClass)
-                    // Each source (Revenant/Ghatanothoa) causes exactly 1 pain regardless
-                    // of how many enemy units arrived — do NOT cap at the arrival count
-                    sourceUnits./((r, _))
-                } else $
+                anyArrived
             }
 
-            val sources = edgeCaseSources ++ moveSources
-            if (sources.any)
-                Force(FBCyclopeanGazePhaseAction(FB, actor, sources, fromBattle = false))
-            else
-                UnknownContinue
+            // Bug fix 2026-04-16 (CG double-trigger): a move into a gaze region registers
+            // BOTH a delta (moveTriggeredRegions) AND gets appended to
+            // fbCyclopeanGazeActionRegions via the Region setter in Game.scala:220-226.
+            // Without dedup, edgeCaseSources + moveSources would each produce 1 source
+            // per Rev/Ghato for the SAME region event, causing CG to trigger twice for
+            // one move. Fix: compute the union of trigger regions (dedup), then emit
+            // sources once per unique region.
+            val triggerRegions : $[Region] = (moveTriggeredRegions ++
+                edgeCaseRegions.%(r => gazeRegions.has(r) && actor.at(r).%(_.uclass.utype != Building).any)).distinct
+
+            val sources : $[(Region, UnitClass)] = triggerRegions./~ { r =>
+                val sourceUnits : $[UnitClass] =
+                    FB.at(r, RevenantOfKnaa).num.times(RevenantOfKnaa : UnitClass) ++
+                    FB.at(r, Ghatanothoa).num.times(Ghatanothoa : UnitClass)
+                // Each source (Revenant/Ghatanothoa) causes exactly 1 pain regardless
+                // of how many enemy units arrived — do NOT cap at the arrival count
+                sourceUnits./((r, _))
+            }
+            // Two-pass CG: store sources for Game.scala to fire AFTER triggers()/SBRs
+            if (sources.any) {
+                game.fbCyclopeanGazePendingSources = sources
+                game.fbCyclopeanGazePendingActor = Some(actor)
+            }
+            UnknownContinue
 
         case FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle) =>
             // Bug fix Round 4: pop one (region, sourceUnit) per step and dispatch a single pain.
@@ -1343,6 +1595,99 @@ object FBExpansion extends Expansion {
             UnknownContinue
 
         case FBAuguryBattleCancelAction(self) =>
+            UnknownContinue
+
+        // ── Round 8 Bug 75: FB cost-bearing action intercepts (transient boost) ──
+        // IP discount is a separate pool from power. Shared cost-bearing actions
+        // in Game.scala (RitualAction, BuildGateAction, RecruitAction, SummonAction,
+        // MoveAction, AttackAction) do `f.power -= cost` directly and don't know
+        // about the discount pool. To make FB pay from discount FIRST, we intercept
+        // each action in FBExpansion, consume discount up to `cost`, pre-add the
+        // consumed amount to `f.power` as a transient boost, and return
+        // UnknownContinue so the base handler's `f.power -= cost` runs. Net result:
+        //     f.power = original + consumed - cost = original - (cost - consumed)
+        // i.e. FB paid `cost - consumed` from real power, with `consumed` coming
+        // from the discount pool.
+        //
+        // The guard `game.fbInfernalPactDiscount > 0` is the only condition —
+        // when there's no discount the base handler runs unchanged. Each
+        // intercept logs the consumed amount for traceability.
+        //
+        // Generic helper captured locally (can't be a class method because it
+        // needs to appear inside the case-match flow).
+        case RitualAction(f, cost, k) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val consumed = min(game.fbInfernalPactDiscount, cost)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on ritual")
+            UnknownContinue
+
+        case BuildGateAction(f, r) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val baseCost = 3 - f.has(UmrAtTawil).??(1)
+            val consumed = min(game.fbInfernalPactDiscount, baseCost)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on build gate")
+            UnknownContinue
+
+        case RecruitAction(f, uc, r) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val baseCost = f.recruitCost(uc, r)
+            val consumed = min(game.fbInfernalPactDiscount, baseCost)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on recruit")
+            UnknownContinue
+
+        case SummonAction(f, uc, r) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val baseCost = f.summonCost(uc, r)
+            val consumed = min(game.fbInfernalPactDiscount, baseCost)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on summon")
+            UnknownContinue
+
+        case MoveAction(f, u, from, to, cost) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val consumed = min(game.fbInfernalPactDiscount, cost)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            if (consumed > 0)
+                FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on move")
+            UnknownContinue
+
+        case AttackAction(f, r, fe, effect) if f == FB && game.fbInfernalPactDiscount > 0 && effect.has(FromBelow).not =>
+            // Attack costs 1 power (skipped when FromBelow effect is in play)
+            val consumed = min(game.fbInfernalPactDiscount, 1)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on attack")
+            UnknownContinue
+
+        case CaptureAction(f, r, fe, effect) if f == FB && game.fbInfernalPactDiscount > 0 && effect.has(FromBelow).not =>
+            // Capture costs 1 power (+ tax). Base cost is 1 power; the tax is
+            // region-specific and handled inside the base handler via payTax.
+            val consumed = min(game.fbInfernalPactDiscount, 1)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on capture")
+            UnknownContinue
+
+        // ── Round 8 Bug 73: end-of-doom-phase IP cleanup for FB ──
+        // DoomDoneAction in Game.scala does not clear FB's IP session state.
+        // Without this intercept, any remaining discount / flipped-spellbook
+        // tracking leaks into the next action phase, and the pre-acted FB main
+        // menu still sees `fbInfernalPactDiscount > 0` and offers Cancel —
+        // which then incorrectly refunds power and unflips spellbooks even
+        // though the discount was already spent on a ritual. This mirrors the
+        // cleanup block in EndTurnAction so doom-phase and action-phase IP
+        // sessions are cleared identically. Power is clamped to the pre-IP
+        // snapshot via the same formula as EndTurnAction.
+        case DoomDoneAction(f) if f == FB =>
+            // Round 8 Bug 75: separate-pool rework. No power clamp needed.
+            game.fbInfernalPactDiscount = 0
+            game.fbInfernalPactStartPower = -1
+            game.fbInfernalPactFlipped = $
+            game.fbInfernalPactSpellbooksBeforeSession = $
+            game.fbInfernalPactUnfulfilledBeforeSession = $
             UnknownContinue
 
         // ...

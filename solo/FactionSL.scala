@@ -293,6 +293,14 @@ object SLExpansion extends Expansion {
             game.eliminate(m)
             m.region = self.prison
             self.log("captured", m, "in", r)
+            // Round 8 Bug 76: register as a CG edge case. CaptureMonster is a
+            // zero-delta action — only the captured monster's faction loses a
+            // unit, and the captor (SL) count is unchanged. The snapshot-delta
+            // detector in FB's AfterAction handler won't see any new enemy
+            // arrivals, so CG won't fire. Registering here ensures CG triggers
+            // when SL captures a monster in a region with FB Revenants/Ghatanothoa.
+            if (game.factions.has(FB))
+                game.fbCyclopeanGazeActionRegions :+= r
             EndAction(self)
 
         // ANCIENT SORCERY

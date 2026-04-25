@@ -156,6 +156,22 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
             }
         }
 
+        // Round 9: FB-awareness negative scores (see OTHER_BOTS_FB_STRATEGY.md).
+        // AN exception: Cathedrals don't move units, so crater avoidance applies
+        // only to BuildCathedralAction via the "can't build on crater" rule.
+        a.unwrap match {
+            case MoveAction(_, _, _, r, _) =>
+                fbMoveAvoidance(r).foreach(e => true |=> e)
+            case BuildGateAction(_, r) =>
+                hasFBCrater(r) |=> -8000 -> "cannot build gate on FB crater"
+            case RecruitAction(_, _, r) =>
+                hasFBCrater(r) |=> -5000 -> "avoid recruiting at FB crater"
+            case SummonAction(_, _, r) =>
+                hasFBCrater(r) |=> -5000 -> "avoid summoning at FB crater"
+                (fbHasCG && isFBGazeRegion(r)) |=> -6000 -> "avoid summoning into FB gaze region"
+            case _ =>
+        }
+
         a match {
             case StartingRegionAction(_, r) =>
                 val isWW = r.glyph == GlyphWW

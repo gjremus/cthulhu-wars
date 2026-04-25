@@ -189,6 +189,23 @@ class GameEvaluationYS(implicit game : Game) extends GameEvaluation(YS)(game) {
             }
         }
 
+        // Round 9: FB-awareness negative scores (see OTHER_BOTS_FB_STRATEGY.md).
+        // YS exceptions: KiY/Screaming Dead/Hastur movement INTENDING to desecrate
+        // a crater/CG region is still OK. Since the avoidance applies only to plain
+        // MoveAction, the spellbook-triggered accompaniments bypass it implicitly.
+        a.unwrap match {
+            case MoveAction(_, _, _, r, _) =>
+                fbMoveAvoidance(r).foreach(e => true |=> e)
+            case BuildGateAction(_, r) =>
+                hasFBCrater(r) |=> -8000 -> "cannot build gate on FB crater"
+            case RecruitAction(_, _, r) =>
+                hasFBCrater(r) |=> -5000 -> "avoid recruiting at FB crater"
+            case SummonAction(_, _, r) =>
+                hasFBCrater(r) |=> -5000 -> "avoid summoning at FB crater"
+                (fbHasCG && isFBGazeRegion(r)) |=> -6000 -> "avoid summoning into FB gaze region"
+            case _ =>
+        }
+
         a match {
             case FirstPlayerAction(_, f) =>
                 f == self && areas.%(_.allies.goos.any).%(_.foes.goos.any).any |=> 100 -> "play first goos together"

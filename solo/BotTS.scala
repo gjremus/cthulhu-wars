@@ -4,8 +4,8 @@ import hrf.colmat._
 
 // Tombstalker (TS) BOT: AI evaluation logic for all TS-specific actions.
 object BotTS extends BotX(implicit g => new GameEvaluationTS) {
-    var traceWeights = false
     // Testing/tracking fields removed — see Backup/pre-cleanup-code/BotTS.scala for original
+    // Round 9: traceWeights moved to Bot3.traceFaction (central, parameterized by faction).
 }
 
 class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
@@ -145,6 +145,41 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 case OW => 100; case WW => 75; case YS => 50; case AN => 25
                 case _ => 0
             }).headOption.getOrElse(0)
+        }
+
+        // Round 9: FB-awareness negative scores (see OTHER_BOTS_FB_STRATEGY.md).
+        // TS exception: movement into a crater region intended for Grasping Dead
+        // capture is OK. Since GraspingDead dispatches as a battle rather than a
+        // plain MoveAction, the crater avoidance on MoveAction does not affect it.
+        a.unwrap match {
+            case MoveAction(_, u, from, to, _) =>
+                fbMoveAvoidance(to).foreach(e => true |=> e)
+                // HARD RULE (user-reported): when TS has 1 power left in the AP,
+                // do NOT move ANY unit off an own gate that has only 1 cultist.
+                // Moving Glaaki/DT/TH leaves the cultist defenseless (enemy
+                // capture next turn → gate abandoned). Moving the cultist itself
+                // abandons the gate immediately. The same unit can't be
+                // replaced on the same turn with 1 power (can't afford
+                // movement + recruit + gate control adjustment).
+                val fromOwnGateLow = from.ownGate && power <= 1 &&
+                    self.at(from).%(_.cultist).num == 1 && from != to
+                fromOwnGateLow |=> -100000 -> "HARD BLOCK: don't strip last cultist from own gate at 1 power"
+            case BuildGateAction(_, r) =>
+                hasFBCrater(r) |=> -8000 -> "cannot build gate on FB crater"
+            case RecruitAction(_, _, r) =>
+                hasFBCrater(r) |=> -5000 -> "avoid recruiting at FB crater"
+            case SummonAction(_, _, r) =>
+                hasFBCrater(r) |=> -5000 -> "avoid summoning at FB crater"
+                (fbHasCG && isFBGazeRegion(r)) |=> -6000 -> "avoid summoning into FB gaze region"
+            case TSUndulateCarryAction(_, u, from, to, _) =>
+                // Same rule for Undulate carry: don't carry anything off a
+                // 1-cultist own gate at 1 power. Undulate moves both Glaaki
+                // and the carried unit, so even non-cultist carries
+                // (DT/TH) drain the gate's defender.
+                val fromOwnGateLow = from.ownGate && power <= 1 &&
+                    self.at(from).%(_.cultist).num == 1 && from != to
+                fromOwnGateLow |=> -100000 -> "HARD BLOCK: don't undulate off 1-cultist own gate at 1 power"
+            case _ =>
         }
 
         a match {
@@ -1694,6 +1729,17 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
 
             case AbandonGateAction(_, _, _) =>
                 true |=> -1000000 -> "#542 never"
+
+            case ThousandFormsAskAction(f, r, offers, _, _, _, p) =>
+                r < p + offers./(_.n).sum |=> -6*6*6*6*6*6 -> "dont overpay"
+                p == -1 && power >= f.power + r && !f.allSB |=> (4*4*4*4*4*4 * Math.random()).round.toInt -> "refuse pay"
+                p == 0 |=> (3*3*3*3*3*3 * Math.random()).round.toInt -> "pay 0"
+                p == 1 |=> (2*3*3*3*3*3 * Math.random()).round.toInt -> "pay 1"
+                p == 2 |=> (2*2*3*3*3*3 * Math.random()).round.toInt -> "pay 2"
+                p == 3 |=> (2*2*2*3*3*3 * Math.random()).round.toInt -> "pay 3"
+                p == 4 |=> (2*2*2*2*3*3 * Math.random()).round.toInt -> "pay 4"
+                p == 5 |=> (2*2*2*2*2*3 * Math.random()).round.toInt -> "pay 5"
+                p == 6 |=> (2*2*2*2*2*2 * Math.random()).round.toInt -> "pay 6"
 
             case GhrothAskAction(_, _, _, _, _, _, n) =>
                 n == -1 |=> 200 -> "#431 refuse"

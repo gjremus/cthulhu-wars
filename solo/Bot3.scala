@@ -5,6 +5,11 @@ import hrf.colmat._
 
 object Bot3 {
     var lastEval : $[ActionEval] = $
+    // Round 9: centralized trace-faction state. SimRunner sets this to the
+    // target faction when --trace is passed, and the weight-log pattern match
+    // uses it to filter decisions. Replaces per-bot `traceWeights` flags so
+    // new factions can opt in by setting this variable (no per-bot change).
+    var traceFaction : Option[Faction] = None
 }
 
 case class Bot3(faction : Faction) {
@@ -556,6 +561,11 @@ case class Bot3(faction : Faction) {
                     u.goo && !o.gate && d.gate |=> 20 -> "move goo to gate"
                     u.monsterly && !o.gate && d.gate |=> 10 -> "move monster to gate"
 
+                    val fbCGActive = game.factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze)
+                    val fbDefendersAtDest = FB.at(d, Ghatanothoa).num + FB.at(d, RevenantOfKnaa).num
+                    val alliesAtDest = self.at(d).num + 1
+                    (fbCGActive && fbDefendersAtDest > 0 && alliesAtDest <= fbDefendersAtDest) |=> -3000 -> "CG gaze region: not enough units to overwhelm FB defenders"
+
                     u.goo && game.cathedrals.has(o) && AN.has(UnholyGround) && AN.strength(AN.at(o), self) > 0 && (AN.power > 0 || power == 1) |=> 50000 -> "flee from unholy ground"
                     u.goo && game.cathedrals.has(d) && AN.has(UnholyGround) && AN.strength(AN.at(d), self) > 0 && (AN.power > 0 || power < 3) |=> -50000 -> "beware unholy ground"
 
@@ -787,6 +797,43 @@ case class Bot3(faction : Faction) {
                     u.uclass == KingInYellow |=> -400 -> "elim kiy"
                     u.uclass == Hastur |=> -1000 -> "elim hastur"
 
+                    u.uclass == Desiccated |=> 300 -> "elim desc"
+                    u.uclass == RevenantOfKnaa |=> -400 -> "elim rev"
+                    u.uclass == Ghatanothoa |=> -1000 -> "elim ghato"
+
+                    u.uclass == TombHerd |=> 300 -> "elim tomb-herd"
+                    u.uclass == DeepTendril |=> -400 -> "elim deep tendril"
+                    u.uclass == Glaaki |=> -1000 -> "elim glaaki"
+
+                    // WW
+                    u.uclass == Wendigo |=> 500 -> "elim wendigo"
+                    u.uclass == GnophKeh |=> -200 -> "elim gnoph-keh"
+                    u.uclass == RhanTegoth |=> -400 -> "elim rhan-tegoth"
+                    u.uclass == Ithaqua |=> -1000 -> "elim ithaqua"
+
+                    // SL
+                    u.uclass == Wizard |=> 500 -> "elim wizard"
+                    u.uclass == SerpentMan |=> 300 -> "elim serpent man"
+                    u.uclass == FormlessSpawn |=> 100 -> "elim formless spawn"
+                    u.uclass == Tsathoggua |=> -1000 -> "elim tsathoggua"
+
+                    // AN
+                    u.uclass == Reanimated |=> 200 -> "elim reanimated"
+                    u.uclass == UnMan |=> 100 -> "elim un-man"
+                    u.uclass == Yothan |=> -400 -> "elim yothan"
+
+                    // OW
+                    u.uclass == Mutant |=> 400 -> "elim mutant"
+                    u.uclass == Abomination |=> 100 -> "elim abomination"
+                    u.uclass == SpawnOW |=> -200 -> "elim spawn of yog-sothoth"
+                    u.uclass == YogSothoth |=> -1000 -> "elim yog-sothoth"
+
+                    // Neutral monsters
+                    u.uclass.isInstanceOf[NeutralMonster] |=> 200 -> "elim neutral monster"
+
+                    // iGOOs
+                    u.uclass.isInstanceOf[IGOO] |=> -600 -> "elim igoo"
+
                     if (u.faction != self)
                         result = result./(e => Evaluation(-e.weight, "neg " + e.desc))
                 }
@@ -814,6 +861,39 @@ case class Bot3(faction : Faction) {
                     u.uclass == Byakhee |=> 800 -> "retr byakhee"
                     u.uclass == KingInYellow |=> 400 -> "retr kiy"
                     u.uclass == Hastur |=> -1000 -> "retr hastur"
+
+                    // FB
+                    u.uclass == Desiccated |=> 300 -> "retr desc"
+                    u.uclass == RevenantOfKnaa |=> -400 -> "retr rev"
+                    u.uclass == Ghatanothoa |=> -1000 -> "retr ghato"
+
+                    // TS
+                    u.uclass == TombHerd |=> 300 -> "retr tomb-herd"
+                    u.uclass == DeepTendril |=> -400 -> "retr deep tendril"
+                    u.uclass == Glaaki |=> -1000 -> "retr glaaki"
+
+                    // WW
+                    u.uclass == Wendigo |=> 500 -> "retr wendigo"
+                    u.uclass == GnophKeh |=> -200 -> "retr gnoph-keh"
+                    u.uclass == RhanTegoth |=> -400 -> "retr rhan-tegoth"
+                    u.uclass == Ithaqua |=> -1000 -> "retr ithaqua"
+
+                    // SL
+                    u.uclass == Wizard |=> 500 -> "retr wizard"
+                    u.uclass == SerpentMan |=> 300 -> "retr serpent man"
+                    u.uclass == FormlessSpawn |=> 100 -> "retr formless spawn"
+                    u.uclass == Tsathoggua |=> -1000 -> "retr tsathoggua"
+
+                    // AN
+                    u.uclass == Reanimated |=> 200 -> "retr reanimated"
+                    u.uclass == UnMan |=> 100 -> "retr un-man"
+                    u.uclass == Yothan |=> -400 -> "retr yothan"
+
+                    // OW
+                    u.uclass == Mutant |=> 400 -> "retr mutant"
+                    u.uclass == Abomination |=> 100 -> "retr abomination"
+                    u.uclass == SpawnOW |=> -200 -> "retr spawn of yog-sothoth"
+                    u.uclass == YogSothoth |=> -1000 -> "retr yog-sothoth"
 
                     if (u.faction != self)
                         result = result./(e => Evaluation(-e.weight, "neg " + e.desc))

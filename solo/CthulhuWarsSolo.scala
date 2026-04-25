@@ -540,6 +540,7 @@ object CthulhuWarsSolo {
 
                 def filterAttack(actions : $[Action], factions : $[Faction]) = actions.%(dontAttack(factions)).some.|(actions)
 
+                val gameActions = actions
                 c match {
                     case Force(action) =>
                         throw new Error("force escaped " + action)
@@ -550,6 +551,9 @@ object CthulhuWarsSolo {
                     case DelayedContinue(_, continue) =>
                         askFaction(continue)
 
+                    case RollD6(question, roll) if setup.dice && recorded.any && recorded.num > actions.num && localReplay.not =>
+                        try { UIPerform(game, serializer.parseAction(recorded(actions.num).replace("&gt;", ">"))) }
+                        catch { case _ : Throwable => UIPerform(game, roll((1::2::3::4::5::6).maxBy(_ => random()))) }
                     case RollD6(question, roll) if setup.dice =>
                         UIPerform(game, roll((1::2::3::4::5::6).maxBy(_ => random())))
 
@@ -559,6 +563,9 @@ object CthulhuWarsSolo {
                     case RollBattle(_, 0, roll) =>
                         UIPerform(game, roll($))
 
+                    case RollBattle(_, n, roll) if setup.dice && recorded.any && recorded.num > actions.num && localReplay.not =>
+                        try { UIPerform(game, serializer.parseAction(recorded(actions.num).replace("&gt;", ">"))) }
+                        catch { case _ : Throwable => UIPerform(game, roll(List.fill(n)(BattleRoll.roll()))) }
                     case RollBattle(_, n, roll) if setup.dice =>
                         UIPerform(game, roll(List.fill(n)(BattleRoll.roll())))
 
@@ -568,6 +575,9 @@ object CthulhuWarsSolo {
                     case DrawES(_, 0, 0, 0, draw) =>
                         UIPerform(game, draw(0, true))
 
+                    case DrawES(_, es1, es2, es3, draw) if setup.es && recorded.any && recorded.num > actions.num && localReplay.not =>
+                        try { UIPerform(game, serializer.parseAction(recorded(actions.num).replace("&gt;", ">"))) }
+                        catch { case _ : Throwable => UIPerform(game, draw((List.fill(es1)(1) ++ List.fill(es2)(2) ++ List.fill(es3)(3)).maxBy(_ => random()), false)) }
                     case DrawES(_, es1, es2, es3, draw) if setup.es =>
                         UIPerform(game, draw((List.fill(es1)(1) ++ List.fill(es2)(2) ++ List.fill(es3)(3)).maxBy(_ => random()), false))
 
@@ -614,6 +624,19 @@ object CthulhuWarsSolo {
 
                         val confirm = setup.confirm && setup.difficulty(faction) == Human
 
+                        if (recorded.any && recorded.num > gameActions.num && localReplay.not && setup.difficulty(faction) != Human && setup.difficulty(faction) != Recorded) {
+                            try { UIPerform(game, serializer.parseAction(recorded(gameActions.num).replace("&gt;", ">"))) }
+                            catch { case _ : Throwable =>
+                                if (confirm.not && actions.num == 1)
+                                    UIPerform(game, actions(0))
+                                else
+                                if (confirm.not && actions.%!(_.isInfo).num == 1 && actions.has(NeedOk).not)
+                                    UIPerform(game, actions.%!(_.isInfo).only)
+                                else
+                                    UIPerform(game, actions(0))
+                            }
+                        }
+                        else
                         if (confirm.not && actions.num == 1)
                             UIPerform(game, actions(0))
                         else
@@ -640,8 +663,11 @@ object CthulhuWarsSolo {
                                         case AN => BotAN   .ask(actions, 0.2)(game)
                                         // Tombstalker (TS): AI bot decision-making at Easy difficulty
                                         case TS => BotTS   .ask(actions, 0.2)(game)
-                                        // Firstborn (FB): AI bot decision-making at Easy difficulty
-                                        case FB => BotFB   .ask(actions, 0.2)(game)
+                                        // Firstborn (FB): AI bot decision-making at Easy difficulty.
+                                        // Lowered error 0.2→0.0 because randomization was causing
+                                        // bot to pick lower-scored alternatives (e.g. CoF over CG)
+                                        // ~14% of the time, which broke the SB priority order.
+                                        case FB => BotFB   .ask(actions, 0.0)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -879,8 +905,11 @@ object CthulhuWarsSolo {
                     // Round 8 Bug 53: dedicated 66x66 render for the on-map starting glyph of
                     // dynamic-start factions (FB, TS). Dispatches by faction. Smaller than the
                     // 100x100 FactionGlyph used in faction status panels.
+                    // Round 9: AN and OW also use dynamic glyph placement via findStaticGlyphPos.
                     case StartingGlyph if faction == FB => DrawRect("fb-glyph", None, x - 33, y - 33, 66, 66)
                     case StartingGlyph if faction == TS => DrawRect("ts-glyph", None, x - 33, y - 33, 66, 66)
+                    case StartingGlyph if faction == AN => DrawRect("an-glyph", None, x - 33, y - 33, 66, 66)
+                    case StartingGlyph if faction == OW => DrawRect("ow-glyph", None, x - 33, y - 33, 66, 66)
 
                     case _ => null
                 }
@@ -1052,6 +1081,19 @@ object CthulhuWarsSolo {
                         fixed +:= DrawItem(r, TS, StartingGlyph, Alive, $, glyphX, glyphY)
                     }
 
+                    // Round 9: AN and OW use dynamic starting-region glyphs too.
+                    // They pick from nonFactionRegions / all regions respectively at setup,
+                    // so they need the same findStaticGlyphPos treatment as FB/TS.
+                    if (game.setup.has(AN) && game.starting.get(AN).contains(r)) {
+                        val (glyphX, glyphY) = findStaticGlyphPos(px, py)
+                        fixed +:= DrawItem(r, AN, StartingGlyph, Alive, $, glyphX, glyphY)
+                    }
+
+                    if (game.setup.has(OW) && game.starting.get(OW).contains(r)) {
+                        val (glyphX, glyphY) = findStaticGlyphPos(px, py)
+                        fixed +:= DrawItem(r, OW, StartingGlyph, Alive, $, glyphX, glyphY)
+                    }
+
                     if (game.setup.%(_.iceAge.?(_ == r)).any)
                         all +:= DrawItem(r, null, IceAgeToken, Alive, $, 0, 0)
 
@@ -1157,8 +1199,14 @@ object CthulhuWarsSolo {
                 val nameS = div("name")(f.short.styled(f) + "")
                 // Tombstalker (TS): append Death's Head count to faction status panel
                 val dhStr = (f == TS).?(" | " + (game.deathsHead.toString + " Death's Head").styled(TS)).|("")
-                val power = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr)
-                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|(""))
+                // Firstborn (FB): Round 8 Bug 75 — append Infernal Pact discount count
+                // to faction status panel, mirroring the TS Death's Head display. Shows
+                // a grey pipe "|" separator followed by "N IP Disc" in FB color. Only
+                // renders when discount > 0 (i.e. during an active IP session).
+                val fbIPDiscStr = (f == FB && game.fbInfernalPactDiscount > 0).?(" | " + (game.fbInfernalPactDiscount.toString + " IP Disc").styled(FB)).|("")
+                val fbIPDiscSStr = (f == FB && game.fbInfernalPactDiscount > 0).?(" " + (game.fbInfernalPactDiscount.toString + "IP").styled(FB)).|("")
+                val power = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr)
+                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr)
                 // Firstborn (FB): read Infernal Pact discount and stored Augury kills for the faction panel display
                 val fbIPDiscount = if (f == FB) game.fbInfernalPactDiscount else 0
                 val fbAugury = if (f == FB) game.fbAuguryKills else 0

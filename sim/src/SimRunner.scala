@@ -194,7 +194,16 @@ object SimRunner {
             var tsTomePower = 0     // power other factions gained from using TS tomes
             var tsCumGates = 0      // [2026-04-01 12:20] cumulative gates at each AP end (for avg gates held)
 
-            BotTS.traceWeights = withTrace && numberOfGames == 1
+            // Round 9: central trace-faction state. When --trace is passed with
+            // a single required faction, that faction becomes the trace target.
+            // If no required faction, TS is the default for backward compatibility.
+            val traceTarget : Option[Faction] =
+                if ((withTrace && numberOfGames == 1) || saveAll)
+                    requiredFactions.headOption.orElse(Some(TS))
+                else None
+            Bot3.traceFaction = traceTarget
+            // Emit a marker line so save-replay.py can read the trace faction.
+            traceTarget.foreach(f => writeLog("TRACE_FACTION=" + f.short))
 
             try {
                 val (l, cc) = game.perform(StartAction)
@@ -204,16 +213,24 @@ object SimRunner {
                 while (!c.isInstanceOf[GameOver]) {
                     n += 1
                     val a = Host.askFaction(game, c)
-                    // Log TS decision weights when tracing
-                    if (BotTS.traceWeights) {
+                    // Log decision weights for the trace target faction only
+                    if (traceTarget.isDefined) {
                         c match {
-                            case ask : Ask if ask.faction == TS && ask.actions.num > 1 &&
+                            case ask : Ask if ask.actions.num > 1 && (
+                                traceTarget.contains(ask.faction) ||
+                                // Also log battle decisions involving trace target's units (during battle only)
+                                (game.battle.any && traceTarget.isDefined && !traceTarget.contains(ask.faction) &&
+                                    ask.actions.exists(act => {
+                                        val name = act.unwrap.toString
+                                        name.contains(traceTarget.get.short + "/")
+                                    }))
+                                ) &&
                                 // Only log meaningful decisions — skip menus, end turn, move done, etc.
                                 !a.unwrap.isInstanceOf[EndTurnAction] &&
                                 !a.unwrap.getClass.getSimpleName.contains("MoveDone") &&
-                                !a.unwrap.getClass.getSimpleName.contains("MainAction") &&
-                                !a.unwrap.getClass.getSimpleName.contains("MainGates") &&
-                                !a.unwrap.getClass.getSimpleName.contains("PreMain") &&
+                                !a.unwrap.isInstanceOf[MainAction] &&
+                                !a.unwrap.isInstanceOf[MainGatesAction] &&
+                                !a.unwrap.isInstanceOf[PreMainAction] &&
                                 !a.unwrap.getClass.getSimpleName.contains("PassAction") &&
                                 !a.unwrap.getClass.getSimpleName.contains("DoomDone") &&
                                 !a.unwrap.getClass.getSimpleName.contains("NextPlayer") =>
@@ -242,9 +259,11 @@ object SimRunner {
                                 def cleanConsole(act : Action) : String = {
                                     act.unwrap.toString.replaceAll("<[^>]+>", "")
                                         .replaceAll("WrappedQForcedAction\\(", "").replaceAll("WrappedForcedAction\\(", "")
+                                        .replaceAll("UnitRef\\([^,]+,([^,]+),\\d+\\)", "$1")
                                         .take(80)
                                 }
-                                println("  [TS] Chose: " + cleanConsole(a))
+                                val consoleTag = traceTarget.map(_.short).getOrElse("BOT")
+                                println("  [" + consoleTag + "] Chose: " + cleanConsole(a))
                                 scored.take(4).foreach { case (act, score) =>
                                     val marker = if (act == a.unwrap) ">>>" else "   "
                                     println("  [TS] " + marker + " " + score + " " + cleanConsole(act))
@@ -262,19 +281,19 @@ object SimRunner {
                                     val t = act.unwrap.getClass.getSimpleName.replace("$", "")
                                     t match {
                                         case n if n.contains("MoveAction") && !n.contains("Main") && !n.contains("Done") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             if (parts.length >= 3) "Move " + parts(0) + " from " + parts(1) + " to " + parts(2) else "Move " + parts.mkString(" ")
                                         case n if n.contains("SummonAction") && !n.contains("Main") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             "Summon " + parts.mkString(" at ")
                                         case n if n.contains("AttackAction") && !n.contains("Main") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             if (parts.length >= 2) "Attack " + parts(1) + " in " + parts(0) else "Attack " + parts.mkString(" ")
                                         case n if n.contains("CaptureAction") && !n.contains("Main") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             if (parts.length >= 2) "Capture " + parts(1) + " in " + parts(0) else "Capture " + parts.mkString(" ")
                                         case n if n.contains("BuildGate") => "Build gate " + s.replaceAll(".*,", "").replaceAll("[()]", "").trim
-                                        case n if n.contains("Recruit") && !n.contains("Main") => "Recruit " + s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").trim
+                                        case n if n.contains("Recruit") && !n.contains("Main") => "Recruit " + s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").trim
                                         case n if n.contains("EndTurn") => "End Turn"
                                         case n if n.contains("Pass") => "Pass"
                                         case n if n.contains("MoveDone") => "(move done)"
@@ -283,54 +302,54 @@ object SimRunner {
                                             val rgn = s.replaceAll(".*List\\(", "").replaceAll("[()]", "").split(",").head.trim
                                             "Attack in " + rgn + "..."
                                         case n if n.contains("SummonMain") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             if (parts.length >= 1) "Summon " + parts(0) else "Summon..."
                                         case n if n.contains("CaptureMain") => "Capture..."
                                         case n if n.contains("StartingRegion") =>
                                             "Place in " + s.replaceAll(".*,", "").replaceAll("[()]", "").trim
                                         case n if n.contains("SpellbookAction") =>
-                                            "Take spellbook: " + s.replaceAll(".*Action\\(Tombstalker,", "").split(",").head.trim
+                                            "Take spellbook: " + s.replaceAll(".*Action\\([^,]+,", "").split(",").head.trim
                                         case n if n.contains("DeathMarch") && !n.contains("Doom") =>
                                             "Death March to " + s.replaceAll(".*,", "").replaceAll("[()]", "").trim
                                         case n if n.contains("UndulateCarry") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             if (parts.length >= 2) "Carry " + parts(0) + " to " + parts.last else "Carry " + parts.mkString(" ")
                                         case n if n.contains("UndulateSkip") => "Skip Undulate carry"
                                         case n if n.contains("TSAwakenGlaakiPay") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             if (parts.length >= 2) "Awaken Glaaki at " + parts(0) + " (cost " + parts(1) + " power)" else "Awaken Glaaki"
                                         case n if n.contains("TSAwakenGlaakiChooseCost") => "Choose Glaaki awakening cost"
                                         case n if n.contains("AwakenMain") => "Awaken Glaaki"
                                         case n if n.contains("TSHecatombRitualCost") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             if (parts.length >= 2) "Hecatomb ritual (power " + parts(0) + ", DH " + parts(1) + ")" else "Hecatomb ritual"
                                         case n if n.contains("Ritual") && !n.contains("Hecatomb") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             if (parts.length >= 1) "Ritual (cost " + parts(0) + ")" else "Ritual"
                                         case n if n.contains("TSDeathMarchDoom") => "Use Death March"
                                         case n if n.contains("TSShepherdGather") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             if (parts.length >= 1) "Shepherd gather to " + parts(0) else "Shepherd gather"
                                         case n if n.contains("GraspingDeadMain") => "Use Grasping Dead"
                                         case n if n.contains("GraspingDeadBattle") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             if (parts.length >= 2) "Grasping Dead battle " + parts(1) + " in " + parts(0) else "Grasping Dead battle"
                                         case n if n.contains("GraspingDeadPay") => "Pay for Grasping Dead"
                                         case n if n.contains("ElevenRevelationsMain") => "Use Eleven Revelations"
                                         case n if n.contains("ElevenRevelations") && !n.contains("Main") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             if (parts.length >= 1) "Give tome to " + parts(0) else "Give tome"
                                         case n if n.contains("RevealES") => "Reveal Elder Signs"
                                         case n if n.contains("PlayDirection") => "Choose play order"
                                         case n if n.contains("FirstPlayer") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             if (parts.length >= 1) "Choose first player: " + parts(0) else "Choose first player"
                                         case n if n.contains("ControlGate") => "Control gate"
                                         case n if n.contains("OleaginousRetreat") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             "Oleaginous retreat to " + parts.lastOption.getOrElse("?")
                                         case n if n.contains("RetreatUnit") =>
-                                            val parts = s.replaceAll(".*Action\\(Tombstalker,", "").replaceAll("[()]", "").split(",").map(_.trim)
+                                            val parts = s.replaceAll(".*Action\\([^,]+,", "").replaceAll("[()]", "").split(",").map(_.trim)
                                             "Retreat " + parts.headOption.getOrElse("unit") + " to " + parts.lastOption.getOrElse("?")
                                         case n if n.contains("AssignKill") => "Assign kill"
                                         case n if n.contains("AssignPain") => "Assign pain"
@@ -340,9 +359,15 @@ object SimRunner {
                                         case n if n.contains("TSRemoveTome") => "Remove face-down tome"
                                         case n if n.contains("TSSkipRemoveTome") => "Keep face-down tome"
                                         case _ =>
-                                            // Generic fallback — clean up as much as possible
+                                            // Faction-independent fallback: strip faction name, UnitRefs, brackets
                                             val cleanType = t.replaceAll("Action.*", "").replaceAll("([a-z])([A-Z])", "$1 $2")
-                                            val cleanArgs = s.replaceAll(".*Tombstalker,?\\s*", "").replaceAll("[()]", "").replaceAll("List\\(", "").take(40)
+                                            // Strip any faction name prefix from args
+                                            val allFactionNames = List("Firstborn", "Tombstalker", "Great Cthulhu", "Crawling Chaos",
+                                                "Black Goat", "Yellow Sign", "Sleeper", "Windwalker", "Opener of the Way", "The Ancients")
+                                            var cleanArgs = s
+                                            allFactionNames.foreach(fn => cleanArgs = cleanArgs.replaceAll(".*" + fn + ",?\\s*", ""))
+                                            cleanArgs = cleanArgs.replaceAll("UnitRef\\([^,]+,([^,]+),\\d+\\)", "$1")
+                                                .replaceAll("List\\(([^)]+)\\)", "$1").replaceAll("[()]", "").take(60)
                                             (cleanType + " " + cleanArgs).trim
                                     }
                                 }
@@ -355,8 +380,9 @@ object SimRunner {
                                 }
                                 // Use the top weight from the bot's evaluation (what compareEL uses)
                                 val chosenScore = scored.find(_._1.unwrap == a.unwrap).map(_._2).getOrElse(0)
-                                // Header — include action counter for replay sync, show top weight
-                                writeLog("[TS BOT @" + n + "] " + readable(a) + " (" + chosenScore + ")")
+                                // Header — include action counter + faction for replay sync, show top weight
+                                val facStr = traceTarget.map(_.short).getOrElse("??")
+                                writeLog("[BOT " + facStr + " @" + n + "] " + readable(a) + " (" + chosenScore + ")")
                                 // All real alternatives with REAL eval scores
                                 val chosenReadable = readable(a)
                                 // Deduplicate: show best option per category, but keep all unique destinations
@@ -607,12 +633,15 @@ object SimRunner {
 
 
 
-                // Save replay when TS wins or --save-all
-                if (w.contains(TS) || saveAll) {
+                // Save replay when target faction wins or --save-all.
+                // Target faction = first required faction (or TS for backward compat).
+                val targetFaction : Faction = requiredFactions.headOption.getOrElse(TS)
+                val tshort = targetFaction.short.toLowerCase
+                if (w.contains(targetFaction) || saveAll) {
                     val path = "win-logs"
                     new java.io.File(path).mkdirs()
                     val serializer = new Serialize(game)
-                    val label = if (w.contains(TS)) "ts-win" else "ts-game"
+                    val label = if (w.contains(targetFaction)) tshort + "-win" else tshort + "-game"
                     val fname = path + "/" + label + "-" + java.lang.System.currentTimeMillis + ".txt"
                     Files.write(
                         Paths.get(fname),
@@ -620,7 +649,7 @@ object SimRunner {
                         log.reverse.map("<div class='p'>" + _ + "</div>").mkString("\n")
                         ).getBytes(StandardCharsets.UTF_8)
                     )
-                    if (w.contains(TS)) println("  *** TS WIN SAVED: " + fname)
+                    if (w.contains(targetFaction)) println("  *** " + targetFaction.short + " WIN SAVED: " + fname)
                     else println("  Game saved: " + fname)
                 }
 

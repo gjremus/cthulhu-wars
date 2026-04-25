@@ -31,6 +31,21 @@ class GameEvaluationCC(implicit game : Game) extends GameEvaluation(CC)(game) {
         has1000f && a != ThousandFormsMainAction(self) && costA(a) > 0 && power - costA(a) < 1 |=> -4000 -> "dont spend last power if 1000F unused"
         has1000f && a != ThousandFormsMainAction(self) && costA(a) > 0 && power - costA(a) < 1 && active.none |=> -1000000 -> "dont spend last power if 1000F unused"
 
+        // Round 9: FB-awareness negative scores (see OTHER_BOTS_FB_STRATEGY.md).
+        // These stack on top of the positive scoring below.
+        a.unwrap match {
+            case MoveAction(_, _, _, r, _) =>
+                fbMoveAvoidance(r).foreach(e => true |=> e)
+            case BuildGateAction(_, r) =>
+                hasFBCrater(r) |=> -8000 -> "cannot build gate on FB crater"
+            case RecruitAction(_, _, r) =>
+                hasFBCrater(r) |=> -5000 -> "avoid recruiting at FB crater"
+            case SummonAction(_, _, r) =>
+                hasFBCrater(r) |=> -5000 -> "avoid summoning at FB crater"
+                (fbHasCG && isFBGazeRegion(r)) |=> -6000 -> "avoid summoning into FB gaze region"
+            case _ =>
+        }
+
         a match {
             case FirstPlayerAction(_, f) =>
                 f == self && areas.%(_.capturers.any).%(_.allies.cultists.any).any |=> 100 -> "play first prevent capture"

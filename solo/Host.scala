@@ -95,10 +95,8 @@ object Host {
 
         var results : $[$[Faction]] = $
 
-        //val base = repeat
-        // Tombstalker (TS): filter simulation combos to only include games with TS for targeted testing
-        val base = allComb.filter(_.contains(TS)).shuffle
-        //val base = customComb
+        // All faction combos containing FB (for FB bot testing)
+        val base = allComb.filter(_.contains(FB)).shuffle
 
         1.to(10).foreach { i =>
             results ++= base.par.map { ff =>

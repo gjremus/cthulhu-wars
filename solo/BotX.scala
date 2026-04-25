@@ -99,6 +99,46 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
     def numSB = self.numSB
     def oncePerRound = self.oncePerRound
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Round 9: Firstborn-awareness helpers. When FB is in the game, all other
+    // bots should avoid (or heavily de-score) moving units into:
+    //   1. Regions with a crater (FB Devil's Mark crater = gate-blocker and
+    //      bad juju for anything that lingers there).
+    //   2. Regions containing FB Revenants/Ghatanothoa AND FB has Cyclopean
+    //      Gaze active — the unit will be immediately pained out.
+    //
+    // For multi-unit movement (Undulate, Arctic Wind, Screaming Dead, etc.)
+    // the movement is only worth it if at least 3 units SURVIVE the CG pains
+    // (one pain per FB Rev/Ghato source in the destination region).
+    // See OTHER_BOTS_FB_STRATEGY.md for the full rules.
+    // ─────────────────────────────────────────────────────────────────────
+    val fbInGame = game.factions.has(FB)
+    val fbHasCG = fbInGame && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze)
+    def isFBGazeRegion(r : Region) : Boolean =
+        fbInGame && (FB.at(r, Ghatanothoa).any || FB.at(r, RevenantOfKnaa).any)
+    def fbGazeSourceCount(r : Region) : Int =
+        if (!fbInGame) 0
+        else FB.at(r, Ghatanothoa).num + FB.at(r, RevenantOfKnaa).num
+    def hasFBCrater(r : Region) : Boolean =
+        fbInGame && game.fbCraters.has(r)
+    // Score for discouraging a single unit move into a CG region or crater.
+    // Returns Some(weight,desc) if a negative should be applied, else None.
+    def fbMoveAvoidance(r : Region) : |[(Int, String)] = {
+        if (hasFBCrater(r)) |((-7000, "avoid FB crater region"))
+        else if (fbHasCG && isFBGazeRegion(r)) |((-7000, "avoid FB gaze region (CG pain risk)"))
+        else None
+    }
+    // Score for multi-unit moves: need at least 3 survivors after CG pains.
+    def fbMultiMoveAvoidance(r : Region, movers : Int) : |[(Int, String)] = {
+        if (hasFBCrater(r)) |((-6500, "avoid multi-move into FB crater region"))
+        else if (fbHasCG && isFBGazeRegion(r)) {
+            val sources = fbGazeSourceCount(r)
+            if ((movers - sources) < 3) |((-7000, "multi-move into CG region: not enough survivors"))
+            else None
+        }
+        else None
+    }
+
     implicit class RegionClassify(val r : Region) {
         def empty = allies.none && foes.none
         def allies = self.at(r)

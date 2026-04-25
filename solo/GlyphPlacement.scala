@@ -88,6 +88,12 @@ class GlyphPlacement(boardId : String) {
         val regionColor = place(gx)(gy)
         val GAP = 0
         val MaxExpansion = 12
+        // Round 9: hard radius cap from the gate. On mobile with a saved-HTML viewer,
+        // the placement bitmap loading could drift or produce false color matches far
+        // from the core region (user report: FB glyph placed mid-South-Pacific when
+        // the start region was Australia). Constraining the search to a reasonable
+        // radius from the gate guarantees the glyph stays visually tied to the region.
+        val MaxRadiusFromGate = 200
         val w = placeb.width
         val h = placeb.height
         val INF = w + h
@@ -183,14 +189,19 @@ class GlyphPlacement(boardId : String) {
                 if (dxy >= halfGlyph && place(x)(y) == regionColor) {
                     val dx = scala.math.abs(x - gx)
                     val dy = scala.math.abs(y - gy)
-                    val ox = scala.math.max(0, halfGate + halfGlyph - dx)
-                    val oy = scala.math.max(0, halfGate + halfGlyph - dy)
-                    val overlap = ox * oy
-                    if (overlap < bestOverlap || (overlap == bestOverlap && dxy > bestDist)) {
-                        bestOverlap = overlap
-                        bestDist = dxy
-                        bestX = x
-                        bestY = y
+                    // Round 9: hard radius cap — reject candidates beyond MaxRadiusFromGate
+                    // from the gate. Defensive against mobile-viewer bitmap loading drift.
+                    val radialDist = scala.math.max(dx, dy)
+                    if (radialDist <= MaxRadiusFromGate) {
+                        val ox = scala.math.max(0, halfGate + halfGlyph - dx)
+                        val oy = scala.math.max(0, halfGate + halfGlyph - dy)
+                        val overlap = ox * oy
+                        if (overlap < bestOverlap || (overlap == bestOverlap && dxy > bestDist)) {
+                            bestOverlap = overlap
+                            bestDist = dxy
+                            bestX = x
+                            bestY = y
+                        }
                     }
                 }
                 x += 1
