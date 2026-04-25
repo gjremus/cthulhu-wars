@@ -281,6 +281,7 @@ trait Faction { f =>
     units(DimensionalShamblerUnit).num * 2 +
         units(Gnorri).num * 2 +
         units(Ygolonac).not(Zeroed).num * 1 +
+        units(Tulzscha).not(Zeroed).num * 1 +
         units(Byatis).not(Zeroed).num * 4 +
         units(Abhoth).not(Zeroed).num * f.all(Filth).num +
         units(Daoloth).not(Zeroed).num * 0 +
