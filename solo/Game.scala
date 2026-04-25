@@ -219,10 +219,12 @@ class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int,
     def region_=(r : Region)(implicit game : Game) : Unit = {
         val prev = _region
         _region = r
+        // CG edge-case hook: only check when FB is in game with active CG
+        // Optimized: short-circuit early, single-pass unit check
         if (prev != r && faction != FB && uclass.utype != Building &&
             !game.fbSuppressCGForPlacement &&
-            game.factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze) &&
-            (FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any))
+            game.fbHasCGActive &&
+            FB.units.exists(u => u.region == r && (u.uclass == RevenantOfKnaa || u.uclass == Ghatanothoa)))
             game.fbCyclopeanGazeActionRegions :+= r
     }
 
@@ -695,8 +697,8 @@ class Player(private val f : Faction)(implicit game : Game) {
         // (BG Avatar's replacement, AN Cathedral/Festival, YS Screaming Dead,
         // TS Undulate/Hecatomb, SL Lethargy, etc.).
         if (f != FB && uc.utype != Building &&
-            game.factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze) &&
-            (FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any))
+            game.fbHasCGActive &&
+            FB.units.exists(u => u.region == r && (u.uclass == RevenantOfKnaa || u.uclass == Ghatanothoa)))
             game.fbCyclopeanGazeActionRegions :+= r
     }
 
@@ -1104,6 +1106,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // flag true before a qualifying `place()` or `u.region = r` call, false
     // after. The UnitFigure region setter skips the CG append when true.
     var fbSuppressCGForPlacement : Boolean = false
+    // Performance: cached flag for CG active check. Updated when spellbooks change.
+    // Avoids repeated factions.has(FB) + FB.has(CG) + oncePerGame checks per unit move.
+    def fbHasCGActive : Boolean = factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze)
     var fbDevilsMarkUsedThisDoom : Boolean = false
     var fbWritheUsedUnits : $[UnitRef] = $
     var fbWritheRerolled : Boolean = false
@@ -2608,9 +2613,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // unlimited BG Dark Young relocations, etc.); record the destination
             // region unconditionally so FB's AfterAction picks it up via the
             // fbCyclopeanGazeActionRegions list.
-            if (self != FB && factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze) &&
-                u.uclass.utype != Building &&
-                (FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any))
+            if (self != FB && u.uclass.utype != Building && fbHasCGActive &&
+                FB.units.exists(uf => uf.region == r && (uf.uclass == RevenantOfKnaa || uf.uclass == Ghatanothoa)))
                 fbCyclopeanGazeActionRegions :+= r
 
             MovedAction(self, u, o, r)
@@ -2817,9 +2821,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 self.log("summoned", uc.styled(self), "in", r)
 
                 // Universal CG trigger: non-FB summon into a gaze region.
-                if (self != FB && factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze) &&
-                    uc.utype != Building &&
-                    (FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any))
+                if (self != FB && uc.utype != Building && fbHasCGActive &&
+                    FB.units.exists(uf => uf.region == r && (uf.uclass == RevenantOfKnaa || uf.uclass == Ghatanothoa)))
                     fbCyclopeanGazeActionRegions :+= r
 
                 SummonedAction(self, uc, r, $)
