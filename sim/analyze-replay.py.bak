@@ -1,0 +1,421 @@
+#!/usr/bin/env python3
+"""Replay review engine for FB bot traces.
+
+Parses a trace file from SimRunner (with --save-all --trace) or a full HTML
+replay (user's saved playthrough) and produces a detailed discrepancy report
+against the FB bot strategy.
+
+Implementation spec: BOT_REVIEW_GAME_STATE_DEFINITION.md
+
+Usage:
+    python3 analyze-replay.py <trace-file.txt | replay.html>
+    python3 analyze-replay.py <file>  --diff <baseline-file>
+
+The engine tracks:
+  - Per-region FB and enemy units (reconstructed from action events)
+  - FB gate history (build/lose/gain/destroy)
+  - Writhe sessions (dice, kills, pains, destinations, pairing)
+  - Rituals, awakenings, Devil's Mark, spellbook events
+  - Per-decision: action chosen, expected per strategy, discrepancy
+
+Outputs:
+  - Parsed event list
+  - Per-session Writhe analysis
+  - Anti-pattern detection (scatter, unpaired, gate thrash, late awaken,
+    low-yield rituals, DM misfire, no rituals, no awaken, etc.)
+  - Decision-level discrepancies (per action type)
+  - Summary counts
+"""
+import sys, re, os
+from collections import defaultdict
+
+if len(sys.argv) < 2:
+    print("Usage: analyze-replay.py <file> [--diff baseline]")
+    sys.exit(1)
+
+path = sys.argv[1]
+if not os.path.exists(path):
+    print(f"File not found: {path}")
+    sys.exit(1)
+
+with open(path) as f:
+    raw = f.read()
+
+# ── Detect format and extract action log + HTML log ────────────────────
+# Three formats:
+#   1. Sim trace: action log (plain text) + blank line + HTML game log
+#   2. HTML replay with <div class='p'> game log blocks
+#   3. HTML replay with <div id="replay"> containing serialized action strings
+is_html = raw.lstrip().startswith("<") or "<!DOCTYPE" in raw[:500]
+action_log = []
+html_log = ""
+
+if is_html:
+    idx = raw.find('<div id="replay"')
+    if idx < 0:
+        idx = raw.find("<div id='replay'")
+    if idx >= 0:
+        start = raw.find(">", idx) + 1
+        end = raw.find("</div>", start)
+        replay_body = raw[start:end]
+        action_log = [l.strip() for l in replay_body.split("\n") if l.strip() and "(" in l and ")" in l]
+    html_log = raw
+else:
+    parts = raw.split("\n\n", 1)
+    action_log = parts[0].strip().split("\n") if parts else []
+    html_log = parts[1] if len(parts) > 1 else ""
+
+# ── HTML helpers ────────────────────────────────────────────────────────
+def strip_html(s):
+    s = re.sub(r"<[^>]+>", "", s)
+    s = s.replace("&gt;", ">").replace("&lt;", "<").replace("&nbsp;", " ").replace("&amp;", "&")
+    return s.strip()
+
+game_lines = [strip_html(l) for l in html_log.splitlines() if l.strip()]
+has_html_game_log = any(l.startswith("Firstborn") for l in game_lines)
+
+# ── Prefer HTML log parser when it has rich data, fall back to action log ─
+use_html_parser = has_html_game_log
+use_action_log_parser = bool(action_log) and not use_html_parser
+
+# ── Game state tracker (reconstructs state from events) ────────────────
+class GameState:
+    def __init__(self):
+        self.factions = []             # play order
+        self.setup_factions = []       # all factions in game
+        self.starting = {}             # faction → region
+        self.fb_gates = set()           # regions FB controls
+        self.fb_units = defaultdict(lambda: defaultdict(int))  # region → utype → count
+        self.enemy_units = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))  # region → faction → utype → count
+        self.gate_owner = {}             # region → faction
+        self.fb_awakenings = 0
+        self.fb_craters = set()
+        self.fb_sb = set()
+        self.fb_sb_facedown = set()
+        self.turn = 0                    # action phase count
+        self.doom_phase_count = 0
+        self.current_faction = None
+
+state = GameState()
+
+# ── Event list ──────────────────────────────────────────────────────────
+events = []   # (type, details)
+discrepancies = []   # (decision_id, type, expected, actual, description)
+decision_count = 0
+
+def log_disc(d_type, expected, actual, desc):
+    global decision_count
+    decision_count += 1
+    discrepancies.append((decision_count, d_type, expected, actual, desc))
+
+# ── Parse action log (format 1 or 3) ───────────────────────────────────
+def parse_action_string(s):
+    m = re.match(r"(\w+Action|\w+)\((.*)\)$", s.strip())
+    if not m:
+        return None
+    return (m.group(1), m.group(2))
+
+if use_action_log_parser:
+    for a in action_log:
+        parsed = parse_action_string(a)
+        if not parsed:
+            continue
+        atype, args = parsed
+        parts_args = [p.strip() for p in args.split(",")]
+        if atype == "StartingRegionAction" and len(parts_args) >= 2:
+            state.starting[parts_args[0]] = parts_args[1]
+            if parts_args[0] not in state.setup_factions:
+                state.setup_factions.append(parts_args[0])
+            if parts_args[0] == "FB":
+                events.append(("start", parts_args[1]))
+        elif atype == "FBWritheMainAction":
+            events.append(("writhe_roll", 0))
+        elif atype == "FBWritheRerollAction":
+            events.append(("reroll", None))
+        elif atype == "FBWritheKillUnitAction" and len(parts_args) >= 2:
+            events.append(("writhe_kill", parts_args[1]))
+        elif atype == "FBWritheMoveOneToRegionAction" and len(parts_args) >= 3:
+            events.append(("writhe_pain", (parts_args[1], "?", parts_args[2])))
+        elif atype == "FBWritheMoveOneJoinAction" and len(parts_args) >= 3:
+            events.append(("writhe_pain_join", (parts_args[1], "?", parts_args[2])))
+        elif atype == "FBAwakenGhatanothoaAction" and len(parts_args) >= 2:
+            cost = parts_args[1]
+            state.fb_awakenings += 1
+            events.append(("awaken", ("?", int(cost) if cost.isdigit() else 0)))
+        elif atype == "BuildGateAction" and len(parts_args) >= 2 and parts_args[0] == "FB":
+            state.fb_gates.add(parts_args[1])
+            events.append(("build_gate", parts_args[1]))
+        elif atype == "RitualAction" and len(parts_args) >= 2 and parts_args[0] == "FB":
+            cost = parts_args[1]
+            events.append(("ritual", (int(cost) if cost.isdigit() else 0, 0, False)))
+        elif atype == "FBDevilsMarkPlaceCraterAction" and len(parts_args) >= 2:
+            state.fb_craters.add(parts_args[1])
+            events.append(("crater", parts_args[1]))
+        elif atype == "MoveAction" and len(parts_args) >= 5 and parts_args[0] == "FB":
+            events.append(("move", (parts_args[1], parts_args[2], parts_args[3])))
+        elif atype == "FBCallOfTheFaithfulAction" and len(parts_args) >= 2:
+            events.append(("cof", (parts_args[1], False)))
+        elif atype == "RecruitAction" and len(parts_args) >= 3 and parts_args[0] == "FB":
+            events.append(("recruit", (parts_args[1], parts_args[2])))
+        elif atype == "SummonAction" and len(parts_args) >= 3 and parts_args[0] == "FB":
+            events.append(("summon", (parts_args[1], parts_args[2])))
+
+# ── Parse HTML log (format 1 or 2) ──────────────────────────────────────
+if use_html_parser:
+    for l in game_lines:
+        if "Firstborn started in" in l:
+            m = re.search(r"started in (\w[\w ]*)", l)
+            events.append(("start", m.group(1).strip() if m else "?"))
+        elif "Firstborn used Writhe rolling" in l:
+            m = re.search(r"rolling (\d+) dice", l)
+            events.append(("writhe_roll", int(m.group(1)) if m else 0))
+        elif "Firstborn rolled" in l:
+            k = re.search(r"(\d+) Kill", l)
+            p = re.search(r"(\d+) Pain", l)
+            mi = re.search(r"(\d+) Miss", l)
+            events.append(("dice", (int(k.group(1)) if k else 0, int(p.group(1)) if p else 0, int(mi.group(1)) if mi else 0)))
+        elif "Firstborn rerolled ALL dice with Writhe" in l:
+            events.append(("reroll", None))
+        elif "Firstborn Writhe: Acolyte replaced with Desiccated" in l:
+            m = re.search(r"in (\w[\w ]*)", l)
+            events.append(("writhe_kill", m.group(1).strip() if m else "?"))
+        elif "Firstborn Writhe: relocated" in l:
+            m = re.search(r"relocated (\w[\w' ]*) from (\w[\w ]*) to (\w[\w ]*)", l)
+            if m:
+                events.append(("writhe_pain", (m.group(1).strip(), m.group(2).strip(), m.group(3).strip())))
+        elif "Firstborn awakened Ghatanothoa" in l:
+            m = re.search(r"in (\w[\w ]*) for (\d+)", l)
+            events.append(("awaken", (m.group(1).strip() if m else "?", int(m.group(2)) if m else 0)))
+        elif "Firstborn built a gate in" in l:
+            m = re.search(r"built a gate in (\w[\w ]*)", l)
+            events.append(("build_gate", m.group(1).strip() if m else "?"))
+        elif "Firstborn lost control of the gate" in l:
+            m = re.search(r"gate in (\w[\w ]*)", l)
+            events.append(("lost_gate", m.group(1).strip() if m else "?"))
+        elif "Firstborn gained control of the gate" in l:
+            m = re.search(r"gate in (\w[\w ]*)", l)
+            events.append(("gained_gate", m.group(1).strip() if m else "?"))
+        elif "Firstborn performed the ritual" in l:
+            c = re.search(r"for (\d+) Power", l)
+            d = re.search(r"gained (\d+) Doom", l)
+            es = "Elder Sign" in l
+            events.append(("ritual", (int(c.group(1)) if c else 0, int(d.group(1)) if d else 0, es)))
+        elif "Firstborn placed Crater" in l:
+            m = re.search(r"in (\w[\w ]*) with Devil", l)
+            events.append(("crater", m.group(1).strip() if m else "?"))
+        elif "Firstborn moved" in l:
+            m = re.search(r"moved (\w[\w' ]*) from (\w[\w ]*) to (\w[\w ]*)", l)
+            if m:
+                events.append(("move", (m.group(1).strip(), m.group(2).strip(), m.group(3).strip())))
+        elif "Firstborn Call of the Faithful" in l:
+            m = re.search(r"Acolyte (on the gate )?in (\w[\w ]*)", l)
+            events.append(("cof", (m.group(2).strip() if m else "?", m.group(1) is not None if m else False)))
+        elif "Firstborn recruited" in l:
+            m = re.search(r"recruited (\w[\w' ]*) in (\w[\w ]*)", l)
+            if m:
+                events.append(("recruit", (m.group(1).strip(), m.group(2).strip())))
+        elif "Firstborn summoned" in l:
+            m = re.search(r"summoned (\w[\w' ]*) in (\w[\w ]*)", l)
+            if m:
+                events.append(("summon", (m.group(1).strip(), m.group(2).strip())))
+        elif "Firstborn captured" in l:
+            m = re.search(r"captured (\w[\w' ]*) in (\w[\w ]*)", l)
+            if m:
+                events.append(("capture", (m.group(1).strip(), m.group(2).strip())))
+        elif "Firstborn received" in l:
+            m = re.search(r"received (.+?)$", l)
+            if m:
+                events.append(("sb_earned", m.group(1).strip()))
+        elif "Firstborn ran out of power" in l or "Firstborn had no power" in l:
+            events.append(("end_turn", None))
+        elif "Play order" in l:
+            m = re.findall(r"\b([A-Z][a-z]+(?: [A-Z][a-z]+)*)\b", l)
+            if m:
+                events.append(("play_order", m))
+
+# ── Analysis pass: walk events and detect discrepancies ───────────────
+def walk_and_check():
+    issues = []
+    # Sim state reconstruction (best-effort from events)
+    gates = 1        # FB starts with 1 gate
+    awakens = 0
+    rituals = 0
+    craters = 0
+    current_ap = 1   # rough AP counter (each end_turn advances)
+    session_idx = 0
+    last_writhe_dice = None
+    last_writhe_rerolled = False
+    session_kills = []
+    session_pains = []
+    in_writhe = False
+
+    def finalize_writhe_session():
+        nonlocal session_kills, session_pains, last_writhe_dice, last_writhe_rerolled, session_idx, in_writhe
+        if not in_writhe:
+            return
+        session_idx += 1
+        # Strategy check: pair desc + cultist
+        desc_pains = [p for p in session_pains if "Desiccated" in (p[0] if isinstance(p, tuple) else "")]
+        cult_pains = [p for p in session_pains if "Acolyte" in (p[0] if isinstance(p, tuple) else "") or "Priest" in (p[0] if isinstance(p, tuple) else "")]
+        if desc_pains and cult_pains:
+            desc_dests = set(p[2] for p in desc_pains)
+            cult_dests = set(p[2] for p in cult_pains)
+            paired = desc_dests & cult_dests
+            if not paired:
+                issues.append(f"[Writhe #{session_idx}] UNPAIRED: desc→{sorted(desc_dests)}, cult→{sorted(cult_dests)}. Strategy: pair desc+cult at same region.")
+        if len(session_pains) >= 3:
+            all_dests = [p[2] for p in session_pains if isinstance(p, tuple)]
+            unique_dests = set(all_dests)
+            if len(unique_dests) == len(all_dests):
+                issues.append(f"[Writhe #{session_idx}] SCATTER: all {len(session_pains)} pains to different regions ({sorted(unique_dests)}).")
+        # Strategy check: reroll rules
+        if last_writhe_dice:
+            kills, pains, misses = last_writhe_dice
+            total = kills + pains + misses
+            should_reroll = kills >= 3 or pains < 2 or (total > 0 and misses * 2 > total)
+            if should_reroll and not last_writhe_rerolled and total > 0:
+                issues.append(f"[Writhe #{session_idx}] KEEP-WHEN-REROLL: rolled {kills}K/{pains}P/{misses}M but didn't reroll. Strategy: reroll if kills≥3 OR pains<2 OR misses>50%.")
+        # Reset
+        session_kills = []
+        session_pains = []
+        last_writhe_dice = None
+        last_writhe_rerolled = False
+        in_writhe = False
+
+    first_awaken_rituals = -1
+    dm_misfires = 0
+    low_yield_rituals = 0
+    for ev in events:
+        t = ev[0]
+        if t == "writhe_roll":
+            finalize_writhe_session()
+            in_writhe = True
+        elif t == "dice":
+            last_writhe_dice = ev[1]
+        elif t == "reroll":
+            last_writhe_rerolled = True
+        elif t == "writhe_kill":
+            session_kills.append(ev[1])
+        elif t == "writhe_pain":
+            session_pains.append(ev[1])
+        elif t == "build_gate":
+            gates += 1
+            in_writhe = False  # writhe ended earlier but catch trailing state
+        elif t == "lost_gate":
+            gates = max(0, gates - 1)
+        elif t == "gained_gate":
+            gates += 1
+        elif t == "awaken":
+            awakens += 1
+            if first_awaken_rituals < 0:
+                first_awaken_rituals = rituals
+        elif t == "ritual":
+            rituals += 1
+            if gates <= 1:
+                low_yield_rituals += 1
+        elif t == "crater":
+            craters += 1
+            if gates < 2:
+                dm_misfires += 1
+                issues.append(f"[DM #{craters}] MISFIRE: Devil's Mark with {gates} gate (destroys our only gate). Strategy: only with 2+ gates.")
+            gates = max(0, gates - 1)  # DM destroys the gate
+        elif t == "end_turn":
+            current_ap += 1
+            finalize_writhe_session()
+
+    # End of replay: flush pending
+    finalize_writhe_session()
+
+    # Summary-level anti-patterns
+    if first_awaken_rituals >= 2:
+        issues.append(f"LATE AWAKEN: first Ghato awakening happened after {first_awaken_rituals} rituals. Strategy: awaken in AP2, before any ritual.")
+    if awakens == 0 and rituals > 0:
+        issues.append(f"NO AWAKEN: {rituals} rituals but never awakened Ghatanothoa. Strategy: AP2 awakening is mandatory.")
+    if low_yield_rituals >= 2:
+        issues.append(f"LOW-YIELD RITUALS: {low_yield_rituals} rituals at 1-gate (yield 1 doom each). Strategy: aim for 2+ gates at ritual time.")
+    # Gate thrash
+    gate_builds = defaultdict(int)
+    for ev in events:
+        if ev[0] == "build_gate":
+            gate_builds[ev[1]] += 1
+    for region, count in gate_builds.items():
+        if count >= 3:
+            issues.append(f"GATE THRASH: Built gate in {region} {count} times (lost and rebuilt).")
+
+    # Strategy: CoF should fire when Rev/Ghato on gate — hard to check without live state
+    # Strategy: AP2 awakening timing — we'd need to know when AP2 is, approximate via turn boundaries
+    # Strategy: lone enemy cultist on land → desc+cult override — requires enemy position tracking
+
+    return issues, {
+        "gates_max_at_ritual": gates,
+        "awakens": awakens,
+        "rituals": rituals,
+        "craters": craters,
+        "dm_misfires": dm_misfires,
+        "low_yield_rituals": low_yield_rituals,
+        "sessions": session_idx,
+        "first_awaken_rituals": first_awaken_rituals,
+    }
+
+issues, stats = walk_and_check()
+
+# ── Print report ─────────────────────────────────────────────────────
+print("=" * 72)
+print(f"FB REPLAY ANALYSIS — {os.path.basename(path)}")
+print("=" * 72)
+
+# Starting
+start = next((e[1] for e in events if e[0] == "start"), "?")
+print(f"\n  Starting region: {start}")
+print(f"  Factions in game: {', '.join(state.setup_factions) if state.setup_factions else '?'}")
+
+# Event counts
+counts = defaultdict(int)
+for e in events:
+    counts[e[0]] += 1
+print("\n  Event counts:")
+for k, v in sorted(counts.items()):
+    print(f"    {k:20s} {v}")
+
+# Writhe session detail
+print(f"\n  Writhe sessions: {stats['sessions']}")
+
+# Rituals / awakens / craters
+rituals = [e for e in events if e[0] == "ritual"]
+awakens = [e for e in events if e[0] == "awaken"]
+craters = [e for e in events if e[0] == "crater"]
+print(f"\n  Rituals: {len(rituals)}")
+for r in rituals:
+    cost, doom, es = r[1]
+    print(f"    cost={cost} → doom={doom}" + (" + ES" if es else ""))
+print(f"\n  Awakenings: {len(awakens)}")
+for a in awakens:
+    print(f"    in {a[1][0]} for {a[1][1]} power")
+print(f"\n  Devil's Mark craters: {len(craters)}")
+for c in craters:
+    print(f"    in {c[1]}")
+
+# Discrepancies
+print("\n" + "=" * 72)
+print("DISCREPANCIES vs STRATEGY")
+print("=" * 72)
+if issues:
+    for i, issue in enumerate(issues):
+        print(f"  [{i+1}] {issue}")
+else:
+    print("  No discrepancies detected.")
+
+# Summary
+print("\n" + "=" * 72)
+print("SUMMARY")
+print("=" * 72)
+print(f"  Starting region    : {start}")
+print(f"  Writhe sessions    : {stats['sessions']}")
+print(f"  Rituals            : {len(rituals)}")
+print(f"  Awakenings         : {len(awakens)}")
+print(f"  Craters            : {len(craters)}")
+print(f"  Gates built events : {counts.get('build_gate', 0)}")
+print(f"  Gates lost events  : {counts.get('lost_gate', 0)}")
+print(f"  DM misfires        : {stats['dm_misfires']}")
+print(f"  Low-yield rituals  : {stats['low_yield_rituals']}")
+print(f"  Discrepancies      : {len(issues)}")

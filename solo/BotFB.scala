@@ -1296,12 +1296,18 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             case FBDevilsMarkPlaceCraterAction(_, r) =>
                 // Single-best-score conditional — each candidate region gets one tier.
                 val isFBControlled = self.gates.has(r)
-                val inEnemyGlyph = others.exists(f => game.starting.get(f).contains(r))
+                // WW has two potential start areas (Antarctica + Arctic Ocean), both have WW glyph.
+                // Antarctica counts as a glyph region even if WW didn't start there.
+                val wwGlyphRegion = WW.exists && (r.name == "Antarctica" || r.name == "ArcticOcean")
+                val inEnemyGlyph = others.exists(f => game.starting.get(f).contains(r)) || wwGlyphRegion
                 val inFBGlyph = fbStartGlyphRegion.contains(r)
-                val regionGlyphOwner = game.factions.exists(f => game.starting.get(f).contains(r))
+                val regionGlyphOwner = game.factions.exists(f => game.starting.get(f).contains(r)) || wwGlyphRegion
                 val hasFBCult = self.at(r).cultists.any
                 val unprotectedFBCult = hasFBCult && self.at(r).monsterly.none && self.at(r).goos.none
                 val protectedFBCult = hasFBCult && (self.at(r).monsterly.any || self.at(r).goos.any)
+                // Slight preference for gate with Ghato (tiebreaker — Ghato gate wins ties)
+                val hasGhatoHere = self.at(r, Ghatanothoa).any
+                hasGhatoHere |=> 100 -> "DM: slight Ghato gate preference"
                 // Strategy guide: if NoAcolytesInStart needed, DM the starting gate
                 val needsNoAcolytes = self.needs(FBNoAcolytesInStart) && fbStartRegion.contains(r) &&
                     self.at(r).cultists.any

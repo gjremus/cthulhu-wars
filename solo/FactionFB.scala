@@ -194,7 +194,7 @@ case class FBAwakenGhatanothoaAction(self : Faction, cost : Int) extends OptionF
 // Now Hard — undo will correctly reverse the power deduction and elimination chain.
 case class FBTheEyeOpensMainAction(self : Faction) extends OptionFactionAction(TheEyeOpens) with MainQuestion
 case class FBTheEyeOpensTargetAction(self : Faction, r : Region, f : Faction) extends BaseFactionAction(
-    Desiccated.styled(FB) + " and " + f.name.styled(f) + " Cultist in", r
+    implicit g => Desiccated.styled(FB) + " and " + f.name.styled(f) + " Cultist in", implicit g => r + self.iced(r)
 )
 // Round 8 Bug 50: parameter changed from `uc : UnitClass` to `u : UnitRef` so the
 // enemy can choose between specific cultists (e.g., on-gate vs off-gate Acolyte)
@@ -698,10 +698,13 @@ object FBExpansion extends Expansion {
             if (f.power >= 2)
                 + FBWritheMainAction(f)
 
-            // The Eye Opens (Cost 1)
+            // The Eye Opens (Cost 1, +1 in Ice Age region)
             if (f.has(TheEyeOpens) && !FB.oncePerGame.has(TheEyeOpens)) {
                 if (f.power >= 1) {
-                    val eligible = areas.%(r => f.at(r, Desiccated).any && f.enemies.exists(_.at(r).%(_.uclass.utype == Cultist).any))
+                    val eligible = areas.%(r => f.at(r, Desiccated).any &&
+                        f.enemies.exists(_.at(r).%(_.uclass.utype == Cultist).any) &&
+                        // Ice Age regions cost 2 total — check affordability
+                        (f.power >= 2 || !game.factions.exists(wf => wf.iceAge.contains(r))))
                     if (eligible.any)
                         + FBTheEyeOpensMainAction(f)
                 }
@@ -1250,6 +1253,12 @@ object FBExpansion extends Expansion {
             asking
 
         case FBTheEyeOpensTargetAction(self, r, f) =>
+            // Ice Age: Eye Opens costs 1 extra power in Ice Age region
+            val iceAgeExtra = game.factions.exists(wf => wf.iceAge.contains(r))
+            if (iceAgeExtra) {
+                self.power -= 1
+                self.log(TheEyeOpens.styled(FB), "costs extra", 1.power, "due to", IceAge)
+            }
             // Round 8 Bug 50: prompt the enemy to pick the SPECIFIC unit to eliminate
             // (per-unit, not per-class) so they can choose between on-gate and off-gate
             // cultists of the same class. Only auto-pick if there's exactly 1 cultist.
@@ -1260,7 +1269,7 @@ object FBExpansion extends Expansion {
                 f.log(u.uclass.styled(f), "eliminated in", r, "by", TheEyeOpens.styled(FB))
                 val d = self.at(r, Desiccated).head
                 game.eliminate(d)
-                // Net power: cost 1 paid above, gain 1 here = flat
+                // Net power: cost 1 paid above, gain 1 here = flat (minus ice age extra)
                 self.power += 1
                 self.log(TheEyeOpens.styled(FB) + ": eliminated", u.uclass.styled(f), "and", Desiccated.styled(FB), "in", r)
                 EndAction(self)
