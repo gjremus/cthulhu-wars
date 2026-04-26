@@ -49,6 +49,8 @@ class GlyphPlacement(boardId : String) {
 
     // Random valid placement within the same region as (x, y) — used by the unit layout engine.
     def findAnother(x : Int, y : Int) : (Int, Int) = {
+        if (x < 0 || x >= placeb.width || y < 0 || y >= placeb.height)
+            return (x, y)
         val p = place(x)(y)
         var xx = 0
         var yy = 0
@@ -85,6 +87,9 @@ class GlyphPlacement(boardId : String) {
     // Constraint: the chosen position itself must be in the place map's core region
     // (not a gap pixel) so the glyph CENTER is in the playable area.
     def findStaticGlyphPos(gx : Int, gy : Int, halfGlyph : Int = 33, halfGate : Int = 38) : (Int, Int) = {
+        // Bounds check: if gate coords exceed bitmap, return gate coords as fallback
+        if (gx < 0 || gx >= placeb.width || gy < 0 || gy >= placeb.height)
+            return (gx, gy)
         val regionColor = place(gx)(gy)
         val GAP = 0
         val MaxExpansion = 12
