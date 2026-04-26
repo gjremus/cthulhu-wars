@@ -2216,6 +2216,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 val aa = Explode.explode(g, actions)
 
                                 // Tombstalker (TS) and BG: use Bot3 evaluation for debug action sorting
+                                // NOTE: only fires in Debug difficulty mode, not during normal bot play
                                 val sorted = if (f == BG || f == TS)
                                     Bot3(f).eval(aa)(g).sortBy(-_.evaluations.map(_.weight).sum)
                                 else
