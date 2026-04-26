@@ -1060,7 +1060,7 @@ object CthulhuWarsSolo {
             def factionStatus(f : Faction, b : CachedBitmap)(implicit game : Game) {
                 if (!game.setup.has(f))
                     return
-                dom.console.log(s"FACTION STATUS CALLED for ${f} loyaltyCards=${f.loyaltyCards.num} shamblerHold=${f.at(ShamblerHold(f)).num} reserve=${f.pool(DimensionalShamblerUnit).num}")
+                // Debug logging removed — was firing on every UI cycle for every faction, causing severe slowdown
 
                 def div(styles : String*)(content : String) = if (styles.none) "<div>" + content + "</div>" else "<div class=\"" + styles.mkString(" ") + "\">" + content + "</div>"
                 def r(content : String) = div("right")(content)
