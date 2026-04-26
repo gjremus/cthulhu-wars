@@ -679,7 +679,12 @@ object CthulhuWarsSolo {
             val glyphPlacer = new GlyphPlacement(board.id)
             val place = glyphPlacer.place
             val findAnother = (x : Int, y : Int) => glyphPlacer.findAnother(x, y)
-            def findStaticGlyphPos(gx : Int, gy : Int) : (Int, Int) = glyphPlacer.findStaticGlyphPos(gx, gy, halfGlyph = 33, halfGate = 38)
+            // Cache glyph positions: glyphs are static (same position every render).
+            // Without caching, findStaticGlyphPos scans the entire placement bitmap
+            // on every map redraw — consuming 85% of all CPU time.
+            val glyphPosCache = scala.collection.mutable.Map[(Int, Int), (Int, Int)]()
+            def findStaticGlyphPos(gx : Int, gy : Int) : (Int, Int) =
+                glyphPosCache.getOrElseUpdate((gx, gy), glyphPlacer.findStaticGlyphPos(gx, gy, halfGlyph = 33, halfGate = 38))
 
             case object DesecrationToken extends FactionUnitClass(YS, "Desecration", Token, 0)
             case object IceAgeToken extends FactionUnitClass(WW, "Ice Age", Token, 0)
