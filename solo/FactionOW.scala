@@ -346,7 +346,9 @@ object OWExpansion extends Expansion {
 
         case DreadCurseRetreatToAction(self, r, e, f, uc, d) =>
             val u = f.at(r, uc).%(_.health == Pained).sortP.first
+            game.fbSuppressCGForPlacement = true
             u.region = d
+            game.fbSuppressCGForPlacement = false
             u.onGate = false
             u.health = Alive
             log(u, "was", "pained".styled("pain"), "to", d)

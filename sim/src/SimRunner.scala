@@ -8,14 +8,20 @@ import java.nio.charset.StandardCharsets
 /**
  * SimRunner — sim-specific entry point.
  *
- * Args: <players> <games> [faction1 faction2 ...] [--hp] [--nm] [--igoo] [--rand]
+ * Args: <players> <games> [faction1 faction2 ...] [flags...]
  *   players  : 3, 4, or 5 (ignored if --rand)
  *   games    : number of games to run
- *   factions : optional list of required factions (gc cc bg ys sl ww ow an ts)
+ *   factions : optional list of required factions (gc cc bg ys sl ww ow an ts fb ds)
  *   --hp     : include High Priests (each faction gets 1 HP at start)
  *   --nm     : include all Neutral Monsters (Ghast, Gug, Shantak, StarVampire, Voonith, DS, Gnorri)
  *   --igoo   : include all iGOOs (Byatis, Abhoth, Daoloth, Nyogtha, Tulzscha, Ygolonac)
  *   --rand   : randomize player count per game (3, 4, or 5)
+ *   --rand-flags : randomly toggle HP/NM/iGOO (50%) and other flags (30%) per game
+ *   --opener10 : Opener4P10Gates flag
+ *   --demand-tsat : DemandTsathoggua flag (SL needs Tsathoggua)
+ *   --neutral-sb : NeutralSpellbooks
+ *   --ice-lethargy : IceAgeAffectsLethargy
+ *   --gate-dip : GateDiplomacy
  *
  * Structured output lines (parsed by tune_ts.py):
  *   GAME|factions=...|players=...|winner=...|turns=...[|ts_*=...]
@@ -33,7 +39,106 @@ import java.nio.charset.StandardCharsets
  */
 object SimRunner {
     def main(args : Array[String]) {
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB)
+        // ── REPLAY MODE: replay an action file and output log ──────────────
+        if (args.length >= 2 && args(0) == "--replay") {
+            val inputPath = args(1)
+            val outputPath = if (args.length > 2) args(2) else inputPath.replace(".txt", "-log.txt")
+            val lines = scala.io.Source.fromFile(inputPath).getLines().toList.map(_.trim).filter(_.nonEmpty)
+
+            // Parse header: "Cthulhu Wars 1.18 Replay" then "BG-YS-SL-FB MapEarth35 PlayerCount(4)"
+            val headerLine = lines.find(_.contains("Map")).getOrElse(lines(1))
+            val factionCodes = headerLine.split(" ")(0).split("-").toList
+            val mapName = headerLine.split(" ").find(_.startsWith("Map")).getOrElse("MapEarth35").replace("Map", "")
+            val pcMatch = "PlayerCount\\((\\d+)\\)".r.findFirstMatchIn(headerLine)
+            val pc = pcMatch.map(_.group(1).toInt).getOrElse(factionCodes.size)
+
+            val board = mapName match {
+                case "Earth33" => EarthMap3
+                case "Earth35" | "Earth4v35" => EarthMap4v35
+                case "Earth53" | "Earth4v53" => EarthMap4v53
+                case "Earth55" => EarthMap5
+                case _ => EarthMap4v35
+            }
+            val ritualTrack = pc match {
+                case 3 => RitualTrack.for3
+                case 5 => RitualTrack.for5
+                case _ => RitualTrack.for4
+            }
+
+            // Parse options from header
+            var opts : $[GameOption] = $
+            if (headerLine.contains("HighPriests")) opts :+= HighPriests
+            if (headerLine.contains("UseGhast")) opts :+= UseGhast
+            if (headerLine.contains("UseGug")) opts :+= UseGug
+            if (headerLine.contains("UseShantak")) opts :+= UseShantak
+            if (headerLine.contains("UseStarVampire")) opts :+= UseStarVampire
+            if (headerLine.contains("UseVoonith")) opts :+= UseVoonith
+            if (headerLine.contains("UseDimensionalShamblers")) opts :+= UseDimensionalShamblers
+            if (headerLine.contains("UseGnorri")) opts :+= UseGnorri
+            if (headerLine.contains("UseByatis")) opts :+= UseByatis
+            if (headerLine.contains("UseAbhoth")) opts :+= UseAbhoth
+            if (headerLine.contains("UseDaoloth")) opts :+= UseDaoloth
+            if (headerLine.contains("UseNyogtha")) opts :+= UseNyogtha
+            if (headerLine.contains("UseTulzscha")) opts :+= UseTulzscha
+            if (headerLine.contains("UseYgolonac")) opts :+= UseYgolonac
+            if (headerLine.contains("Opener4P10Gates")) opts :+= Opener4P10Gates
+
+            def parseFactionReplay(s : String) : Faction = s match {
+                case "GC" => GC; case "CC" => CC; case "BG" => BG; case "YS" => YS
+                case "SL" => SL; case "WW" => WW; case "OW" => OW; case "AN" => AN
+                case "TS" => TS; case "FB" => FB; case "DS" => DS
+            }
+            val seating = factionCodes.map(parseFactionReplay)
+            val game = new Game(board, ritualTrack, seating, true, opts)
+            val serializer = new Serialize(game)
+
+            // Filter to action lines only (skip header, skip log divs)
+            val actionLines = lines.filter(l =>
+                !l.startsWith("Cthulhu Wars") && !l.contains("Map") && !l.startsWith("<div") &&
+                !l.startsWith("Options") && l.nonEmpty)
+
+            var log : $[String] = $
+            def writeLog(s : String) { log :+= s }
+
+            println("Replaying " + actionLines.size + " actions for " + seating.map(_.short).mkString("-") + " on " + mapName + " (" + pc + "p)")
+
+            val (startLog, startCont) = game.perform(StartAction)
+            startLog.foreach(writeLog)
+            var c = startCont
+            var actionIdx = 0
+
+            try {
+                while (!c.isInstanceOf[GameOver] && actionIdx < actionLines.size) {
+                    val actionStr = actionLines(actionIdx).replace("&gt;", ">")
+                    try {
+                        val action = serializer.parseAction(actionStr)
+                        val (ll, cc) = game.perform(action)
+                        ll.foreach(writeLog)
+                        c = cc
+                    } catch {
+                        case e : Throwable =>
+                            writeLog("<div class='p'>REPLAY ERROR at action " + actionIdx + ": " + actionStr.take(80) + "</div>")
+                    }
+                    actionIdx += 1
+                }
+            } catch {
+                case _ : Throwable =>
+                    writeLog("<div class='p'>REPLAY ENDED at action " + actionIdx + "</div>")
+            }
+
+            // Write output: action lines + log lines (same format as SimRunner save)
+            val writer = new java.io.PrintWriter(new java.io.File(outputPath))
+            actionLines.foreach(writer.println)
+            writer.println()
+            writer.println()
+            log.foreach(s => writer.println("<div class='p'>" + s + "</div>"))
+            writer.close()
+
+            println("Written " + actionLines.size + " actions + " + log.size + " log lines to " + outputPath)
+            return
+        }
+
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS)
 
         // ── Flag parsing ───────────────────────────────────────────────────
         val withHP    = args.contains("--hp")
@@ -42,7 +147,14 @@ object SimRunner {
         val withRand  = args.contains("--rand")
         val withTrace = args.contains("--trace")
         val saveAll   = args.contains("--save-all")
-        val cleanArgs = args.filterNot(Set("--hp", "--nm", "--igoo", "--rand", "--trace", "--save-all").contains)
+        val withOpener10 = args.contains("--opener10")
+        val withDemandTsat = args.contains("--demand-tsat")
+        val withNeutralSB = args.contains("--neutral-sb")
+        val withIceLethargy = args.contains("--ice-lethargy")
+        val withGateDip = args.contains("--gate-dip")
+        val withRandFlags = args.contains("--rand-flags")
+        val cleanArgs = args.filterNot(Set("--hp", "--nm", "--igoo", "--rand", "--trace", "--save-all",
+            "--opener10", "--demand-tsat", "--neutral-sb", "--ice-lethargy", "--gate-dip", "--rand-flags").contains)
 
         val defaultPlayers = if (cleanArgs.length > 0 && cleanArgs(0) != "rand") cleanArgs(0).toInt else 4
         val numberOfGames  = if (cleanArgs.length > 1) cleanArgs(1).toInt else 100
@@ -58,6 +170,7 @@ object SimRunner {
             case "an" => Some(AN)
             case "ts" => Some(TS)
             case "fb" => Some(FB)
+            case "ds" => Some(DS)
             case _    => None
         }
 
@@ -69,13 +182,27 @@ object SimRunner {
         val allIGOOOptions : $[GameOption] =
             $(UseByatis, UseAbhoth, UseDaoloth, UseNyogtha, UseTulzscha, UseYgolonac)
 
+        val allToggleOptions : $[GameOption] =
+            $(Opener4P10Gates, DemandTsathoggua, NeutralSpellbooks, IceAgeAffectsLethargy, GateDiplomacy)
+
         def buildOptions(pc : Int) : $[GameOption] = {
-            // Base NM: no neutral monsters by default. Use --nm to enable all.
-            val baseNM : $[GameOption] = $
-            val nm   : $[GameOption]   = if (withNM)   allNMOptions   else baseNM
-            val hp   : $[GameOption]   = if (withHP)   $(HighPriests) else $
-            val igoo : $[GameOption]   = if (withIGOO) allIGOOOptions else $
-            nm ++ hp ++ igoo
+            if (withRandFlags) {
+                val nm   : $[GameOption] = if (random() < 0.5) allNMOptions   else $
+                val hp   : $[GameOption] = if (random() < 0.5) $(HighPriests) else $
+                val igoo : $[GameOption] = if (random() < 0.5) allIGOOOptions else $
+                val toggles : $[GameOption] = allToggleOptions.filter(_ => random() < 0.3)
+                nm ++ hp ++ igoo ++ toggles
+            } else {
+                val nm   : $[GameOption]   = if (withNM)   allNMOptions   else $
+                val hp   : $[GameOption]   = if (withHP)   $(HighPriests) else $
+                val igoo : $[GameOption]   = if (withIGOO) allIGOOOptions else $
+                val opener : $[GameOption] = if (withOpener10) $(Opener4P10Gates) else $
+                val dTsat  : $[GameOption] = if (withDemandTsat) $(DemandTsathoggua) else $
+                val nSB    : $[GameOption] = if (withNeutralSB) $(NeutralSpellbooks) else $
+                val iceL   : $[GameOption] = if (withIceLethargy) $(IceAgeAffectsLethargy) else $
+                val gDip   : $[GameOption] = if (withGateDip) $(GateDiplomacy) else $
+                nm ++ hp ++ igoo ++ opener ++ dTsat ++ nSB ++ iceL ++ gDip
+            }
         }
 
         // ── Faction combination pools ──────────────────────────────────────
@@ -86,7 +213,7 @@ object SimRunner {
             case GC => "gc" ; case CC => "cc" ; case BG => "bg"
             case YS => "ys" ; case SL => "sl" ; case WW => "ww"
             case OW => "ow" ; case AN => "an" ; case TS => "ts"
-            case FB => "fb"
+            case FB => "fb" ; case DS => "ds"
             case _  => "xx"
         }
 
@@ -107,8 +234,8 @@ object SimRunner {
             } else {
                 val randPools = validCounts.map(n => n -> makePool(n)).toMap
                 (1 to numberOfGames).map { _ =>
-                    val pc = validCounts.sortBy(_ => random()).head
-                    pc -> randPools(pc).sortBy(_ => random()).head
+                    val pc = validCounts.shuffle.head
+                    pc -> randPools(pc).shuffle.head
                 }.toList
             }
         } else {

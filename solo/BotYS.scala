@@ -186,6 +186,10 @@ class GameEvaluationYS(implicit game : Game) extends GameEvaluation(YS)(game) {
                 // Firstborn (FB): opponent combat evaluation
                 case FB =>
                     true |=> 0 -> "fb"
+
+                // Daemon Sultan (DS): opponent combat evaluation
+                case DS =>
+                    0 -> "todo"
             }
         }
 
@@ -262,6 +266,44 @@ class GameEvaluationYS(implicit game : Game) extends GameEvaluation(YS)(game) {
             //
             // case NeutralMonstersAction(_, _) =>
             //     true |=> +100000 -> "don't obtain loyalty cards (for now)"
+
+            // DS Power/Doom offer: take Power when Hastur isn't on map
+            case PowerDoomChoicePowerAction(_, _, _, _, _) =>
+                self.all(Hastur).none |=> 800 -> "need power to awaken hastur"
+                self.all(Hastur).any  |=> -200 -> "hastur up prefer doom"
+            case PowerDoomChoiceDoomAction(_, _, _, _, _) =>
+                self.all(Hastur).any  |=> 800 -> "hastur up take doom"
+                self.all(Hastur).none |=> -200 -> "need power first"
+
+            // Azathoth Synthesis bidding — never let DS win; prefer power, fall back to doom
+            case AzathothSynthesisPowerAskAction(_, x, offers, forum, time, _, p) =>
+                val gap = x - offers./(_.n).sum
+                val panic = time <= forum.num
+                p == -1 && gap <= 0  |=>   2000 -> "target met skip"
+                p == -1 && gap > 0   |=> -50000 -> "refuse lets DS win"
+                p == 0 && !panic     |=> (5*5*5*5*5*5 * math.random()).round.toInt -> "wait for others"
+                p == 0 && panic      |=>  -8000 -> "panic must contribute"
+                p == 1               |=> (2*5*5*5*5*5 * math.random()).round.toInt -> "pay 1"
+                p == 2               |=> (2*2*5*5*5*5 * math.random()).round.toInt -> "pay 2"
+                p == 3               |=> (2*2*2*5*5*5 * math.random()).round.toInt -> "pay 3"
+                p == 4               |=> (2*2*2*2*5*5 * math.random()).round.toInt -> "pay 4"
+                p == 5               |=> (2*2*2*2*2*5 * math.random()).round.toInt -> "pay 5"
+                p >= 6               |=> (2*2*2*2*2*2 * math.random()).round.toInt -> "pay 6+"
+                p >= gap && panic    |=>  10000 -> "meet gap in panic"
+            case AzathothSynthesisDoomAskAction(_, x, offers, forum, time, _, p, d) =>
+                val gap = x - offers./(_.n).sum - p
+                val panic = time <= forum.num
+                d == -1 && gap <= 0  |=>   2000 -> "target met skip"
+                d == -1 && gap > 0   |=> -50000 -> "refuse lets DS win"
+                d == 0 && !panic     |=> (5*5*5*5*5*5 * math.random()).round.toInt -> "wait for others"
+                d == 0 && panic      |=>  -8000 -> "panic must contribute"
+                d == 1               |=> (2*5*5*5*5*5 * math.random()).round.toInt -> "pay 1"
+                d == 2               |=> (2*2*5*5*5*5 * math.random()).round.toInt -> "pay 2"
+                d == 3               |=> (2*2*2*5*5*5 * math.random()).round.toInt -> "pay 3"
+                d == 4               |=> (2*2*2*2*5*5 * math.random()).round.toInt -> "pay 4"
+                d == 5               |=> (2*2*2*2*2*5 * math.random()).round.toInt -> "pay 5"
+                d >= 6               |=> (2*2*2*2*2*2 * math.random()).round.toInt -> "pay 6+"
+                d >= gap && panic    |=>  10000 -> "meet gap in panic"
 
             case DoomDoneAction(_) =>
                 true |=> 10 -> "doom done"
@@ -380,6 +422,9 @@ class GameEvaluationYS(implicit game : Game) extends GameEvaluation(YS)(game) {
                 game.cathedrals.contains(d) && AN.has(UnholyGround) && d.str(AN) > 0 && (AN.power > 0 || power < 3) |=> -50000 -> "beware unholy ground"
 
             case ScreamingDeadAction(_, o, d) =>
+                // KiY + all Undead in origin move together
+                val screamMovers = 1 + o.allies(Undead).num
+                fbMultiMoveAvoidance(d, screamMovers).foreach(e => true |=> e)
                 val undead = o.allies(Undead).num
                 val followers = undead - (o.ownGate && o.allies.monsterly.num == undead && o.foes.monsterly.active.any && o.foes.goos.active.none).??(1)
                 def isSafe(r : Region) = active.%(f => f.strength(f.at(r).diff(f.at(r).cultists.take(1)), self) > d.allies.num + followers).none
@@ -491,6 +536,7 @@ class GameEvaluationYS(implicit game : Game) extends GameEvaluation(YS)(game) {
 
 
             case ScreamingDeadFollowAction(_, o, d, _) =>
+                fbMoveAvoidance(d).foreach(e => true |=> e)
                 true |=> 1000 -> "always"
                 o.ownGate && o.allies.monsterly.num == 1 && o.foes.monsterly.active.any && o.foes.goos.active.none |=> -2000 -> "stay to protect gate"
                 o.allies(Hastur).any && o.allies.num < 4 && active.%(_.allSB).any && power == 0 |=> -2000 -> "stay to protect hastur"
@@ -768,6 +814,7 @@ class GameEvaluationYS(implicit game : Game) extends GameEvaluation(YS)(game) {
                 true |=> 200 -> "byakhee ok"
 
             case HWINTBNAction(_, o, d) =>
+                fbMoveAvoidance(d).foreach(e => true |=> e)
                 o.allies(KingInYellow).any && power == 1 |=>  -1000 -> "stay with kiy"
 
                 o.allies(KingInYellow).any && active.%(_.allSB).any |=> -1000 -> "stay with kiy"

@@ -60,6 +60,7 @@ case class Bot3(faction : Faction) {
             def gate = game.gates.has(r)
             def ownGate = self.gates.has(r)
             def enemyGate = others.%(_.gates.has(r)).any
+            def chaosGate = DS.chaosGateRegions.has(r)
             def freeGate = gate && !ownGate && !enemyGate
             def controllers : $[UnitFigure] = (ownGate || enemyGate).??(owner.at(r).%(_.canControlGate))
             def owner = game.factions.%(_.gates.has(r)).single.get
@@ -92,6 +93,15 @@ case class Bot3(faction : Faction) {
         implicit def unitRefToUnitFigureGameEx(r : UnitRef) : UnitFigureGameEx = UnitFigureGameEx(r)
 
         val maxEnemyPower = others./(_.power).max
+
+        val fbInGame3 = game.factions.has(FB) && self != FB
+        val fbHasCG3 = fbInGame3 && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze)
+        def fbAvoid3(r : Region) : Int = {
+            if (!fbInGame3) 0
+            else if (game.fbCraters.has(r)) -7000
+            else if (fbHasCG3 && (FB.at(r, Ghatanothoa).any || FB.at(r, RevenantOfKnaa).any)) -7000
+            else 0
+        }
 
         def adjustedOwnStrengthForCosmicUnity(ownStr : Int, allies : $[UnitFigure], foes : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
             val hasDaoloth = foes.exists(_.uclass == Daoloth)
@@ -331,6 +341,7 @@ case class Bot3(faction : Faction) {
                     true |=> -100000 -> "don't avatar uncontrolled filth (for now)"
 
                 case AvatarAction(_, o, r, f) =>
+                    { val fb = fbAvoid3(r); fb != 0 |=> fb -> "avoid FB CG/crater" }
                     val shub = self.all(ShubNiggurath).only
 
                     r.enemyGate && f == r.owner && f.at(r).monsterly.num == 0 && (shub.friends.monsterly.any || !shub.region.ownGate) |=> 600 -> "get gate no monster"
@@ -343,6 +354,7 @@ case class Bot3(faction : Faction) {
                     game.cathedrals.has(r) && AN.has(UnholyGround) && AN.strength(AN.at(r), self) > 0 && (AN.power > 0 || power < 3) |=> -50000 -> "beware unholy ground"
 
                 case MoveAction(_, u, o, d, cost) =>
+                    { val fb = fbAvoid3(d); fb != 0 |=> fb -> "avoid FB CG/crater" }
                     self.realDoom > 28 && d.allies.none && o.allies.any && self.needs(Spread8) && self.allInPlay.num >= 8 && areas.%(self.present).num < 8 |=> 3000 -> "final spread"
                     self.realDoom > 27 && self.needs(SpreadSocial) && d.allies.none && d.foes./(_.faction).%(f => areas.%(r => r.allies.any && f.at(r).any).none).any |=> 1000 -> "final social spread"
 
@@ -504,13 +516,14 @@ case class Bot3(faction : Faction) {
                     true |=> 500 -> "move done"
 
                 case MoveAction(_, u, o, d, cost) =>
+                    { val fb = fbAvoid3(d); fb != 0 |=> fb -> "avoid FB CG/crater" }
                     true |=> 100 -> "moving is ok"
                     u.gateKeeper && (!u.capturable || u.enemies.goos.none) |=> -1000 -> "don't move gatekeeper"
 
                     u.monsterly && o.allies.none && d.foes.goos.any |=> 100 -> "alone vs goo"
 
-                    u.canControlGate && !u.gateKeeper && d.freeGate && self.gates.num < self.allInPlay.%(_.canControlGate).num && d.capturers.none |=> 500 -> "ic free gate"
-                    u.monsterly && !d.foes.goos.any && d.freeGate && self.gates.num < self.allInPlay.%(_.canControlGate).num && d.capturers.any && power > 1 |=> 500 -> "ic free gate"
+                    u.canControlGate && !u.gateKeeper && d.freeGate && !d.chaosGate && self.gates.num < self.allInPlay.%(_.canControlGate).num && d.capturers.none |=> 500 -> "ic free gate"
+                    u.monsterly && !d.foes.goos.any && d.freeGate && !d.chaosGate && self.gates.num < self.allInPlay.%(_.canControlGate).num && d.capturers.any && power > 1 |=> 500 -> "ic free gate"
 
                     d.ownGate && canSummon(u.uclass) && self.summonCost(u.uclass, d) == 1 |=> -1000 -> "why move if can summon for same"
                     d.ownGate && canSummon(u.uclass) && self.summonCost(u.uclass, d) == 2 |=> -500 -> "why move if can summon for almost same"
@@ -631,7 +644,7 @@ case class Bot3(faction : Faction) {
                     self == GC && r.glyph == Ocean |=> 250 -> "cthulhu likes ocean gates"
 
                 case RecruitAction(_, Acolyte, r) =>
-                    r.freeGate && r.foes.goos.none && (r.foes.monsterly.none || r.allies.goos.any || r.allies.monsterly.any) |=> 800 -> "free gate"
+                    r.freeGate && !r.chaosGate && r.foes.goos.none && (r.foes.monsterly.none || r.allies.goos.any || r.allies.monsterly.any) |=> 800 -> "free gate"
                     r.foes.goos.any && r.allies.goos.none |=> -500 -> "recruit to capture"
                     r.allies.cultists.num == 1 |=> 200 -> "a cultist needs a friend"
                     r.allies.cultists.num == 2 |=> 100 -> "two cultists needs a friend"
@@ -705,6 +718,18 @@ case class Bot3(faction : Faction) {
                     power == 5 |=> 2*2*2*2*2*3 -> "pay 5"
                     power == 6 |=> 2*2*2*2*2*2 -> "pay 6"
                     result = result.map(e => Evaluation((e.weight * Math.random()).round.toInt, e.desc))
+
+                case PowerDoomChoicePowerAction(_, _, _, _, _) =>
+                    power <= 2 |=> 2000 -> "DS offer: take power (low power)"
+                    !self.allSB |=> 1500 -> "DS offer: take power (need SBs)"
+                    self.allSB && self.doom >= 25 |=> -500 -> "DS offer: power less useful late"
+                    true |=> 1000 -> "DS offer: power default"
+
+                case PowerDoomChoiceDoomAction(_, _, _, _, _) =>
+                    self.allSB && self.doom >= 20 |=> 2000 -> "DS offer: take doom (endgame)"
+                    self.allSB |=> 1500 -> "DS offer: take doom (all SBs)"
+                    !self.allSB |=> 500 -> "DS offer: doom early is weak"
+                    true |=> 800 -> "DS offer: doom default"
 
                 case GiveWorstMonsterAskAction(_, _, uc, r, _)  =>
                     result = evalA(SummonAction(self, uc, r))
@@ -805,6 +830,14 @@ case class Bot3(faction : Faction) {
                     u.uclass == DeepTendril |=> -400 -> "elim deep tendril"
                     u.uclass == Glaaki |=> -1000 -> "elim glaaki"
 
+                    // DS
+                    u.uclass == LarvaThesis |=> 500 -> "elim larva thesis"
+                    u.uclass == LarvaAntithesis |=> 500 -> "elim larva antithesis"
+                    u.uclass == LarvaSynthesis |=> 500 -> "elim larva synthesis"
+                    u.uclass == AvatarThesis |=> -400 -> "elim avatar thesis"
+                    u.uclass == AvatarAntithesis |=> -1000 -> "elim avatar antithesis"
+                    u.uclass == AvatarSynthesis |=> -1000 -> "elim avatar synthesis"
+
                     // WW
                     u.uclass == Wendigo |=> 500 -> "elim wendigo"
                     u.uclass == GnophKeh |=> -200 -> "elim gnoph-keh"
@@ -871,6 +904,14 @@ case class Bot3(faction : Faction) {
                     u.uclass == TombHerd |=> 300 -> "retr tomb-herd"
                     u.uclass == DeepTendril |=> -400 -> "retr deep tendril"
                     u.uclass == Glaaki |=> -1000 -> "retr glaaki"
+
+                    // DS
+                    u.uclass == LarvaThesis |=> 500 -> "retr larva thesis"
+                    u.uclass == LarvaAntithesis |=> 500 -> "retr larva antithesis"
+                    u.uclass == LarvaSynthesis |=> 500 -> "retr larva synthesis"
+                    u.uclass == AvatarThesis |=> -400 -> "retr avatar thesis"
+                    u.uclass == AvatarAntithesis |=> -1000 -> "retr avatar antithesis"
+                    u.uclass == AvatarSynthesis |=> -1000 -> "retr avatar synthesis"
 
                     // WW
                     u.uclass == Wendigo |=> 500 -> "retr wendigo"

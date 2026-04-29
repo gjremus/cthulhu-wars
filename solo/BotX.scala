@@ -76,7 +76,11 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
 
     implicit class FactionClassify(val f : Faction) {
         def exists = game.players.contains(f)
-        def aprxDoom = f.doom + (f.es.num * 1.67).round.toInt
+        def aprxDoom = {
+            val base = f.doom + (f.es.num * 1.67).round.toInt
+            val tomePen = if (game.factions.has(TS) && f != TS) game.cursedTomesOwned.get(f).|(Nil).count { case (_, fd) => fd } else 0
+            base - tomePen
+        }
         def maxDoom = f.doom + min(6, f.es.num) * 3 + max(0, f.es.num - 6) * 2
         def count(uc : UnitClass) = f.all(uc).num
         def allSB = f.hasAllSB
@@ -121,19 +125,19 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
         else FB.at(r, Ghatanothoa).num + FB.at(r, RevenantOfKnaa).num
     def hasFBCrater(r : Region) : Boolean =
         fbInGame && game.fbCraters.has(r)
-    // Score for discouraging a single unit move into a CG region or crater.
-    // Returns Some(weight,desc) if a negative should be applied, else None.
+    // Single-unit move: block if destination has ANY CG defender.
     def fbMoveAvoidance(r : Region) : |[(Int, String)] = {
         if (hasFBCrater(r)) |((-7000, "avoid FB crater region"))
-        else if (fbHasCG && isFBGazeRegion(r)) |((-7000, "avoid FB gaze region (CG pain risk)"))
+        else if (fbHasCG && isFBGazeRegion(r)) |((-7000, "avoid FB CG region (1 unit <= defenders)"))
         else None
     }
-    // Score for multi-unit moves: need at least 3 survivors after CG pains.
+    // Multi-unit move: block only if total movers <= CG defender count.
+    // If movers > defenders, enough units survive — allow the move.
     def fbMultiMoveAvoidance(r : Region, movers : Int) : |[(Int, String)] = {
-        if (hasFBCrater(r)) |((-6500, "avoid multi-move into FB crater region"))
+        if (hasFBCrater(r)) |((-7000, "avoid multi-move into FB crater region"))
         else if (fbHasCG && isFBGazeRegion(r)) {
-            val sources = fbGazeSourceCount(r)
-            if ((movers - sources) < 3) |((-7000, "multi-move into CG region: not enough survivors"))
+            val defenders = fbGazeSourceCount(r)
+            if (movers <= defenders) |((-7000, "multi-move blocked: movers(" + movers + ") <= CG defenders(" + defenders + ")"))
             else None
         }
         else None
@@ -150,7 +154,8 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
         def noGate = !gate
         def ownGate = self.gates.contains(r)
         def enemyGate = others.%(_.gates.contains(r)).any
-        def freeGate = gate && !ownGate && !enemyGate
+        def chaosGate = DS.chaosGateRegions.has(r)
+        def freeGate = gate && !ownGate && !enemyGate && !chaosGate
         def controllers = (ownGate || enemyGate).??(owner.at(r).%(_.canControlGate))
         def gateOf(f : Faction) = f.gates.contains(r)
         def owner = game.factions.%(_.gates.contains(r)).single.get
@@ -227,6 +232,41 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
 
     def instantDeathNow = game.ritualTrack(game.ritualMarker) == 999 || game.factions.%(_.doom >= 30).any
     def instantDeathNext = game.ritualTrack(game.ritualMarker) != 999 && game.ritualTrack(game.ritualMarker + 1) == 999
+
+    def ritualsTillInstantDeath : Int = {
+        val track = game.ritualTrack
+        var i = game.ritualMarker
+        var count = 0
+        while (i < track.length && track(i) != 999) { i += 1; count += 1 }
+        count
+    }
+
+    def instantDeathImminent : Boolean = {
+        val remaining = ritualsTillInstantDeath
+        if (remaining == 0) return true
+        remaining <= game.factions.num
+    }
+
+    def doomPhaseTurnsRemaining : Int = {
+        if (!game.doomPhase) return 0
+        val facs = game.factions
+        val playerCount = facs.num
+        val firstIdx = facs.indexOf(game.first)
+        val selfIdx = facs.indexOf(self)
+        if (selfIdx < 0 || firstIdx < 0) return 0
+        var count = 0
+        var i = (selfIdx + 1) % playerCount
+        while (i != firstIdx && count < playerCount) { count += 1; i = (i + 1) % playerCount }
+        count
+    }
+
+    def instantDeathImminentForDM : Boolean = {
+        val remaining = ritualsTillInstantDeath
+        if (remaining == 0) return true
+        val playerCount = game.factions.num
+        val doomLeft = if (game.doomPhase) doomPhaseTurnsRemaining else playerCount
+        (doomLeft + playerCount) >= remaining
+    }
 
     def validGatesForRitual : $[Region] = {
         self.gates.filter { r =>
@@ -393,6 +433,18 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
                 p += 4
 
             p / 4
+
+        // Daemon Sultan (DS)
+        case DS =>
+            var p = f.power
+
+            if (f.has(AvatarSynthesis))
+                p += 8
+
+            if (p < 6)
+                0
+            else
+                1
 
         case _ =>
             0

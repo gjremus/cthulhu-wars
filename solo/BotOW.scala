@@ -134,6 +134,10 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
                 // Firstborn (FB): opponent combat evaluation
                 case FB =>
                     true |=> 0 -> "fb"
+
+                // Daemon Sultan (DS): opponent combat evaluation
+                case DS =>
+                    0 -> "todo"
             }
         }
 
@@ -214,6 +218,36 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
 
             case NeutralMonstersAction(_, _) =>
                 true |=> -100000 -> "don't obtain loyalty cards (for now)"
+
+            // Azathoth Synthesis bidding — never let DS win; prefer power, fall back to doom
+            case AzathothSynthesisPowerAskAction(_, x, offers, forum, time, _, p) =>
+                val gap = x - offers./(_.n).sum
+                val panic = time <= forum.num
+                p == -1 && gap <= 0  |=>   2000 -> "target met skip"
+                p == -1 && gap > 0   |=> -50000 -> "refuse lets DS win"
+                p == 0 && !panic     |=> (5*5*5*5*5*5 * math.random()).round.toInt -> "wait for others"
+                p == 0 && panic      |=>  -8000 -> "panic must contribute"
+                p == 1               |=> (2*5*5*5*5*5 * math.random()).round.toInt -> "pay 1"
+                p == 2               |=> (2*2*5*5*5*5 * math.random()).round.toInt -> "pay 2"
+                p == 3               |=> (2*2*2*5*5*5 * math.random()).round.toInt -> "pay 3"
+                p == 4               |=> (2*2*2*2*5*5 * math.random()).round.toInt -> "pay 4"
+                p == 5               |=> (2*2*2*2*2*5 * math.random()).round.toInt -> "pay 5"
+                p >= 6               |=> (2*2*2*2*2*2 * math.random()).round.toInt -> "pay 6+"
+                p >= gap && panic    |=>  10000 -> "meet gap in panic"
+            case AzathothSynthesisDoomAskAction(_, x, offers, forum, time, _, p, d) =>
+                val gap = x - offers./(_.n).sum - p
+                val panic = time <= forum.num
+                d == -1 && gap <= 0  |=>   2000 -> "target met skip"
+                d == -1 && gap > 0   |=> -50000 -> "refuse lets DS win"
+                d == 0 && !panic     |=> (5*5*5*5*5*5 * math.random()).round.toInt -> "wait for others"
+                d == 0 && panic      |=>  -8000 -> "panic must contribute"
+                d == 1               |=> (2*5*5*5*5*5 * math.random()).round.toInt -> "pay 1"
+                d == 2               |=> (2*2*5*5*5*5 * math.random()).round.toInt -> "pay 2"
+                d == 3               |=> (2*2*2*5*5*5 * math.random()).round.toInt -> "pay 3"
+                d == 4               |=> (2*2*2*2*5*5 * math.random()).round.toInt -> "pay 4"
+                d == 5               |=> (2*2*2*2*2*5 * math.random()).round.toInt -> "pay 5"
+                d >= 6               |=> (2*2*2*2*2*2 * math.random()).round.toInt -> "pay 6+"
+                d >= gap && panic    |=>  10000 -> "meet gap in panic"
 
             case DoomDoneAction(_) =>
                 true |=> 10 -> "doom done"
@@ -406,6 +440,21 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
                 r.ownGate && r.allies.monsterly.none |=> 100 -> "protect gate"
                 r.controllers.num == 1 |=> 10 -> "one controller"
 
+            // Neutral monster summons — slightly less than Mutant (Gnorri slightly more)
+            case SummonAction(_, Gnorri, r) =>
+                r.controllers.num == 1 && r.allies.num == 1 && r.foes.goos.none && r.foes.monsterly.active.any |=> 4500 -> "OW: Gnorri prevent losing gate"
+                r.controllers.num == 1 && r.controllers.%(_.capturable).any && r.foes.goos.none |=> 650 -> "OW: Gnorri prevent capture"
+                r.ownGate && r.allies.monsterly.none |=> 120 -> "OW: Gnorri protect gate"
+                r.allies(YogSothoth).any |=> 60 -> "OW: Gnorri to ygs"
+                true |=> 50 -> "OW: Gnorri summon"
+
+            case SummonAction(_, uc, r) if uc.isInstanceOf[NeutralMonster] =>
+                r.controllers.num == 1 && r.allies.num == 1 && r.foes.goos.none && r.foes.monsterly.active.any |=> 3500 -> "OW: NM prevent losing gate"
+                r.controllers.num == 1 && r.controllers.%(_.capturable).any && r.foes.goos.none |=> 500 -> "OW: NM prevent capture"
+                r.ownGate && r.allies.monsterly.none |=> 80 -> "OW: NM protect gate"
+                r.allies(YogSothoth).any |=> 40 -> "OW: NM to ygs"
+                true |=> 30 -> "OW: NM summon"
+
             case SummonAction(_, Abomination, r) =>
                 true |=> -1000 -> "lets dont"
 
@@ -433,6 +482,7 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
                 r.foes.monsterly.any |=> 100 -> "awaken to defend"
 
             case BeyondOneAction(_, o, uc, r) =>
+                fbMoveAvoidance(r).foreach(e => true |=> e)
                 uc == YogSothoth && need(GooMeetsGoo) && r.foes.goos.any && r.foes.goos.active.none |=> 120000 -> "meet up"
                 uc == YogSothoth && game.cathedrals.contains(r) |=> -5000 -> "not to cathedral"
 
@@ -569,6 +619,127 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
 
             case ControlGateAction(_, _, _, _) =>
                 true |=> 1000000 -> "always"
+
+            // ══════════════════════════════════════════════════════════════════
+            // ── OW iGOO STRATEGY ────────────────────────────────────────────
+            // OW can awaken up to 2 iGOOs (not 3). Prioritize Tulzscha > Daoloth > Y'Golonac.
+            // Use iGOOs to defend gates that don't have Yog-Sothoth.
+            // ══════════════════════════════════════════════════════════════════
+
+            case IndependentGOOMainAction(_, lc, _) =>
+                val igooOnMap = self.allInPlay.%(_.uclass.isInstanceOf[IGOO]).num
+                val remaining = self.power - lc.power
+                igooOnMap >= 2 |=> -100000 -> "OW: max 2 iGOOs"
+                remaining < 0 |=> -99999 -> "OW: cannot afford"
+                self.gates.num < 2 |=> -3000 -> "OW: need 2+ gates first"
+                remaining >= 3 |=> 3000 -> "OW: igoo comfortable power"
+                remaining >= 1 |=> 2000 -> "OW: igoo affordable"
+                (lc == TulzschaCard) |=> 8000 -> "OW: tulzscha highest priority"
+                (lc == DaolothCard) |=> 6000 -> "OW: daoloth gate builder"
+                (lc == YgolonacCard) |=> 5500 -> "OW: ygolonac defender"
+                (lc == ByatisCard) |=> 5500 -> "OW: byatis defender"
+                (lc == AbhothCard) |=> -3000 -> "OW: abhoth not useful"
+                (lc == NyogthaCard) |=> -3000 -> "OW: nyogtha not useful"
+                true |=> 3000 -> "OW: igoo base"
+
+            case IndependentGOOAction(_, lc, r, _) =>
+                val undefendedGate = r.ownGate && self.at(r, YogSothoth).none &&
+                    self.at(r).%(u => u.uclass.utype == GOO).none
+                undefendedGate |=> 9000 -> "OW: igoo at undefended gate"
+                r.ownGate && r.allies.cultists.any |=> 5000 -> "OW: igoo at own gate"
+                r.ownGate |=> 4000 -> "OW: igoo at gate"
+                (lc.unit == Byatis) && r.ownGate |=> 9500 -> "OW: byatis immobile at gate"
+                (lc.unit == Byatis) && !r.ownGate |=> -5000 -> "OW: byatis must go to gate"
+                true |=> 1000 -> "OW: igoo place"
+
+            // Tulzscha Give Power — do early in AP or when 2+ enemies exhausted
+            case TulzschaGivePowerMainAction(_) =>
+                val enemiesOut = others.%(_.power <= 0).num
+                val earlyAP = self.acted.not
+                earlyAP |=> 7000 -> "OW: tulzscha give power early AP"
+                (enemiesOut >= 2 && power >= 3) |=> 6000 -> "OW: tulzscha give power, enemies exhausted"
+                !self.allSB |=> 5000 -> "OW: tulzscha for SBR"
+                true |=> 2000 -> "OW: tulzscha base"
+
+            case TulzschaGivePowerAction(_) =>
+                true |=> 5000 -> "OW: tulzscha confirm"
+
+            // Ceremony of Annihilation — use when < 3 gates
+            case CeremonyOfAnnihilationChoiceAction(_) =>
+                self.gates.num < 3 |=> 6000 -> "OW: ceremony, need gates"
+                power <= 2 |=> 4000 -> "OW: ceremony, need power"
+                true |=> 2000 -> "OW: ceremony base"
+
+            // Move iGOOs to defend unprotected OW gates
+            case MoveAction(_, u, o, d, _) if u.uclass.isInstanceOf[IGOO] =>
+                val destUndefended = d.ownGate && self.at(d, YogSothoth).none &&
+                    self.at(d).%(iu => iu.uclass.utype == GOO && iu != u).none
+                val srcHasYog = self.at(o, YogSothoth).any
+                destUndefended |=> 7000 -> "OW: move iGOO to undefended gate"
+                (srcHasYog && d.ownGate) |=> 5000 -> "OW: iGOO leave Yog's gate for other gate"
+                d.ownGate |=> 3000 -> "OW: iGOO to own gate"
+                !d.ownGate && o.ownGate |=> -3000 -> "OW: don't move iGOO off gate"
+
+            // ── OW Loyalty Card (Neutral Monsters) ───────────────────────────
+            case LoyaltyCardDoomAction(_) =>
+                val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
+                hasNMCard |=> -100000 -> "OW: already have NM card"
+                self.doom < 5 |=> 5000 -> "OW: loyalty card early"
+                self.doom < 10 |=> 4000 -> "OW: loyalty card mid-game"
+                true |=> 3000 -> "OW: loyalty card base"
+
+            case NeutralMonstersAction(_, lc) =>
+                val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
+                hasNMCard |=> -100000 -> "OW: already have NM card"
+                (lc.unit == Voonith) |=> 2000 -> "OW: voonith top"
+                (lc.unit == StarVampire) |=> 1800 -> "OW: star vampire"
+                (lc.unit == Gug) |=> 1600 -> "OW: gug"
+                (lc.unit == Gnorri) |=> 1400 -> "OW: gnorri"
+                (lc.unit == DimensionalShamblerUnit) |=> 1200 -> "OW: shambler"
+                (lc.unit == Ghast) |=> 1000 -> "OW: ghast"
+                (lc.unit == Shantak) |=> -2000 -> "OW: shantak not useful"
+                true |=> 1000 -> "OW: nm base"
+
+            case LoyaltyCardSummonAction(_, uc, r) =>
+                r.ownGate && r.allies.goos.any |=> 2000 -> "OW: place NM at Yog gate"
+                r.ownGate |=> 1500 -> "OW: place NM at gate"
+                true |=> 500 -> "OW: place NM"
+
+            // ── OW Neutral Monster Movement / Use ────────────────────────────
+
+            // Move neutral monsters like slightly-less-than Mutants
+            case MoveAction(_, u, o, d, _) if u.uclass.isInstanceOf[NeutralMonster] =>
+                val undefendedGate = d.ownGate && self.at(d, YogSothoth).none &&
+                    self.at(d).%(_.uclass.utype == GOO).none
+                undefendedGate |=> 4000 -> "OW: NM to undefended gate"
+                d.ownGate |=> 2000 -> "OW: NM to own gate"
+                d.foes.cultists.any && d.foes.goos.none |=> 1500 -> "OW: NM toward enemy cultists"
+                !d.ownGate && o.ownGate |=> -2000 -> "OW: don't move NM off gate"
+
+            // Ghasts: spread among controlled gates, only summon if 3+ in pool
+            case FreeSummonAction(_, Ghast, r, _) =>
+                val ghastPool = self.pool(Ghast).num
+                ghastPool < 3 |=> -5000 -> "OW: only summon ghasts if 3+ in pool"
+                val ghastAtDest = self.at(r, Ghast).num
+                r.ownGate && ghastAtDest == 0 |=> 3000 -> "OW: ghast to gate with none"
+                r.ownGate && ghastAtDest == 1 |=> 1500 -> "OW: ghast to gate with 1"
+                r.ownGate && ghastAtDest >= 2 |=> -1000 -> "OW: don't pile ghasts"
+                true |=> 500 -> "OW: ghast base"
+
+            // Dimensional Shambler: deploy to combat region under threat
+            case ShamblerDeployMainAction(_, _) =>
+                val threatRegions = self.gates.%(r => others.exists(f => f.at(r).monsterly.any || f.at(r).goos.any))
+                threatRegions.any |=> 4000 -> "OW: deploy shambler under combat threat"
+                true |=> 1500 -> "OW: deploy shambler"
+
+            case ShamblerDeployAction(_, r, _) =>
+                val underThreat = r.ownGate && r.foes.%(_.uclass.utype == Monster).any
+                underThreat |=> 5000 -> "OW: shambler to threatened gate"
+                r.foes.cultists.any && r.foes.goos.none |=> 3000 -> "OW: shambler to capture"
+                r.ownGate |=> 2000 -> "OW: shambler to gate"
+                true |=> 500 -> "OW: shambler deploy"
+
+            // ══════════════════════════════════════════════════════════════════
 
             case _ if game.battle.none =>
                 true |=> 1000 -> "todo"

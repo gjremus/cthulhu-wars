@@ -41,6 +41,9 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
         val fbStartRegion : |[Region] = game.starting.get(FB)
         val fbStartGlyphRegion : |[Region] = fbStartRegion // FB glyph region is same as starting
 
+        val idImminent = instantDeathImminent
+        val idImminentForDM = instantDeathImminentForDM
+
         // ─────────────────────────────────────────────────────────────────
         // Round 9 FB strategy helpers. See FB_BOT_STRATEGY.md.
         // ─────────────────────────────────────────────────────────────────
@@ -82,6 +85,15 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             val isFree = r.freeGate
             val isEnemy = r.enemyGate
             if (!isFree && !isEnemy) return 0
+            if (r.chaosGate) return 0
+            // YS Passion block: avoid YS gates when Passion is dangerous
+            if (isEnemy && YS.exists && YS.has(Passion) && YS.gates.has(r)) {
+                val ysCultsHere = YS.at(r).cultists.num
+                val ysHasPower = YS.power > 0
+                val kiyAdjacent = r.near.%(n => YS.at(n, KingInYellow).any).any
+                val hasturMobile = YS.has(Hastur) && YS.has(HWINTBN)
+                if (ysCultsHere > 2 && ysHasPower && (kiyAdjacent || hasturMobile)) return -1
+            }
             val noGoo = r.foes.goos.none
             if (!noGoo) return 0
             val foeCombat = r.foes.%(_.uclass.utype == Monster).num + r.foes.%(_.uclass.utype == Terror).num * 4
@@ -101,7 +113,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             else if (isEnemy && isLand && lowCombat && !lowCultists) 9200   // T2: enemy land, <4 combat, 3+ cult
             else if (isEnemy && !isLand && lowCombat && lowCultists) 8900   // T3: enemy water, <4 combat, <3 cult
             else if (isEnemy && !isLand && lowCombat && !lowCultists) 8600  // T4: enemy water, <4 combat, 3+ cult
-            else if (isEnemy && isLand && !lowCombat && painCount >= 3) 8300 // T5: enemy land, 4+ combat, 3+ pains
+            else if (isEnemy && isLand && !lowCombat && foeCombat <= 6 && painCount >= 3) 8300 // T5: enemy land, 4-6 combat, 3+ pains
             else 0
         }
 
@@ -110,6 +122,40 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             val candidates = areas.%(r => gateVulnerability(r) > 0)
             if (candidates.any) Some(candidates.maxBy(r => gateVulnerability(r))) else None
         }
+
+        // SL home gate boost: only SL gates vulnerable + SL has Cursed Slumber but no gate in slumber
+        val slHomeGateBoost : |[Region] = {
+            val vulnGates = areas.%(r => gateVulnerability(r) > 0)
+            val onlySLVuln = vulnGates.nonEmpty && vulnGates.forall(r => SL.exists && SL.gates.has(r))
+            if (onlySLVuln && SL.exists && SL.has(CursedSlumber) && !SL.gates.%(r => SL.at(r).cultists.any && SL.at(r).%(_.uclass == Tsathoggua).none).any) {
+                game.starting.get(SL).flatMap(home => SL.gates.has(home).?(home))
+            } else None
+        }
+
+        // Safety ranking for non-gate writhe destinations
+        def regionSafety(r : Region) : Int = {
+            if (r.glyph == Ocean) return -1000
+            if (game.fbCraters.has(r)) return -10000
+            val cathedralDanger = game.cathedrals.has(r) && AN.exists &&
+                AN.at(r).%(a => a.uclass.utype == Monster || a.uclass.utype == Terror).any
+            if (cathedralDanger) return -10000
+            val foeCombat = others./~(_.at(r)).%(u => u.uclass.utype == Monster || u.uclass.utype == Terror).num
+            val hasGoo = r.foes.goos.any
+            val adjGoos = r.near.%(n => others./~(_.at(n)).goos.any)
+            val adjGooStr = adjGoos./~(n => others./~(_.at(n)).goos)./(_.uclass.cost).sum
+            if (foeCombat < 3 && !hasGoo && adjGoos.none) 4000
+            else if (foeCombat < 3 && !hasGoo && adjGooStr < 5) 3000
+            else if (foeCombat < 5) 2000
+            else 1000
+        }
+
+        // Ghato in non-gate region checks
+        val ghatoRegion = self.onMap(Ghatanothoa).headOption.map(_.region)
+        val ghatoOnNonGate = ghatoRegion.exists(r => !self.gates.has(r) && !r.freeGate)
+        val ghatoHasAdjacentVulnGate = ghatoRegion.exists(r =>
+            r.near.%(n => gateVulnerability(n) > 0).any)
+        val ghatoHasCultist = ghatoRegion.exists(r => self.at(r).cultists.any)
+        val noVulnerableGatesAnywhere = areas.%(r => gateVulnerability(r) > 0).none
 
         // Count FB gate-controlled that have Ghato or Rev present.
         val gatesWithGOOorRev : Int = self.gates.%(r => self.at(r, Ghatanothoa).any || self.at(r, RevenantOfKnaa).any).num
@@ -171,6 +217,9 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             // WRITHE — main activation
             // ──────────────────────────────────────────────────────────────────
             case FBWritheMainAction(_) =>
+                // BLOCK: never writhe with < 2 units on map (nothing to pain)
+                val fbUnitsOnMap = self.allInPlay.%(_.region.onMap).num
+                (fbUnitsOnMap < 2) |=> -15000 -> "BLOCK: < 2 units on map, nothing to writhe"
                 // AP1 first-turn opener (user strategy: 2 Writhes in AP1)
                 (firstAP && power >= 7 && desiccatedOnMap == 0) |=> 8000 -> "AP1 first Writhe (power 7+, no desc)"
                 // AP1 SECOND Writhe: user's replay shows second Writhe with remaining
@@ -185,14 +234,17 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // (FB's own ritual count catches games where others don't ritual much)
                 val unflippedSBsMain = self.spellbooks.count(sb => !self.oncePerGame.has(sb))
                 val fbTotalDoomMain = self.doom + (self.es.num * 5 / 3)
-                val ap2WritheForGhatoKill = laterAP && gooOnMap > 0 && self.gates.num >= 1 &&
+                val ghatoKillBase = laterAP && gooOnMap > 0 && self.gates.num >= 1 &&
                     game.fbGhatnothoaAwakenings >= 1 && game.fbGhatnothoaAwakenings < 3 &&
-                    self.spellbooks.num >= 2 && (power + infernalDiscount) >= effectiveAwakenCost + 2 &&
+                    self.spellbooks.num >= 2 && (power + infernalDiscount) >= effectiveAwakenCost + 2
+                val ap2WritheForGhatoKill = ghatoKillBase &&
                     game.ritualCost > 6 && (power + unflippedSBsMain > 6) && fbTotalDoomMain >= 20
+                val ap2WritheForGhatoKillID = ghatoKillBase && idImminent
                 ap2WritheForGhatoKill |=> 9200 -> "Writhe for Ghato re-awaken kill"
-                // Writhe to steal vulnerable enemy gate
-                val ap2WritheForEnemyGate = laterAP && gooOnMap > 0 && power >= 4 && self.gates.num >= 1 &&
-                    others.exists(f => f.gates.%(r => f.at(r).goos.none).any)
+                (ap2WritheForGhatoKillID && !ap2WritheForGhatoKill) |=> 9300 -> "Writhe for Ghato kill (instant death imminent)"
+                // Writhe to steal vulnerable enemy gate — must have an actually vulnerable gate
+                val hasVulnGate = areas.%(r => gateVulnerability(r) > 0).any
+                val ap2WritheForEnemyGate = laterAP && gooOnMap > 0 && power >= 4 && self.gates.num >= 1 && hasVulnGate
                 // Post-awaken at < 3 gates with 2+ gates: writhe-capture beats defensive moves
                 val urgentCapture = gooOnMap > 0 && self.gates.num == 2 && game.fbGhatnothoaAwakenings >= 1
                 (urgentCapture && ap2WritheForEnemyGate) |=> 9300 -> "Writhe to recapture 3rd gate (2g post-awaken)"
@@ -478,21 +530,24 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val fbTotalDoomKill = self.doom + (self.es.num * 5 / 3)
                 val fbTotalDoomKill2 = self.doom + (self.es.num * 5 / 3)
                 val powerBeforeWrithe2 = power + 2
-                val reAwakenWindow = laterAP && self.gates.num >= 1 &&
+                val reAwakenBase = laterAP && self.gates.num >= 1 &&
                     game.fbGhatnothoaAwakenings >= 1 && game.fbGhatnothoaAwakenings < 3 &&
                     u.uclass == Ghatanothoa && u.faction == FB &&
                     self.spellbooks.num >= 2 &&
-                    power >= effectiveAwakenCostKill &&
+                    power >= effectiveAwakenCostKill
+                val reAwakenWindow = reAwakenBase &&
                     game.ritualCost > 6 &&
                     (powerBeforeWrithe2 + unflippedSBs > 6) && fbTotalDoomKill2 >= 20
+                val reAwakenWindowID = reAwakenBase && idImminent
                 reAwakenWindow |=> 9000 -> "Writhe-kill Ghato for re-awaken"
+                (reAwakenWindowID && !reAwakenWindow) |=> 9100 -> "Writhe-kill Ghato (instant death imminent)"
                 // After 6 desiccated: prefer desiccated
                 (desiccatedOnMap >= 6 && u.uclass == Desiccated) |=> 4000 -> "prefer killing desiccated when at cap"
                 // Always avoid killing your own valuable units
                 (u.uclass == Desiccated && desiccatedOnMap < 6) |=> -1000 -> "avoid killing desiccated below cap"
                 (u.uclass == RevenantOfKnaa) |=> -3000 -> "avoid killing revenant"
-                (u.uclass == Ghatanothoa && !reAwakenWindow) |=> -15000 -> "NEVER kill Ghato (re-awaken conditions not met)"
-                (u.uclass == Ghatanothoa && reAwakenWindow) |=> -5000 -> "avoid killing GOO (re-awaken possible)"
+                (u.uclass == Ghatanothoa && !reAwakenWindow && !reAwakenWindowID) |=> -15000 -> "NEVER kill Ghato (re-awaken conditions not met)"
+                (u.uclass == Ghatanothoa && (reAwakenWindow || reAwakenWindowID)) |=> -5000 -> "avoid killing GOO (re-awaken possible)"
                 (u.uclass == HighPriest) |=> -2500 -> "avoid killing high priest"
 
             // ──────────────────────────────────────────────────────────────────
@@ -511,6 +566,18 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val descCap = if (totalPains > 3) 2 else 1
                 val cultCap = 2
                 val moreCultists = totalPains > 4 || (chosenDesc <= 1 && totalPains > chosenDesc + cultCap)
+
+                // AP1 WRITHE-BUILD: if a desiccated is already on map in a non-gate region,
+                // pick cultist first so it can join the desiccated for gate building
+                val descOffGateRegions = self.onMap(Desiccated)./(_.region).distinct.%(r => !self.gates.has(r))
+                (firstAP && isCult && descOffGateRegions.any && chosenCult == 0) |=> 7000 -> "AP1: cultist first to join off-gate desiccated"
+
+                // INSTANT DEATH HOME EVACUATION: when writhe-kill is active via instant death,
+                // prioritize paining cultists from the home region first
+                val writheKillActive = idImminent && gooOnMap > 0 &&
+                    game.fbGhatnothoaAwakenings >= 1 && game.fbGhatnothoaAwakenings < 3
+                val inHomeRegion = fbStartRegion.contains(u.region)
+                (writheKillActive && isCult && inHomeRegion) |=> 5000 -> "ID: evacuate home region cultist first"
 
                 // PREFER OFF-GATE UNITS: non-gate units pained FIRST before stripping gates
                 val onOwnGate = u.region.ownGate && self.gates.has(u.region)
@@ -534,6 +601,17 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val isRevFromDoubleGate = u.uclass == RevenantOfKnaa && onOwnGate &&
                     self.at(u.region, RevenantOfKnaa).num >= 2
                 (ghatoWasOnUndefendedGate && isRevFromDoubleGate) |=> 9000 -> "rev from double-defended gate to backfill Ghato"
+
+                // SURPLUS REV BACKFILL: when Ghato chosen for writhe-capture and FB has 2 gates,
+                // if any region has revs > gates in that region, that surplus rev should be
+                // pained 2nd after Ghato, destination = Ghato's controlled gate.
+                val surplusRevRegion = self.gates.num == 2 && ghatoAlreadyChosenPain &&
+                    u.uclass == RevenantOfKnaa && {
+                        val revsHere = self.at(u.region, RevenantOfKnaa).num
+                        val gatesHere = self.gates.%(g => g == u.region).num
+                        revsHere > gatesHere
+                    }
+                surplusRevRegion |=> 9500 -> "surplus rev backfill: pain to Ghato's gate"
 
                 // BALANCE WRITHE: pain from region with MOST units to redistribute
                 val gateUnitCountsPain = self.gates./(gr => self.at(gr).num)
@@ -576,6 +654,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             //     happens at the destination.
             // ──────────────────────────────────────────────────────────────────
             case FBWritheMoveAllToRegionAction(_, r, chosen) =>
+                r.chaosGate |=> -3000 -> "avoid writhe to chaos gate"
                 val land = r.glyph != Ocean
                 val empty = r.foes.none
                 val lonefoe = r.foes.cultists.any && r.foes.monsterly.none && r.foes.goos.none
@@ -663,6 +742,20 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 (writheBuildTarget && adjToOwnGate) |=> 7000 -> "writhe-build: empty land adjacent to own gate"
                 (writheBuildTarget && !adjToOwnGate) |=> 5500 -> "writhe-build: empty land (not adjacent)"
 
+                // SL HOME GATE BOOST: only SL gates vulnerable + cursed slumber
+                (chosenHasGhato && slHomeGateBoost.contains(r) && self.gates.num < 3) |=> 9600 -> "SL home gate: only SL vuln + cursed slumber"
+
+                // GATE-LESS WRITHE: no suitable gates, writhe to safe non-gate land
+                val noGatesAvailable = areas.%(g => gateVulnerability(g) > 0).none && !writheBuildTarget
+                val safety = regionSafety(r)
+                val safeWithEscort = chosenHasGhato && (self.at(r).num >= 2 || chosen.num >= 3)
+                (noGatesAvailable && isLand && safety >= 3000 && safeWithEscort) |=> safety -> ("gate-less writhe: safe land " + safety)
+                (noGatesAvailable && isLand && safety >= 2000 && safeWithEscort) |=> safety -> ("gate-less writhe: moderate land " + safety)
+                // 3rd/4th safest + < 3 pains: pain 2 desc only, no ghato
+                val lowPainNoGhato = noGatesAvailable && isLand && safety >= 1000 && safety < 3000 &&
+                    !chosenHasGhato && chosenCount <= 2
+                lowPainNoGhato |=> (safety - 500) -> ("gate-less writhe: desc only to risky land " + safety)
+
                 // All gate tiers beat empty land (5000 post-awaken)
                 r.enemyGate |=> 1500 -> "move-all: enemy gate fallback"
                 (r.foes.cultists.any && r.foes.monsterly.none) |=> 1000 -> "move-all: lone cultists fallback"
@@ -698,6 +791,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 true |=> 2500 -> "move separately"
 
             case FBWritheMoveOneToRegionAction(_, uRef, r, remaining) =>
+                r.chaosGate |=> -3000 -> "avoid writhe to chaos gate"
                 val u = game.unit(uRef)
                 val totalAfter = remaining.num + 1
                 val land = r.glyph != Ocean
@@ -736,6 +830,20 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val dstUnitsAfter = if (dstIsOwnGate && !sameRegion) self.at(r).num + 1 else self.at(r).num
                 val wouldImbalance = srcIsOwnGate && dstIsOwnGate && !sameRegion && (dstUnitsAfter - srcUnitsAfter > 2)
                 wouldImbalance |=> -9000 -> "BLOCK: would create 2+ unit imbalance between FB gates"
+
+                // SURPLUS REV DESTINATION: when this rev is being pained during a writhe
+                // and FB has 2 gates, send it to the FB gate that lacks a defender
+                // (the gate Ghato just vacated for writhe-capture).
+                val isSurplusRevDest = u.uclass == RevenantOfKnaa && self.gates.num == 2 && {
+                    val revsAtSrc = self.at(u.region, RevenantOfKnaa).num
+                    val gatesAtSrc = self.gates.%(g => g == u.region).num
+                    revsAtSrc > gatesAtSrc
+                }
+                val undefendedGate = if (isSurplusRevDest)
+                    self.gates.%(g => self.at(g, Ghatanothoa).none && self.at(g, RevenantOfKnaa).none).headOption
+                else None
+                (isSurplusRevDest && undefendedGate.contains(r)) |=> 9800 -> "surplus rev to undefended gate for backfill"
+                (isSurplusRevDest && undefendedGate.isDefined && !undefendedGate.contains(r)) |=> -5000 -> "surplus rev must go to undefended gate, not here"
 
                 // Round 9 CRITICAL: do NOT move the on-gate gate-keeper out of
                 // its region. If this unit is the only controller of FB's gate,
@@ -1033,6 +1141,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 (r.ownGate && u.uclass == Desiccated) |=> 800 -> "reinforce gate with desiccated"
 
             case FBWritheMoveOneJoinAction(_, uRef, r, remaining, joinUnit) =>
+                r.chaosGate |=> -3000 -> "avoid writhe join to chaos gate"
                 // Single-best-score conditional. JOIN should STRONGLY beat separate
                 // moves when FB is trying to pair cultist + desiccated (strategy).
                 // Without this, FB acolytes scatter to different regions from the
@@ -1095,6 +1204,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             // ──────────────────────────────────────────────────────────────────
             // CaptureMainAction is Soft → bot sees CaptureAction after explosion
             case CaptureAction(_, r, f, _) =>
+                r.chaosGate |=> -3000 -> "avoid capturing at chaos gate"
                 // Strategy 1.2: capture at enemy gate with Ghato. MUST beat Writhe (8500).
                 val ghatoHere = self.at(r, Ghatanothoa).any
                 val enemyCultsHere = f.at(r).cultists.num
@@ -1171,6 +1281,11 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                     else if (hasFBCult && emptyFoes)                                             7000
                     else                                                                         3000
                 true |=> buildScore -> ("build gate tier " + buildScore)
+                // Ghato on non-gate, no vulnerable gates, cultist with Ghato, < 3 gates, power > 2
+                val ghatoHereBuild = self.at(r, Ghatanothoa).any && ghatoOnNonGate &&
+                    noVulnerableGatesAnywhere && ghatoHasCultist && gateCount < 3 && power > 2 &&
+                    noGate && land && noCrater
+                ghatoHereBuild |=> 9500 -> "BUILD: Ghato on non-gate, no vuln gates, build here"
 
             case BuildGateMainAction(_, l) =>
                 val any = l.exists { r =>
@@ -1313,6 +1428,8 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                     self.at(r).cultists.any
                 val craterScore =
                     if (!isFBControlled)                                         0
+                    // Instant death imminent: home region is highest priority for DM
+                    else if (idImminentForDM && inFBGlyph)                       9000
                     // A/B TEST: needsNoAcolytes DM at start region — commented out for testing
                     // else if (needsNoAcolytes)                                    8000
                     else if (inEnemyGlyph)                                       7000
@@ -1406,6 +1523,10 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                     else if (isAco)                                                  1000  // Acolyte baseline
                     else                                                             0
                 true |=> summonScore -> ("summon tier " + summonScore)
+                // Rev summon priority: gate without CG defender after writhe-capture
+                val gateNeedsCGDef = isRev && ownGate && self.at(r, Ghatanothoa).none &&
+                    self.at(r, RevenantOfKnaa).none && gooOnMap > 0 && self.gates.num >= 2
+                gateNeedsCGDef |=> 9800 -> "PRIORITY: Rev to undefended gate (post writhe-capture)"
                 if (ownGate) {
                     val unitsHere = self.at(r).num
                     val fewestBoost = (6 - unitsHere).max(0) * 200
@@ -1465,6 +1586,10 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                     else if (isHP)                                               1500  // baseline HP
                     else                                                         0
                 true |=> recruitScore -> ("recruit tier " + recruitScore)
+                // Ghato on non-gate, no vuln gates, no cultist, < 3 gates, power > 3: recruit here
+                val ghatoHereRecruit = isAco && self.at(r, Ghatanothoa).any && ghatoOnNonGate &&
+                    noVulnerableGatesAnywhere && !ghatoHasCultist && self.gates.num < 3 && power > 3
+                ghatoHereRecruit |=> 9500 -> "RECRUIT: Ghato on non-gate, no vuln gates, recruit cultist to build"
                 if (ownGate) {
                     val unitsHere = self.at(r).num
                     val fewestBoost = (6 - unitsHere).max(0) * 200
@@ -1497,7 +1622,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val readyForTwoFD = needsTwoFD && game.fbGhatnothoaAwakenings >= 1 && self.gates.num >= 3
                 // Writhe-kill IP: if kill conditions met, flip up to 2 SBs for writhe cost discount
                 val fbTotalDoomForKill = self.doom + (self.es.num * 5 / 3)
-                val killConditionsMet = game.ritualCost > 6 && fbTotalDoomForKill >= 20 &&
+                val killConditionsMet = (game.ritualCost > 6 && fbTotalDoomForKill >= 20 || idImminent) &&
                     gooOnMap > 0 && game.fbGhatnothoaAwakenings >= 1 && game.fbGhatnothoaAwakenings < 3 &&
                     infernalDiscount < 2
                 // Defense writhe IP: 1 power, 3 gates, < 3 defended, flip 1 SB only
@@ -1706,6 +1831,9 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             // STANDARD ACTIONS — Move / Attack
             // ──────────────────────────────────────────────────────────────────
             case MoveAction(_, u, from, to, _) =>
+                // DS chaos gate penalty: avoid moving to chaos gate regions
+                to.chaosGate |=> -3000 -> "avoid chaos gate region"
+
                 // HARD BLOCK: don't strip gate keepers from FB's own gate. If
                 // moving this cultist would leave canControlGate < 2 at the origin,
                 // block it with magnitude > max positive rule.
@@ -1910,6 +2038,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // Writhe, accept losing the SB; preserve gate keepers instead.
 
             case AttackAction(_, r, f, _) =>
+                r.chaosGate |=> -3000 -> "avoid attacking at chaos gate"
                 // Combat strength adjusted for Daoloth cosmic unity (iGOO)
                 val baseAttack = self.strength(self.at(r), f)
                 val baseDefense = f.strength(f.at(r), self)
@@ -1991,6 +2120,22 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 }
                 (poolsEmptyP && gatesBalancedP && power < 4) |=> 8500 -> "pass: balanced, pools empty, low power"
 
+            // ES REVEAL — HARD BLOCK with < 6 SBRs
+            case RevealESAction(_, _, _, _) =>
+                !allSB |=> -100000 -> "HARD BLOCK: never reveal ES with < 6 SBRs"
+
+            // Play direction — copy TS logic
+            case PlayDirectionAction(_, order) =>
+                val fbIdx = order.indexOf(self)
+                val weakest = others.sortBy(_.power).headOption
+                val weakestIdx = weakest.map(order.indexOf(_)).getOrElse(-1)
+                weakestIdx == order.num - 1 |=> 2000 -> "weakest player last"
+                fbIdx == 0 && self.gates.num >= 3 |=> 1500 -> "go first with 3+ gates"
+
+            // SL Demand Sacrifice — kills become pains when weaker
+            case DemandSacrificeKillsArePainsAction(_) =>
+                true |=> 500 -> "demand sacrifice: prefer pains over kills"
+
             // CC Thousand Forms — refuse when possible, competitive bidding otherwise
             case ThousandFormsAskAction(f, r, offers, _, _, _, p) =>
                 r < p + offers./(_.n).sum |=> -6*6*6*6*6*6 -> "dont overpay"
@@ -2012,39 +2157,232 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 true |=> 0 -> "ghroth target"
 
             // ──────────────────────────────────────────────────────────────────
+            // BATTLE KILL ASSIGNMENT — based on summon cost, writhe-kill override
+            // ──────────────────────────────────────────────────────────────────
+            case AssignKillAction(_, _, _, u) if u.faction == FB =>
+                val ghatoAwakenCost = math.max(1, 11 - game.ritualCost - infernalDiscount)
+                val summonCost = u.uclass match {
+                    case Acolyte => 0
+                    case Desiccated => 1
+                    case RevenantOfKnaa => 2
+                    case HighPriest => 3
+                    case Ghatanothoa => ghatoAwakenCost
+                    case _ => u.uclass.cost
+                }
+                // Writhe-kill override: if conditions met, kill Ghato FIRST
+                val ghatoKillReady = u.uclass == Ghatanothoa &&
+                    game.fbGhatnothoaAwakenings >= 1 && game.fbGhatnothoaAwakenings < 3 &&
+                    (game.ritualCost > 6 || idImminent)
+                ghatoKillReady |=> 10000 -> "WRITHE-KILL: Ghato dies for re-awaken"
+                // Lowest cost to resummon = highest priority to assign kill
+                !ghatoKillReady |=> (5000 - summonCost * 500) -> ("kill by cost " + summonCost)
+                (u.gateKeeper && !ghatoKillReady) |=> -3000 -> "avoid killing gate keeper"
+
+            // BATTLE PAIN ASSIGNMENT — priority order with context
+            case AssignPainAction(_, _, _, u) if u.faction == FB =>
+                val battleRegion = game.battle.map(_.arena).getOrElse(u.region)
+                val enemyMonsterRemains = others./~(_.at(battleRegion)).monsterly.any
+                val enemyGOORemains = others./~(_.at(battleRegion)).goos.any
+                val fbMonstersHere = self.at(battleRegion).%(m =>
+                    m.uclass == Desiccated || m.uclass == RevenantOfKnaa).num
+                val twoRevs = self.at(battleRegion, RevenantOfKnaa).num >= 2
+                // Desc first if monsters remain, or rev first if 2 revs
+                (u.uclass == Desiccated && fbMonstersHere >= 2) |=> 6000 -> "pain desc first (2+ monsters)"
+                (u.uclass == RevenantOfKnaa && twoRevs) |=> 5500 -> "pain rev (2 revs in battle)"
+                // Acolytes not on gate
+                (u.uclass == Acolyte && !u.onGate) |=> 5000 -> "pain acolyte off-gate"
+                // If enemy monster remains, pain on-gate acolyte before last monster
+                (u.uclass == Acolyte && u.onGate && enemyMonsterRemains) |=> 4500 -> "pain on-gate aco (enemy monster remains)"
+                (u.uclass == Acolyte && u.onGate) |=> 2000 -> "pain on-gate acolyte"
+                (u.uclass == HighPriest) |=> 1500 -> "pain HP"
+                (u.uclass == Desiccated) |=> 3000 -> "pain desiccated"
+                (u.uclass == RevenantOfKnaa) |=> -1000 -> "avoid paining rev"
+                // Pain Ghato last; if enemy GOO remains, Ghato should stay to fight
+                (u.uclass == Ghatanothoa && enemyGOORemains) |=> -8000 -> "Ghato stays vs enemy GOO"
+                (u.uclass == Ghatanothoa) |=> -5000 -> "pain Ghato last"
+
+            // ──────────────────────────────────────────────────────────────────
             // BATTLE ELIMINATION — no retreat possible, must lose a unit
             // ──────────────────────────────────────────────────────────────────
             case EliminateNoWayAction(_, u) if u.faction == FB =>
-                (u.uclass == Acolyte) |=> 5000 -> "elim acolyte (cost 0)"
-                (u.uclass == Desiccated) |=> 4000 -> "elim desiccated (cost 1)"
-                (u.uclass == HighPriest) |=> 3000 -> "elim HP (cost 3)"
-                (u.uclass == RevenantOfKnaa) |=> 2000 -> "elim rev (cost 2)"
-                (u.uclass == Ghatanothoa) |=> -5000 -> "NEVER elim Ghato"
-                (u.gateKeeper) |=> -3000 -> "avoid elim gate keeper"
+                val ghatoAwakenCostE = math.max(1, 11 - game.ritualCost - infernalDiscount)
+                val summonCostE = u.uclass match {
+                    case Acolyte => 0; case Desiccated => 1; case RevenantOfKnaa => 2
+                    case HighPriest => 3; case Ghatanothoa => ghatoAwakenCostE; case _ => u.uclass.cost
+                }
+                val ghatoKillReadyE = u.uclass == Ghatanothoa &&
+                    game.fbGhatnothoaAwakenings >= 1 && game.fbGhatnothoaAwakenings < 3 &&
+                    (game.ritualCost > 6 || idImminent)
+                ghatoKillReadyE |=> 10000 -> "WRITHE-KILL: elim Ghato for re-awaken"
+                !ghatoKillReadyE |=> (5000 - summonCostE * 500) -> ("elim by cost " + summonCostE)
+                (u.gateKeeper && !ghatoKillReadyE) |=> -3000 -> "avoid elim gate keeper"
 
             // ──────────────────────────────────────────────────────────────────
-            // BATTLE PAIN DESTINATIONS — where to send FB units that are pained
+            // BATTLE PAIN DESTINATIONS — land empty gate > water empty gate >
+            // empty land > empty water > lowest enemy combat. Pain together.
             // ──────────────────────────────────────────────────────────────────
             case RetreatUnitAction(_, u, r) if u.faction == FB =>
                 val isLand = r.glyph != Ocean
-                val hasGhato = self.at(r, Ghatanothoa).any
                 val hasFBUnits = self.at(r).any
-                val emptyGate = r.gate && !r.ownGate && !r.enemyGate
+                val freeGateR = r.gate && !r.ownGate && !r.enemyGate && !r.chaosGate
                 val ownGate = r.ownGate
-                val isEmpty = r.foes.none && !hasFBUnits
-                val foeCombat = r.foes.%(f => f.uclass.utype == Monster || f.uclass.utype == Terror).num
-                val lowCombat = foeCombat > 0 && foeCombat <= 2
-                hasGhato |=> 9000 -> "pain to Ghato region"
-                (isLand && emptyGate) |=> 8000 -> "pain to land empty gate"
-                (!isLand && emptyGate) |=> 7000 -> "pain to water empty gate"
-                (isLand && ownGate) |=> 6500 -> "pain to own land gate"
-                (!isLand && ownGate) |=> 6000 -> "pain to own water gate"
-                (isLand && hasFBUnits && !ownGate) |=> 5500 -> "pain to land with FB units"
-                (!isLand && hasFBUnits && !ownGate) |=> 5000 -> "pain to water with FB units"
-                (isLand && isEmpty) |=> 4000 -> "pain to empty land"
-                (isLand && lowCombat && !hasFBUnits) |=> 3000 -> "pain to land low combat"
-                (!isLand && isEmpty) |=> 2000 -> "pain to empty water"
-                (!isLand && lowCombat && !hasFBUnits) |=> 1000 -> "pain to water low combat"
+                val isEmpty = r.foes.none
+                val foeCombat = others./~(_.at(r)).%(f => f.uclass.utype == Monster || f.uclass.utype == Terror).num
+                // Pain together: boost regions where FB units already retreated this battle
+                hasFBUnits |=> 3000 -> "pain together with FB units"
+                // Destinations ranked
+                (isLand && freeGateR && isEmpty) |=> 9000 -> "pain to land empty gate"
+                (!isLand && freeGateR && isEmpty) |=> 8000 -> "pain to water empty gate"
+                (isLand && isEmpty && !freeGateR) |=> 7000 -> "pain to empty land"
+                (!isLand && isEmpty && !freeGateR) |=> 6000 -> "pain to empty water"
+                (isLand && ownGate) |=> 5500 -> "pain to own land gate"
+                (!isLand && ownGate) |=> 5000 -> "pain to own water gate"
+                // Rank by combat: lower = better
+                (foeCombat == 0) |=> 4500 -> "pain to 0 combat"
+                (foeCombat <= 2) |=> 3500 -> "pain to low combat"
+                (foeCombat <= 4) |=> 2500 -> "pain to moderate combat"
+                (foeCombat > 4) |=> 1000 -> "pain to high combat"
+
+            // ══════════════════════════════════════════════════════════════════
+            // ── NEUTRAL UNIT SCORES ─────────────────────────────────────────
+            // Low-range supplementary scores (500-2000). Core FB engine first.
+            // Conditional on not already having another neutral unit or iGOO.
+            // ══════════════════════════════════════════════════════════════════
+
+            // ── NM: Loyalty card (2 doom cost) ──────────────────────────────
+            case LoyaltyCardDoomAction(_) =>
+                val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
+                val hasIGOO = self.loyaltyCards.of[IGOOLoyaltyCard].any
+                hasNMCard |=> -100000 -> "NU: already have NM card"
+                (hasNMCard || hasIGOO) |=> -100000 -> "NU: already have neutral unit"
+                self.doom < 5 |=> 4000 -> "NU: loyalty card early (low doom)"
+                self.doom < 10 |=> 3000 -> "NU: loyalty card mid-game"
+                true |=> 2000 -> "NU: loyalty card base"
+
+            case NeutralMonstersAction(_, lc) =>
+                val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
+                val hasIGOO = self.loyaltyCards.of[IGOOLoyaltyCard].any
+                hasNMCard |=> -100000 -> "NU: already have NM card"
+                (hasNMCard || hasIGOO) |=> -100000 -> "NU: already have neutral unit"
+                true |=> 1000 -> "NU: nm base"
+                (lc.unit == DimensionalShamblerUnit) |=> 1200 -> "NU: shambler deploy versatility"
+                (lc.unit == Gug)        |=> 1000 -> "NU: gug 3 combat"
+                (lc.unit == Voonith)    |=> 900 -> "NU: voonith combat"
+                (lc.unit == StarVampire) |=> 900 -> "NU: star vampire"
+                (lc.unit == Ghast)      |=> 800 -> "NU: ghast swarm"
+                (lc.unit == Shantak)    |=> 600 -> "NU: shantak carry"
+                (lc.unit == Gnorri)     |=> 700 -> "NU: gnorri summons"
+
+            // ── NM: Placement of summoned NM units ──────────────────────────
+            case LoyaltyCardSummonAction(_, uc, r) =>
+                val ghatoHere = self.at(r, Ghatanothoa).any
+                r.ownGate && ghatoHere |=> 2000 -> "NU: place NM at Ghato gate"
+                r.ownGate && r.allies.cultists.any |=> 1500 -> "NU: place NM at own gate"
+                r.ownGate |=> 1000 -> "NU: place NM at gate"
+                true |=> 500 -> "NU: place NM anywhere"
+
+            // ── NM: Ghast free summon ───────────────────────────────────────
+            case FreeSummonAction(_, Ghast, r, _) =>
+                self.at(r, Ghatanothoa).any |=> 1500 -> "NU: ghast at Ghato"
+                r.ownGate |=> 1200 -> "NU: ghast at gate"
+                true |=> 800 -> "NU: ghast free summon"
+
+            // ── NM: Shantak carry cultist ───────────────────────────────────
+            case ShantakCarryCultistAction(_, o, ur, r) =>
+                r.ownGate && r.allies.cultists.none |=> 2000 -> "NU: shantak carry to empty gate"
+                r.enemyGate && r.foes.goos.none |=> 1500 -> "NU: shantak carry to steal gate"
+                true |=> 800 -> "NU: shantak carry base"
+
+            // ── NM: Shambler deploy to map ──────────────────────────────────
+            case ShamblerDeployMainAction(_, _) =>
+                true |=> 1200 -> "NU: deploy shambler"
+
+            case ShamblerDeployAction(_, r, _) =>
+                r.foes.cultists.any && r.foes.goos.none && r.foes.monsterly.none |=> 2000 -> "NU: shambler to capture"
+                r.ownGate && r.allies.monsterly.none |=> 1500 -> "NU: shambler defend gate"
+                true |=> 800 -> "NU: shambler deploy"
+
+            // ── NM: Shambler summon to faction card ─────────────────────────
+            case ShamblerSummonMainAction(_) =>
+                true |=> 1000 -> "NU: summon shambler to card"
+
+            case ShamblerSummonAction(_) =>
+                true |=> 1000 -> "NU: summon shambler"
+
+            // ── iGOO: Awaken ────────────────────────────────────────────────
+            case IndependentGOOMainAction(_, lc, _) =>
+                val hasIGOO = self.loyaltyCards.of[IGOOLoyaltyCard].any
+                val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
+                val remaining = self.power - lc.power
+                hasIGOO    |=> -100000 -> "NU: already have an iGOO"
+                (hasIGOO || hasNMCard) |=> -100000 -> "NU: already have neutral unit"
+                remaining < 0  |=> -99999 -> "NU: igoo: cannot afford"
+                gooOnMap == 0  |=> -5000 -> "NU: igoo: awaken Ghato first"
+                self.gates.num < 2 |=> -3000 -> "NU: igoo: need 2+ gates first"
+                remaining >= 3 |=> 2500 -> "NU: igoo comfortable power"
+                remaining >= 1 |=> 2000 -> "NU: igoo affordable"
+                remaining == 0 |=> 1000 -> "NU: igoo spends all power"
+                (lc == TulzschaCard) |=> 3000 -> "NU: tulzscha undying"
+                (lc == AbhothCard)   |=> 2800 -> "NU: abhoth filth"
+                (lc == DaolothCard)  |=> 2800 -> "NU: daoloth gate builder"
+                (lc == NyogthaCard)  |=> 2500 -> "NU: nyogtha fighter"
+                (lc == ByatisCard)   |=> 2000 -> "NU: byatis anchor"
+                (lc == YgolonacCard) |=> 1500 -> "NU: ygolonac cheapest"
+                true                 |=> 1800 -> "NU: igoo base"
+
+            case IndependentGOOAction(_, lc, r, _) =>
+                r.ownGate && self.at(r, Ghatanothoa).any |=> 900 -> "NU: igoo place: Ghato gate"
+                r.ownGate && r.allies.cultists.any |=> 700 -> "NU: igoo place: own gate with cultists"
+                r.ownGate                          |=> 500 -> "NU: igoo place: own gate"
+                r.allies.monsterly.any             |=> 600 -> "NU: igoo place: with monsters"
+                (lc.unit == Byatis) && r.ownGate  |=> 851 -> "NU: byatis at own gate (immobile)"
+                (lc.unit == Byatis) && !r.ownGate |=> -500 -> "NU: byatis avoid non-gate"
+                true |=> 400 -> "NU: igoo place: any"
+
+            // ── iGOO abilities ──────────────────────────────────────────────
+            case GodOfForgetfulnessMainAction(_, _, _) =>
+                true |=> 1000 -> "NU: byatis pull cultists"
+
+            case GodOfForgetfulnessAction(_, d, r) =>
+                r.foes.cultists.num >= 2 |=> 1500 -> "NU: byatis pull many"
+                r.foes.cultists.any |=> 1000 -> "NU: byatis pull"
+                true |=> 500 -> "NU: byatis base"
+
+            case FilthMainAction(_, _) =>
+                true |=> 700 -> "NU: abhoth filth"
+
+            case FilthAction(_, r) =>
+                r.enemyGate |=> 1200 -> "NU: filth at enemy gate"
+                true |=> 500 -> "NU: filth base"
+
+            case NightmareWebMainAction(_, _) =>
+                true |=> 800 -> "NU: nyogtha nightmare web"
+
+            case NightmareWebAction(_, r) =>
+                r.ownGate |=> 1500 -> "NU: nightmare web at gate"
+                r.foes.any |=> 1000 -> "NU: nightmare web near enemies"
+                true |=> 500 -> "NU: nightmare web base"
+
+            case TulzschaGivePowerMainAction(_) =>
+                !allSB |=> 1200 -> "NU: tulzscha give power for SB"
+                true |=> 400 -> "NU: tulzscha give power"
+
+            case TulzschaGivePowerAction(_) =>
+                true |=> 700 -> "NU: tulzscha confirm"
+
+            case CeremonyOfAnnihilationChoiceAction(_) =>
+                power <= 2 |=> 1200 -> "NU: ceremony, need power"
+                true |=> 600 -> "NU: ceremony base"
+
+            // ── HP: Sacrifice out of turn (Unspeakable Oath) ────────────────
+            case SacrificeHighPriestOutOfTurnMainAction(_) =>
+                others.%(_.active).none |=> 2000 -> "NU: HP oath, enemies exhausted"
+                power <= 1 |=> 1500 -> "NU: HP oath low power"
+                true |=> 800 -> "NU: HP out-of-turn sacrifice"
+
+            // ══════════════════════════════════════════════════════════════════
+            // ── END NEUTRAL UNIT SCORES ──────────────────────────────────────
+            // ══════════════════════════════════════════════════════════════════
 
             case _ =>
                 true |=> 0 -> "default"

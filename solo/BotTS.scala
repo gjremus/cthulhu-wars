@@ -51,8 +51,18 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
         val enemiesExhausted = others.any && others.%(_.power <= 1).num >= others.num - 1
         val allEnemiesExhausted = others.any && others.forall(_.power <= 1)
         val realDoom = self.doom + self.es./(_.value).sum
+        val tsTomePenalty = game.cursedTomesOwned.get(self).|(Nil).count { case (_, fd) => fd }
+        val tsAprxDoom = self.doom + (self.es.num * 5 / 3) - tsTomePenalty
+        def factionAprxDoom(f : Faction) : Int = {
+            val tomePen = game.cursedTomesOwned.get(f).|(Nil).count { case (_, fd) => fd }
+            f.doom + (f.es.num * 5 / 3) - tomePen
+        }
         val leadingFactionDoom = if (others.any) others./(f => f.doom + f.es./(_.value).sum).max else 0
+        val leadingFactionAprxDoom = if (others.any) others./(factionAprxDoom).max else 0
         val doomGap = leadingFactionDoom - realDoom
+        // SBR PIVOT: when total estimated doom > 30, prioritize SBR completion
+        val sbrPivot = !allSB && tsAprxDoom > 30 && have(Glaaki)
+        val needsGOOBattle = need(TSGlaakiBattlesGOO)
         // FINAL AP: can win this doom phase if we grab enough gates/captures
         val potentialWinDoom = realDoom + self.gates.num + (dh / 2) + (have(Glaaki).?(1).|(0))
         val canWinThisTurn = allSB && potentialWinDoom >= 28  // within striking distance of 30
@@ -111,6 +121,9 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
         val topAggressivePresent = $(SL, GC, CC, OW).%(_.exists).any
         // AN Cathedral danger: AN combat > 0 + cathedral + (AN has power/HP, or SL can spend 3)
         val slCanSpend3 = SL.exists && SL.power >= 3 && (!SL.has(Lethargy) || !SL.has(AncientSorcery))
+        def noEnemyGOOOrIGOO(r : Region) : Boolean =
+            others./~(_.at(r)).%(u => u.uclass.utype == GOO).none
+
         def anCathedralDanger(r : Region) : Boolean = {
             val anCombat = if (AN.exists) AN.strength(AN.at(r), self) else 0
             val hasCathedral = game.cathedrals.contains(r)
@@ -140,9 +153,8 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
         // gave no preference to attacking FB-held gates.
         def factionTierBonus(r : Region) : Int = {
             others.%(ef => r.gateOf(ef) || ef.at(r).any)./(f => f match {
-                case SL => 200; case GC => 175; case CC => 150; case BG => 125
-                case FB => 115
-                case OW => 100; case WW => 75; case YS => 50; case AN => 25
+                case SL => 200; case GC => 175; case DS => 175; case CC => 150; case BG => 125
+                case OW => 100; case WW => 75; case YS => 50; case FB => 50; case AN => 25
                 case _ => 0
             }).headOption.getOrElse(0)
         }
@@ -153,7 +165,12 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
         // plain MoveAction, the crater avoidance on MoveAction does not affect it.
         a.unwrap match {
             case MoveAction(_, u, from, to, _) =>
-                fbMoveAvoidance(to).foreach(e => true |=> e)
+                if (u.uclass == Glaaki && have(Undulate)) {
+                    val combatMovers = 1 + self.at(from, DeepTendril).num + self.at(from, TombHerd).num
+                    fbMultiMoveAvoidance(to, combatMovers.min(3)).foreach(e => true |=> e)
+                } else {
+                    fbMoveAvoidance(to).foreach(e => true |=> e)
+                }
                 // HARD RULE (user-reported): when TS has 1 power left in the AP,
                 // do NOT move ANY unit off an own gate that has only 1 cultist.
                 // Moving Glaaki/DT/TH leaves the cultist defenseless (enemy
@@ -172,13 +189,19 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 hasFBCrater(r) |=> -5000 -> "avoid summoning at FB crater"
                 (fbHasCG && isFBGazeRegion(r)) |=> -6000 -> "avoid summoning into FB gaze region"
             case TSUndulateCarryAction(_, u, from, to, _) =>
-                // Same rule for Undulate carry: don't carry anything off a
-                // 1-cultist own gate at 1 power. Undulate moves both Glaaki
-                // and the carried unit, so even non-cultist carries
-                // (DT/TH) drain the gate's defender.
+                // Count only Glaaki + DT + TH (not acolytes), max 3
+                val combatMovers = 1 + self.at(from, DeepTendril).num + self.at(from, TombHerd).num
+                fbMultiMoveAvoidance(to, combatMovers.min(3)).foreach(e => true |=> e)
                 val fromOwnGateLow = from.ownGate && power <= 1 &&
                     self.at(from).%(_.cultist).num == 1 && from != to
                 fromOwnGateLow |=> -100000 -> "HARD BLOCK: don't undulate off 1-cultist own gate at 1 power"
+            case FBCyclopeanGazePainUnitAction(_, _, uRef, _, _, _, _) =>
+                val u = game.unit(uRef)
+                val onWater = u.region.glyph == Ocean
+                (u.uclass == DeepTendril && !onWater) |=> 3000 -> "TS CG: pain Tendril on land"
+                (u.uclass == TombHerd && onWater) |=> 3000 -> "TS CG: pain TH on water"
+                (u.uclass == DeepTendril && onWater) |=> 1000 -> "TS CG: Tendril on water (less preferred)"
+                (u.uclass == TombHerd && !onWater) |=> 1000 -> "TS CG: TH on land (less preferred)"
             case _ =>
         }
 
@@ -231,7 +254,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 case GreenDecay =>
                     true |=> 1000 -> "#644 Green Decay: primary doom engine"
                 case ElevenRevelations =>
-                    val noAdjCaptures = !glaakiRegion.exists(r => r.near.%(n => n.foes.%(_.capturable).any && n.foes.goos.none).any)
+                    val noAdjCaptures = !glaakiRegion.exists(r => r.near.%(n => n.foes.cultists.any && n.foes.goos.none).any)
                     (noAdjCaptures || !have(Glaaki)) |=> 900 -> "#645 Eleven Rev: no adj captures or no Glaaki"
                     true |=> 800 -> "#649 Eleven Rev: base"
                 case Hecatomb =>
@@ -369,9 +392,12 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
             case LoyaltyCardDoomAction(_) =>
                 // [NU-TEST 2026-04-04] Very restrictive: 2 doom is huge for TS. Only with massive surplus.
                 val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
+                val hasIGOOD = self.loyaltyCards.of[IGOOLoyaltyCard].any
                 hasNMCard |=> -100000 -> "NU: already have NM card"
-                !hasNMCard && allSB && self.doom >= 25 |=> 5000 -> "NU: loyalty card, endgame surplus"
-                true |=> -10000 -> "NU: doom too precious for loyalty card"
+                (hasNMCard || hasIGOOD) |=> -100000 -> "NU: already have neutral unit"
+                self.doom < 5 |=> 4000 -> "NU: loyalty card early (low doom)"
+                self.doom < 10 |=> 3000 -> "NU: loyalty card mid-game"
+                true |=> 2000 -> "NU: loyalty card base"
 
             case SacrificeHighPriestDoomAction(_) =>
                 // [NU-TEST 2026-04-04] HP sacrifice is free (PowerNeutral) — moderate scores
@@ -479,18 +505,16 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 true |=> -800 -> "#570 main done"
 
             case NeutralMonstersAction(_, lc) =>
-                // [NU-TEST 2026-04-04] Very restrictive — 2 doom cost is huge. Only endgame surplus.
                 val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
                 hasNMCard |=> -100000 -> "NU: already have NM card"
-                true |=> -5000 -> "NU: nm 2 doom cost is huge"
-                allSB && self.doom >= 25 |=> 3000 -> "NU: nm endgame surplus doom"
-                (lc.unit == Gug)        |=> 1300 -> "NU: gug 3 combat fighters"
-                (lc.unit == Ghast)      |=> 1100 -> "NU: ghast swarm defense"
-                (lc.unit == Voonith)    |=> 1200 -> "NU: voonith 3 combat battle"
-                (lc.unit == Shantak)    |=> 800 -> "NU: shantak carry mobility"
-                (lc.unit == StarVampire) |=> 1200 -> "NU: star vampire battle"
-                (lc.unit == DimensionalShamblerUnit) |=> 1500 -> "NU: shambler deploy versatility"
-                (lc.unit == Gnorri)     |=> 1000 -> "NU: gnorri summons"
+                true |=> 1000 -> "NU: nm base"
+                (lc.unit == StarVampire) |=> 2000 -> "NU: star vampire top"
+                (lc.unit == Gug)        |=> 1800 -> "NU: gug combat"
+                (lc.unit == DimensionalShamblerUnit) |=> 1600 -> "NU: shambler"
+                (lc.unit == Ghast)      |=> 1400 -> "NU: ghast"
+                (lc.unit == Gnorri)     |=> 1200 -> "NU: gnorri"
+                (lc.unit == Voonith)    |=> 1000 -> "NU: voonith"
+                (lc.unit == Shantak)    |=> -2000 -> "NU: shantak not useful"
 
             case SacrificeHighPriestMainAction(_) =>
                 // [NU-TEST 2026-04-04] HP main sacrifice: costs 1 power, gains +2 (net +1). Moderate.
@@ -511,24 +535,22 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 true                    |=>  100 -> "#441 hp: any"
 
             case IndependentGOOMainAction(_, lc, _) =>
-                // [NU-TEST 2026-04-04] Gated: only if no iGOO yet. Weak — core engine first.
-                val hasIGOO = self.loyaltyCards.of[IGOOLoyaltyCard].any
+                val igooOnMap = self.allInPlay.%(_.uclass.isInstanceOf[IGOO]).num
                 val remaining = self.power - lc.power
-                hasIGOO    |=> -100000 -> "NU: already have an iGOO"
-                remaining < 0  |=> -99999 -> "#525 igoo: cannot afford"
-                // Only consider after Glaaki is awakened and gates >= 2
-                !have(Glaaki) |=> -5000 -> "NU: igoo: awaken Glaaki first"
-                self.gates.num < 2 |=> -3000 -> "NU: igoo: need 2+ gates first"
-                remaining >= 3 |=> 800 -> "NU: igoo comfortable power"
-                remaining >= 1 |=> 600 -> "NU: igoo affordable"
-                remaining == 0 |=> 300 -> "NU: igoo spends all power"
-                (lc == YgolonacCard) |=> 200 -> "NU: ygolonac cheapest"
-                (lc == TulzschaCard) |=> 1000 -> "NU: tulzscha undying flame"
-                (lc == ByatisCard)   |=> 700 -> "NU: byatis anchor"
-                (lc == AbhothCard)   |=> 900 -> "NU: abhoth filth"
-                (lc == NyogthaCard)  |=> 800 -> "NU: nyogtha fighter"
-                (lc == DaolothCard)  |=> 900 -> "NU: daoloth gate builder"
-                true                 |=> 500 -> "NU: igoo base"
+                // Max 1 iGOO, except Y'Golonac is always allowed
+                (igooOnMap >= 1 && lc != YgolonacCard) |=> -100000 -> "NU: max 1 iGOO (except Ygolonac)"
+                remaining < 0  |=> -99999 -> "NU: cannot afford"
+                !have(Glaaki) |=> -5000 -> "NU: awaken Glaaki first"
+                self.gates.num < 2 |=> -3000 -> "NU: need 2+ gates first"
+                remaining >= 3 |=> 2500 -> "NU: igoo comfortable power"
+                remaining >= 1 |=> 2000 -> "NU: igoo affordable"
+                (lc == TulzschaCard) |=> 7000 -> "NU: tulzscha top priority"
+                (lc == ByatisCard)   |=> 5500 -> "NU: byatis defender"
+                (lc == YgolonacCard) |=> 5000 -> "NU: ygolonac kills"
+                (lc == NyogthaCard)  |=> 4000 -> "NU: nyogtha"
+                (lc == DaolothCard)  |=> -3000 -> "NU: daoloth not useful"
+                (lc == AbhothCard)   |=> -3000 -> "NU: abhoth not useful"
+                true                 |=> 2000 -> "NU: igoo base"
 
             case IndependentGOOAction(_, lc, r, _) =>
                 // Choose where to place the iGOO
@@ -541,114 +563,39 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 (lc.unit == Byatis) && !r.ownGate |=> 800 -> "#322 byatis: avoid non-gate (cant move)"
                 true |=> 500 -> "#377 igoo place: any valid region"
 
-            // ══════════════════════════════════════════════════════════════════
-            // ── NEUTRAL UNIT SCORES (2026-04-04) ─────────────────────────────
-            // Weak supplementary scores (500-2000 range). Core TS engine first.
-            // See: TS Neutral Unit Testing and Rollback Guide.md
-            // ══════════════════════════════════════════════════════════════════
-
-            // ── HP: Recruit High Priest in AP3+ ──────────────────────────────
-            case RecruitAction(_, HighPriest, r) =>
-                firstAP || secondAP |=> -5000 -> "NU: dont recruit HP early, gates first"
-                r.ownGate && r.allies.goos.any |=> 1500 -> "NU: recruit HP at Glaaki gate"
-                r.ownGate |=> 1000 -> "NU: recruit HP at own gate"
-                true |=> 500 -> "NU: recruit HP base"
-
-            // ── HP: Sacrifice out of turn ────────────────────────────────────
-            case SacrificeHighPriestOutOfTurnMainAction(_) =>
-                enemiesExhausted |=> 1500 -> "NU: HP sacrifice, enemies exhausted"
-                power <= 1 |=> 1200 -> "NU: HP sacrifice when low power"
-                true |=> 800 -> "NU: HP out-of-turn sacrifice"
-
-            // ── NM: Placement of summoned NM units ───────────────────────────
-            case LoyaltyCardSummonAction(_, uc, r) =>
-                r.ownGate && r.allies.goos.any |=> 2000 -> "NU: place NM at Glaaki gate"
-                r.ownGate && r.allies.cultists.any |=> 1500 -> "NU: place NM at own gate"
-                r.ownGate |=> 1000 -> "NU: place NM at gate"
-                true |=> 500 -> "NU: place NM anywhere"
-
-            // ── NM: Ghast free summon (defend battles) ───────────────────────
-            case FreeSummonAction(_, Ghast, r, _) =>
-                r.allies.goos.any |=> 1500 -> "NU: ghast at Glaaki"
-                r.ownGate |=> 1200 -> "NU: ghast at gate"
-                true |=> 800 -> "NU: ghast free summon"
-
-            // ── NM: Shantak carry cultist ────────────────────────────────────
-            case ShantakCarryCultistAction(_, o, ur, r) =>
-                r.ownGate && r.allies.cultists.none |=> 2000 -> "NU: shantak carry to empty gate"
-                r.enemyGate && r.foes.goos.none |=> 1500 -> "NU: shantak carry to steal gate"
-                true |=> 800 -> "NU: shantak carry base"
-
-            // ── NM: Shambler deploy to map ───────────────────────────────────
-            case ShamblerDeployMainAction(_, _) =>
-                true |=> 1500 -> "NU: deploy shambler"
-
-            case ShamblerDeployAction(_, r, _) =>
-                r.foes.cultists.any && r.foes.goos.none && r.foes.monsterly.none |=> 2000 -> "NU: shambler to capture"
-                r.ownGate && r.allies.monsterly.none |=> 1500 -> "NU: shambler defend gate"
-                true |=> 800 -> "NU: shambler deploy"
-
-            // ── NM: Shambler summon to faction card ──────────────────────────
-            case ShamblerSummonMainAction(_) =>
-                true |=> 1000 -> "NU: summon shambler to card"
-
-            case ShamblerSummonAction(_) =>
-                true |=> 1000 -> "NU: summon shambler"
-
-            // ── iGOO abilities (weak — use when nothing better to do) ────────
-            case GodOfForgetfulnessMainAction(_, _, _) =>
-                true |=> 1200 -> "NU: byatis pull cultists"
-
-            case GodOfForgetfulnessAction(_, d, r) =>
-                r.foes.cultists.num >= 2 |=> 1500 -> "NU: byatis pull many"
-                r.foes.cultists.any |=> 1000 -> "NU: byatis pull"
-                true |=> 500 -> "NU: byatis base"
-
-            case FilthMainAction(_, _) =>
-                true |=> 800 -> "NU: abhoth filth"
-
-            case FilthAction(_, r) =>
-                r.enemyGate |=> 1200 -> "NU: filth at enemy gate"
-                true |=> 600 -> "NU: filth base"
-
-            case NightmareWebMainAction(_, _) =>
-                true |=> 1000 -> "NU: nyogtha nightmare web"
-
-            case NightmareWebAction(_, r) =>
-                r.ownGate |=> 1500 -> "NU: nightmare web at gate"
-                r.foes.any |=> 1000 -> "NU: nightmare web near enemies"
-                true |=> 600 -> "NU: nightmare web base"
-
-            case TulzschaGivePowerMainAction(_) =>
-                !allSB |=> 1500 -> "NU: tulzscha give power for SB"
-                true |=> 500 -> "NU: tulzscha give power"
-
-            case TulzschaGivePowerAction(_) =>
-                true |=> 800 -> "NU: tulzscha confirm"
-
-            case CeremonyOfAnnihilationChoiceAction(_) =>
-                power <= 2 |=> 1500 -> "NU: ceremony, need power"
-                true |=> 800 -> "NU: ceremony base"
-
-            // ══════════════════════════════════════════════════════════════════
-            // ── END NEUTRAL UNIT SCORES ──────────────────────────────────────
-            // ══════════════════════════════════════════════════════════════════
+            // ── NEUTRAL UNIT: delegated to evalNeutralUnit ─────────────────────
+            case _ if evalNeutralUnit(a).nonEmpty =>
+                result ++= evalNeutralUnit(a)
 
             // ── MOVEMENT ─────────────────────────────────────────────────────
             case MoveAction(_, u, o, d, _) if u.uclass == Glaaki =>
+                // GLAAKI ALONE: move to adjacent region with TS units to regroup
+                val glaakiSolo = self.at(o).num == 1
+                val destHasTSUnits = self.at(d, DeepTendril).num > 1 ||
+                    self.at(d, TombHerd).num > 1 || self.at(d).cultists.num > 1
+                (glaakiSolo && destHasTSUnits) |=> 8000 -> "TS: Glaaki alone, regroup with TS units"
+
+                // GOO/iGOO THREAT: if enemy GOO or iGOO in TS controlled gate,
+                // and Glaaki is adjacent and NOT on a controlled gate, Undulate to threatened gate
+                val threatenedTSGates = self.gates.%(g =>
+                    others./~(_.at(g)).%(u => u.uclass.utype == GOO).any)
+                val glaakiAdjacentToThreat = !o.ownGate && threatenedTSGates.%(g =>
+                    game.board.connected(o).has(g)).any
+                (glaakiAdjacentToThreat && threatenedTSGates.has(d)) |=> 5000 -> "TS: Glaaki to threatened gate (GOO/iGOO)"
+
                 // STRIKE: at 2 power drop to 6000. Also: if Glaaki already at capturable gate, don't move — capture first
-                val glaakiOnCapturableGate = o.foes.%(_.capturable).any && o.foes.goos.none && o.enemyGate
+                val glaakiOnCapturableGate = o.foes.cultists.any && o.foes.goos.none && o.enemyGate
                 val strikeBase = if (power <= 2) 6000 else 9000
                 val strikeGrab = if (power <= 2) 5000 else 8000
                 // If already on capturable gate, movement drops to 0 — capture scores will win
                 allEnemiesExhausted && glaakiOnCapturableGate && !d.ownGate |=> 0 -> "#456 STRIKE: already at capturable gate, capture first"
-                allEnemiesExhausted && have(GreenDecay) && d.foes.%(_.capturable).any && d.foes.goos.none |=> strikeBase -> "#457 STRIKE: enemies out, GD capture"
+                allEnemiesExhausted && have(GreenDecay) && d.foes.cultists.any && d.foes.goos.none |=> strikeBase -> "#457 STRIKE: enemies out, GD capture"
                 allEnemiesExhausted && d.enemyGate && d.foes.cultists.num <= 1 && d.foes.monsterly.none && d.foes.goos.none |=> strikeGrab -> "#458 STRIKE: enemies out, grab gate"
                 // MID-AP OPPORTUNISM: grab gates when OWNER is out of power/inactive (even if others still active)
                 val ownerExhausted = d.enemyGate && others.%(ef => d.gateOf(ef) && (ef.power <= 1 || !ef.active)).any
                 ownerExhausted && d.foes.cultists.num <= 1 && d.foes.monsterly.none && d.foes.goos.none |=> 5000 -> "#143 opportunistic: gate owner exhausted"
                 // GD capture when target faction is out of power (can't block)
-                have(GreenDecay) && d.foes.%(_.capturable).any && d.foes.goos.none && others.%(e => e.at(d).any && e.power <= 1).any |=> 4000 -> "#160 opportunistic: GD capture, owner weak"
+                have(GreenDecay) && d.foes.cultists.any && d.foes.goos.none && others.%(e => e.at(d).any && e.power <= 1).any |=> 4000 -> "#160 opportunistic: GD capture, owner weak"
                 // [2026-04-01 19:22] v1.18.065: TC4 — Undulate roaming when fortress exists
                 // Only block Glaaki movement when NO fortress gate exists (< 2 TH on any non-Glaaki gate)
                 val fortressExists = self.gates.%(g => !g.allies.goos.any && self.at(g, TombHerd).num >= 2).any
@@ -679,7 +626,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 // CC: Nyarlathotep — very powerful, will target Glaaki
                 // [2026-03-31 16:00] v1.18.035: Active-aware GOO threats — only penalize when faction is active
                 ccHasNya && d.foes(Nyarlathotep).any && CC.active && d.allies.monsterly.none |=> -900 -> "#481 nyarlathotep ACTIVE: glaaki avoids without support"
-                ccHasNya && d.foes(Nyarlathotep).any && !CC.active && d.foes.%(_.capturable).any |=> 2000 -> "#206 nyarlathotep INACTIVE: safe to capture nearby"
+                ccHasNya && d.foes(Nyarlathotep).any && !CC.active && d.foes.cultists.any |=> 2000 -> "#206 nyarlathotep INACTIVE: safe to capture nearby"
                 ccHasNya && d.foes(Nyarlathotep).any |=> 180 -> "#434 nyarlathotep: glaaki cautious"
                 // OW: DreadCurse+YogSothoth — rolls extra dice vs Glaaki in combat
                 owHasDreadCurse && owHasYog && d.foes(YogSothoth).any && d.allies.monsterly.none |=> 800 -> "#323 OW dread curse: glaaki alone vs yog risky"
@@ -712,12 +659,15 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 val earlyHunt = needCombatSB && numSB >= 3 && have(Glaaki) && d.foes.any && d.foes.goos.none
                 earlyHunt && d.allies.%(_.is(TombHerd)).any |=> 3000 -> "#179 SB hunt: Glaaki to fight with TH for combat SBs"
                 earlyHunt && d.allies.%(_.is(DeepTendril)).any |=> 2500 -> "#197 SB hunt: Glaaki to fight with DT for combat SBs"
+                // SBR PIVOT: aprxDoom > 30, hunt nearest GOO for Glaaki battles GOO SBR
+                sbrPivot && needsGOOBattle && d.foes.goos.any |=> 11000 -> "SBR PIVOT: Glaaki to GOO for battle SBR"
+                sbrPivot && needsGOOBattle && d.near.%(n => n.foes.goos.any).any |=> 9000 -> "SBR PIVOT: Glaaki toward GOO (1 hop away)"
                 // [2026-04-02] NS: 1-power Glaaki at home with no monsters = STAY (score 0 for leaving)
                 val homeNoMonsters = o.ownGate && o.allies.monsterly.none
                 power == 1 && homeNoMonsters && !d.ownGate |=> -6000 -> "#578 NS: 1pwr, no monsters at home, stay"
                 // Survival mode
                 power == 1 && others.%(_.power > 1).any && d.ownGate && !o.ownGate |=> 4000 -> "#550 survival: power=1, Glaaki return to gate"
-                power == 1 && others.%(_.power > 1).any && !d.ownGate && !d.foes.%(_.capturable).any |=> -4000 -> "#574 survival: power=1, dont leave gate area"
+                power == 1 && others.%(_.power > 1).any && !d.ownGate && !d.foes.cultists.any |=> -4000 -> "#574 survival: power=1, dont leave gate area"
                 // [2026-03-31 15:20] v1.18.031: STRENGTH CHECK — avoid areas where Glaaki would be outmatched
                 val destEnemyStr = others.%(e => e.at(d).any)./(e => e.strength(e.at(d), self)).sum
                 val destOwnStr = self.strength(self.at(d) :+ self.all(Glaaki).head, others.head) // approximate
@@ -735,7 +685,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 val gooNearOwnGate = d.ownGate && d.near.%(n => n.foes.goos.active.any).any && d.allies.cultists.any && d.allies.monsterly.none
                 // [RARELY] gooNearOwnGate && homeCombatFavorable |=> 6000 -> "#137 NS: GOO approaching home, favorable — intercept"
                 // [2026-04-02] NS: no GOO at home — Glaaki at capture location stays put
-                val atCaptureLocation = !o.ownGate && o.foes.%(_.capturable).any && o.foes.goos.none
+                val atCaptureLocation = !o.ownGate && o.foes.cultists.any && o.foes.goos.none
                 val homeHasNoGOO = self.gates.forall(g => !g.foes.goos.active.any)
                 // Returning home when no threat: score LOW so capture (5000) wins
                 // [DEAD] atCaptureLocation && homeHasNoGOO && d.ownGate |=> 500 -> "#378 NS: no threat at home, stay and capture"
@@ -756,7 +706,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 secondAP && weakestGateTarget |=> 5000 + destFactionBonus + cultistTargetBonus -> "#84 NS4: AP2 Glaaki [UNDULATE] to weakest faction gate"
                 // [2026-04-02] NS 5a: AP2 at 2 power — Undulate+capture if 1 enemy cultist on adjacent gate (take the gate)
                 val canStealGate = d.enemyGate && d.foes.cultists.num == 1 && d.foes.monsterly.none && d.foes.goos.none
-                secondAP && power == 2 && canStealGate |=> 6000 + destFactionBonus + cultistTargetBonus -> "#90 NS5a: AP2 2pwr [UNDULATE]+capture steal gate"
+                secondAP && power >= 2 && canStealGate |=> 6000 + destFactionBonus + cultistTargetBonus -> "#90 NS5a: AP2 2pwr [UNDULATE]+capture steal gate"
                 // [2026-04-02] NS 5b: AP2 at 1 power — retreat to fortress if not on capturable gate with cultist
                 val onCapturableGateWithCultist = o.enemyGate && o.foes.cultists.num == 1 && o.foes.monsterly.none && o.foes.goos.none && o.allies.cultists.any
                 secondAP && power == 1 && !onCapturableGateWithCultist && d.ownGate |=> 5000 -> "NS5b: AP2 1pwr [RAW MOVE] retreat to fortress"
@@ -770,13 +720,13 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 thirdAP && originHasLoneCultist |=> -2000 -> "#97 NS6: don't leave lone cultist, recruit first"
                 // [2026-04-02] NS10: AP4+ Glaaki raids with faction tier preference
                 val destTier = factionTierBonus(d)
-                fourthAPPlus && have(Undulate) && have(GreenDecay) && d.foes.%(_.capturable).any && d.foes.goos.none && !anCathedralDanger(d) |=> 7000 + destTier + cultistTargetBonus -> "#134 NS10: AP4+ Glaaki [UNDULATE] GD capture raid"
+                fourthAPPlus && power > 1 && have(Undulate) && have(GreenDecay) && d.foes.cultists.any && d.foes.goos.none && !anCathedralDanger(d) |=> 7000 + destTier + cultistTargetBonus -> "#134 NS10: AP4+ Glaaki [UNDULATE] GD capture raid"
                 fourthAPPlus && have(Undulate) && d.enemyGate && d.foes.goos.none && d.foes.monsterly.none |=> 6000 + destTier + cultistTargetBonus -> "#138 NS10: AP4+ Glaaki [UNDULATE] raid adjacent gate"
-                fourthAPPlus && have(GreenDecay) && d.near.%(n => n.foes.cultists.any && n.foes.goos.none).any |=> 5000 + destTier -> "#145 NS10: AP4+ Glaaki [RAW MOVE] toward captures"
-                fourthAPPlus && d.foes.any && d.foes.goos.none |=> 4000 + destTier -> "#161 NS10: AP4+ Glaaki [RAW MOVE] toward enemies"
+                fourthAPPlus && power > 1 && have(Undulate) && have(GreenDecay) && d.near.%(n => n.foes.cultists.any && n.foes.goos.none).any |=> 5000 + destTier -> "#145 NS10: AP4+ Glaaki [UNDULATE] toward captures"
+                fourthAPPlus && power > 1 && have(Undulate) && d.foes.any && d.foes.goos.none |=> 4000 + destTier -> "#161 NS10: AP4+ Glaaki [UNDULATE] toward enemies"
                 // [2026-04-02] NS12: Glaaki return home — ONLY when threatened
                 // Threat = Glaaki alone, enemy combat >= 3, enemy can act before Glaaki (has power or goes first)
-                val canCaptureHere = o.foes.%(_.capturable).any && o.foes.goos.none
+                val canCaptureHere = o.foes.cultists.any && o.foes.goos.none
                 val glaakiAlone = glaakiRegion.exists(r => self.at(r).%(_.monsterly).none)
                 val enemyCombatHere = glaakiRegion.map(r => others.%(e => e.at(r).any)./(e => e.strength(e.at(r), self)).sum).getOrElse(0)
                 val enemyCanActFirst = others.%(_.power >= 1).any
@@ -792,10 +742,10 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 // Raw move is fine IF gate stays defended (1 TH + cultist left behind)
                 val gateStaysDefended = o.ownGate && o.allies.cultists.any && o.allies.%(_.is(TombHerd)).num >= 2
                 // Needs to beat NS10 capture raid (7800 max) by ~1000
-                glaakiFortressReady && have(GreenDecay) && d.foes.%(_.capturable).any && d.foes.goos.none && gateStaysDefended && !anCathedralDanger(d) |=> 8000 + destTier -> "#128 NS: fortress [UNDULATE] capture raid"
+                glaakiFortressReady && power > 1 && have(GreenDecay) && d.foes.cultists.any && d.foes.goos.none && gateStaysDefended && !anCathedralDanger(d) |=> 8000 + destTier -> "#128 NS: fortress [UNDULATE] capture raid"
                 glaakiFortressReady && d.enemyGate && d.foes.goos.none && d.foes.monsterly.none && gateStaysDefended |=> 7000 + destTier -> "#135 NS: fortress [UNDULATE] gate theft"
                 // [2026-04-02] NS: low power consolidation — stop chasing, occupy empty gates toward home
-                val noAdjacentCaptures = !o.near.%(n => n.foes.%(_.capturable).any && n.foes.goos.none).any
+                val noAdjacentCaptures = !o.near.%(n => n.foes.cultists.any && n.foes.goos.none).any
                 val lowPower = power <= 3
                 val glaakiNotOnGate = glaakiRegion.exists(r => !r.ownGate && !r.freeGate)
                 val closerEmptyGate = d.freeGate && fortressGate.exists(fg => game.board.distance(d, fg) < game.board.distance(o, fg))
@@ -850,14 +800,14 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 // Multi-capture areas are especially valuable (2+ ES in one move)
                 // GREEN DECAY CAPTURE: primary late-game doom engine
                 // 5 cultists = 5 ES ≈ 8.3 doom for 2 power. 10x more efficient than ritual!
-                esPivot && d.foes.%(_.capturable).num >= 3 && d.foes.goos.none |=> 4000 -> "#162 GD: mass capture = massive ES"
-                esPivot && d.foes.%(_.capturable).num >= 2 && d.foes.goos.none |=> 3000 -> "#181 GD: multi-capture for ES"
+                esPivot && d.foes.cultists.num >= 3 && d.foes.goos.none |=> 4000 -> "#162 GD: mass capture = massive ES"
+                esPivot && d.foes.cultists.num >= 2 && d.foes.goos.none |=> 3000 -> "#181 GD: multi-capture for ES"
                 // Transit toward capture targets 1-2 hops away
                 // [2026-04-02] NS: transit scores only when no Undulate — otherwise use Undulate carry
                 esPivot && !have(Undulate) && d.near.%(n => n.foes.cultists.num >= 2 && n.foes.goos.none).any |=> 2000 -> "#209 GD: transit to multi-capture (no Undulate)"
                 esPivot && !have(Undulate) && d.near.%(n => n.foes.cultists.any && n.foes.goos.none).any |=> 1500 -> "#242 GD: transit to capture (no Undulate)"
-                esPivot && d.foes.%(_.capturable).any && d.foes.goos.none |=> 2000 -> "#210 GD: capture for ES"
-                have(GreenDecay) && d.foes.%(_.capturable).any && d.foes.goos.none |=> 1500 -> "#243 green decay: capture for es"
+                esPivot && d.foes.cultists.any && d.foes.goos.none |=> 2000 -> "#210 GD: capture for ES"
+                have(GreenDecay) && d.foes.cultists.any && d.foes.goos.none |=> 1500 -> "#243 green decay: capture for es"
                 // SL early gate aggression: Glaaki goes to SL's gate ONLY after we have an ocean gate
                 // (ocean gate = Glaaki awakening prereq — never divert Glaaki from that critical path)
                 // [2026-04-01] NS: Glaaki grabs free/empty gates with stranded TS units via Undulate
@@ -867,7 +817,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 d.ownGate && d.allies.goos.none |=> 800 -> "#324 glaaki to own gate"
                 d.ownGate && d.allies.cultists.any |=> 400 -> "#393 glaaki protects cultist at gate"
                 d.allies.cultists.any && d.foes.none |=> 400 -> "#394 glaaki protects cultists"
-                d.foes.%(_.capturable).any && d.foes.goos.none |=> 300 -> "#407 glaaki to capture"
+                d.foes.cultists.any && d.foes.goos.none |=> 300 -> "#407 glaaki to capture"
                 // UNDULATE CAPTURE COMBO: Glaaki + acolyte move to lone cultist at enemy gate → capture → take gate
                 val dLoneCultistGate = d.enemyGate && d.foes.cultists.num == 1 && d.foes.monsterly.none && d.foes.goos.none
                 dLoneCultistGate && have(Undulate) |=> 2000 -> "#211 glaaki: undulate capture combo, take enemy gate"
@@ -883,7 +833,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 self.gates.num >= 2 && dGlaakiSteal    |=> 500 -> "#379 glaaki gate theft > building (1p vs 3p)"
                 dGlaakiSteal                           |=> 1200 -> "#267 glaaki: threaten weak enemy gate"
                 d.enemyGate && d.foes.goos.none && d.foes.monsterly.num <= 2 |=> 600 -> "#363 glaaki: threaten lightly defended gate"
-                o.ownGate && d.foes.%(_.capturable).any |=> 1200 -> "#268 go capture"
+                o.ownGate && d.foes.cultists.any |=> 1200 -> "#268 go capture"
                 // Glaaki to empty region = 0 (no reason to go there)
                 d.foes.none && !d.ownGate && !d.freeGate |=> -500 -> "#471 glaaki to empty region: no target"
                 true |=> 0 -> "#459 glaaki moves: base"
@@ -1145,6 +1095,10 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 val enemyStr  = f.strength(foes, self)
                 val ownStr    = adjustedOwnStrengthForCosmicUnity(self.strength(allies, f), allies, foes, opponent = f)
 
+                // GOO/iGOO at TS controlled gate: battle if favorable
+                val gooAtOwnGate = r.ownGate && foes.%(_.uclass.utype == GOO).any
+                (gooAtOwnGate && ownStr > enemyStr) |=> 4500 -> "TS: battle GOO/iGOO at own gate (favorable)"
+
                 // [2026-04-01 20:22] v1.18.069: CC Invisibility — polyps negate combat. Don't attack when polyps >= TS units.
                 val ccInvisibility = f == CC && CC.exists && CC.has(Invisibility)
                 val polypsHere = foes.%(_.uclass == FlyingPolyp).num
@@ -1217,6 +1171,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 needBattleSB && allies.any && ownStr >= enemyStr |=> 300 -> "#409 need battle sb fight"
                 needGlaakiGOO && allies.goos.any && foes.goos.any |=> 2000 -> "#217 glaaki vs goo for SB"
                 needGlaakiGOO && numSB >= 5 && allies.goos.any && foes.goos.any |=> 10000 -> "#123 LAST SB: glaaki MUST fight GOO"
+                sbrPivot && needsGOOBattle && allies.goos.any && foes.goos.any |=> 12000 -> "SBR PIVOT: battle GOO NOW (doom > 30)"
                 // GOO kill escalation: killing an enemy GOO is high value; GC costs 4 power to resurrect Cthulhu
                 f == GC && allies.goos.any && foes.goos.any && ownStr >= enemyStr |=> -300 -> "#466 kill GC GOO: costs 4 power to resurrect"
                 allies.goos.any && foes.goos.any && ownStr > enemyStr |=> 200 -> "#427 kill enemy GOO: high value, deny power"
@@ -1268,7 +1223,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 earlyGame && r.enemyGate && r.controllers.num == 2 |=> 1500 -> "#43 AP1: capture toward gate control"
                 // GREEN DECAY CAPTURE — faction pref first, then cultist count
                 val capFactionBonus = factionTierBonus(r)
-                val capCultistBonus = r.foes.%(_.capturable).num * 5
+                val capCultistBonus = r.foes.cultists.num * 5
                 have(GreenDecay) && have(Glaaki) && self.at(r, Glaaki).any |=> 8000 + capFactionBonus + capCultistBonus -> "#130 NS: Glaaki here, GD capture NOW"
                 have(GreenDecay) |=> 5000 + capFactionBonus + capCultistBonus -> "#148 GD capture: 1.67 doom per capture"
                 esPivot |=> 3000 -> "#186 es pivot: capture streak for ES"
@@ -1331,11 +1286,9 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 val oceanFreeWithTH = !r.ownGate && r.ocean && r.allies.monsterly.any && r.allies.cultists.none
                 glaakiDead && oceanGateWithTH |=> 50000 -> "#118 NS: recruit to ocean gate with TH, re-awaken Glaaki"
                 glaakiDead && oceanFreeWithTH |=> 40000 -> "#120 NS: recruit to ocean with TH, claim gate then awaken"
-                // R9 — recruit to empty gate when safe
+                // Recruit to empty gate with GOO/monster when low power
                 val emptyOwnGate = r.ownGate && r.allies.cultists.none && (r.allies.monsterly.any || r.allies.goos.any)
-                val noGOOThreat = others.%(f => f.goos.any && f.power >= 2).none
-                // [DEAD] emptyOwnGate && noGOOThreat |=> 8000 -> "#131 R9: recruit to empty gate, safe from capture"
-                // [DEAD] emptyOwnGate |=> 5000 -> "#149 R9: recruit to empty gate (some risk)"
+                (power < 3 && emptyOwnGate && self.pool.cultists.any) |=> 8100 -> "TS: recruit to empty gate (low power, GOO/monster there)"
                 // [2026-04-01 20:12] v1.18.068: BG Avatar defense — keep 3+ cultists on gates
                 val bgAvatarThreat = BG.exists && bgHasShub && BG.power >= 1
                 r.ownGate && r.allies.cultists.num <= 2 && bgAvatarThreat |=> 4000 -> "#166 BG Avatar: need 3+ cultists on gate"
@@ -1344,7 +1297,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 val recruitGateWipe = have(Glaaki) && self.gates.num <= 1 && self.cultists.num < 6
                 recruitGateWipe && r.allies.goos.any |=> 5000 -> "#102 NS: gate wipe rebuild, recruit cultist"
                 // [2026-04-02] Low-power consolidation: recruit at 6500 when 1 power, no captures, no closer gate
-                val recruitNoAdjCaptures = !r.near.%(n => n.foes.%(_.capturable).any && n.foes.goos.none).any
+                val recruitNoAdjCaptures = !r.near.%(n => n.foes.cultists.any && n.foes.goos.none).any
                 val recruitNoCloserGate = !glaakiRegion.exists(gr => gr.near.%(n => n.freeGate && fortressGate.exists(fg => game.board.distance(n, fg) < game.board.distance(gr, fg))).any)
                 power == 1 && recruitNoAdjCaptures && recruitNoCloserGate && r.allies.goos.any |=> 6500 + r.allies.cultists.num * 100 -> "#544 NS: 1pwr consolidate, recruit cultist"
                 // STALL VALUE
@@ -1403,7 +1356,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 val gateWipeRecovery = have(Glaaki) && self.gates.num <= 1 && (tombsOnMap < 2 || !glaakiHasDT)
                 gateWipeRecovery && r.allies.goos.any |=> 5000 -> "#103 NS: gate wipe rebuild, summon TH"
                 // [2026-04-02] Low-power consolidation: summon TH at 6500 when 2 power, no captures, no closer gate
-                val noAdjacentCapturesForSummon = !r.near.%(n => n.foes.%(_.capturable).any && n.foes.goos.none).any
+                val noAdjacentCapturesForSummon = !r.near.%(n => n.foes.cultists.any && n.foes.goos.none).any
                 val noCloserEmptyGate = !glaakiRegion.exists(gr => gr.near.%(n => n.freeGate && fortressGate.exists(fg => game.board.distance(n, fg) < game.board.distance(gr, fg))).any)
                 power == 2 && noAdjacentCapturesForSummon && noCloserEmptyGate && r.allies.goos.any |=> 6500 + self.at(r, TombHerd).num * 100 + r.allies.cultists.num * 50 -> "#545 NS: 2pwr consolidate, summon TH"
                 // NS12: summon replacement monster
@@ -1430,7 +1383,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 val dtGateWipeRecovery = have(Glaaki) && self.gates.num <= 1 && self.all(DeepTendril).num == 0
                 dtGateWipeRecovery && r.allies.goos.any |=> 5000 -> "#104 NS: gate wipe rebuild, summon DT"
                 // [2026-04-02] Low-power consolidation: summon DT at 6500 when 3 power, no captures, no closer gate
-                val dtNoAdjCaptures = !r.near.%(n => n.foes.%(_.capturable).any && n.foes.goos.none).any
+                val dtNoAdjCaptures = !r.near.%(n => n.foes.cultists.any && n.foes.goos.none).any
                 val dtNoCloserGate = !glaakiRegion.exists(gr => gr.near.%(n => n.freeGate && fortressGate.exists(fg => game.board.distance(n, fg) < game.board.distance(gr, fg))).any)
                 power == 3 && dtNoAdjCaptures && dtNoCloserGate && self.all(DeepTendril).num == 0 && r.allies.goos.any |=> 6500 + (r.allies.%(_.is(DeepTendril)).none.?(100).|(0)) -> "#546 NS: 3pwr consolidate, summon DT"
                 // Second DT: only in AP3+
@@ -1635,10 +1588,10 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 // [2026-04-02] NS: fortress-ready carry — must beat raw Glaaki move (10000)
                 val carryFortressReady = have(Undulate) && glaakiHasDT && glaakiRegion.exists(gr => self.at(gr, TombHerd).num >= 2)
                 // Needs to beat raw Glaaki fortress move (8800 max) by ~1000
-                // [DEAD] carryFortressReady && have(GreenDecay) && to.foes.%(_.capturable).any && to.foes.goos.none |=> 9000 -> "#125 NS: fortress [UNDULATE] GD capture raid"
+                // [DEAD] carryFortressReady && have(GreenDecay) && to.foes.cultists.any && to.foes.goos.none |=> 9000 -> "#125 NS: fortress [UNDULATE] GD capture raid"
                 carryFortressReady && to.enemyGate && to.foes.goos.none && to.foes.monsterly.none |=> 8000 -> "#135 NS: fortress [UNDULATE] gate theft"
                 // AP4+ carry (fortress may not be ready yet)
-                // [DEAD] fourthAPPlus && have(GreenDecay) && to.foes.%(_.capturable).any && to.foes.goos.none |=> 5500 -> "#141 NS10: AP4+ [UNDULATE] GD capture raid"
+                // [DEAD] fourthAPPlus && have(GreenDecay) && to.foes.cultists.any && to.foes.goos.none |=> 5500 -> "#141 NS10: AP4+ [UNDULATE] GD capture raid"
                 // Carry Glaaki to an enemy GOO area — satisfies TSGlaakiBattlesGOO
                 // Carry DT/TombHerd to Glaaki's area — assembles the combo
                 // When combat is imminent (enemies at destination), boost: combo is about to fire
@@ -1660,9 +1613,14 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 have(GreenDecay) && undefendedDest |=> 4000 -> "#169 GDCY carry: capture for ES"
                 have(GreenDecay) && to.foes.cultists.num >= 2 && to.foes.goos.none |=> 5000 -> "#153 GD carry: multi-capture for ES"
                 undefendedDest |=> 172 -> "#435 carry to undefended cultists: DH + capture"
+                // Neutral monster carry scoring: Gug > cultist, 2-power below TH, 3-power below DT (except Voonith)
+                (u.uclass == Gug) |=> 3500 -> "NU: carry Gug (above cultist)"
+                (u.uclass == StarVampire) |=> 3200 -> "NU: carry Star Vampire (above cultist)"
+                (u.uclass == Voonith) |=> 250 -> "NU: carry Voonith (above DT level)"
+                (u.uclass == Ghast || u.uclass == DimensionalShamblerUnit || u.uclass == Gnorri) |=> 150 -> "NU: carry 2-power NM (below TH)"
                 // Gate-stay rule: don't carry units away from own gate UNLESS good reason
                 val fromOwnGate = self.gates.%(g => self.at(g).%(_ == u).any).any
-                val udGDTarget = have(GreenDecay) && to.foes.%(_.capturable).any && to.foes.goos.none
+                val udGDTarget = have(GreenDecay) && to.foes.cultists.any && to.foes.goos.none
                 val udGOOTarget = need(TSGlaakiBattlesGOO) && to.foes.goos.any
                 // [2026-04-02] NS: allow carry whenever gate keeps 1+ monster + 1+ cultist
                 val gateRegion = self.gates.%(g => self.at(g).%(_ == u).any).headOption
@@ -1699,6 +1657,8 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
 
             case RevealESAction(_, _, _, _) =>
                 allSB && realDoom >= 30 |=> 1000 -> "#301 reveal and win"
+                // SBR PIVOT: reveal when TS aprxDoom > all others to end the game
+                (allSB && tsAprxDoom > leadingFactionAprxDoom) |=> 10000 -> "SBR PIVOT: reveal ES, TS leads all factions"
                 true |=> 300 -> "#414 dont reveal"
                 // [DEAD] canRitual |=> 1195 -> "#275 ritual first"
 
@@ -1764,6 +1724,83 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
         result
     }
 
+    def evalNeutralUnit(a : Action) : $[Evaluation] = {
+        var result : $[Evaluation] = $
+        implicit class condToEvalNU(val bool : Boolean) {
+            def |=>(e : (Int, String)) { result +:= Evaluation(e._1, e._2) }
+        }
+        a.unwrap match {
+            case RecruitAction(_, HighPriest, r) =>
+                (game.turn <= 2) |=> -5000 -> "NU: dont recruit HP early"
+                r.ownGate |=> 1000 -> "NU: recruit HP at gate"
+                true |=> 500 -> "NU: recruit HP"
+            case SacrificeHighPriestOutOfTurnMainAction(_) =>
+                true |=> 800 -> "NU: HP out-of-turn"
+            case LoyaltyCardSummonAction(_, uc, r) =>
+                r.ownGate && self.at(r).goos.any |=> 2000 -> "NU: NM at Glaaki"
+                r.ownGate |=> 1000 -> "NU: NM at gate"
+                true |=> 500 -> "NU: NM place"
+            case FreeSummonAction(_, _, r, _) =>
+                r.ownGate |=> 1200 -> "NU: free summon gate"
+                true |=> 800 -> "NU: free summon"
+            case ShantakCarryCultistAction(_, o, ur, r) =>
+                r.ownGate |=> 1500 -> "NU: shantak to gate"
+                true |=> 800 -> "NU: shantak"
+            case ShamblerDeployMainAction(_, _) =>
+                true |=> 1500 -> "NU: deploy shambler"
+            case ShamblerDeployAction(_, r, _) =>
+                r.foes.cultists.any && r.foes.goos.none |=> 2000 -> "NU: shambler capture"
+                r.ownGate |=> 1500 -> "NU: shambler gate"
+                true |=> 800 -> "NU: shambler"
+            case ShamblerSummonMainAction(_) =>
+                true |=> 1000 -> "NU: summon shambler"
+            case ShamblerSummonAction(_) =>
+                true |=> 1000 -> "NU: summon shambler"
+            case GodOfForgetfulnessMainAction(_, _, _) =>
+                true |=> 1200 -> "NU: byatis pull"
+            case GodOfForgetfulnessAction(_, d, r) =>
+                r.foes.cultists.any |=> 1000 -> "NU: byatis pull"
+                true |=> 500 -> "NU: byatis"
+            case FilthMainAction(_, _) =>
+                true |=> 800 -> "NU: filth"
+            case FilthAction(_, r) =>
+                r.enemyGate |=> 1200 -> "NU: filth gate"
+                true |=> 600 -> "NU: filth"
+            case NightmareWebMainAction(_, _) =>
+                true |=> 1000 -> "NU: web"
+            case NightmareWebAction(_, r) =>
+                r.ownGate |=> 1500 -> "NU: web gate"
+                true |=> 600 -> "NU: web"
+            case TulzschaGivePowerMainAction(_) =>
+                !self.hasAllSB |=> 1500 -> "NU: tulzscha SB"
+                true |=> 500 -> "NU: tulzscha"
+            case TulzschaGivePowerAction(_) =>
+                true |=> 800 -> "NU: tulzscha"
+            case CeremonyOfAnnihilationChoiceAction(_) =>
+                self.power <= 2 |=> 1500 -> "NU: ceremony"
+                true |=> 800 -> "NU: ceremony"
+            case SummonAction(_, uc, r) if uc == StarVampire || uc == Gug =>
+                r.ownGate |=> (if (uc == StarVampire) 9000 else 8500) -> "NU: summon above TH/DT"
+                true |=> (if (uc == StarVampire) 5000 else 4500) -> "NU: summon"
+            case SummonAction(_, uc, r) if uc.isInstanceOf[NeutralMonster] =>
+                r.ownGate |=> 500 -> "NU: NM summon"
+                true |=> 300 -> "NU: NM"
+            case EliminateNoWayAction(_, u) if u.uclass == Ygolonac =>
+                true |=> 6000 -> "NU: Ygolonac kill"
+            case DemandSacrificeKillsArePainsAction(_) =>
+                true |=> 500 -> "demand sacrifice: prefer pains over kills"
+
+            case AvatarReplacementAction(_, _, r, o, u) =>
+                val monstersHere = self.at(r).monsterly.num
+                (monstersHere > 1 && u.uclass == TombHerd) |=> 5000 -> "TS avatar: give TH (>1 monster)"
+                (monstersHere > 1 && u.uclass == DeepTendril) |=> 4000 -> "TS avatar: give DT (>1 monster, no TH)"
+                (monstersHere <= 1 && u.cultist) |=> 5000 -> "TS avatar: give cultist (only 1 monster)"
+                (monstersHere <= 1 && u.monsterly) |=> -3000 -> "TS avatar: keep monster (only 1)"
+            case _ =>
+        }
+        result
+    }
+
     def evalBattle(a : Action) : $[Evaluation] = {
         var result : $[Evaluation] = $
 
@@ -1812,8 +1849,8 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                         // GREEN DECAY COMBO: retreat INTO cultist-rich region for mass capture
                         have(GreenDecay) && r.foes.cultists.num >= 3 && r.foes.goos.none |=> 5000 -> "oleaginous+GD: mass capture 3+ cultists"
                         have(GreenDecay) && r.foes.cultists.num >= 2 && r.foes.goos.none |=> 3000 -> "oleaginous+GD: capture 2 cultists"
-                        have(GreenDecay) && r.foes.%(_.capturable).any && r.foes.goos.none |=> 2000 -> "#224 oleaginous+GD: capture for ES"
-                        r.foes.%(_.capturable).any && r.foes.goos.none |=> 500 -> "#385 oleaginous to capture"
+                        have(GreenDecay) && r.foes.cultists.any && r.foes.goos.none |=> 2000 -> "#224 oleaginous+GD: capture for ES"
+                        r.foes.cultists.any && r.foes.goos.none |=> 500 -> "#385 oleaginous to capture"
                         // Retreat to own gate is OK but not priority
                         r.ownGate |=> 500 -> "#386 oleaginous to own gate"
                         r.near.%(_.ownGate).any |=> 300 -> "#416 oleaginous near own gate"

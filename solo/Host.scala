@@ -60,13 +60,15 @@ object Host {
                     case TS => BotTS.ask(actions, 0.03)(g)
                     // Firstborn (FB): AI bot decision-making for headless simulation
                     case FB => BotFB.ask(actions, 0.03)(g)
+                    // Daemon Sultan (DS): AI bot decision-making for headless simulation
+                    case DS => BotDS.ask(actions, 0.03)(g)
                 }
         }
     }
 
     def main(args : Array[String]) {
-        // Tombstalker (TS) and Firstborn (FB): included in the master faction list for headless simulation runs
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB)
+        // Tombstalker (TS), Firstborn (FB), and Daemon Sultan (DS): included in the master faction list for headless simulation runs
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS)
 
         val numberOfPlayers = 4
 

@@ -668,6 +668,8 @@ object CthulhuWarsSolo {
                                         // bot to pick lower-scored alternatives (e.g. CoF over CG)
                                         // ~14% of the time, which broke the SB priority order.
                                         case FB => BotFB   .ask(actions, 0.0)(game)
+                                        // Daemon Sultan (DS): AI bot decision-making at Easy difficulty
+                                        case DS => BotDS   .ask(actions, 0.3)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -683,6 +685,8 @@ object CthulhuWarsSolo {
                                         case TS => BotTS   .ask(actions, 0.03)(game)
                                         // Firstborn (FB): AI bot decision-making at Normal difficulty
                                         case FB => BotFB   .ask(actions, 0.03)(game)
+                                        // Daemon Sultan (DS): AI bot decision-making at Normal difficulty
+                                        case DS => BotDS   .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -701,6 +705,8 @@ object CthulhuWarsSolo {
                                         case TS => BotTS   .ask(as, 0.03)(game)
                                         // Firstborn (FB): AI bot decision-making at AllVsHuman difficulty
                                         case FB => BotFB   .ask(as, 0.03)(game)
+                                        // Daemon Sultan (DS): AI bot decision-making at AllVsHuman difficulty
+                                        case DS => BotDS   .ask(as, 0.03)(game)
                                     })
 
 
@@ -733,6 +739,8 @@ object CthulhuWarsSolo {
             case object Cathedral extends FactionUnitClass(AN, "Cathedral", Token, 0)
             // Firstborn (FB): Crater rendered as Token (same pattern as Cathedral) so rank() doesn't crash
             case object Crater extends FactionUnitClass(FB, "Crater", Token, 0)
+            // Daemon Sultan (DS): Chaos Gate rendered as Token
+            case object ChaosGate extends FactionUnitClass(DS, "Chaos Gate", Token, 0)
             case object Gate extends UnitClass("Gate", Token, 3)
             case object FactionGlyph extends UnitClass("Faction Glyph", Token, 0)
             // Round 8 Bug 53: separate UnitClass for the on-map dynamic-start glyph render.
@@ -741,7 +749,7 @@ object CthulhuWarsSolo {
             // dispatches to fb-glyph or ts-glyph based on the faction passed to DrawItem.
             case object StartingGlyph extends UnitClass("Starting Glyph", Token, 0)
 
-            case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0)
+            case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0)
 
             case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int) {
                 val defaultProcessing = Processing(None, None, None)
@@ -759,6 +767,8 @@ object CthulhuWarsSolo {
                     case TS => Processing(|("#BDE0BC"), |("#333333"), None)
                     // Firstborn (FB): faction color (magenta/pink #CB307E) for unit rendering
                     case FB => Processing(|("#CB307E"), |("#333333"), None)
+                    // Daemon Sultan (DS): faction color
+                    case DS => Processing(|("#3A2825"), None, |("#120E0C"))
                     case _  => defaultProcessing
                 }
 
@@ -778,6 +788,8 @@ object CthulhuWarsSolo {
                         case TS => DrawRect("ts-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Firstborn (FB): acolyte unit sprite
                         case FB => DrawRect("fb-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        // Daemon Sultan (DS): acolyte unit sprite
+                        case DS => DrawRect("ds-acolyte", None, x - 17, y - 54, 38, 60)
                         case _ => null
                     }
 
@@ -792,6 +804,8 @@ object CthulhuWarsSolo {
                         case AN => DrawRect("an-high-priest", None, x - 35, y - 60, 70, 66) // Left to do
                         // Firstborn (FB): high priest unit sprite (FB cannot recruit HP, but sprite is defined)
                         case FB => DrawRect("fb-high-priest", |(tint), x - 35, y - 60, 70, 66)
+                        // Daemon Sultan (DS): high priest unit sprite
+                        case DS => DrawRect("ds-high-priest", None, x - 35, y - 60, 70, 66)
                         case _ => null
                     }
 
@@ -810,47 +824,49 @@ object CthulhuWarsSolo {
                         // Firstborn (FB): faction glyph sprite (100x100, matches all other factions).
                         // Used by the faction status panel. On-map dynamic-start render uses StartingGlyph instead.
                         case FB => DrawRect("fb-glyph", None, x - 50, y - 50, 100, 100)
+                        // Daemon Sultan (DS): faction glyph sprite
+                        case DS => DrawRect("ds-glyph", None, x - 50, y - 50, 100, 100)
                         case _ => null
                     }
 
-                    case Ghoul         => DrawRect("bg-ghoul", None, x - 20, y - 40, 39, 47)
-                    case Fungi         => DrawRect("bg-fungi", None, x - 40, y - 73, 72, 80)
-                    case DarkYoung     => DrawRect("bg-dark-young", None, x - 53, y - 122, 83, 131)
-                    case ShubNiggurath => DrawRect("bg-shub", None, x - 69, y - 173, 132, 185, 0, 10)
+                        case Ghoul         => DrawRect("bg-ghoul", None, x - 20, y - 40, 39, 47)
+                        case Fungi         => DrawRect("bg-fungi", None, x - 40, y - 73, 72, 80)
+                        case DarkYoung     => DrawRect("bg-dark-young", None, x - 53, y - 122, 83, 131)
+                        case ShubNiggurath => DrawRect("bg-shub", None, x - 69, y - 173, 132, 185, 0, 10)
 
-                    case Nightgaunt    => DrawRect("cc-nightgaunt", None, x - 36, y - 82, 69, 90, -1, 0)
-                    case FlyingPolyp   => DrawRect("cc-flying-polyp", None, x - 36, y - 81, 73, 90, 10, 0)
-                    case HuntingHorror => DrawRect("cc-hunting-horror", None, x - 86, y - 70, 166, 77)
-                    case Nyarlathotep  => DrawRect("cc-nyarly", None, x - 50, y - 155, 106, 163)
+                        case Nightgaunt    => DrawRect("cc-nightgaunt", None, x - 36, y - 82, 69, 90, -1, 0)
+                        case FlyingPolyp   => DrawRect("cc-flying-polyp", None, x - 36, y - 81, 73, 90, 10, 0)
+                        case HuntingHorror => DrawRect("cc-hunting-horror", None, x - 86, y - 70, 166, 77)
+                        case Nyarlathotep  => DrawRect("cc-nyarly", None, x - 50, y - 155, 106, 163)
 
-                    case DeepOne       => DrawRect("gc-deep-one", None, x - 16, y - 25, 36, 31, 0, -5)
-                    case Shoggoth      => DrawRect("gc-shoggoth", None, x - 31, y - 62, 63, 69)
-                    case Starspawn     => DrawRect("gc-starspawn", None, x - 35, y - 63, 69, 70)
-                    case Cthulhu       => DrawRect("gc-cthulhu", None, x - 65, y - 209, 117, 225, 0, 50)
+                        case DeepOne       => DrawRect("gc-deep-one", None, x - 16, y - 25, 36, 31, 0, -5)
+                        case Shoggoth      => DrawRect("gc-shoggoth", None, x - 31, y - 62, 63, 69)
+                        case Starspawn     => DrawRect("gc-starspawn", None, x - 35, y - 63, 69, 70)
+                        case Cthulhu       => DrawRect("gc-cthulhu", None, x - 65, y - 209, 117, 225, 0, 50)
 
-                    case Undead        => DrawRect("ys-undead", None, x - 27, y - 49, 44, 54, -5, 0)
-                    case Byakhee       => DrawRect("ys-byakhee", None, x - 32, y - 64, 57, 70)
-                    case KingInYellow  => DrawRect("ys-king-in-yellow", None, x - 44, y - 111, 85, 116)
-                    case Hastur        => DrawRect("ys-hastur", None, x - 87, y - 163, 150, 170)
+                        case Undead        => DrawRect("ys-undead", None, x - 27, y - 49, 44, 54, -5, 0)
+                        case Byakhee       => DrawRect("ys-byakhee", None, x - 32, y - 64, 57, 70)
+                        case KingInYellow  => DrawRect("ys-king-in-yellow", None, x - 44, y - 111, 85, 116)
+                        case Hastur        => DrawRect("ys-hastur", None, x - 87, y - 163, 150, 170)
 
-                    case Wizard        => DrawRect("sl-wizard", None, x - 23, y - 33, 45, 41)
-                    case SerpentMan    => DrawRect("sl-serpent-man", None, x - 34, y - 76, 70, 85, 3, 0)
-                    case FormlessSpawn => DrawRect("sl-formless-spawn", None, x - 38, y - 85, 78, 94)
-                    case Tsathoggua    => DrawRect("sl-tsathoggua", None, x - 75, y - 133, 152, 146)
+                        case Wizard        => DrawRect("sl-wizard", None, x - 23, y - 33, 45, 41)
+                        case SerpentMan    => DrawRect("sl-serpent-man", None, x - 34, y - 76, 70, 85, 3, 0)
+                        case FormlessSpawn => DrawRect("sl-formless-spawn", None, x - 38, y - 85, 78, 94)
+                        case Tsathoggua    => DrawRect("sl-tsathoggua", None, x - 75, y - 133, 152, 146)
 
-                    case Wendigo       => DrawRect("ww-wendigo", None, x - 26, y - 62, 56, 68)
-                    case GnophKeh      => DrawRect("ww-gnoph-keh", None, x - 30, y - 88, 61, 95)
-                    case RhanTegoth    => DrawRect("ww-rhan-tegoth", None, x - 74, y - 128, 153, 135)
-                    case Ithaqua       => DrawRect("ww-ithaqua", None, x - 112, y - 192, 164, 202)
+                        case Wendigo       => DrawRect("ww-wendigo", None, x - 26, y - 62, 56, 68)
+                        case GnophKeh      => DrawRect("ww-gnoph-keh", None, x - 30, y - 88, 61, 95)
+                        case RhanTegoth    => DrawRect("ww-rhan-tegoth", None, x - 74, y - 128, 153, 135)
+                        case Ithaqua       => DrawRect("ww-ithaqua", None, x - 112, y - 192, 164, 202)
 
-                    case Mutant        => DrawRect("ow-mutant", None, x - 20, y - 52, 40, 58)
-                    case Abomination   => DrawRect("ow-abomination", None, x - 30, y - 76, 62, 82)
-                    case SpawnOW       => DrawRect("ow-spawn-of-yog-sothoth", None, x - 49, y - 94, 91, 100, 3, 3)
-                    case YogSothoth    => DrawRect("ow-yog-sothoth", None, x - 82, y - 162, 132, 174)
+                        case Mutant        => DrawRect("ow-mutant", None, x - 20, y - 52, 40, 58)
+                        case Abomination   => DrawRect("ow-abomination", None, x - 30, y - 76, 62, 82)
+                        case SpawnOW       => DrawRect("ow-spawn-of-yog-sothoth", None, x - 49, y - 94, 91, 100, 3, 3)
+                        case YogSothoth    => DrawRect("ow-yog-sothoth", None, x - 82, y - 162, 132, 174)
 
-                    case UnMan         => DrawRect("an-un-man", None, x - 24, y - 60, 48, 65)
-                    case Reanimated    => DrawRect("an-reanimated", None, x - 28, y - 62, 57, 65)
-                    case Yothan        => DrawRect("an-yothan", None, x - 61, y - 85, 122, 90)
+                        case UnMan         => DrawRect("an-un-man", None, x - 24, y - 60, 48, 65)
+                        case Reanimated    => DrawRect("an-reanimated", None, x - 28, y - 62, 57, 65)
+                        case Yothan        => DrawRect("an-yothan", None, x - 61, y - 85, 122, 90)
 
                     // Tombstalker (TS): monster and GOO unit sprites (TombHerd, DeepTendril, Gla'aki)
                     case TombHerd      => DrawRect("ts-tomb-herd", |(tint), x - 30, y - 70, 60, 80)
@@ -864,9 +880,18 @@ object CthulhuWarsSolo {
                     case Ghatanothoa     => DrawRect("fb-ghatanothoa",  |(tint), x - 48, y - 160, 96, 176)
                     case Crater          => DrawRect("fb-crater",       |(tint), x - 36, y - 36, 72, 72)
 
+                    // Daemon Sultan (DS): larva, avatar, and chaos gate unit sprites
+                    case LarvaThesis      => DrawRect("ds-larva-thesis", None, x - 37, y - 46, 73, 52)
+                    case LarvaAntithesis  => DrawRect("ds-larva-antithesis", None, x - 46, y - 61, 92, 68)
+                    case LarvaSynthesis   => DrawRect("ds-larva-synthesis", None, x - 39, y - 87, 78, 95, rotation = 5.0)
+                    case AvatarThesis     => DrawRect("ds-avatar-thesis", None, x - 67, y - 74, 133, 87)
+                    case AvatarAntithesis => DrawRect("ds-avatar-antithesis", None, x - 70, y - 89, 139, 104)
+                    case AvatarSynthesis  => DrawRect("ds-avatar-synthesis", None, x - 70, y - 170, 141, 187, rotation = 10.0)
+
                     case DesecrationToken => DrawRect("ys-desecration", None, x - 20, y - 20, 41, 40)
                     case IceAgeToken      => DrawRect("ww-ice-age", None, x - 44, y - 67, 91, 75)
                     case Cathedral        => DrawRect("an-cathedral", None, x - 39, y - 90, 78, 110)
+                    case ChaosGate        => DrawRect("gate", |(Processing(|("#3C2E18"), None, |("#130E08"))), x - 38, y - 38, 76, 76)
 
                     case Ghast         => DrawRect("n-ghast", |(tint), x - 17, y - 53, 35, 59)
                     case Gug           => DrawRect("n-gug", |(tint), x - 36, y - 78, 73, 90)
@@ -935,11 +960,26 @@ object CthulhuWarsSolo {
             var oldGates : $[Region] = $
             var horizontal = true
 
+            var cachedMapWidth : Double = 0
+            var cachedMapHeight : Double = 0
+            var cachedDPR : Double = 0
+
+            def invalidateMapSize() {
+                cachedMapWidth = 0
+                cachedMapHeight = 0
+            }
+
             def drawMap(implicit game : Game) {
                 val upscale = 2
 
-                val width = map.node.clientWidth * dom.window.devicePixelRatio
-                val height = map.node.clientHeight * dom.window.devicePixelRatio
+                val dpr = dom.window.devicePixelRatio
+                if (cachedMapWidth == 0 || cachedDPR != dpr) {
+                    cachedMapWidth = map.node.clientWidth * dpr
+                    cachedMapHeight = map.node.clientHeight * dpr
+                    cachedDPR = dpr
+                }
+                val width = cachedMapWidth
+                val height = cachedMapHeight
 
                 val bitmap = map.get(width.~ * upscale, height.~ * upscale)
 
@@ -1030,8 +1070,11 @@ object CthulhuWarsSolo {
                     var sticking : $[DrawItem] = $
                     var free : $[DrawItem] = $
 
-                    if (gated)
+                    if (gated && DS.chaosGateRegions.has(r).not)
                         fixed +:= DrawItem(r, null, Gate, Alive, $, px, py)
+
+                    if (DS.chaosGateRegions.has(r))
+                        fixed +:= DrawItem(r, DS, ChaosGate, Alive, $, px, py)
 
                     keeper match {
                         case Some(u) => fixed +:= DrawItem(r, u.faction, u.uclass, u.health, u.state, px, py)
@@ -1153,13 +1196,40 @@ object CthulhuWarsSolo {
 
                 oldGates = game.gates
 
-                draws.sortBy(d => d.y + (d.unit == Gate).?(-2000).|(0) + (d.unit == DesecrationToken).?(-1000).|(0))./(_.rect).foreach { d =>
+                // Draw starting region glyphs for variable-setup factions (underneath all units)
+                // DS uses a tighter offset (lone acolyte); OW/AN use larger offset (6 acolytes + gate)
+                $(DS, OW, AN).foreach { f =>
+                    val startR = game.starting.get(f).filter(_ => f != DS || DS.cultists.any)
+                    startR.foreach { r =>
+                        val (gx, gy) = gateXY(r)
+                        val size = 60
+                        val key = f match {
+                            case DS => "ds-glyph"
+                            case OW => "ow-glyph"
+                            case AN => "an-glyph"
+                            case _  => ""
+                        }
+                        if (key.nonEmpty) {
+                            val (ox, oy) = if (f == DS) (45, -30) else (80, -60)
+                            g.drawImage(getAsset(key), gx + ox - size / 2, gy + oy - size / 2, size, size)
+                        }
+                    }
+                }
+
+                draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate).?(-2000).|(0) + (d.unit == DesecrationToken).?(-1000).|(0))./(_.rect).foreach { d =>
                     g.globalAlpha = d.alpha
-                    g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
+                    if (d.rotation != 0.0) {
+                        g.save()
+                        g.translate(d.x + d.width / 2.0, d.y + d.height / 2.0)
+                        g.rotate(d.rotation * math.Pi / 180.0)
+                        g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), -d.width / 2, -d.height / 2, d.width, d.height)
+                        g.restore()
+                    } else
+                        g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
                     g.globalAlpha = 1.0
                 }
 
-                draws.sortBy(d => d.y + (d.unit == Gate).?(-2000).|(0) + (d.unit == DesecrationToken).?(-1000).|(0)).foreach { d =>
+                draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate).?(-2000).|(0) + (d.unit == DesecrationToken).?(-1000).|(0)).foreach { d =>
                     if (d.icon.any)
                         g.drawImage(getAsset(d.icon.get.key), d.icon.get.x, d.icon.get.y)
                 }
@@ -1170,6 +1240,7 @@ object CthulhuWarsSolo {
                 show(mapBig.parentElement.parentElement)
 
                 map = mapBitmapBig
+                invalidateMapSize()
                 drawMap(displayGame)
             }
 
@@ -1178,6 +1249,7 @@ object CthulhuWarsSolo {
                 show(mapSmall.parentElement.parentElement)
 
                 map = mapBitmapSmall
+                invalidateMapSize()
                 drawMap(displayGame)
             }
 
@@ -1358,6 +1430,18 @@ object CthulhuWarsSolo {
                         dd(DrawItem(null, e, SerpentMan, Alive, $, w - 46 + smx, 86).rect)
                         smx -= 20
                     }
+                }
+
+                if (f == DS && DS.unfulfilled.has(AwakenAvatarThesis).not) {
+                    val track = DS.azathothTrack.toString
+                    g.font = "bold 31px \"Bohemian Typewriter\", monospace"
+                    g.textAlign = "center"
+                    g.textBaseline = "middle"
+                    g.lineWidth = 5.0
+                    g.strokeStyle = "rgba(0,0,0,0.85)"
+                    g.strokeText(track, 55, 28)
+                    g.fillStyle = "white"
+                    g.fillText(track, 55, 28)
                 }
 
                 val deep = f.at(GC.deep).any.?? {
@@ -1692,7 +1776,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 drawMap(displayGame)
             }
 
-            dom.window.onresize = e => updateStatus()
+            dom.window.onresize = e => { invalidateMapSize(); updateStatus() }
 
             if (hash == "") {
                 val localTitle = dom.document.createElement("div")
@@ -2194,6 +2278,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     .%!(_.unwrap.is[DragonAscendingMainAction])
                                     .%!(_.unwrap.is[DragonAscendingDoomAction])
                                 )
+
+                                actionDiv.className = "inner action unselectable"
 
                                 askN($,
                                     aa./(a => AskLine(a.question(game), a.option(game), $(f.style + "-border") ++ a.isInfo.$("thin"), a.isNoClear.not, a.isInfo.not.??(() => {
@@ -2761,8 +2847,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             askTop()
         }
 
-        // Tombstalker (TS) and Firstborn (FB): included in the master faction list for game setup and replay parsing
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB)
+        // Tombstalker (TS), Firstborn (FB), and Daemon Sultan (DS): included in the master faction list for game setup and replay parsing
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS)
 
         val replay = getElem("replay").?./(_.innerHTML).|("")
 

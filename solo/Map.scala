@@ -74,6 +74,8 @@ object EarthMap3 extends Board {
         // areas (e.g., Europe, Africa) even when those factions weren't in the game.
         // Same pattern as OW which uses `regions`.
         case FB => regions
+        // Daemon Sultan (DS): no starting area restrictions
+        case DS => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -174,6 +176,8 @@ object EarthMap4v35 extends Board {
         // areas (e.g., Europe, Africa) even when those factions weren't in the game.
         // Same pattern as OW which uses `regions`.
         case FB => regions
+        // Daemon Sultan (DS): no starting area restrictions
+        case DS => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -278,6 +282,8 @@ object EarthMap4v53 extends Board {
         // areas (e.g., Europe, Africa) even when those factions weren't in the game.
         // Same pattern as OW which uses `regions`.
         case FB => regions
+        // Daemon Sultan (DS): no starting area restrictions
+        case DS => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -390,6 +396,8 @@ object EarthMap5 extends Board {
         // areas (e.g., Europe, Africa) even when those factions weren't in the game.
         // Same pattern as OW which uses `regions`.
         case FB => regions
+        // Daemon Sultan (DS): no starting area restrictions
+        case DS => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -512,6 +520,8 @@ object EarthMap6 extends Board {
         // areas (e.g., Europe, Africa) even when those factions weren't in the game.
         // Same pattern as OW which uses `regions`.
         case FB => regions
+        // Daemon Sultan (DS): no starting area restrictions
+        case DS => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -542,3 +552,4 @@ object EarthMap6 extends Board {
         case _ => throw new Error("Unknown region " + r)
     }
 }
+

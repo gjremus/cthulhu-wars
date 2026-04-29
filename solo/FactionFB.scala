@@ -890,6 +890,9 @@ object FBExpansion extends Expansion {
                 // Acolyte killed by Writhe: replace with Desiccated
                 game.eliminate(u)
                 self.place(Desiccated, r)
+                // The newly placed Desiccated must be available for pain — ensure it's not in used list
+                val placedDesc = self.at(r, Desiccated).last
+                game.fbWritheUsedUnits = game.fbWritheUsedUnits.but(placedDesc.ref)
                 self.log(Writhe.styled(FB) + ": Acolyte replaced with", Desiccated.styled(FB), "in", r)
             } else {
                 game.eliminate(u)
@@ -1557,7 +1560,9 @@ object FBExpansion extends Expansion {
             // caused the pain. After applying, continue with remaining sources via FBCyclopeanGazePhaseAction.
             val u = game.unit(uRef)
             val from = u.region
+            game.fbSuppressCGForPlacement = true
             u.region = dest
+            game.fbSuppressCGForPlacement = false
             u.onGate = false
             self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": pained", u.uclass.styled(u.faction), "from", from, "to", dest)
             Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
