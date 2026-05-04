@@ -740,6 +740,8 @@ case class Bot3(faction : Faction) {
                 case ControlGateAction(_, r, u, _) =>
                     r.allies.%(_.onGate).foreach { c =>
                         c.uclass == u.uclass |=> -1000000 -> "remain calm"
+                        // Prefer acolyte on gate over other cultist types
+                        (c.uclass == HighPriest && u.uclass == Acolyte) |=> 500 -> "acolyte preferred on gate"
                         c.uclass == Acolyte && u.uclass == DarkYoung |=> 1000 -> "dark young on gate"
                         u.uclass == Acolyte && c.uclass == DarkYoung |=> -1000 -> "dark young on gate"
                         c.uclass == HighPriest && u.uclass == Acolyte |=> 1000 -> "high priest not on gate"
@@ -749,8 +751,14 @@ case class Bot3(faction : Faction) {
                 case AbandonGateAction(_, _, _) =>
                     true |=> -1000000 -> "never"
 
-                case ControlGateAction(_, _, _, _) =>
-                    true |=> 1000000 -> "always"
+                case ControlGateAction(_, r, u, _) =>
+                    // Prefer taking control when no unit is on gate yet
+                    val currentOnGate = r.allies.%(_.onGate)
+                    (currentOnGate.none) |=> 1000000 -> "take control (no unit on gate)"
+                    // If acolyte already on gate, don't switch — prefer Done
+                    (currentOnGate.exists(_.uclass == Acolyte)) |=> -500 -> "acolyte already on gate, prefer done"
+                    // If non-acolyte on gate and we're an acolyte, switch
+                    (currentOnGate.any && !currentOnGate.exists(_.uclass == Acolyte) && u.uclass == Acolyte) |=> 500 -> "switch to acolyte on gate"
 
                 // ────────────────────────────────────────────────────────────
                 // Round 8 (FB): score the three FB-prompted choices that get
@@ -781,12 +789,152 @@ case class Bot3(faction : Faction) {
                     (k.cultist && !k.region.ownGate)       |=>   500 -> "sacrifice off-gate cultist to CG"
                     true                                   |=>     0 -> "default CG kill choice"
 
-                case FBTheEyeOpensChooseCultistAction(_, _, _, uRef) =>
+                case FBTheEyeOpensChooseCultistAction(_, _, _, uRef, _) =>
                     val u = game.unit(uRef)
                     (u.uclass == HighPriest)               |=> -2000 -> "don't sacrifice HP to eye opens"
                     u.region.ownGate                       |=> -1500 -> "keep gate keeper from eye opens"
                     (u.is(Acolyte) && !u.region.ownGate)   |=>  1000 -> "lose off-gate acolyte to eye opens"
                     true                                   |=>     0 -> "default eye opens cultist choice"
+
+                // ── Library at Celaeno ──
+                case SpendOnCustodianAction(_) =>
+                    true |=> 800 -> "activate custodian"
+
+                case SpendOnLibrarianAction(_) =>
+                    true |=> 1200 -> "activate librarian vs overdue"
+
+                case CustodianMoveAction(_, r) =>
+                    r.foes.any                             |=> 1000 -> "custodian to region with enemies"
+                    r.enemyGate                            |=> 500 -> "custodian to enemy gate"
+                    r.allies.any                           |=> -500 -> "avoid custodian on own units"
+
+                case CustodianStayAction(_, _) =>
+                    true |=> 200 -> "custodian stay +1 bonus"
+
+                case CustodianAssignToFactionAction(_, _, _, _, target) =>
+                    (target != self)                       |=> 1000 -> "assign agony to enemy"
+                    (target == self)                       |=> -5000 -> "avoid agony to self"
+
+                case CustodianMoveToOublietteAction(_, _, target, uRef, _) =>
+                    val u = game.unit(uRef)
+                    u.goo                                  |=> -5000 -> "don't oubliette own GOO"
+                    (u.uclass == HighPriest)               |=> -3000 -> "don't oubliette own HP"
+                    u.gateKeeper                           |=> -2000 -> "don't oubliette own gate keeper"
+                    (u.is(Acolyte) && !u.region.ownGate)   |=>  1000 -> "oubliette off-gate acolyte"
+                    u.cultist                              |=>   500 -> "oubliette cultist"
+                    true                                   |=>     0 -> "default oubliette"
+
+                case LibrarianMoveAction(_, r) =>
+                    r.foes.any                             |=> 1000 -> "librarian to region with enemies"
+                    r.enemyGate                            |=> 500 -> "librarian to enemy gate"
+
+                case LibrarianStayAction(_, _) =>
+                    true |=> 200 -> "librarian stay +1 bonus"
+
+                case LibrarianAssignToFactionAction(_, _, _, _, target) =>
+                    (target != self)                       |=> 1000 -> "assign librarian agony to enemy"
+                    (target == self)                       |=> -5000 -> "avoid librarian agony to self"
+
+                case LibrarianEliminateUnitMainAction(_, _, _, _) =>
+                    true |=> -500 -> "eliminate unit is costly"
+
+                case LibrarianEliminateRegionAction(_, r, _, _, _, _) =>
+                    val units = self.at(r).%(u => u.uclass.utype != MapUnit)
+                    val hasGoo = units.exists(_.goo)
+                    hasGoo                                  |=> -5000 -> "region has GOO"
+                    (units.num == 1 && units.head.is(Acolyte)) |=> 1000 -> "region with lone acolyte"
+                    true                                   |=>     0 -> "default region"
+
+                case LibrarianEliminateUnitAction(_, uRef, _, _, _, _, _) =>
+                    val u = game.unit(uRef)
+                    u.goo                                  |=> -5000 -> "don't eliminate own GOO"
+                    (u.uclass == HighPriest)               |=> -3000 -> "don't eliminate own HP"
+                    u.gateKeeper                           |=> -2000 -> "don't eliminate own gate keeper"
+                    (u.is(Acolyte) && !u.region.ownGate)   |=>  1000 -> "eliminate off-gate acolyte"
+                    true                                   |=>     0 -> "default eliminate"
+
+                case LibrarianEliminateDoneAction(_, _, _, _, eliminated) =>
+                    (eliminated.any)                        |=>  2000 -> "done eliminating"
+                    true                                   |=>  -100 -> "done with nothing"
+
+
+                case LibrarianReturnTomeMainAction(_, _, _, _) =>
+                    true |=> -1000 -> "returning a tome is bad"
+
+                case LibrarianReturnTomeAction(_, tome, _, _, _) =>
+                    true |=> 0 -> "return tome"
+
+                case LibrarianLoseDoomAction(_, _, _, _) =>
+                    true |=> -800 -> "losing doom is bad"
+
+                case SpendToFlipTomeAction(_, _) =>
+                    true |=> 600 -> "flip tome face-up"
+
+                case FlipTomeReleaseCultistMainAction(_, _) =>
+                    true |=> 400 -> "release cultist to flip tome"
+
+                case FlipTomeDiscardESAction(_, _) =>
+                    true |=> -200 -> "discard ES to flip tome"
+
+                case FlipTomeDiscardTokenAction(_, _) =>
+                    true |=> 300 -> "discard token to flip tome"
+
+                case UseTomeGuardianMainAction(_) =>
+                    true |=> 2500 -> "use guardian tome"
+
+                case UseTomeGuardianRelocateAction(_, r, target) =>
+                    r.ownGate                              |=>  1000 -> "relocate enemies from own gate"
+                    r.enemyGate                            |=>  -500 -> "don't help enemy leave their gate"
+                    true                                   |=>   200 -> "relocate enemy"
+
+                case UseTomeGuardianDestAction(_, _, _, dest) =>
+                    dest.ownGate                           |=> -2000 -> "don't move enemies to own gate"
+                    dest.foes.none                         |=>  500 -> "move enemies to empty region"
+                    true                                   |=>     0 -> "default guardian dest"
+
+                case UseTomeLarvaeAction(_) =>
+                    true |=> 3000 -> "gain ES from larvae"
+
+                case UseTomeYrMainAction(_) =>
+                    true |=> 2500 -> "use yr tome"
+
+                case UseTomeYrMonsterAction(_) =>
+                    // Score based on power: prefer monster path when faction has expensive units
+                    val poolMonsters = self.pool.%(_.uclass.utype == Monster)
+                    val maxCost = if (poolMonsters.any) poolMonsters./(_.uclass.cost).max else 0
+                    (maxCost > 2)  |=> 2500 -> "place free monster (expensive units in pool)"
+                    (maxCost == 2) |=> 1400 -> "place free monster (2-cost units)"
+                    (maxCost <= 1) |=> 1000 -> "place free monster (cheap units only)"
+
+                case UseTomeYrMonsterChooseAction(_, uc, r) =>
+                    val gateUndefended = r.ownGate && r.allies.%(m => m.uclass.utype == Monster || m.uclass.utype == Terror).none
+                    val gateUnitCount = r.ownGate.?(r.allies.num).|(99)
+                    val costBoost = uc.cost * 300
+                    (gateUndefended)                        |=> 3000 + costBoost -> "place at unprotected gate"
+                    (r.ownGate && gateUnitCount <= 2)       |=> 2000 + costBoost -> "place at gate with few units"
+                    (r.ownGate)                             |=> 1000 + costBoost -> "place at gate"
+                    true                                   |=> costBoost -> "default monster placement"
+
+                case UseTomeYrPowerAction(_) =>
+                    // Power path: prefer when only cheap units in pool
+                    val poolMonsters = self.pool.%(_.uclass.utype == Monster)
+                    val maxCost = if (poolMonsters.any) poolMonsters./(_.uclass.cost).max else 0
+                    (maxCost <= 1 || poolMonsters.none) |=> 2000 -> "gain net +1 power (no good monsters)"
+                    (maxCost == 2) |=> 1600 -> "gain net +1 power (only 2-cost monsters)"
+                    true |=> 1200 -> "gain net +1 power (expensive monsters available)"
+
+                case BarrierReleaseCultistFactionAction(_, captiveFaction, _) =>
+                    (captiveFaction == self)               |=> -1000 -> "don't release own cultist"
+                    true                                   |=>   500 -> "release enemy cultist to battle"
+
+                case BarrierDiscardESAction(_, _) =>
+                    true |=> -200 -> "discard ES to battle"
+
+                case BarrierDiscardTokenAction(_, _) =>
+                    true |=> 500 -> "discard token to battle"
+
+                case BarrierBlockedAction(_) =>
+                    true |=> -800 -> "battle blocked is bad"
 
                 case _ =>
             }
@@ -1063,6 +1211,9 @@ case class Bot3(faction : Faction) {
             result
         }
 
-        actions./{ a => ActionEval(a, evalA(a)) }
+        // Add Library map-specific scores
+        val mapScores = BotMaps.eval(actions, self).groupBy(_._1).view.mapValues(_./(t => Evaluation(t._2, t._3))).toMap
+
+        actions./{ a => ActionEval(a, evalA(a) ++ mapScores.getOrElse(a, $)) }
     }
 }

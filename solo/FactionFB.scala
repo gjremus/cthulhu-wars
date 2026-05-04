@@ -109,12 +109,20 @@ case object FB extends Faction { f =>
 
 // ── WRITHE ACTIONS ── Roll dice equal to Power; Kills eliminate own units
 // (Acolytes become Desiccated), Pains relocate own units anywhere
-case class FBWritheMainAction(self : Faction) extends OptionFactionAction(Writhe.toString + " (Cost 2)") with MainQuestion
+case class FBWritheMainAction(self : Faction) extends OptionFactionAction(implicit g => {
+    val ipDiscount = min(g.fbInfernalPactDiscount, 2)
+    val effectiveCost = 2 - ipDiscount
+    Writhe.toString + " (Cost " + effectiveCost.power + ")" + (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")")
+}) with MainQuestion
 case class FBWritheRollAction(self : Faction, numDice : Int) extends ForcedAction
 case class FBWritheRollResultAction(self : Faction, numDice : Int, rolls : $[BattleRoll]) extends ForcedAction
 case class FBWritheRerollAction(self : Faction, rolls : $[BattleRoll]) extends OptionFactionAction("Reroll ALL dice with " + Writhe.styled(FB)) with PowerNeutral { def question(implicit game : Game) = Writhe.styled(FB) }
 case class FBWritheKeepAction(self : Faction, rolls : $[BattleRoll]) extends OptionFactionAction("Keep current " + Writhe.styled(FB) + " results") with PowerNeutral { def question(implicit game : Game) = Writhe.styled(FB) }
 case class FBWritheApplyAction(self : Faction, rolls : $[BattleRoll]) extends ForcedAction with PowerNeutral
+case class FBWritheUndoAllAction(self : Faction, rolls : $[BattleRoll], numDice : Int) extends ForcedAction with PowerNeutral
+case class FBWritheUndoLastKillAction(self : Faction, remainingKills : Int, remainingPains : Int) extends ForcedAction with PowerNeutral
+case class FBWritheUndoLastPainAction(self : Faction, remainingPains : Int, chosen : $[UnitRef]) extends ForcedAction with PowerNeutral
+case class FBWritheUndoLastMoveAction(self : Faction, uRef : UnitRef, remaining : $[UnitRef]) extends ForcedAction with PowerNeutral
 
 // Augury replacement during Writhe
 case class FBWritheAuguryCancelAction(self : Faction, rolls : $[BattleRoll]) extends OptionFactionAction("Skip " + Augury.styled(FB)) with PowerNeutral { def question(implicit game : Game) = Writhe.styled(FB) }
@@ -183,26 +191,37 @@ case class FBInfernalPactResumeAction(self : Faction) extends ForcedAction with 
 case class FBInfernalPactDoomResumeAction(self : Faction) extends ForcedAction with Soft
 
 // ── AWAKEN GHATANOTHOA ── Cost is 11 minus current Ritual cost; placed in start area, no gate needed
-case class FBAwakenGhatanothoaAction(self : Faction, cost : Int) extends OptionFactionAction(
-    "Awaken " + Ghatanothoa.styled(FB) + " for " + cost.power + " in Start Area"
-) with MainQuestion
+case class FBAwakenGhatanothoaAction(self : Faction, cost : Int) extends OptionFactionAction(implicit g => {
+    val ipDiscount = min(g.fbInfernalPactDiscount, cost)
+    val effectiveCost = cost - ipDiscount
+    "Awaken " + Ghatanothoa.styled(FB) + " for " + effectiveCost.power + " in Start Area" +
+        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")")
+}) with MainQuestion
 
 // ── THE EYE OPENS ACTIONS ── Cost 1: eliminate enemy cultists in areas with Desiccated, gain power
 // Round 8 Bug 42: was `with Soft` but the handler mutates state (deducts power via
 // consumeDiscount + power -= cost). Soft excludes the action from undo replay, so undoing
 // across The Eye Opens corrupted state (lost power changes, eliminated units lost track).
 // Now Hard — undo will correctly reverse the power deduction and elimination chain.
-case class FBTheEyeOpensMainAction(self : Faction) extends OptionFactionAction(TheEyeOpens) with MainQuestion
-case class FBTheEyeOpensTargetAction(self : Faction, r : Region, f : Faction) extends BaseFactionAction(
-    implicit g => Desiccated.styled(FB) + " and " + f.name.styled(f) + " Cultist in", implicit g => r + self.iced(r)
-)
-// Round 8 Bug 50: parameter changed from `uc : UnitClass` to `u : UnitRef` so the
-// enemy can choose between specific cultists (e.g., on-gate vs off-gate Acolyte)
-// rather than just by unit class. Per-unit selection lets the painted faction
-// preserve their gate-controlling unit if they prefer.
-case class FBTheEyeOpensChooseCultistAction(self : Faction, f : Faction, r : Region, u : UnitRef) extends BaseFactionAction(
+case class FBTheEyeOpensMainAction(self : Faction) extends OptionFactionAction(implicit g => {
+    val ipDiscount = min(g.fbInfernalPactDiscount, 1)
+    val effectiveCost = 1 - ipDiscount
+    TheEyeOpens.styled(FB) + " (" + effectiveCost.power + ")" + (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")")
+}) with MainQuestion
+case class FBTheEyeOpensRegionAction(self : Faction, r : Region, pending : $[(Region, Faction, UnitRef)]) extends BaseFactionAction(
+    implicit g => TheEyeOpens.styled(FB) + ": Choose", r) {
+    override def question(implicit game : Game) = TheEyeOpens.styled(FB) + ": Choose Region"
+}
+case class FBTheEyeOpensFactionAction(self : Faction, r : Region, f : Faction, pending : $[(Region, Faction, UnitRef)]) extends BaseFactionAction(
+    implicit g => "Target", f.full) {
+    override def question(implicit game : Game) = TheEyeOpens.styled(FB) + ": Choose target faction"
+}
+case class FBTheEyeOpensChooseCultistAction(self : Faction, f : Faction, r : Region, u : UnitRef, pending : $[(Region, Faction, UnitRef)]) extends BaseFactionAction(
     TheEyeOpens.styled(FB) + ": eliminate", implicit g => g.unit(u).full
 )
+case class FBTheEyeOpensLoopAction(self : Faction, pending : $[(Region, Faction, UnitRef)]) extends ForcedAction
+case class FBTheEyeOpensCancelAction(self : Faction) extends ForcedAction
+case class FBTheEyeOpensCommitAction(self : Faction, pending : $[(Region, Faction, UnitRef)]) extends ForcedAction
 
 // ── CYCLOPEAN GAZE ACTIONS ── Ongoing: after opponent actions/battles, pain enemy units in areas with Revenants/Ghatanothoa
 // Bug fix Round 4: each Revenant and each Ghatanothoa is its own pain source — sourcesPending tracks
@@ -719,6 +738,8 @@ object FBExpansion extends Expansion {
 
             game.neutralSpellbooks(f)
 
+            game.libraryActions(f)
+
             // No High Priests for Firstborn
             // game.highPriests(f)
 
@@ -784,6 +805,8 @@ object FBExpansion extends Expansion {
             self.power -= (writheCost - discountUsed)
             game.fbWritheRerolled = false
             game.fbWritheUsedUnits = $
+            game.fbWritheKillLog = $
+            game.fbWrithePainLog = $
             // Bug fix Round 6: reset Writhe "join" tracking at start of each Writhe activation
             game.fbWritheLastPainRegion = None
             game.fbWritheLastPainedUnit = ""
@@ -797,6 +820,8 @@ object FBExpansion extends Expansion {
             RollBattle(self, Writhe.styled(FB), numDice, rolls => FBWritheRollResultAction(self, numDice, rolls))
 
         case FBWritheRollResultAction(self, numDice, rolls) =>
+            game.fbWritheRolls = rolls
+            game.fbWritheNumDice = numDice
             val kills = rolls.count(_ == Kill)
             val pains = rolls.count(_ == Pain)
             val misses = rolls.count(_ == Miss)
@@ -856,6 +881,83 @@ object FBExpansion extends Expansion {
         case FBWritheAuguryCancelAction(self, rolls) =>
             Force(FBWritheApplyAction(self, rolls))
 
+        case FBWritheUndoLastKillAction(self, remainingKills, remainingPains) =>
+            // Reverse the last kill transformation
+            if (game.fbWritheKillLog.any) {
+                val (origRef, origRegion, origClass, replacementRef) = game.fbWritheKillLog.last
+                game.fbWritheKillLog = game.fbWritheKillLog.dropRight(1)
+                // Remove replacement Desiccated if one was placed
+                replacementRef.foreach { rRef =>
+                    val replacement = game.unit(rRef)
+                    replacement.region = self.reserve
+                    replacement.health = Alive
+                }
+                // Restore original unit
+                val orig = game.unit(origRef)
+                orig.region = origRegion
+                orig.health = Alive
+                orig.state = $
+                game.fbWritheUsedUnits = game.fbWritheUsedUnits.but(origRef)
+                self.log(Writhe.styled(FB) + ": undid last kill")
+            }
+            Force(FBWritheAssignKillAction(self, remainingKills + 1, remainingPains, $))
+
+        case FBWritheUndoLastPainAction(self, remainingPains, chosen) =>
+            // Remove last pain selection — just pop from chosen list
+            if (chosen.any) {
+                val newChosen = chosen.dropRight(1)
+                self.log(Writhe.styled(FB) + ": undid last pain selection")
+                Force(FBWritheAssignPainAction(self, remainingPains + 1))
+            } else
+                Force(FBWritheAssignPainAction(self, remainingPains))
+
+        case FBWritheUndoLastMoveAction(self, uRef, remaining) =>
+            // Reverse the last pain movement
+            if (game.fbWrithePainLog.any) {
+                val (movedRef, fromRegion, toRegion) = game.fbWrithePainLog.last
+                game.fbWrithePainLog = game.fbWrithePainLog.dropRight(1)
+                val movedUnit = game.unit(movedRef)
+                movedUnit.region = fromRegion
+                movedUnit.onGate = false
+                game.fbWritheUsedUnits = game.fbWritheUsedUnits.but(movedRef)
+                self.log(Writhe.styled(FB) + ": undid last region selection")
+                // Re-offer region choice for the unit that was just un-moved
+                Force(FBWritheMoveOneAction(self, movedRef, uRef +: remaining))
+            } else
+                Force(FBWritheMoveOneAction(self, uRef, remaining))
+
+        case FBWritheUndoAllAction(self, rolls, numDice) =>
+            // Reverse all pain movements (in reverse order)
+            game.fbWrithePainLog.reverse.foreach { case (uRef, fromRegion, toRegion) =>
+                val u = game.unit(uRef)
+                u.region = fromRegion
+                u.onGate = false
+            }
+            // Reverse all kills (in reverse order)
+            game.fbWritheKillLog.reverse.foreach { case (origRef, origRegion, origClass, replacementRef) =>
+                // If a replacement was placed (Acolyte → Desiccated), remove it
+                replacementRef.foreach { rRef =>
+                    val replacement = game.unit(rRef)
+                    replacement.region = self.reserve
+                    replacement.health = Alive
+                }
+                // Restore the original unit
+                val orig = game.unit(origRef)
+                orig.region = origRegion
+                orig.health = Alive
+                orig.state = $
+            }
+            // Reset writhe state
+            game.fbWritheUsedUnits = $
+            game.fbWritheKillLog = $
+            game.fbWrithePainLog = $
+            game.fbWritheRerolled = false
+            game.fbWritheLastPainRegion = None
+            game.fbWritheLastPainedUnit = ""
+            self.log(Writhe.styled(FB) + ": undid all choices, back to dice roll")
+            // Re-offer the roll result with reroll available again
+            Force(FBWritheRollResultAction(self, numDice, rolls))
+
         case FBWritheApplyAction(self, rolls) =>
             val kills = rolls.count(_ == Kill)
             val pains = rolls.count(_ == Pain)
@@ -878,24 +980,32 @@ object FBExpansion extends Expansion {
                     .sortBy(u => (u.region.toString, -u.uclass.cost))
                 if (units.none)
                     EndAction(self)
-                else
-                    Ask(self).each(units)(u => FBWritheKillUnitAction(self, u.ref, remainingKills, remainingPains))
+                else {
+                    val ask = Ask(self).each(units)(u => FBWritheKillUnitAction(self, u.ref, remainingKills, remainingPains))
+                    if (game.fbWritheKillLog.any)
+                        ask.add(FBWritheUndoLastKillAction(self, remainingKills, remainingPains).as("Undo last elimination")(Writhe.styled(FB)))
+                            .add(FBWritheUndoAllAction(self, game.fbWritheRolls, game.fbWritheNumDice).as("Undo all back to dice roll")(Writhe.styled(FB)))
+                    else
+                        ask.add(FBWritheUndoAllAction(self, game.fbWritheRolls, game.fbWritheNumDice).as("Undo all back to dice roll")(Writhe.styled(FB)))
+                }
             }
 
         case FBWritheKillUnitAction(self, uRef, remainingKills, remainingPains) =>
             val u = game.unit(uRef)
             val r = u.region
+            val origClass = u.uclass
             game.fbWritheUsedUnits :+= uRef
             if (u.uclass == Acolyte && self.pool(Desiccated).any) {
                 // Acolyte killed by Writhe: replace with Desiccated
                 game.eliminate(u)
                 self.place(Desiccated, r)
-                // The newly placed Desiccated must be available for pain — ensure it's not in used list
                 val placedDesc = self.at(r, Desiccated).last
                 game.fbWritheUsedUnits = game.fbWritheUsedUnits.but(placedDesc.ref)
+                game.fbWritheKillLog :+= (uRef, r, origClass, |(placedDesc.ref))
                 self.log(Writhe.styled(FB) + ": Acolyte replaced with", Desiccated.styled(FB), "in", r)
             } else {
                 game.eliminate(u)
+                game.fbWritheKillLog :+= (uRef, r, origClass, None)
                 self.log(Writhe.styled(FB) + ": eliminated", u.uclass.styled(self), "in", r)
             }
             Force(FBWritheAssignKillAction(self, remainingKills - 1, remainingPains, $))
@@ -917,6 +1027,7 @@ object FBExpansion extends Expansion {
                 } else {
                     // Player chooses which units to pain
                     Ask(self).each(units)(u => FBWritheChoosePainUnitAction(self, u.ref, remainingPains, $))
+                        .add(FBWritheUndoAllAction(self, game.fbWritheRolls, game.fbWritheNumDice).as("Undo all back to dice roll")(Writhe.styled(FB)))
                 }
             }
 
@@ -935,6 +1046,8 @@ object FBExpansion extends Expansion {
                     Force(FBWritheMoveAllAction(self, newChosen))
                 } else {
                     Ask(self).each(units)(u => FBWritheChoosePainUnitAction(self, u.ref, remaining, newChosen))
+                        .when(newChosen.any)(FBWritheUndoLastPainAction(self, remaining, newChosen).as("Undo last pain selection")(Writhe.styled(FB)))
+                        .add(FBWritheUndoAllAction(self, game.fbWritheRolls, game.fbWritheNumDice).as("Undo all back to dice roll")(Writhe.styled(FB)))
                 }
             }
 
@@ -949,6 +1062,7 @@ object FBExpansion extends Expansion {
                 areas.foreach { r =>
                     + FBWritheMoveAllToRegionAction(self, r, chosen)
                 }
+                + (FBWritheUndoAllAction(self, game.fbWritheRolls, game.fbWritheNumDice).as("Undo all back to dice roll")(Writhe.styled(FB)))
                 asking
             }
 
@@ -956,6 +1070,7 @@ object FBExpansion extends Expansion {
             chosen.foreach { uRef =>
                 val u = game.unit(uRef)
                 val from = u.region
+                game.fbWrithePainLog :+= (uRef, from, r)
                 u.region = r
                 u.onGate = false
                 game.fbWritheUsedUnits :+= uRef
@@ -997,11 +1112,14 @@ object FBExpansion extends Expansion {
                 + FBWritheMoveOneJoinAction(self, uRef, r, remaining, label)
             }
             areas.%!(fbRegionRefs.has).foreach(r => + FBWritheMoveOneToRegionAction(self, uRef, r, remaining))
+            if (game.fbWrithePainLog.any) + (FBWritheUndoLastMoveAction(self, uRef, remaining).as("Undo last region selection")(Writhe.styled(FB)))
+            + (FBWritheUndoAllAction(self, game.fbWritheRolls, game.fbWritheNumDice).as("Undo all back to dice roll")(Writhe.styled(FB)))
             asking
 
         case FBWritheMoveOneToRegionAction(self, uRef, r, remaining) =>
             val u = game.unit(uRef)
             val from = u.region
+            game.fbWrithePainLog :+= (uRef, from, r)
             u.region = r
             u.onGate = false
             // Bug fix Round 6: store destination for "join" hint on next unit's region list
@@ -1017,6 +1135,7 @@ object FBExpansion extends Expansion {
         case FBWritheMoveOneJoinAction(self, uRef, r, remaining, _) =>
             val u = game.unit(uRef)
             val from = u.region
+            game.fbWrithePainLog :+= (uRef, from, r)
             u.region = r
             u.onGate = false
             game.fbWritheLastPainRegion = |(r)
@@ -1240,55 +1359,74 @@ object FBExpansion extends Expansion {
 
         // ── THE EYE OPENS ──
         case FBTheEyeOpensMainAction(self) =>
-            // Round 8 Bug 75: pay from discount first, then power.
+            // Pay 1 power (once for the whole action)
             val eyeCost = 1
             val discountUsed = consumeDiscount(eyeCost)
             self.power -= (eyeCost - discountUsed)
+            Force(FBTheEyeOpensLoopAction(self, $))
 
-            val eligible = areas./~{ r =>
-                if (self.at(r, Desiccated).any) {
-                    self.enemies.%(e => e.at(r).%(_.uclass.utype == Cultist).any)./(f => (r, f))
-                } else
-                    Nil
-            }
-            implicit val asking = Asking(self)
-            eligible.foreach { case (r, f) => + FBTheEyeOpensTargetAction(self, r, f) }
-            asking
+        case FBTheEyeOpensLoopAction(self, pending) =>
+            // Find eligible regions: have desiccated + enemy cultist, not already targeted
+            val doneRegions = pending./(t => t._1)
+            val eligible = areas.%(r => !doneRegions.has(r) && self.at(r, Desiccated).any &&
+                self.enemies.exists(_.at(r).%(_.uclass.utype == Cultist).any))
+            if (eligible.none)
+                Force(FBTheEyeOpensCommitAction(self, pending))
+            else
+                Ask(self).each(eligible)(r =>
+                    FBTheEyeOpensRegionAction(self, r, pending))
+                .add(FBTheEyeOpensCancelAction(self).as("Cancel")(TheEyeOpens.styled(FB) + ": Choose Region"))
 
-        case FBTheEyeOpensTargetAction(self, r, f) =>
-            // Ice Age: Eye Opens costs 1 extra power in Ice Age region
-            val iceAgeExtra = game.factions.exists(wf => wf.iceAge.contains(r))
-            if (iceAgeExtra) {
-                self.power -= 1
-                self.log(TheEyeOpens.styled(FB), "costs extra", 1.power, "due to", IceAge)
+        case FBTheEyeOpensRegionAction(self, r, pending) =>
+            // Find enemy factions with cultists in this region
+            val enemyFactions = self.enemies.%(e => e.at(r).%(_.uclass.utype == Cultist).any)
+            if (enemyFactions.num == 1) {
+                val f = enemyFactions.head
+                val cultists = f.at(r).%(_.uclass.utype == Cultist)
+                if (cultists.num == 1) {
+                    Force(FBTheEyeOpensLoopAction(self, pending :+ (r, f, cultists.head.ref)))
+                } else {
+                    Ask(f).each(cultists)(u => FBTheEyeOpensChooseCultistAction(self, f, r, u.ref, pending))
+                }
+            } else {
+                Ask(self).each(enemyFactions)(f =>
+                    FBTheEyeOpensFactionAction(self, r, f, pending))
+                .add(FBTheEyeOpensCancelAction(self).as("Cancel")(TheEyeOpens.styled(FB) + ": Choose target faction"))
             }
-            // Round 8 Bug 50: prompt the enemy to pick the SPECIFIC unit to eliminate
-            // (per-unit, not per-class) so they can choose between on-gate and off-gate
-            // cultists of the same class. Only auto-pick if there's exactly 1 cultist.
+
+        case FBTheEyeOpensFactionAction(self, r, f, pending) =>
             val cultists = f.at(r).%(_.uclass.utype == Cultist)
             if (cultists.num == 1) {
-                val u = cultists.head
-                game.eliminate(u)
-                f.log(u.uclass.styled(f), "eliminated in", r, "by", TheEyeOpens.styled(FB))
-                val d = self.at(r, Desiccated).head
-                game.eliminate(d)
-                // Net power: cost 1 paid above, gain 1 here = flat (minus ice age extra)
-                self.power += 1
-                self.log(TheEyeOpens.styled(FB) + ": eliminated", u.uclass.styled(f), "and", Desiccated.styled(FB), "in", r)
-                EndAction(self)
+                Force(FBTheEyeOpensLoopAction(self, pending :+ (r, f, cultists.head.ref)))
             } else {
-                Ask(f).each(cultists)(u => FBTheEyeOpensChooseCultistAction(self, f, r, u.ref))
+                Ask(f).each(cultists)(u => FBTheEyeOpensChooseCultistAction(self, f, r, u.ref, pending))
             }
 
-        case FBTheEyeOpensChooseCultistAction(self, f, r, uRef) =>
-            val u = game.unit(uRef)
-            val ucName = u.uclass.styled(f)
-            game.eliminate(u)
-            f.log(ucName, "eliminated in", r, "by", TheEyeOpens.styled(FB))
-            val d = self.at(r, Desiccated).head
-            game.eliminate(d)
+        case FBTheEyeOpensChooseCultistAction(self, f, r, uRef, pending) =>
+            Force(FBTheEyeOpensLoopAction(self, pending :+ (r, f, uRef)))
+
+        case FBTheEyeOpensCommitAction(self, pending) =>
+            // Execute all pending eliminations
+            pending.foreach { case (r, f, uRef) =>
+                val u = game.unit(uRef)
+                game.eliminate(u)
+                val d = self.at(r, Desiccated).head
+                game.eliminate(d)
+                self.log(TheEyeOpens.styled(FB) + ": eliminated", u.uclass.styled(f), "and", Desiccated.styled(FB), "in", r)
+                // Ice Age: costs 1 extra power in Ice Age region
+                val iceAgeExtra = game.factions.exists(wf => wf.iceAge.contains(r))
+                if (iceAgeExtra) {
+                    self.power -= 1
+                    self.log(TheEyeOpens.styled(FB), "costs extra", 1.power, "due to", IceAge)
+                }
+                self.power += 1
+                self.log(TheEyeOpens.styled(FB) + ": gained", 1.power)
+            }
+            EndAction(self)
+
+        case FBTheEyeOpensCancelAction(self) =>
+            // Cancel — refund the 1 power cost, no eliminations happened
             self.power += 1
-            self.log(TheEyeOpens.styled(FB) + ": eliminated", ucName, "and", Desiccated.styled(FB), "in", r)
             EndAction(self)
 
         // ── CALL OF THE FAITHFUL ──
@@ -1527,7 +1665,7 @@ object FBExpansion extends Expansion {
             // motion. Use Ask(FB) and pass FB as the destination action's `self` so the
             // menu is bordered in FB's color and the title is attributed to FB.
             val u = game.unit(uRef)
-            val destinations = game.board.connected(u.region).%(_.glyph.onMap).%(d => FB.at(d).%(_.uclass.utype != Building).none)
+            val destinations = game.board.connectedForRetreat(u.region).%(_.glyph.onMap).%(d => FB.at(d).%(_.uclass.utype != Building).none)
             if (destinations.any)
                 Ask(FB).each(destinations)(dest => FBCyclopeanGazeDestinationAction(FB, uRef, dest, sourceUnit, sourcesPending, actor, fromBattle))
             else {

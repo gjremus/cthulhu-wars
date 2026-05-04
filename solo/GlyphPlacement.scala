@@ -48,15 +48,23 @@ class GlyphPlacement(boardId : String) {
     val height : Int = placeb.height
 
     // Random valid placement within the same region as (x, y) — used by the unit layout engine.
+    // Constrains search to the same vertical half to avoid cross-floor color collisions
+    // on Library maps where joined bitmaps may share colors between floors.
     def findAnother(x : Int, y : Int) : (Int, Int) = {
         if (x < 0 || x >= placeb.width || y < 0 || y >= placeb.height)
             return (x, y)
         val p = place(x)(y)
+        val halfH = placeb.height / 2
+        val yMin = if (y < halfH) 0 else halfH
+        val yMax = if (y < halfH) halfH else placeb.height
         var xx = 0
         var yy = 0
+        var tries = 0
         do {
             xx = (placeb.width * scala.math.random()).toInt
-            yy = (placeb.height * scala.math.random()).toInt
+            yy = yMin + ((yMax - yMin) * scala.math.random()).toInt
+            tries += 1
+            if (tries > 5000) return (x, y) // safety valve
         }
         while (place(xx)(yy) != p)
         (xx, yy)
@@ -86,19 +94,14 @@ class GlyphPlacement(boardId : String) {
     //
     // Constraint: the chosen position itself must be in the place map's core region
     // (not a gap pixel) so the glyph CENTER is in the playable area.
-    def findStaticGlyphPos(gx : Int, gy : Int, halfGlyph : Int = 33, halfGate : Int = 38) : (Int, Int) = {
+    def findStaticGlyphPos(gx : Int, gy : Int, halfGlyph : Int = 33, halfGate : Int = 38, maxRadius : Int = 200) : (Int, Int) = {
         // Bounds check: if gate coords exceed bitmap, return gate coords as fallback
         if (gx < 0 || gx >= placeb.width || gy < 0 || gy >= placeb.height)
             return (gx, gy)
         val regionColor = place(gx)(gy)
         val GAP = 0
         val MaxExpansion = 12
-        // Round 9: hard radius cap from the gate. On mobile with a saved-HTML viewer,
-        // the placement bitmap loading could drift or produce false color matches far
-        // from the core region (user report: FB glyph placed mid-South-Pacific when
-        // the start region was Australia). Constraining the search to a reasonable
-        // radius from the gate guarantees the glyph stays visually tied to the region.
-        val MaxRadiusFromGate = 200
+        val MaxRadiusFromGate = maxRadius
         val w = placeb.width
         val h = placeb.height
         val INF = w + h

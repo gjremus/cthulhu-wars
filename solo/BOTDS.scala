@@ -576,8 +576,10 @@ class GameEvaluationDS(implicit game : Game) extends GameEvaluation(DS)(game) {
             case ControlGateAction(_, r, u, _) =>
                 r.allies.%(_.onGate).foreach { c =>
                     c.uclass == u.uclass |=> -1000000 -> "remain calm"
+                    c.uclass == HighPriest && u.uclass == Acolyte |=> 1000 -> "high priest not on gate"
+                    u.uclass == HighPriest && c.uclass == Acolyte |=> -1000 -> "keep high priest off gate"
                 }
-                true |=> 1000000 -> "always control"
+                r.allies.%(_.onGate).none |=> 1000000 -> "claim unowned gate"
 
             case EndTurnAction(_) =>
                 true |=> 500 -> "main done"

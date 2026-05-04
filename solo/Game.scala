@@ -96,6 +96,7 @@ trait Board {
     def name : String
     def regions : $[Region]
     def connected(region : Region) : $[Region]
+    def connectedForRetreat(region : Region) : $[Region] = connected(region)
     def starting(faction : Faction) : $[Region]
     def distance(a : Region, b : Region) : Int
     def gateXYO(r : Region) : (Int, Int)
@@ -103,6 +104,11 @@ trait Board {
     val nonFactionRegions : $[Region]
     val west : $[Region]
     val east : $[Region]
+    val isLibraryMap : Boolean = false
+    def gateXYOHorizontal(r : Region) : (Int, Int) = gateXYO(r)
+    def silenceTokenMax(f : Faction) : Int = 0
+    val unitScale : Double = 1.0
+    val archways : Set[Region] = Set()
 }
 
 case class ElderSign(value : Int) {
@@ -145,6 +151,7 @@ case object Terror extends UnitType { val priority = 30 }
 case object GOO extends UnitType { val priority = 40 }
 case object Token extends UnitType { val priority = 2 }
 case object Building extends UnitType { val priority = 5 }
+case object MapUnit extends UnitType { val priority = 1 }
 
 trait IGOO
 
@@ -185,6 +192,19 @@ case object HighPriestCard extends LoyaltyCard {
 
 abstract class FactionUnitClass(val faction : Faction, name : String, utype : UnitType, cost : Int) extends UnitClass(name, utype, cost) {
     def elem = name.styled(faction)
+    override def toString = elem
+}
+
+abstract class MapUnitClass(name : String) extends UnitClass(name, MapUnit, 0) {
+    override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBattle(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canControlGate(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBeRecruited(f : Faction)(implicit game : Game) : Boolean = false
+    override def canBeSummoned(f : Faction)(implicit game : Game) : Boolean = false
+
+    def elem = name.styled("lb")
     override def toString = elem
 }
 
@@ -419,6 +439,7 @@ case class Force(action : Action) extends Continue
 case class Then(action : Action) extends Continue
 case class DelayedContinue(delay : Int, continue : Continue) extends Continue
 case class RollD6(question : Game => String, roll : Int => ForcedAction) extends Continue
+case class RollAgony(question : Game => String, roll : Int => ForcedAction) extends Continue
 case class RollBattle(question : Game => String, n : Int, roll : $[BattleRoll] => ForcedAction) extends Continue
 case class DrawES(question : Game => String, es1 : Int, es2 : Int, es3 : Int, draw : (Int, Boolean) => ForcedAction) extends Continue
 case class GameOver(winners : $[Faction]) extends Continue
@@ -803,6 +824,10 @@ case object MapEarth33 extends MapOption
 case object MapEarth35 extends MapOption
 case object MapEarth53 extends MapOption
 case object MapEarth55 extends MapOption
+case object MapLibrary33 extends MapOption
+case object MapLibrary35 extends MapOption
+case object MapLibrary53 extends MapOption
+case object MapLibrary55 extends MapOption
 
 abstract class LoyaltyCardGameOption(val lc : LoyaltyCard) extends GameOption
 
@@ -841,6 +866,10 @@ object GameOptions {
         MapEarth35,
         MapEarth53,
         MapEarth55,
+        MapLibrary33,
+        MapLibrary35,
+        MapLibrary53,
+        MapLibrary55,
         UseGhast,
         UseGug,
         UseShantak,
@@ -951,7 +980,12 @@ case class AdjustGateControlAction(self : Faction, changed : Boolean, then : For
 case class ControlGateAction(self : Faction, r : Region, u : UnitRef, then : ForcedAction) extends ForcedAction with NoClear
 case class AbandonGateAction(self : Faction, r : Region, then : ForcedAction) extends ForcedAction with NoClear
 
-case class RitualAction(self : Faction, cost : Int, k : Int) extends OptionFactionAction(g => "Perform " + "Ritual of Annihilation".styled("doom") + " for " + cost.power) with DoomQuestion
+case class RitualAction(self : Faction, cost : Int, k : Int) extends OptionFactionAction(implicit g => {
+    val ipDiscount = if (self == FB) min(g.fbInfernalPactDiscount, cost) else 0
+    val effectiveCost = cost - ipDiscount
+    "Perform " + "Ritual of Annihilation".styled("doom") + " for " + effectiveCost.power +
+        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")")
+}) with DoomQuestion
 
 case class RevealESMainAction(self : Faction, then : ForcedAction) extends BaseFactionAction("", "View " + "Elder Signs".styled("es")) with Soft with PowerNeutral
 case class RevealESOutOfTurnAction(self : Faction) extends BaseFactionAction("Elder Signs", "View " + "Elder Signs".styled("es")) with Soft
@@ -1030,6 +1064,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         options.of[NeutralMonsterOption].any.$(NeutralMonstersExpansion) ++
         options.of[IGOOOption].any.$(IGOOsExpansion) ++
+        board.isLibraryMap.$(LibraryExpansion) ++
         $(this)
 
     val players = setup./(f => f -> new Player(f)).toMap
@@ -1118,8 +1153,28 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Avoids repeated factions.has(FB) + FB.has(CG) + oncePerGame checks per unit move.
     def fbHasCGActive : Boolean = factions.has(FB) && FB.has(CyclopeanGaze) && !FB.oncePerGame.has(CyclopeanGaze)
     var fbDevilsMarkUsedThisDoom : Boolean = false
+
+    // ── Library at Celaeno state ──
+    var silenceTokens : Map[Faction, Int] = Map()
+    var tomeHolders : Map[LibraryTome, |[Faction]] = Map(
+        TomeBarrier -> None, TomeGuardian -> None, TomeLarvae -> None, TomeYr -> None)
+    var tomeOverdue : Map[LibraryTome, Boolean] = Map(
+        TomeBarrier -> false, TomeGuardian -> false, TomeLarvae -> false, TomeYr -> false)
+    var tomeFaceUp : Map[LibraryTome, Boolean] = Map(
+        TomeBarrier -> true, TomeGuardian -> true, TomeLarvae -> true, TomeYr -> true)
+    var libraryFirstDoomGatesDone : Boolean = false
+    var custodianRegion : |[Region] = None
+    var librarianRegion : |[Region] = None
+    var barrierPaid : Boolean = false
     var fbWritheUsedUnits : $[UnitRef] = $
     var fbWritheRerolled : Boolean = false
+    // Writhe undo: track (originalUnitRef, originalRegion, originalClass, replacementRef) for reversal
+    var fbWritheKillLog : $[(UnitRef, Region, UnitClass, |[UnitRef])] = $
+    // Writhe undo: track pain selections for reversal
+    var fbWrithePainLog : $[(UnitRef, Region, Region)] = $ // (unit, fromRegion, toRegion)
+    // Writhe undo: save rolls and dice count for "undo all back to dice roll"
+    var fbWritheRolls : $[BattleRoll] = $
+    var fbWritheNumDice : Int = 0
     // Bug fix Round 6: track last Writhe pain destination for "join" UI hint when paining separately
     var fbWritheLastPainRegion : |[Region] = None
     var fbWritheLastPainedUnit : String = ""
@@ -1343,16 +1398,32 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (self.abandoned.has(r).not) {
                 if (DS.chaosGateRegions.has(r).not || self == DS) {
                     if (factions.%(_.gates.has(r)).none) {
-                        self.at(r).%(_.canControlGate).sortBy(_.uclass @@ {
-                            case DarkYoung => 1
-                            case Acolyte => 2
-                            case HighPriest => 3
-                        }).starting.foreach { u =>
-                            self.gates :+= r
-                            u.onGate = true
+                        // Library at Celaeno: custodian/librarian block gate control
+                        val libraryBlocker : |[String] = if (board.isLibraryMap) {
+                            if (librarianRegion.has(r)) |("Librarian")
+                            else if (custodianRegion.has(r)) |("Custodian")
+                            else None
+                        } else None
 
-                            if (self.oncePerAction.has(UmrAtTawil).not)
-                                self.log("gained control of the gate in", r)
+                        if (libraryBlocker.any) {
+                            // Silently block — don't log repeatedly (checkGatesGained is called every action cycle)
+                        }
+                        else {
+                            self.at(r).%(_.canControlGate).sortBy(_.uclass @@ {
+                                case DarkYoung => 1
+                                case Acolyte => 2
+                                case HighPriest => 3
+                            }).starting.foreach { u =>
+                                self.gates :+= r
+                                u.onGate = true
+
+                                if (self.oncePerAction.has(UmrAtTawil).not)
+                                    self.log("gained control of the gate in", r)
+
+                                // Library at Celaeno: check tome acquisition on auto gate control
+                                if (board.isLibraryMap)
+                                    LibraryExpansion.checkTomeAcquisition()
+                            }
                         }
                     }
                 }
@@ -1542,6 +1613,47 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
     }
 
+    def libraryActions(f : Faction)(implicit w : AskWrapper) {
+        if (board.isLibraryMap && silenceTokens.getOrElse(f, 0) > 0) {
+            + SpendOnCustodianAction(f)
+            val librarianAvailable = factions.but(f).exists(ff =>
+                tomeOverdue.exists { case (tome, overdue) => overdue && tomeHolders.get(tome).flatten.has(ff) })
+            if (librarianAvailable)
+                + SpendOnLibrarianAction(f)
+        }
+
+        // Library Tome actions (cost 1 Power each, flippable tomes must be face-up)
+        if (board.isLibraryMap) {
+            // Guardian under the Lake: move enemy units between Archway regions
+            if (tomeHolders.get(TomeGuardian).flatten.has(f) && tomeFaceUp.getOrElse(TomeGuardian, true) && f.power >= 1) {
+                val arches = board.regions.%(board.archways.contains)
+                if (arches.exists(r => factions.but(f).exists(_.at(r).%(u => u.uclass.utype != MapUnit).any)))
+                    + UseTomeGuardianMainAction(f)
+            }
+            // Larvae of the Outer Gods: spend 1 Power, gain 1 ES if any opponent has more Power
+            // Always offered when held and face-up (even if no opponent has more power — costs 1 power, does nothing)
+            if (tomeHolders.get(TomeLarvae).flatten.has(f) && tomeFaceUp.getOrElse(TomeLarvae, true) && f.power >= 1)
+                + UseTomeLarvaeAction(f)
+            // Yr and the Nhhngr: place Monster or gain Power if any opponent has more Doom
+            if (tomeHolders.get(TomeYr).flatten.has(f) && tomeFaceUp.getOrElse(TomeYr, true) && f.power >= 1)
+                if (factions.but(f).exists(_.doom > f.doom))
+                    + UseTomeYrMainAction(f)
+
+            // Flip face-down flippable tomes back up (unlimited actions)
+            $(TomeGuardian, TomeLarvae, TomeYr).foreach { tome =>
+                if (tomeHolders.get(tome).flatten.has(f) && !tomeFaceUp.getOrElse(tome, true)) {
+                    val hasCaptured = factions./~(ff => ff.at(ff.prison).%(_.uclass.utype == Cultist)).any
+                    if (hasCaptured)
+                        + FlipTomeReleaseCultistMainAction(f, tome)
+                    if (f.es.any)
+                        + FlipTomeDiscardESAction(f, tome)
+                    if (silenceTokens.getOrElse(f, 0) > 0)
+                        + FlipTomeDiscardTokenAction(f, tome)
+                }
+            }
+        }
+    }
+
     def highPriests(f : Faction)(implicit w : AskWrapper) {
         if (f.all(HighPriest).any)
             if (doomPhase)
@@ -1590,6 +1702,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
         // INIT
         case StartAction =>
+            log("Cthulhu Wars HRF", hrf.BuildInfo.version, "Build lace49")
             log("Options", options./(_.toString.hh).mkString(" "))
 
             if (options.has(GateDiplomacy)) {
@@ -1617,11 +1730,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             SetupFactionsAction
 
-        case SetupFactionsAction if setup.forall(starting.contains) =>
+        case SetupFactionsAction if setup.forall(f => starting.contains(f) || board.starting(f).none) =>
             PlayOrderAction
 
         case SetupFactionsAction =>
-            val f = setup.%!(starting.contains).minBy(board.starting(_).num)
+            val unplaced = setup.%!(starting.contains).%(f => board.starting(f).any)
+            if (unplaced.none)
+                return PlayOrderAction
+            val f = unplaced.minBy(board.starting(_).num)
 
             /*
             if (f == CC)
@@ -1680,6 +1796,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             log(CthulhuWarsSolo.DoubleLine)
             log("POWER GATHER")
+
+            // Library at Celaeno: discard all Silence Tokens before power is gathered
+            if (board.isLibraryMap) {
+                factions.foreach { f =>
+                    if (silenceTokens.getOrElse(f, 0) > 0) {
+                        silenceTokens = silenceTokens + (f -> 0)
+                        f.log("discarded", "Silence Token".styled("lb"))
+                    }
+                }
+            }
 
             factions.foreach { f =>
                 val hibernate = f.power
@@ -1812,6 +1938,20 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case DoomPhaseAction =>
             doomPhase = true
+
+            // Library at Celaeno: distribute Silence Tokens at start of Doom Phase
+            if (board.isLibraryMap) {
+                factions.foreach { f =>
+                    val max = board.silenceTokenMax(f)
+                    val current = silenceTokens.getOrElse(f, 0)
+                    if (current < max) {
+                        silenceTokens = silenceTokens + (f -> (current + 1))
+                        f.log("received", "Silence Token".styled("lb"))
+                    }
+                }
+                // Auto-flip Library Tomes face-up at Doom Phase start
+                tomeFaceUp = tomeFaceUp + (TomeGuardian -> true) + (TomeLarvae -> true) + (TomeYr -> true)
+            }
 
             factions.foreach { f =>
                 // Round 8 Bug 40: also check facedown state for IGOO spellbooks
@@ -2099,6 +2239,19 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 DoomNextPlayerAction(next)
             }
             else {
+                // Library at Celaeno: place gates in Special Collection rooms at end of first Doom Phase
+                if (board.isLibraryMap && !libraryFirstDoomGatesDone) {
+                    libraryFirstDoomGatesDone = true
+                    import LibraryCelaeno55._
+                    val tomeRegions = $(YrAndTheNhhngr, GuardianUnderLake, BarrierOfNaachTith, LarvaeOfOuterGods)
+                    tomeRegions.foreach { r =>
+                        if (!gates.has(r) && board.regions.has(r)) {
+                            gates :+= r
+                            log("Gate placed in", r, "(first Doom Phase)")
+                        }
+                    }
+                }
+
                 factions.foreach(_.borrowed = $)
                 CheckSpellbooksAction(ActionPhaseAction)
             }
@@ -2486,12 +2639,24 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // CONTROL
         case AdjustGateControlAction(f, changed, then) =>
+            // Library at Celaeno: custodian/librarian block control of uncontrolled gates
+            val libraryBlockedRegions : $[Region] = if (board.isLibraryMap) $(custodianRegion, librarianRegion).flatten else $()
+            // Determine which neutral unit blocks each region (for abandon warning)
+            def libraryBlockerName(r : Region) : |[String] = if (board.isLibraryMap) {
+                if (librarianRegion.has(r)) |("Librarian")
+                else if (custodianRegion.has(r)) |("Custodian")
+                else None
+            } else None
+
             Ask(f)
-                .some(areas.%(r => f.gates.has(r) || (abandonedGates.has(r) && (DS.chaosGateRegions.has(r).not || f == DS)))) { r =>
+                .some(areas.%(r => f.gates.has(r) || (abandonedGates.has(r) && (DS.chaosGateRegions.has(r).not || f == DS) && !libraryBlockedRegions.has(r)))) { r =>
+                    val blocked = libraryBlockedRegions.has(r)
                     val l = f.at(r).%(_.canControlGate).sortBy(_.onGate.not).distinctBy(_.uclass)
                     val g = $[Any](f.gates.has(r).not.?("Abandoned gate").|("Gate"), "in", r)
 
-                    l./(u =>
+                    // Don't show ControlGateAction if custodian/librarian blocks this region
+                    val controlOptions = if (blocked) l./(u => Info(u.full)(g : _*))
+                    else l./(u =>
                         if (l.%(_.onGate).single./(_.uclass).has(u.uclass))
                             Info(u.full)(g : _*)
                         else
@@ -2499,8 +2664,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                             Info(u.full)(g : _*)
                         else
                             ControlGateAction(f, r, u, then).as(u.full)(g : _*)
-                    ) ++
-                    (f.gates.has(r) && f.clings.not && f.commands.has(GateDiplomacySkipAbandon).not).$(AbandonGateAction(f, r, then).as("Abandon")(""))
+                    )
+
+                    // Abandon option: add warning if custodian/librarian would block re-control
+                    val abandonLabel = libraryBlockerName(r) match {
+                        case Some(name) => "Abandon - " + name.styled("lb") + " blocks taking control again"
+                        case None => "Abandon"
+                    }
+                    controlOptions ++
+                    (f.gates.has(r) && f.clings.not && f.commands.has(GateDiplomacySkipAbandon).not).$(AbandonGateAction(f, r, then).as(abandonLabel)(""))
                 }
                 .add(OutOfTurnRefresh(AdjustGateControlAction(f, changed, then)))
                 .group(" ")
@@ -2522,6 +2694,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
             else
                 f.log("changed control of the gate in", r, "to", u)
+
+            // Library at Celaeno: immediate tome acquisition when controlling a gate in a tome region
+            if (board.isLibraryMap)
+                LibraryExpansion.checkTomeAcquisition()
 
             // Gate occupy/abandon are unlimited free actions (place/remove
             // cultist on gate). They do NOT trigger CG — no unit movement occurs.
@@ -2579,7 +2755,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             Ask(self)
                 .each(l2.%(self.affords(cost)))(to => MoveAction(self, u, from, to, cost).as
-                    (to, self.iced(to), s"""<img class=direction src="${Overlays.imageSource("move-deg-" + direction(from, to))}" />""")
+                    (ConnectionGlyph(from, to) + to.toString, self.iced(to), s"""<img class=direction src="${Overlays.imageSource("move-deg-" + direction(from, to))}" />""")
                     ("Move", u, (cost == 0).??("for free"), "from", from, "to")
                 )
                 .cancelIf(cost > 0)
@@ -2649,6 +2825,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 .skipIf(effect.has(FromBelow))(ProceedBattlesAction)
 
         case AttackAction(self, r, f, effect) =>
+            // Library at Celaeno: Barrier of Naach-Tith — attacker must pay a cost
+            if (board.isLibraryMap && !barrierPaid && tomeHolders.get(TomeBarrier).flatten.has(f) && !tomeOverdue.getOrElse(TomeBarrier, false)) {
+                barrierPaid = true
+                return Force(BarrierCheckAction(self, f, AttackAction(self, r, f, effect)))
+            }
+            barrierPaid = false
+
             // Round 8 Bug 60: snapshot FB.power BEFORE the 1-power attack cost is deducted,
             // so Ghatanothoa's combat strength uses the pre-battle power (not post-cost).
             // The original snapshot was in ProceedBattlesAction (line ~2570), but that runs

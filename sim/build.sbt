@@ -19,9 +19,9 @@ scalacOptions := Seq(
     ).map("msg=" + _ + ":s").mkString(",")
 )
 
-val soloDir   = file("/Users/gremus/cthulhu-wars Merged/solo")
+val soloDir   = file("/Users/gremus/cthulhu-wars Library at Celaeno/solo")
 val baseDir   = soloDir / "base"
-val simSrcDir = file("/Users/gremus/cthulhu-wars Merged/sim/src")
+val simSrcDir = file("/Users/gremus/cthulhu-wars Library at Celaeno/sim/src")
 
 Compile / unmanagedSourceDirectories := Seq(soloDir, baseDir, simSrcDir)
 

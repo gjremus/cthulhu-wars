@@ -31,6 +31,9 @@ object Host {
             case RollD6(question, roll) =>
                 roll((1::2::3::4::5::6).shuffle.first)
 
+            case RollAgony(question, roll) =>
+                roll(AgonyDie.faces.shuffle.first)
+
             case RollBattle(_, n, roll) =>
                 roll(1.to(n)./(_ => BattleRoll.roll()))
 

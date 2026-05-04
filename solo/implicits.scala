@@ -57,6 +57,7 @@ trait GameImplicits {
         def inPlay = r.glyph.inPlay
         def onMap = r.glyph.onMap
         def connected(implicit game : Game) = game.board.connected(r)
+        def connectedForRetreat(implicit game : Game) = game.board.connectedForRetreat(r)
     }
 
     implicit class RegionListEx(l : $[Region]) {

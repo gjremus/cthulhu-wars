@@ -57,6 +57,10 @@ object SimRunner {
                 case "Earth35" | "Earth4v35" => EarthMap4v35
                 case "Earth53" | "Earth4v53" => EarthMap4v53
                 case "Earth55" => EarthMap5
+                case "Library33" => LibraryCelaeno33
+                case "Library35" => LibraryCelaeno35
+                case "Library53" => LibraryCelaeno53
+                case "Library55" => LibraryCelaeno55
                 case _ => EarthMap4v35
             }
             val ritualTrack = pc match {
@@ -117,7 +121,7 @@ object SimRunner {
                         c = cc
                     } catch {
                         case e : Throwable =>
-                            writeLog("<div class='p'>REPLAY ERROR at action " + actionIdx + ": " + actionStr.take(80) + "</div>")
+                            writeLog("<div class='p'>REPLAY ERROR at action " + actionIdx + ": " + actionStr.take(80) + " [" + e.getClass.getSimpleName + ": " + (if (e.getMessage != null) e.getMessage.take(60) else "null") + "]</div>")
                     }
                     actionIdx += 1
                 }
@@ -153,8 +157,9 @@ object SimRunner {
         val withIceLethargy = args.contains("--ice-lethargy")
         val withGateDip = args.contains("--gate-dip")
         val withRandFlags = args.contains("--rand-flags")
+        val withLibrary = args.contains("--library")
         val cleanArgs = args.filterNot(Set("--hp", "--nm", "--igoo", "--rand", "--trace", "--save-all",
-            "--opener10", "--demand-tsat", "--neutral-sb", "--ice-lethargy", "--gate-dip", "--rand-flags").contains)
+            "--opener10", "--demand-tsat", "--neutral-sb", "--ice-lethargy", "--gate-dip", "--rand-flags", "--library").contains)
 
         val defaultPlayers = if (cleanArgs.length > 0 && cleanArgs(0) != "rand") cleanArgs(0).toInt else 4
         val numberOfGames  = if (cleanArgs.length > 1) cleanArgs(1).toInt else 100
@@ -260,16 +265,28 @@ object SimRunner {
             optLabel.nonEmpty.?(optLabel).|(("")) + " ...")
 
         var resultList : $[$[Faction]] = $
-        resultList ++= games.par.map { case (pc, ff) =>
+        // Singleton faction objects (DS.chaosGateRegions etc.) have mutable state
+        // that races across parallel games on different boards. Run sequentially.
+        resultList ++= games.map { case (pc, ff) =>
             var log : $[String] = $
             def writeLog(s : String) { log = s :: log }
 
             val opts = buildOptions(pc)
-            val game : Game = pc match {
-                case 3 => new Game(EarthMap3,    RitualTrack.for3, randomSeating(ff), true, opts)
-                case 5 => new Game(EarthMap5,    RitualTrack.for5, randomSeating(ff), true, opts)
-                case _ => new Game(EarthMap4v35, RitualTrack.for4, randomSeating(ff), true, opts)
+            val (board : Board, mapOpt : MapOption) = if (withLibrary) pc match {
+                case 3 => (LibraryCelaeno33, MapLibrary33)
+                case 5 => (LibraryCelaeno55, MapLibrary55)
+                case _ => if (random() < 0.5) (LibraryCelaeno35, MapLibrary53) else (LibraryCelaeno53, MapLibrary35)
+            } else pc match {
+                case 3 => (EarthMap3, MapEarth33)
+                case 5 => (EarthMap5, MapEarth55)
+                case _ => (EarthMap4v35, MapEarth35)
             }
+            val ritualTrack = pc match {
+                case 3 => RitualTrack.for3
+                case 5 => RitualTrack.for5
+                case _ => RitualTrack.for4
+            }
+            val game : Game = new Game(board, ritualTrack, randomSeating(ff), true, opts :+ mapOpt)
 
             var aa : $[Action] = $
 

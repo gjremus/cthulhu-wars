@@ -94,9 +94,10 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val hasturMobile = YS.has(Hastur) && YS.has(HWINTBN)
                 if (ysCultsHere > 2 && ysHasPower && (kiyAdjacent || hasturMobile)) return -1
             }
-            val noGoo = r.foes.goos.none
-            if (!noGoo) return 0
+            val hasGoo = r.foes.goos.any
             val foeCombat = r.foes.%(_.uclass.utype == Monster).num + r.foes.%(_.uclass.utype == Terror).num * 4
+            // GOO with high combat (4+) is blocked; GOO with low combat is attackable
+            if (hasGoo && foeCombat >= 4) return 0
             val lowCombat = foeCombat < 4
             val lowCultists = r.foes.cultists.num < 3
             val noUnits = r.foes.none
@@ -1599,10 +1600,26 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             // ──────────────────────────────────────────────────────────────────
             // INFERNAL PACT
             // ──────────────────────────────────────────────────────────────────
-            // FBInfernalPactMainAction is Soft — bot never sees this (dead code).
-            // Scoring is on FBInfernalPactChooseAction below.
+            // Gate IPMain on the same flip conditions as ChooseAction. Without
+            // this, IPMain always scored 0 (Soft, no scoring). When peer main-menu
+            // options also tied at 0 the bot would enter IPMain, find no flip
+            // worth -5000 and Cancel out at -500 (Game.scala forces MainAction
+            // again), then re-enter on the next pick — an infinite Cancel loop
+            // until the 7000-action timeout. Score positive only when at least
+            // one in-session flip will pass the BLOCK in ChooseAction.
             case FBInfernalPactMainAction(_) =>
-                true |=> 0 -> "Soft action — scoring is on ChooseAction"
+                val gatesNumIPM = self.gates.num
+                val projectedDoomIPM = self.doom + ((self.es.num + 2) * 5 / 3) + gatesNumIPM
+                val ritualDiscountIPM = gatesNumIPM > 2 && game.ritualCost > 6 && projectedDoomIPM > 20
+                val fbTotalDoomKillIPM = self.doom + (self.es.num * 5 / 3)
+                val killCondIPM = (game.ritualCost > 6 && fbTotalDoomKillIPM >= 20 || idImminent) &&
+                    gooOnMap > 0 && game.fbGhatnothoaAwakenings >= 1 && game.fbGhatnothoaAwakenings < 3 &&
+                    infernalDiscount < 2
+                val needsTwoFDIPM = self.needs(FBTwoFacedownSpellbooks)
+                val readyTwoFDIPM = needsTwoFDIPM && game.fbGhatnothoaAwakenings >= 1 && self.gates.num >= 3
+                val wantIP = ritualDiscountIPM || killCondIPM || readyTwoFDIPM
+                wantIP  |=>  5000 -> "enter IP: flip conditions met"
+                !wantIP |=> -10000 -> "BLOCK IPMain: no flip wanted (avoids Cancel loop)"
 
             case FBInfernalPactChooseAction(_, sb) =>
                 // T13: ONLY flip SBs for ritual IP discount when cost > 6 and 3+ gates.
@@ -1702,20 +1719,81 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             case FBTheEyeOpensMainAction(_) =>
                 val eyeTargets = areas.%(r => self.at(r, Desiccated).any && r.foes.cultists.any)
                 eyeTargets.any |=> 6000 -> "Eye Opens: desiccated + enemy cultist target available"
+                (eyeTargets.num >= 2) |=> 7000 -> "Eye Opens: 2+ regions to sweep"
                 (power <= 2) |=> 2000 -> "stall with eye opens when low power"
                 true |=> 1000 -> "eye opens for cultist pressure"
 
-            case FBTheEyeOpensTargetAction(_, r, f) =>
-                r.enemyGate |=> 2000 -> "eliminate cultist at enemy gate"
-                (f.at(r).%(_.canControlGate).num == 1) |=> 3000 -> "eliminate sole gate controller"
-                true |=> 500 -> "eliminate cultist"
+            case FBTheEyeOpensRegionAction(_, r, _) =>
+                r.enemyGate |=> 3000 -> "eye opens: target enemy gate region"
+                val soleCultist = others.exists(f => f.gates.has(r) && f.at(r).%(_.canControlGate).num == 1)
+                soleCultist |=> 4000 -> "eye opens: sole gate controller in region"
+                true |=> 500 -> "eye opens: target region"
 
-            case FBTheEyeOpensChooseCultistAction(_, _, _, uRef) =>
+            case FBTheEyeOpensFactionAction(_, r, f, _) =>
+                // Target faction with most gates first, then power, then doom
+                val gateScore = f.gates.num * 100
+                val powerScore = (f.power / 3) * 10
+                val doomScore = f.doom / 5
+                true |=> (1000 + gateScore + powerScore + doomScore) -> ("eye opens: target " + f.short + " (gates=" + f.gates.num + ")")
+
+            case FBTheEyeOpensChooseCultistAction(_, _, _, uRef, _) =>
                 val u = game.unit(uRef)
                 (u.uclass == HighPriest) |=> -2000 -> "don't sacrifice HP to eye opens"
                 (u.onGate) |=> -1500 -> "keep gate keeper"
-                (u.uclass == Acolyte && !u.onGate) |=> 1000 -> "lose off-gate acolyte"
-                true |=> 0 -> "default eye-opens cultist choice"
+
+            case FBTheEyeOpensCancelAction(_) =>
+                true |=> -5000 -> "don't cancel eye opens"
+
+            case FBWritheUndoLastKillAction(_, _, _) =>
+                true |=> -1000000 -> "bot never undoes writhe kill"
+
+            case FBWritheUndoLastPainAction(_, _, _) =>
+                true |=> -1000000 -> "bot never undoes writhe pain"
+
+            case FBWritheUndoLastMoveAction(_, _, _) =>
+                true |=> -1000000 -> "bot never undoes writhe move"
+
+            case FBWritheUndoAllAction(_, _, _) =>
+                true |=> -1000000 -> "bot never undoes writhe"
+
+            // ──────────────────────────────────────────────────────────────────
+            // LIBRARIAN AGONY — FB-specific satisfaction priority
+            // ──────────────────────────────────────────────────────────────────
+            case LibrarianReturnTomeMainAction(_, _, _, _) =>
+                true |=> 5000 -> "FB agony: return overdue tome (best option)"
+
+            case LibrarianEliminateUnitMainAction(_, _, _, _) =>
+                true |=> 3000 -> "FB agony: eliminate units"
+
+            case LibrarianEliminateRegionAction(_, r, _, _, _, _) =>
+                // Prefer regions with expendable units
+                val hasCultOffGate = self.at(r).%(u => u.canControlGate && !u.onGate).any
+                val hasDesc = self.at(r, Desiccated).any
+                hasCultOffGate |=> 2000 -> "FB agony region: has off-gate cultist"
+                hasDesc |=> 1500 -> "FB agony region: has desiccated"
+                true |=> 500 -> "FB agony region: default"
+
+            case LibrarianEliminateUnitAction(_, uRef, _, _, _, _, _) =>
+                val u = game.unit(uRef)
+                val isOnGate = u.onGate
+                val isCultist = u.canControlGate
+                val isDesc = u.uclass == Desiccated
+                val isGhato = u.uclass == Ghatanothoa
+                val ghatoCost = if (isGhato) u.uclass.cost else 0
+                // Priority: off-gate cultist > desiccated > on-gate cultist > cheap ghato > others
+                (isCultist && !isOnGate)       |=> 4000 -> "FB agony: eliminate off-gate cultist (best)"
+                (isDesc)                       |=> 3000 -> "FB agony: eliminate desiccated"
+                (isCultist && isOnGate)        |=> 2000 -> "FB agony: eliminate on-gate cultist"
+                (isGhato && ghatoCost < 5)     |=> 11000 -> "FB agony: eliminate cheap ghato (overrides BotMaps GOO block)"
+                (isGhato && ghatoCost >= 5)    |=> -5000 -> "FB agony: don't eliminate expensive ghato"
+                (u.uclass == RevenantOfKnaa)   |=> -3000 -> "FB agony: don't eliminate revenant"
+
+            case LibrarianEliminateDoneAction(_, _, _, _, eliminated) =>
+                eliminated.any |=> 2000 -> "FB agony: done eliminating"
+                true |=> -100 -> "FB agony: done with nothing"
+
+            case LibrarianLoseDoomAction(_, _, _, _) =>
+                true |=> -1000 -> "FB agony: lose doom (worst option)"
 
             // ──────────────────────────────────────────────────────────────────
             // CALL OF THE FAITHFUL — strategy: always use when Rev/Ghato on gate
@@ -2062,6 +2140,9 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 (enemyGooAtOwnGate && combatNotDevastating && fbUnitsHere >= 2) |=> 9500 -> "URGENT: battle enemy GOO at own gate"
                 (enemyGooAtOwnGate && combatNotDevastating && fbUnitsHere == 1) |=> 9000 -> "URGENT: battle enemy GOO at own gate (alone)"
                 (enemyGooAtOwnGate && !combatNotDevastating) |=> -2000 -> "enemy GOO too strong to battle"
+                // Ghato at enemy gate with GOO + low combat: writhe-capture attack
+                val ghatoVsGooLowCombat = ghatoHereBattle && f.at(r).goos.any && enemyGateHere && foeDefense < 4
+                ghatoVsGooLowCombat |=> 9200 -> "Ghato vs GOO at enemy gate (low combat, writhe-capture)"
                 // Generic battle scores
                 self.at(r, RevenantOfKnaa).any |=> 1000 -> "Revenant attacks"
                 self.at(r, Ghatanothoa).any |=> 1500 -> "Ghatanothoa attacks"
@@ -2087,6 +2168,17 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 (self.doom >= 25) |=> 1000 -> "very late game doom boost"
 
             // Save power for ritual: end turn at 3+ gates when affordable
+            // Gate diplomacy: NEVER abandon, prefer acolyte on gate
+            case AbandonGateAction(_, _, _) =>
+                true |=> -1000000 -> "FB: NEVER abandon gate"
+
+            case ControlGateAction(_, r, u, _) =>
+                val onGate = self.at(r).%(_.onGate)
+                (onGate.none) |=> 10000 -> "FB: take control of uncontrolled gate"
+                (onGate.exists(_.uclass == Acolyte) && u.uclass == Acolyte) |=> -1000000 -> "FB: acolyte already on gate"
+                (onGate.exists(_.uclass == Acolyte)) |=> -500 -> "FB: don't switch off acolyte"
+                (u.uclass == Acolyte && !onGate.exists(_.uclass == Acolyte)) |=> 5000 -> "FB: switch to acolyte"
+
             case EndTurnAction(_) =>
                 val canRitual = self.gates.num >= 3 && gooOnMap > 0 && power >= game.ritualCost
                 val saveForRitual = canRitual && power <= game.ritualCost + 1

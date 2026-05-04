@@ -26,6 +26,7 @@ case class UIRead(game : Game) extends UIAction
 case class UIProcess(game : Game, recorded : $[Action]) extends UIAction
 
 case class UIRollD6(game : Game, question : Game => String, roll : Int => Action) extends UIAction
+case class UIRollAgony(game : Game, question : Game => String, roll : Int => Action) extends UIAction
 case class UIRollBattle(game : Game, question : Game => String, n : Int, o : $[BattleRoll] => Action) extends UIAction
 case class UIDrawES(game : Game, question : Game => String, es1 : Int, es2 : Int, es3 : Int, draw : (Int, Boolean) => Action) extends UIAction
 
@@ -66,6 +67,7 @@ class Setup(factions : $[Faction], diff : Difficulty) {
 
 class CachedBitmap(val node : dom.Element) {
     private var bitmap : Bitmap = null
+    def canvas : html.Canvas = if (bitmap != null) bitmap.canvas else null
 
     def get(w : Int, h : Int) = {
         if (bitmap == null || bitmap.width != w || bitmap.height != h) {
@@ -488,6 +490,9 @@ object CthulhuWarsSolo {
         }
 
         def startGame(setup : Setup, recorded : $[String] = $, self : |[Faction] = None) {
+            // Clear the map preview from setup menu
+            getElem("map-small").innerHTML = ""
+
             setup.options = GameOptions.all.intersect(setup.options)
             val seating = setup.seating.%(f => setup.difficulty(f) != Off)
 
@@ -517,6 +522,10 @@ object CthulhuWarsSolo {
                 case Some(MapEarth35) | None => EarthMap4v35
                 case Some(MapEarth53) => EarthMap4v53
                 case Some(MapEarth55) => EarthMap5
+                case Some(MapLibrary55) => LibraryCelaeno55
+                case Some(MapLibrary33) => LibraryCelaeno33
+                case Some(MapLibrary35) => LibraryCelaeno35
+                case Some(MapLibrary53) => LibraryCelaeno53
             }
 
             val track = seating.num @@ {
@@ -559,6 +568,15 @@ object CthulhuWarsSolo {
 
                     case RollD6(question, roll) =>
                         UIRollD6(game, question, roll)
+
+                    case RollAgony(question, roll) if setup.dice && recorded.any && recorded.num > actions.num && localReplay.not =>
+                        try { UIPerform(game, serializer.parseAction(recorded(actions.num).replace("&gt;", ">"))) }
+                        catch { case _ : Throwable => UIPerform(game, roll(AgonyDie.roll())) }
+                    case RollAgony(question, roll) if setup.dice =>
+                        UIPerform(game, roll(AgonyDie.roll()))
+
+                    case RollAgony(question, roll) =>
+                        UIRollAgony(game, question, roll)
 
                     case RollBattle(_, 0, roll) =>
                         UIPerform(game, roll($))
@@ -724,15 +742,20 @@ object CthulhuWarsSolo {
             // Round 8 Bug 53: shared GlyphPlacement engine. Used by findAnother (random
             // valid placement for unit layout) and findStaticGlyphPos (deterministic
             // position for dynamic-start faction glyphs — FB, TS, etc.).
-            val glyphPlacer = new GlyphPlacement(board.id)
-            val place = glyphPlacer.place
-            val findAnother = (x : Int, y : Int) => glyphPlacer.findAnother(x, y)
+            // Library maps: separate placement bitmaps for vertical and horizontal orientations.
+            // Create both up front; activeGlyphPlacer switches based on orientation in drawMap.
+            val glyphPlacerV = new GlyphPlacement(board.id)
+            val glyphPlacerH = if (board.isLibraryMap) new GlyphPlacement(board.id + "-h") else glyphPlacerV
+            var activeGlyphPlacer = glyphPlacerV
+            def place = activeGlyphPlacer.place
+            val findAnother = (x : Int, y : Int) => activeGlyphPlacer.findAnother(x, y)
             // Cache glyph positions: glyphs are static (same position every render).
             // Without caching, findStaticGlyphPos scans the entire placement bitmap
             // on every map redraw — consuming 85% of all CPU time.
             val glyphPosCache = scala.collection.mutable.Map[(Int, Int), (Int, Int)]()
+            var glyphPosCacheHorizontal : Boolean = false
             def findStaticGlyphPos(gx : Int, gy : Int) : (Int, Int) =
-                glyphPosCache.getOrElseUpdate((gx, gy), glyphPlacer.findStaticGlyphPos(gx, gy, halfGlyph = 33, halfGate = 38))
+                glyphPosCache.getOrElseUpdate((gx, gy), activeGlyphPlacer.findStaticGlyphPos(gx, gy, halfGlyph = (33 * board.unitScale).toInt, halfGate = (38 * board.unitScale).toInt, maxRadius = (200 * board.unitScale).toInt))
 
             case object DesecrationToken extends FactionUnitClass(YS, "Desecration", Token, 0)
             case object IceAgeToken extends FactionUnitClass(WW, "Ice Age", Token, 0)
@@ -769,6 +792,8 @@ object CthulhuWarsSolo {
                     case FB => Processing(|("#CB307E"), |("#333333"), None)
                     // Daemon Sultan (DS): faction color
                     case DS => Processing(|("#3A2825"), None, |("#120E0C"))
+                    // Library map units: no tint (use original icon images)
+                    case LibraryFaction => defaultProcessing
                     case _  => defaultProcessing
                 }
 
@@ -934,26 +959,50 @@ object CthulhuWarsSolo {
                     case StartingGlyph if faction == FB => DrawRect("fb-glyph", None, x - 33, y - 33, 66, 66)
                     case StartingGlyph if faction == TS => DrawRect("ts-glyph", None, x - 33, y - 33, 66, 66)
                     case StartingGlyph if faction == AN => DrawRect("an-glyph", None, x - 33, y - 33, 66, 66)
-                    case StartingGlyph if faction == OW => DrawRect("ow-glyph", None, x - 33, y - 33, 66, 66)
+                    case StartingGlyph if faction == OW => DrawRect("ow-glyph", None, x - 33, y - 33, 66, 66, alpha = 0.55)
+
+                    // Library map units — larger than monsters, smaller than GOOs
+                    case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 65, y - 130, 130, 130)
+                    case TheLibrarian => DrawRect("librarian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 58, y - 182, 117, 182)
 
                     case _ => null
                 }
 
-                def rect = proto
+                // Library maps: scale up unit sprites to match Earth-map visual size.
+                // Library maps are 2-floor joined images (~2x larger per dimension).
+                // Only scale on-map units (region != null), not faction card glyphs.
+                def scaledProto : DrawRect = {
+                    val p = proto
+                    if (p == null) return null
+                    val s = if (region != null) board.unitScale else 1.0
+                    if (s > 1.01) p.copy(
+                        x = (x + (p.x - x) * s).toInt,
+                        y = (y + (p.y - y) * s).toInt,
+                        width = (p.width * s).toInt,
+                        height = (p.height * s).toInt,
+                        cx = (p.cx * s).toInt,
+                        cy = (p.cy * s).toInt
+                    ) else p
+                }
+
+                def rect = scaledProto
                     .useIf(tags.has(Hidden))(_.copy(alpha = 0.5))
                     .useIf(tags.has(Absorbed)) { r =>
                         val k = math.sqrt(1 + tags.count(Absorbed))
                         r.copy(x = r.x + (r.width * 0.5 + r.cx) * (1 - k) ~, y = r.y + (r.height * 0.5 + r.cy) * (1 - k) ~, width = r.width * k ~, height = r.height * k ~, cx = r.cx * k ~, cy = r.cy * k ~)
                     }
 
-                def icon =
+                def icon = {
+                    val hs = (30 * board.unitScale).toInt
+                    val is = (60 * board.unitScale).toInt
                     if (health == Killed)
-                        |(DrawRect("kill", None, x + rect.cx - 30, (rect.y + y) / 2 + rect.cy - 30, 60, 60))
+                        |(DrawRect("kill", None, x + rect.cx - hs, (rect.y + y) / 2 + rect.cy - hs, is, is))
                     else
                     if (health == Pained)
-                        |(DrawRect("pain", None, x - 29 + rect.cx, (rect.y + y) / 2 + rect.cy - 30, 60, 60))
+                        |(DrawRect("pain", None, x - hs + 1 + rect.cx, (rect.y + y) / 2 + rect.cy - hs, is, is))
                     else
                         None
+                }
             }
 
             var oldPositions : $[DrawItem] = $
@@ -992,13 +1041,32 @@ object CthulhuWarsSolo {
                     oldGates = $
                 }
 
-                var mp = getAsset(board.id)
+                // Library maps: switch placement bitmap based on orientation
+                if (board.isLibraryMap) {
+                    val target = if (horizontal) glyphPlacerH else glyphPlacerV
+                    if (activeGlyphPlacer ne target) {
+                        activeGlyphPlacer = target
+                        glyphPosCache.clear()
+                    }
+                }
 
-                val gateXYO : Region => (Int, Int) = board.gateXYO
+                var mp = if (board.isLibraryMap && horizontal)
+                    getAsset(board.id + "-h")
+                else
+                    getAsset(board.id)
+
+                val gateXYO : Region => (Int, Int) =
+                    if (board.isLibraryMap && horizontal) board.gateXYOHorizontal
+                    else board.gateXYO
 
                 def gateXY(r : Region) =
-                    if (horizontal)
+                    if (horizontal && !board.isLibraryMap)
                         gateXYO(r)
+                    else if (board.isLibraryMap) {
+                        // Library maps: both orientations use pre-joined images, no coord rotation
+                        val (x, y) = gateXYO(r)
+                        (x, y)
+                    }
                     else {
                         val (x, y) = gateXYO(r)
                         (mp.height - y, x)
@@ -1006,6 +1074,8 @@ object CthulhuWarsSolo {
 
                 def find(ox : Int, oy : Int) =
                     if (horizontal)
+                        findAnother(ox, oy)
+                    else if (board.isLibraryMap)
                         findAnother(ox, oy)
                     else {
                         val (x, y) = findAnother(oy, mp.height - ox)
@@ -1020,6 +1090,22 @@ object CthulhuWarsSolo {
 
                 if (horizontal)
                 {
+                    val dw = 12
+                    val dh = 12
+                    if ((dw + mp.width + dw) * bitmap.height < bitmap.width * (dh + mp.height + dh)) {
+                        g.translate((bitmap.width - (dw + mp.width + dw) * bitmap.height / (dh + mp.height + dh)) / 2, 0)
+                        g.scale(1.0 * bitmap.height / (dh + mp.height + dh), 1.0 * bitmap.height / (dh + mp.height + dh))
+                    }
+                    else {
+                        g.translate(0, (bitmap.height - (dh + mp.height + dh) * bitmap.width / (dw + mp.width + dw)) / 2)
+                        g.scale(1.0 * bitmap.width / (dw + mp.width + dw), 1.0 * bitmap.width / (dw + mp.width + dw))
+                    }
+                    g.translate(dw, dh)
+                    g.drawImage(mp, 0, 0)
+                }
+                else if (board.isLibraryMap) {
+                    // Library maps: vertical image is pre-joined (Upper on top, Lower on bottom)
+                    // No rotation needed — draw directly, fitting to canvas
                     val dw = 12
                     val dh = 12
                     if ((dw + mp.width + dw) * bitmap.height < bitmap.width * (dh + mp.height + dh)) {
@@ -1059,8 +1145,71 @@ object CthulhuWarsSolo {
                 var draws : $[DrawItem] = $
 
                 areas.foreach { r =>
-                    val (px, py) = gateXY(r)
+                    val (rawPx, rawPy) = gateXY(r)
                     val gated = game.gates.has(r)
+
+                    // Library: check if an unclaimed tome is in this region
+                    val tomeInRegion = if (board.isLibraryMap) TomePlacement.positions.find { case (tome, _, _, _, _) =>
+                        tome.region == r && !game.tomeHolders.getOrElse(tome, None).isDefined
+                    } else None
+
+                    // Gate position: offset away from tome when tome is present
+                    val (gatePx, gatePy) = tomeInRegion match {
+                        case Some((_, _, _, _, th)) if gated => (rawPx, rawPy + (th * 0.7).toInt)
+                        case _ => (rawPx, rawPy)
+                    }
+                    // Unit anchor: when tome present WITHOUT gate, offset units around tome
+                    // When tome+gate both present, or no tome, use gate position
+                    val (px, py) = tomeInRegion match {
+                        case Some((_, _, _, _, th)) if !gated => (rawPx, rawPy + (th * 0.7).toInt)
+                        case _ => (gatePx, gatePy)
+                    }
+
+                    // Library maps: validate gate fits inside region, nudge if needed
+                    val (adjGatePx, adjGatePy) = if (board.isLibraryMap && place.nonEmpty) {
+                        val halfGate = (38 * board.unitScale).toInt
+                        val gpx = rawPx.min(place.length - 1).max(0)
+                        val gpy = rawPy.min(place(0).length - 1).max(0)
+                        var regionColor = place(gpx)(gpy)
+                        // If center lands on white boundary, search nearby for the real region color
+                        val isWhite = (regionColor >> 16 & 0xFF) > 240 && (regionColor >> 8 & 0xFF) > 240 && (regionColor & 0xFF) > 240
+                        if (isWhite) {
+                            val searchOffsets = $(10, 20, 30, 40, 50)
+                            val dirs = $(0 -> 1, 1 -> 0, 0 -> -1, -1 -> 0, 1 -> 1, -1 -> -1)
+                            var found = false
+                            searchOffsets.foreach { d => if (!found) dirs.foreach { case (dx, dy) => if (!found) {
+                                val sx = (gpx + dx * d).min(place.length - 1).max(0)
+                                val sy = (gpy + dy * d).min(place(0).length - 1).max(0)
+                                val c = place(sx)(sy)
+                                val cw = (c >> 16 & 0xFF) > 240 && (c >> 8 & 0xFF) > 240 && (c & 0xFF) > 240
+                                if (!cw && c != 0) { regionColor = c; found = true }
+                            }}}
+                        }
+                        var gx = gatePx; var gy = gatePy
+                        // Check corners of gate box; if any are outside region, nudge inward
+                        var nudged = false
+                        for (attempt <- 0 until 15 if !nudged) {
+                            val offsets = $(-halfGate, halfGate)
+                            var outsideCount = 0
+                            var nudgeDx = 0; var nudgeDy = 0
+                            offsets.foreach { ox => offsets.foreach { oy =>
+                                val cx = (gx + ox).min(place.length - 1).max(0)
+                                val cy = (gy + oy).min(place(0).length - 1).max(0)
+                                if (place(cx)(cy) != regionColor) {
+                                    outsideCount += 1
+                                    // Push away from the failing corner
+                                    nudgeDx -= ox.sign * 8
+                                    nudgeDy -= oy.sign * 8
+                                }
+                            }}
+                            if (outsideCount == 0) nudged = true
+                            else {
+                                gx += nudgeDx
+                                gy += nudgeDy
+                            }
+                        }
+                        (gx, gy)
+                    } else (gatePx, gatePy)
 
                     val controler = game.setup.%(_.gates.has(r)).single
                     val keeper = controler./~(_.at(r).%(_.onGate).%(_.health == Alive).starting)
@@ -1071,13 +1220,13 @@ object CthulhuWarsSolo {
                     var free : $[DrawItem] = $
 
                     if (gated && DS.chaosGateRegions.has(r).not)
-                        fixed +:= DrawItem(r, null, Gate, Alive, $, px, py)
+                        fixed +:= DrawItem(r, null, Gate, Alive, $, adjGatePx, adjGatePy)
 
                     if (DS.chaosGateRegions.has(r))
-                        fixed +:= DrawItem(r, DS, ChaosGate, Alive, $, px, py)
+                        fixed +:= DrawItem(r, DS, ChaosGate, Alive, $, adjGatePx, adjGatePy)
 
                     keeper match {
-                        case Some(u) => fixed +:= DrawItem(r, u.faction, u.uclass, u.health, u.state, px, py)
+                        case Some(u) => fixed +:= DrawItem(r, u.faction, u.uclass, u.health, u.state, adjGatePx, adjGatePy)
                         case _ =>
                     }
 
@@ -1085,6 +1234,14 @@ object CthulhuWarsSolo {
                         f.at(r).diff(keeper.$).foreach { u =>
                             all +:= DrawItem(r, f, u.uclass, u.health, u.state, 0, 0)
                         }
+                    }
+
+                    // Library at Celaeno: Custodian and Librarian on map as proper units
+                    if (board.isLibraryMap) {
+                        if (game.custodianRegion.has(r))
+                            all +:= DrawItem(r, LibraryFaction, TheCustodian, Alive, $, 0, 0)
+                        if (game.librarianRegion.has(r))
+                            all +:= DrawItem(r, LibraryFaction, TheLibrarian, Alive, $, 0, 0)
                     }
 
                     if (game.desecrated.has(r))
@@ -1108,34 +1265,88 @@ object CthulhuWarsSolo {
                     // Round 8 Bug 52: use `game.setup` (the full faction list set at game creation)
                     // instead of `game.factions` (the play order, set only after PlayDirectionAction).
                     // Otherwise the glyph wouldn't render until after play order was decided.
-                    if (game.setup.has(FB) && game.starting.get(FB).contains(r)) {
-                        val (glyphX, glyphY) = findStaticGlyphPos(px, py)
-                        fixed +:= DrawItem(r, FB, StartingGlyph, Alive, $, glyphX, glyphY)
-                    }
+                    // Faction starting glyphs — placed offset from gate to avoid overlap
+                    // Library maps: use fixed offset (findStaticGlyphPos fails on large scaled regions)
+                    // Earth maps: use findStaticGlyphPos for smart placement
+                    def placeGlyph(f : Faction) {
+                        if (game.setup.has(f) && game.starting.get(f).contains(r)) {
+                            val (glyphX, glyphY) = if (board.isLibraryMap) {
+                                // Search for a position where 80%+ of the glyph is inside the region
+                                // Use validated gate position (adjGatePx/Py) as search center
+                                var regionColor = place(adjGatePx.min(place.length - 1).max(0))(adjGatePy.min(place(0).length - 1).max(0))
+                                // If center is white boundary, search nearby for real region color
+                                val rcWhite = (regionColor >> 16 & 0xFF) > 240 && (regionColor >> 8 & 0xFF) > 240 && (regionColor & 0xFF) > 240
+                                if (rcWhite) {
+                                    val sOffsets = $(10, 20, 30, 40, 50)
+                                    val sDirs = $(0 -> 1, 1 -> 0, 0 -> -1, -1 -> 0, 1 -> 1, -1 -> -1)
+                                    var rcFound = false
+                                    sOffsets.foreach { d => if (!rcFound) sDirs.foreach { case (ddx, ddy) => if (!rcFound) {
+                                        val sx2 = (adjGatePx + ddx * d).min(place.length - 1).max(0)
+                                        val sy2 = (adjGatePy + ddy * d).min(place(0).length - 1).max(0)
+                                        val c2 = place(sx2)(sy2)
+                                        val c2w = (c2 >> 16 & 0xFF) > 240 && (c2 >> 8 & 0xFF) > 240 && (c2 & 0xFF) > 240
+                                        if (!c2w && c2 != 0) { regionColor = c2; rcFound = true }
+                                    }}}
+                                }
+                                val halfG = (33 * board.unitScale).toInt
+                                val halfGate = (38 * board.unitScale).toInt
+                                val searchRadius = (150 * board.unitScale).toInt
 
-                    // Tombstalker (TS): draw TS faction glyph at starting region if TS is in the game
-                    // (dynamic-start ocean faction — same pattern as FB). Uses findStaticGlyphPos for
-                    // smart positioning that avoids region borders and the gate. Uses `game.setup`
-                    // (not `game.factions`) so the glyph appears as soon as TS picks its region,
-                    // not after play order is decided. Uses StartingGlyph (66x66, see Bug 53)
-                    // instead of FactionGlyph (100x100, used by faction panel).
-                    if (game.setup.has(TS) && game.starting.get(TS).contains(r)) {
-                        val (glyphX, glyphY) = findStaticGlyphPos(px, py)
-                        fixed +:= DrawItem(r, TS, StartingGlyph, Alive, $, glyphX, glyphY)
+                                // Try offsets in a spiral pattern around the validated gate position
+                                val searchCx = adjGatePx
+                                val searchCy = adjGatePy
+                                var bestX = searchCx
+                                var bestY = searchCy
+                                var bestScore = -1
+                                val step = 10
+                                var dy = -searchRadius
+                                while (dy <= searchRadius) {
+                                    var dx = -searchRadius
+                                    while (dx <= searchRadius) {
+                                        val cx = searchCx + dx
+                                        val cy = searchCy + dy
+                                        if (cx >= halfG && cx < place.length - halfG && cy >= halfG && cy < place(0).length - halfG) {
+                                            // Count region pixels in glyph box
+                                            var inRegion = 0
+                                            var total = 0
+                                            var sy = -halfG
+                                            while (sy <= halfG) {
+                                                var sx = -halfG
+                                                while (sx <= halfG) {
+                                                    total += 1
+                                                    if (place(cx + sx)(cy + sy) == regionColor) inRegion += 1
+                                                    sx += 4
+                                                }
+                                                sy += 4
+                                            }
+                                                            // Must have 80%+ inside region AND not overlap gate
+                                            val pct = inRegion * 100 / total
+                                            val gateOverlap = scala.math.abs(cx - searchCx) < halfGate + halfG && scala.math.abs(cy - searchCy) < halfGate + halfG
+                                            // Prefer below-gate placement (higher cy = lower on screen)
+                                            val belowBonus = if (cy > searchCy) 500 else 0
+                                            val score = if (pct >= 80 && !gateOverlap) pct * 1000 + belowBonus + (searchRadius - scala.math.abs(dx) - scala.math.abs(dy))
+                                                else if (pct >= 80) pct
+                                                else -1
+                                            if (score > bestScore) {
+                                                bestScore = score
+                                                bestX = cx
+                                                bestY = cy
+                                            }
+                                        }
+                                        dx += step
+                                    }
+                                    dy += step
+                                }
+                                (bestX, bestY)
+                            } else
+                                findStaticGlyphPos(rawPx, rawPy)
+                            fixed +:= DrawItem(r, f, StartingGlyph, Alive, $, glyphX, glyphY)
+                        }
                     }
-
-                    // Round 9: AN and OW use dynamic starting-region glyphs too.
-                    // They pick from nonFactionRegions / all regions respectively at setup,
-                    // so they need the same findStaticGlyphPos treatment as FB/TS.
-                    if (game.setup.has(AN) && game.starting.get(AN).contains(r)) {
-                        val (glyphX, glyphY) = findStaticGlyphPos(px, py)
-                        fixed +:= DrawItem(r, AN, StartingGlyph, Alive, $, glyphX, glyphY)
-                    }
-
-                    if (game.setup.has(OW) && game.starting.get(OW).contains(r)) {
-                        val (glyphX, glyphY) = findStaticGlyphPos(px, py)
-                        fixed +:= DrawItem(r, OW, StartingGlyph, Alive, $, glyphX, glyphY)
-                    }
+                    placeGlyph(FB)
+                    placeGlyph(TS)
+                    placeGlyph(AN)
+                    placeGlyph(OW)
 
                     if (game.setup.%(_.iceAge.?(_ == r)).any)
                         all +:= DrawItem(r, null, IceAgeToken, Alive, $, 0, 0)
@@ -1169,6 +1380,8 @@ object CthulhuWarsSolo {
 
                     def rank(d : DrawItem) = d.unit.utype match {
                         case Token => 0
+                        case MapUnit => 0
+                        case Building => 0
                         case Cultist => 1
                         case Monster => 2
                         case Terror => 3
@@ -1177,14 +1390,20 @@ object CthulhuWarsSolo {
 
                     free.sortBy(d => -rank(d)).foreach { d =>
                         sticking +:= Array.tabulate(40)(n => find(px, py)).sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }.map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y) }.minBy { dd =>
-                            (draws ++ fixed ++ sticking).map { oo =>
+                            val overlapScore = (draws ++ fixed ++ sticking).map { oo =>
                                 val d = dd.rect
                                 val o = oo.rect
-                                val w = min(o.x + o.width, d.x + d.width) - max(o.x, d.x)
-                                val h = min(o.y + o.height, d.y + d.height) - max(o.y, d.y)
-                                val s = (w > 0 && h > 0).?(w * h).|(0)
-                                s * (1.0 / (o.width * o.height) + 1.0 / (d.width * d.height))
+                                if (d == null || o == null) 0.0
+                                else {
+                                    val w = min(o.x + o.width, d.x + d.width) - max(o.x, d.x)
+                                    val h = min(o.y + o.height, d.y + d.height) - max(o.y, d.y)
+                                    val s = (w > 0 && h > 0).?(w * h).|(0)
+                                    s * (1.0 / (o.width * o.height) + 1.0 / (d.width * d.height))
+                                }
                             }.sum
+                            // Add proximity penalty to keep units near gate center
+                            val distFromGate = ((dd.x - px).abs + (dd.y - py).abs).toDouble / 1000.0
+                            overlapScore + distFromGate
                         }
 
                     }
@@ -1196,23 +1415,47 @@ object CthulhuWarsSolo {
 
                 oldGates = game.gates
 
-                // Draw starting region glyphs for variable-setup factions (underneath all units)
-                // DS uses a tighter offset (lone acolyte); OW/AN use larger offset (6 acolytes + gate)
-                $(DS, OW, AN).foreach { f =>
-                    val startR = game.starting.get(f).filter(_ => f != DS || DS.cultists.any)
-                    startR.foreach { r =>
+                // DS starting region glyph (DS isn't in the DrawItem loop above because
+                // it only shows when cultists are present, unlike FB/TS/AN/OW which show always)
+                if (game.setup.has(DS) && DS.cultists.any) {
+                    game.starting.get(DS).foreach { r =>
                         val (gx, gy) = gateXY(r)
-                        val size = 60
-                        val key = f match {
-                            case DS => "ds-glyph"
-                            case OW => "ow-glyph"
-                            case AN => "an-glyph"
-                            case _  => ""
+                        val size = (60 * board.unitScale).toInt
+                        val (sx, sy) = findStaticGlyphPos(gx, gy)
+                        g.drawImage(getAsset("ds-glyph"), sx - size / 2, sy - size / 2, size, size)
+                    }
+                }
+
+                // Library at Celaeno: draw tomes on the map for unclaimed tomes
+                if (board.isLibraryMap) {
+                    val tomeImg = getAsset("library-tome")
+                    TomePlacement.positions.foreach { case (tome, tcx, tcy, tw, th) =>
+                        val held = game.tomeHolders.getOrElse(tome, None).isDefined
+                        if (!held) {
+                            val (sx, sy) = if (horizontal) {
+                                if (tcy < 1792) (tcx + 1791, tcy) else (tcx, tcy - 1792)
+                            } else (tcx, tcy)
+                            g.drawImage(tomeImg, sx - tw/2, sy - th/2, tw, th)
                         }
-                        if (key.nonEmpty) {
-                            val (ox, oy) = if (f == DS) (45, -30) else (80, -60)
-                            g.drawImage(getAsset(key), gx + ox - size / 2, gy + oy - size / 2, size, size)
-                        }
+                    }
+
+                    // Draw Custodian and Librarian in starting circles when off-map
+                    val has5L = board.regions.exists(_.name == "Scorched Chamber")
+                    val (libX, libY) = if (has5L) LibraryUnitPlacement.librarianPos5L else LibraryUnitPlacement.librarianPos3L
+                    val (cusX, cusY) = if (has5L) LibraryUnitPlacement.custodianPos5L else LibraryUnitPlacement.custodianPos3L
+
+                    def toScreen(vx : Int, vy : Int) = if (horizontal) {
+                        if (vy < 1792) (vx + 1791, vy) else (vx, vy - 1792)
+                    } else (vx, vy)
+
+                    val us = LibraryUnitPlacement.unitSize
+                    if (game.librarianRegion.isEmpty) {
+                        val (sx, sy) = toScreen(libX, libY)
+                        g.drawImage(getAsset("librarian-icon"), sx - us/2, sy - us/2, us, us)
+                    }
+                    if (game.custodianRegion.isEmpty) {
+                        val (sx, sy) = toScreen(cusX, cusY)
+                        g.drawImage(getAsset("custodian-icon"), sx - us/2, sy - us/2, us, us)
                     }
                 }
 
@@ -1233,24 +1476,119 @@ object CthulhuWarsSolo {
                     if (d.icon.any)
                         g.drawImage(getAsset(d.icon.get.key), d.icon.get.x, d.icon.get.y)
                 }
+
+                // Library: draw hint card, tome info, and white Custodian/Librarian silhouettes in top-right corner
+                if (board.isLibraryMap) {
+                    val silSize = 100
+                    val silX = mp.width - 120
+                    val tomeInfoW = 80
+                    val tomeInfoH = 112
+                    val tomeInfoX = silX - tomeInfoW - 10
+                    val hintW = 100
+                    val hintH = 140
+                    val hintX = tomeInfoX - hintW - 10
+                    g.globalAlpha = 0.85
+                    g.drawImage(getAsset("library-hint-card"), hintX, 10, hintW, hintH)
+                    g.drawImage(getAsset("library-tome-card"), tomeInfoX, 10, tomeInfoW, tomeInfoH)
+                    g.globalAlpha = 0.8
+                    g.drawImage(getAsset("custodian-silhouette"), silX, 10, silSize, silSize)
+                    g.drawImage(getAsset("librarian-silhouette"), silX, 120, silSize, silSize)
+                    g.globalAlpha = 1.0
+                }
+            }
+
+            // Library: check if click hits a tome or silhouette on the map
+            def checkLibraryClick(e : dom.MouseEvent, mapElem : html.Element) : Boolean = {
+                if (!board.isLibraryMap) return false
+                implicit val g = displayGame
+                val canvas = map.canvas
+                val rect = canvas.getBoundingClientRect()
+                val clickX = e.clientX - rect.left
+                val clickY = e.clientY - rect.top
+                val scaleX = canvas.width.toDouble / rect.width
+                val scaleY = canvas.height.toDouble / rect.height
+                val cx = (clickX * scaleX).toInt
+                val cy = (clickY * scaleY).toInt
+
+                val mp = if (horizontal) getAsset(board.id + "-h") else getAsset(board.id)
+                val dw = 12
+                val dh = 12
+                val fitW = (dw + mp.width + dw) * canvas.height < canvas.width * (dh + mp.height + dh)
+                val imgScale = if (fitW) 1.0 * canvas.height / (dh + mp.height + dh) else 1.0 * canvas.width / (dw + mp.width + dw)
+                val offsetX = if (fitW) (canvas.width - (dw + mp.width + dw) * imgScale) / 2.0 else 0.0
+                val offsetY = if (fitW) 0.0 else (canvas.height - (dh + mp.height + dh) * imgScale) / 2.0
+
+                def imgToCanvas(ix : Int, iy : Int) = ((offsetX + (dw + ix) * imgScale).toInt, (offsetY + (dh + iy) * imgScale).toInt)
+
+                // Check tomes
+                TomePlacement.positions.foreach { case (tome, tcx, tcy, tw, th) =>
+                    val held = g.tomeHolders.getOrElse(tome, None).isDefined
+                    if (!held) {
+                        val (sx, sy) = if (horizontal) {
+                            if (tcy < 1792) (tcx + 1791, tcy) else (tcx, tcy - 1792)
+                        } else (tcx, tcy)
+                        val (ccx, ccy) = imgToCanvas(sx, sy)
+                        val hw = (tw * imgScale / 2).toInt
+                        val hh = (th * imgScale / 2).toInt
+                        if (cx >= ccx - hw && cx <= ccx + hw && cy >= ccy - hh && cy <= ccy + hh) {
+                            Overlays.onExternalClick(tome.name, true)
+                            return true
+                        }
+                    }
+                }
+
+                // Check tome info card and hint card (to the left of silhouettes)
+                val silSize = (100 * imgScale).toInt
+                val tomeInfoW = (80 * imgScale).toInt
+                val tomeInfoH = (112 * imgScale).toInt
+                val hintW = (100 * imgScale).toInt
+                val hintH = (140 * imgScale).toInt
+                val (silX, silY1) = imgToCanvas(mp.width - 120, 10)
+                val (tomeInfoCX, tomeInfoCY) = imgToCanvas(mp.width - 120 - 80 - 10, 10)
+                val (hintCX, hintCY) = imgToCanvas(mp.width - 120 - 80 - 10 - 100 - 10, 10)
+                if (cx >= tomeInfoCX && cx <= tomeInfoCX + tomeInfoW && cy >= tomeInfoCY && cy <= tomeInfoCY + tomeInfoH) {
+                    Overlays.onExternalClick("LibraryTomeInfo", true)
+                    return true
+                }
+                if (cx >= hintCX && cx <= hintCX + hintW && cy >= hintCY && cy <= hintCY + hintH) {
+                    Overlays.onExternalClick("LibraryHintCard", true)
+                    return true
+                }
+
+                // Check custodian/librarian silhouettes (top-right corner of map)
+                val (_, silY2) = imgToCanvas(mp.width - 120, 120)
+                if (cx >= silX && cx <= silX + silSize && cy >= silY1 && cy <= silY1 + silSize) {
+                    Overlays.onExternalClick("Custodian", true)
+                    return true
+                }
+                if (cx >= silX && cx <= silX + silSize && cy >= silY2 && cy <= silY2 + silSize) {
+                    Overlays.onExternalClick("Librarian", true)
+                    return true
+                }
+
+                false
             }
 
             mapSmall.onclick = (e) => {
-                hide(mapSmall.parentElement.parentElement)
-                show(mapBig.parentElement.parentElement)
+                if (!checkLibraryClick(e, mapSmall)) {
+                    hide(mapSmall.parentElement.parentElement)
+                    show(mapBig.parentElement.parentElement)
 
-                map = mapBitmapBig
-                invalidateMapSize()
-                drawMap(displayGame)
+                    map = mapBitmapBig
+                    invalidateMapSize()
+                    drawMap(displayGame)
+                }
             }
 
             mapBig.onclick = (e) => {
-                hide(mapBig.parentElement.parentElement)
-                show(mapSmall.parentElement.parentElement)
+                if (!checkLibraryClick(e, mapBig)) {
+                    hide(mapBig.parentElement.parentElement)
+                    show(mapSmall.parentElement.parentElement)
 
-                map = mapBitmapSmall
-                invalidateMapSize()
-                drawMap(displayGame)
+                    map = mapBitmapSmall
+                    invalidateMapSize()
+                    drawMap(displayGame)
+                }
             }
 
             drawMap(displayGame)
@@ -1267,8 +1605,13 @@ object CthulhuWarsSolo {
 
                 val current = game.factions.starting.has(f)
 
-                val name = div("name")("" + f + "")
-                val nameS = div("name")(f.short.styled(f) + "")
+                // Library at Celaeno: silence token icon next to faction name
+                val stCount = if (board.isLibraryMap) game.silenceTokens.getOrElse(f, 0) else 0
+                val silenceTokenIcon = if (stCount > 0)
+                    s""" <span onclick='event.stopPropagation(); onExternalClick("SilenceToken", true)' onpointerover='event.stopPropagation(); onExternalOver("SilenceToken", true)' onpointerout='event.stopPropagation(); onExternalOut("SilenceToken", true)' style='cursor:pointer'><img src='${Overlays.imageSource("silence-token")}' style='height:1.2em; vertical-align:middle;'/></span>"""
+                else ""
+                val name = div("name")("" + f + silenceTokenIcon)
+                val nameS = div("name")(f.short.styled(f) + silenceTokenIcon)
                 // Tombstalker (TS): append Death's Head count to faction status panel
                 val dhStr = (f == TS).?(" | " + (game.deathsHead.toString + " Death's Head").styled(TS)).|("")
                 // Firstborn (FB): Round 8 Bug 75 — append Infernal Pact discount count
@@ -1297,8 +1640,31 @@ object CthulhuWarsSolo {
                     s"""<span onclick='event.stopPropagation(); onExternalClick("cursed-tomes", "$fStyle")' onpointerover='event.stopPropagation(); onExternalOver("cursed-tomes", "$fStyle")' onpointerout='event.stopPropagation(); onExternalOut("cursed-tomes", "$fStyle")' style='cursor:pointer; float:right; margin-left:0.5em;'>${tomeNumToRoman(tsNextTome).styled(TS)}<img src='${Overlays.imageSource("ts-cursed-tome")}' style='height:1.2em; vertical-align:middle;'/></span>"""
                 ).|("")
 
-                val doom = div()(tsStack + ("" + f.doom + " Doom").styled("doom") + f.es.any.?(" + " + (f.es.num == 1).?("ES").|("" + f.es.num + " ES").styled("es")).|("") + tomeStr)
-                val doomL = div()(tsStack + ("" + f.doom + " Doom").styled("doom") + f.es.any.?(" + " + (f.es.num == 1).?("Elder Sign").|("" + f.es.num + " Elder Signs").styled("es")).|("") + tomeStr)
+                // Library at Celaeno: show held Library Tomes on faction card
+                // Face-up: use specific tome image. Face-down (flipped after use): use generic back.
+                val tomeBackSrc = if (board.isLibraryMap) Overlays.imageSource("library-tome-card") else ""
+                def tomeAssetId(t : LibraryTome) = t match {
+                    case TomeBarrier => "tome-barrier"
+                    case TomeGuardian => "tome-guardian"
+                    case TomeLarvae => "tome-larvae"
+                    case TomeYr => "tome-yr"
+                }
+                val libraryTomeStr = if (board.isLibraryMap) {
+                    val heldTomes = $(TomeBarrier, TomeGuardian, TomeLarvae, TomeYr).%(t =>
+                        game.tomeHolders.getOrElse(t, None).has(f))
+                    heldTomes./{ t =>
+                        val overdue = game.tomeOverdue.getOrElse(t, false)
+                        val faceUp = game.tomeFaceUp.getOrElse(t, true)
+                        val tn = t.name.replace("\\", "\\\\").replace("'", "&#39")
+                        val overdueMarker = overdue.??("<span style='position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-weight:bold;font-size:1em;color:red;text-shadow:0 0 2px black;'>O</span>")
+                        // Barrier never flips, always face-up. Others: face-up image when up, generic back when down.
+                        val imgSrc = if (faceUp || t == TomeBarrier) Overlays.imageSource(tomeAssetId(t)) else tomeBackSrc
+                        s""" <span onclick='event.stopPropagation(); onExternalClick("${tn}", ${faceUp})' onpointerover='event.stopPropagation(); onExternalOver("${tn}", ${faceUp})' onpointerout='event.stopPropagation(); onExternalOut("${tn}", ${faceUp})' style='cursor:pointer;position:relative;display:inline-block;vertical-align:middle;'><img src='${imgSrc}' style='height:1.4em;display:block;'/>${overdueMarker}</span>"""
+                    }.mkString("")
+                } else ""
+
+                val doom = div()(tsStack + ("" + f.doom + " Doom").styled("doom") + f.es.any.?(" + " + (f.es.num == 1).?("ES").|("" + f.es.num + " ES").styled("es")).|("") + libraryTomeStr + tomeStr)
+                val doomL = div()(tsStack + ("" + f.doom + " Doom").styled("doom") + f.es.any.?(" + " + (f.es.num == 1).?("Elder Sign").|("" + f.es.num + " Elder Signs").styled("es")).|("") + libraryTomeStr + tomeStr)
                 val doomS = div()(("" + f.doom + "D").styled("doom") + f.es.any.?("+" + ("" + f.es.num + "ES").styled("es")).|("") + tomeSStr)
 
                 val sb = f.spellbooks./{ sb =>
@@ -2206,6 +2572,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             case UIRollD6(g, q, roll) => {
                                 ask(q(g), (1::2::3::4::5::6)./("[" + _.styled("power") + "]"), x => perform(roll(x)))
                             }
+                            case UIRollAgony(g, q, roll) => {
+                                ask(q(g), AgonyDie.faces.distinct.sorted./("[" + _.styled("power") + "]"), x => perform(roll(x)))
+                            }
                             case UIRollBattle(g, q, n, roll) if n <= 3 => {
                                 def apr(br : BattleRoll) = 0.to(n)./(_.times(br))
                                 val results = apr(Kill)./~(k => apr(Pain)./~(p => apr(Miss)./(m => k ++ p ++ m))).%(_.num == n)
@@ -2413,7 +2782,49 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
             val setup = new Setup(seatings(0), Human)
 
+            def showMapPreview() {
+                val mapDiv = getElem("map-small")
+                setup.options.of[MapOption].lastOption.foreach { opt =>
+                    val imgId = opt match {
+                        case MapEarth33 => "earth33"
+                        case MapEarth35 => "earth35"
+                        case MapEarth53 => "earth53"
+                        case MapEarth55 => "earth55"
+                        case MapLibrary33 => "library3"
+                        case MapLibrary35 => "library4b"
+                        case MapLibrary53 => "library4a"
+                        case MapLibrary55 => "library5"
+                    }
+                    val isHorizontal = dom.window.innerWidth > dom.window.innerHeight
+                    val isLibrary = opt == MapLibrary33 || opt == MapLibrary35 || opt == MapLibrary53 || opt == MapLibrary55
+                    val assetId = if (isLibrary && isHorizontal) imgId + "-h" else imgId
+                    val img = getAsset(assetId)
+                    mapDiv.innerHTML = ""
+                    val canvas = dom.document.createElement("canvas").asInstanceOf[html.Canvas]
+                    canvas.style.width = "100%"
+                    canvas.style.height = "100%"
+                    mapDiv.appendChild(canvas)
+                    val w = mapDiv.clientWidth
+                    val h = mapDiv.clientHeight
+                    if (w > 0 && h > 0) {
+                        canvas.width = w
+                        canvas.height = h
+                        val g = canvas.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D]
+                        val scaleX = w.toDouble / img.width
+                        val scaleY = h.toDouble / img.height
+                        val scale = math.min(scaleX, scaleY)
+                        val dw = (img.width * scale).toInt
+                        val dh = (img.height * scale).toInt
+                        val dx = (w - dw) / 2
+                        val dy = (h - dh) / 2
+                        g.drawImage(img, dx, dy, dw, dh)
+                    }
+                }
+            }
+
             def setupQuestions() {
+                showMapPreview()
+
                 askM($,
                     factions.map(f => "Factions" -> ("" + f + " (" + setup.difficulty(f).elem + ")")) ++
                     seatings.map(ff => ("Seating" + factions.has(GC).not.??(" and first player")) -> ((ff == setup.seating).?(ff.map(_.ss)).|(ff.map(_.short)).mkString(" -> "))) ++
@@ -2603,7 +3014,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         }
                         n -= 1
                         if (n == 0) {
-                            val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55)
+                            val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55, MapLibrary33, MapLibrary35, MapLibrary53, MapLibrary55)
                             setup.options = setup.options.notOf[MapOption] :+ (all.dropWhile(setup.options.of[MapOption].lastOption.has(_).not).drop(1) ++ all).first
                             setupQuestions()
                         }
@@ -2625,7 +3036,49 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
             val setup = new Setup(seatings(0), Human)
 
+            def showMapPreview() {
+                val mapDiv = getElem("map-small")
+                setup.options.of[MapOption].lastOption.foreach { opt =>
+                    val imgId = opt match {
+                        case MapEarth33 => "earth33"
+                        case MapEarth35 => "earth35"
+                        case MapEarth53 => "earth53"
+                        case MapEarth55 => "earth55"
+                        case MapLibrary33 => "library3"
+                        case MapLibrary35 => "library4b"
+                        case MapLibrary53 => "library4a"
+                        case MapLibrary55 => "library5"
+                    }
+                    val isHorizontal = dom.window.innerWidth > dom.window.innerHeight
+                    val isLibrary = opt == MapLibrary33 || opt == MapLibrary35 || opt == MapLibrary53 || opt == MapLibrary55
+                    val assetId = if (isLibrary && isHorizontal) imgId + "-h" else imgId
+                    val img = getAsset(assetId)
+                    mapDiv.innerHTML = ""
+                    val canvas = dom.document.createElement("canvas").asInstanceOf[html.Canvas]
+                    canvas.style.width = "100%"
+                    canvas.style.height = "100%"
+                    mapDiv.appendChild(canvas)
+                    val w = mapDiv.clientWidth
+                    val h = mapDiv.clientHeight
+                    if (w > 0 && h > 0) {
+                        canvas.width = w
+                        canvas.height = h
+                        val g = canvas.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D]
+                        val scaleX = w.toDouble / img.width
+                        val scaleY = h.toDouble / img.height
+                        val scale = math.min(scaleX, scaleY)
+                        val dw = (img.width * scale).toInt
+                        val dh = (img.height * scale).toInt
+                        val dx = (w - dw) / 2
+                        val dy = (h - dh) / 2
+                        g.drawImage(img, dx, dy, dw, dh)
+                    }
+                }
+            }
+
             def setupQuestions() {
+                showMapPreview()
+
                 askM($,
                     factions.map(f => "Factions" -> ("" + f + " (" + setup.difficulty(f).elem + ")")) ++
                     seatings.map(ff => ("Seating" + factions.has(GC).not.??(" and first player")) -> ((ff == setup.seating).?(ff.map(_.ss)).|(ff.map(_.short)).mkString(" -> "))) ++
@@ -2817,7 +3270,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         }
                         n -= 1
                         if (n == 0) {
-                            val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55)
+                            val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55, MapLibrary33, MapLibrary35, MapLibrary53, MapLibrary55)
                             setup.options = setup.options.notOf[MapOption] :+ (all.dropWhile(setup.options.of[MapOption].lastOption.has(_).not).drop(1) ++ all).first
                             setupQuestions()
                         }

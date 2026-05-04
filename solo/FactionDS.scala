@@ -36,6 +36,7 @@ case class ChaosGateSBPlaceAction(self : Faction, r : Region) extends BaseFactio
 
 case class ConsummationAction(self : Faction) extends OptionFactionAction(Consummation.styled(self)) with MainQuestion with Soft
 case class ConsummationUnflipAction(self : Faction, sb : Spellbook) extends BaseFactionAction("Unflip", sb.styled(self))
+case class ConsummationUnflipTomeAction(self : Faction, tome : LibraryTome) extends BaseFactionAction("Unflip", tome.elem)
 
 case class CosmicRulerSacrificeAction(self : Faction, saved : UnitRef, sacrificed : UnitRef) extends ForcedAction
 case class CosmicRulerDeclineAction(self : Faction) extends ForcedAction
@@ -117,10 +118,10 @@ object DSExpansion extends Expansion {
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) = action @@ {
         // SETUP — DS places no units and takes 4 power; first Psychosis defines their start area
         case SetupFactionsAction if game.starting.contains(DS).not =>
-            // Avoid regions in any faction's small starting-option list (e.g. WW's 2-choice poles)
-            // so the placeholder doesn't silently consume one of their picks via starting.values diff
-            val wwRegions = game.board.starting(WW)
-            val placeholder = areas.%(r => wwRegions.has(r).not).head
+            // Pick a placeholder region that won't block other factions' starting choices.
+            // Avoid all regions that ANY faction might want to start in.
+            val allStartingOptions = game.setup.but(DS)./~(f => game.board.starting(f))
+            val placeholder = areas.%(r => allStartingOptions.has(r).not).headOption.|(areas.last)
             game.starting = game.starting + (DS -> placeholder)
             DS.power = 4
             DS.log("starts with all Acolytes in the pool and", 4.power)
@@ -193,7 +194,9 @@ object DSExpansion extends Expansion {
             if (f.can(UndirectedEnergy) && f.all(AvatarThesis).any && f.affords(1)(f.all(AvatarThesis).head.region))
                 + UndirectedEnergyAction(f)
 
-            if (f.power >= 1 && f.can(Consummation) && f.oncePerTurn.any)
+            val hasFlippedTome = game.board.isLibraryMap && $(TomeGuardian, TomeLarvae, TomeYr).exists(t =>
+                game.tomeHolders.getOrElse(t, None).has(f) && !game.tomeFaceUp.getOrElse(t, true))
+            if (f.power >= 1 && f.can(Consummation) && (f.oncePerTurn.any || hasFlippedTome))
                 + ConsummationAction(f)
 
             if (f.can(FiendishGrowth) && f.all(AvatarAntithesis).any && (f.pool.monsters ++ f.pool.acolytes).any && f.affords(1)(f.all(AvatarAntithesis).head.region))
@@ -203,6 +206,8 @@ object DSExpansion extends Expansion {
                 + TraitorsAction(f)
 
             game.neutralSpellbooks(f)
+
+            game.libraryActions(f)
 
             game.highPriests(f)
 
@@ -501,13 +506,27 @@ object DSExpansion extends Expansion {
 
         // CONSUMMATION
         case ConsummationAction(self) =>
-            Ask(self).list(self.oncePerTurn./(sb => ConsummationUnflipAction(self, sb))).cancel
+            val sbOptions = self.oncePerTurn./(sb => ConsummationUnflipAction(self, sb))
+            // Library at Celaeno: also offer face-down Library tomes held by DS
+            val tomeOptions : $[Action] = if (game.board.isLibraryMap)
+                $(TomeGuardian, TomeLarvae, TomeYr).%(t =>
+                    game.tomeHolders.getOrElse(t, None).has(self) && !game.tomeFaceUp.getOrElse(t, true)
+                )./(t => ConsummationUnflipTomeAction(self, t))
+            else $
+            Ask(self).list(sbOptions ++ tomeOptions).cancel
 
         case ConsummationUnflipAction(self, sb) =>
             self.power -= 1
             self.oncePerTurn :-= sb
             self.oncePerTurn :+= Consummation
             self.log("used", Consummation.styled(self), "to unflip", sb.styled(self))
+            EndAction(self)
+
+        case ConsummationUnflipTomeAction(self, tome) =>
+            self.power -= 1
+            game.tomeFaceUp = game.tomeFaceUp + (tome -> true)
+            self.oncePerTurn :+= Consummation
+            self.log("used", Consummation.styled(self), "to unflip", tome.elem)
             EndAction(self)
 
         // POWER/DOOM OFFER

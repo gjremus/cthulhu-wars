@@ -193,6 +193,8 @@ object OWExpansion extends Expansion {
 
             game.neutralSpellbooks(f)
 
+            game.libraryActions(f)
+
             game.highPriests(f)
 
             game.reveals(f)
@@ -342,7 +344,7 @@ object OWExpansion extends Expansion {
             Ask(f).add(DreadCurseSplitAction(f, r, $, e, k, p))
 
         case DreadCurseRetreatAction(self, r, e, f, uc) =>
-            Ask(self).each(r.connected)(d => DreadCurseRetreatToAction(self, r, e, f, uc, d))
+            Ask(self).each(r.connectedForRetreat)(d => DreadCurseRetreatToAction(self, r, e, f, uc, d))
 
         case DreadCurseRetreatToAction(self, r, e, f, uc, d) =>
             val u = f.at(r, uc).%(_.health == Pained).sortP.first

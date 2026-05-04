@@ -470,7 +470,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (refugees.none)
             return proceed()
 
-        val destinations = arena.connected.%(r => s.opponent.at(r).none)
+        val destinations = arena.connectedForRetreat.%(r => s.opponent.at(r).none)
 
         val chooser : Faction = retreater(s)
 
@@ -1341,7 +1341,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             Ask(e.real.?(e).|(self)).each(e.forces.%(_.canBeMoved))(u => HowlUnitAction(e, u).as(u)("Retreat unit from", Howl))
 
         case HowlUnitAction(self, u) =>
-            Ask(self).each(arena.connected)(r => HowlAction(self, u, r).as(r)("Retreat", u.full, "to"))
+            Ask(self).each(arena.connectedForRetreat)(r => HowlAction(self, u, r).as(r)("Retreat", u.full, "to"))
 
         case HowlAction(self, u, r) =>
             self.forces :-= u

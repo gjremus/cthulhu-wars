@@ -126,6 +126,8 @@ object CCExpansion extends Expansion {
 
             game.neutralSpellbooks(f)
 
+            game.libraryActions(f)
+
             game.highPriests(f)
 
             game.reveals(f)

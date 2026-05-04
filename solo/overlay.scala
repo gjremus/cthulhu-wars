@@ -627,6 +627,67 @@ object Overlays {
         case $("Y'Golonac", spellbook : Boolean) => loyaltyCardIGOO(YgolonacCard.name, "" + YgolonacCard.power, "" + YgolonacCard.combat, spellbook, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 2 Power, place Y'Golonac in the Area containing the Gate.", "Orifices", "Post-Battle", "If Y'Golonac is Killed in a Battle, select a surviving enemy Terror, Monster, or Cultist. Replace it with Y'Golonac, then give Y'Golonac's Loyalty Card to that player. If no enemies survived, Y'Golonac dies normally (placing this Loyalty Card in the general Pool).", "You have just received Y'Golonac as a result of his Orifices ability.", "The Revelations", "Doom Phase", "Every player except you gets 1 Elder Sign. This is not optional.")
 
 
+        // ── Library at Celaeno: Silence Token overlay ──
+        case $("SilenceToken", _ : Boolean) => tomeOverlay("Silence Token", "",
+            "Spend to activate the Custodian or the Librarian.")
+
+        // ── Library at Celaeno: Tome Info overlay ──
+        case $("LibraryTomeInfo", _ : Boolean) => tomeOverlay("Library Tomes", "",
+            "Library Tomes act as neutral Spellbooks. When you Control a Gate in an Area with a Tome, take possession of that Area's Library Tome. It may be used as a standard Spellbook.<br><br>" +
+            "If you lose Control of the Tome's Gate, the Tome is considered Overdue but remains in your possession. Library Tomes may only be returned to the Map by Satisfying the Librarian's Agony.<br><br>" +
+            "They cannot be otherwise voluntarily relinquished, and the player cannot be forced to return them if they choose to lose Doom or Units instead.<br><br>" +
+            "When a Tome is relinquished and returned to its slot, it is immediately acquired by the Faction currently Controlling its respective Gate, if any.")
+
+        // ── Library at Celaeno: Hint Card overlay ──
+        case $("LibraryHintCard", _ : Boolean) => libraryHintCard()
+
+        // ── Library at Celaeno: Custodian and Librarian overlays ──
+        case $("Custodian", _ : Boolean) => mapUnitOverlay("Custodian",
+            "<div class='p nt black-border'>Spend a silence token. Place the Custodian in any Area. Roll the Agony Die. " +
+            "If the Custodian stays in the same Area, add +1 to the Agony die result, for this roll only. " +
+            "The Activating player assigns the Agony result between the Factions present in the Custodian's Area. " +
+            "Those Factions can satisfy one Agony for each of their Units in the Area that they move to the Oubliette, " +
+            "and must satisfy as much of the Custodian's Agony as possible.</div>" +
+            "<div class='p nt black-border'>No player may perform the Control Gate Action in the Custodian's Area. " +
+            "However, if a Gate is already Controlled when the Custodian is Moved into its Area, that Gate may remain Controlled.</div>",
+            "Agony Die faces: 1, 2, 2, 3, 3, 4")
+
+        case $("Librarian", _ : Boolean) => mapUnitOverlay("Librarian",
+            "<div class='p nt black-border'>The Librarian may only be Activated if at least one enemy Faction has an Overdue Library Tome. " +
+            "Spend a silence token. Place the Librarian in an Area with units from one of those Factions (with an Overdue Library Tome). " +
+            "Roll the Agony Die. If the Librarian stays in the same Area, add +1 to the Agony die result, for this roll only. " +
+            "The Activating player assigns the Agony result between the Factions present in the Librarian's Area. " +
+            "Those Factions can satisfy one Agony for each of their Units in the Area of their choice that they Eliminate, " +
+            "for each point of Doom they choose to lose, or for each Overdue Tome they return to its slot, " +
+            "and must satisfy as much of the Librarian's Agony as possible.</div>" +
+            "<div class='p nt black-border'>No player may perform the Control Gate Action in the Librarian's Area. " +
+            "However, if a Gate is already Controlled when the Librarian is Moved into its Area, that Gate may remain Controlled.</div>",
+            "Agony Die faces: 1, 2, 2, 3, 3, 4")
+
+        // Library Tomes
+        case $("Barrier of Naach-Tith", faceUp : Boolean) => tomeOverlay("Barrier of Naach-Tith", "Always Active",
+            "When an enemy declares Battle against the holder, the attacker must pay one of:<br>" +
+            "• Release a Captured Cultist (any faction's) back to its owner's Pool<br>" +
+            "• Discard an Elder Sign<br>" +
+            "• Discard a Silence Token<br><br>" +
+            "If none can be paid, the Battle is blocked.", faceUp)
+
+        case $("Guardian under the Lake", faceUp : Boolean) => tomeOverlay("Guardian under the Lake", "Action: Cost 1 (flippable)",
+            "Choose an Archway region containing enemy units. Move all units of one enemy faction " +
+            "from that Archway to another Archway region. Flips face-down after use. " +
+            "You may flip it face-up again (and reuse it) by releasing a Captured Cultist back to its owner's Pool, discarding an Elder Sign, or discarding a Silence Token. It also flips in the next Doom Phase.", faceUp)
+
+        case $("Larvae of the Outer Gods", faceUp : Boolean) => tomeOverlay("Larvae of the Outer Gods", "Action: Cost 1 (flippable)",
+            "If any opponent has more Power than you, gain 1 Elder Sign. " +
+            "Flips face-down after use. " +
+            "You may flip it face-up again (and reuse it) by releasing a Captured Cultist back to its owner's Pool, discarding an Elder Sign, or discarding a Silence Token. It also flips in the next Doom Phase.", faceUp)
+
+        case $("Yr and the Nhhngr", faceUp : Boolean) => tomeOverlay("Yr and the Nhhngr", "Action: Cost 1 (flippable)",
+            "If any opponent has more Doom than you, choose one:<br>" +
+            "• Place 1 Monster from your Pool at a Controlled Gate (no additional cost)<br>" +
+            "• Gain 2 Power (net +1 after the 1 Power cost)<br><br>" +
+            "Flips face-down after use. You may flip it face-up again (and reuse it) by releasing a Captured Cultist back to its owner's Pool, discarding an Elder Sign, or discarding a Silence Token. It also flips in the next Doom Phase.", faceUp)
+
         // Tombstalker (TS): faction info card showing Death March ability, units (TombHerd, DeepTendril, Gla'aki)
         case $("TS") => faction(TS, "info:ts-background", DeathMarch, "Ongoing",
             "Increment the Death's Head each time an enemy Unit dies in any Battle. In the Doom Phase, spend 1 Death's Head to place a Tomb-Herd in any Area; repeat as much as possible. Then reset the Death's Head to 0.",
@@ -994,6 +1055,94 @@ object Overlays {
             </tbody>
         </table>"""
     }
+
+    def libraryHintCard() = s"""
+        <table class="spellbook-table" style="">
+            <thead>
+                <tr>
+                    <th style=width:10%></th>
+                    <th style=width:80%></th>
+                    <th style=width:10%></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td></td>
+                    <td>
+                        <div class="h1 black-border"><span class="lb inline-block">Library at Celaeno</span></div>
+                        <div class="white-border">
+                            <div class="p black-border"><span class="ability-color">First Doom Phase Only</span> <span class="nt">&mdash; Gates appear at Library Tome Areas, if not already present</span></div>
+                            <div class="p black-border"><span class="ability-color">All Doom Phases</span> <span class="nt">&mdash; Each player receives a silence token</span></div>
+                            <div class="p black-border"><span class="ability-color">All Gather Power Phases</span> <span class="nt">&mdash; Each player loses any remaining silence token</span></div>
+                        </div>
+                        <div>&nbsp;</div>
+                        <div class="h1 black-border"><span class="lb inline-block">Stairwells</span></div>
+                        <div class="white-border">
+                            <div class="p nt black-border">Certain Areas contain Stairwells; these are lettered A&ndash;F on each floor. These Areas are adjacent to their matching Areas on the other level. For instance, in the 3-Player side of the Lower Floor, the Chamber of Apkallu contains Stairwell D. It is therefore adjacent to the Area of Barrier of Naach-Tith, which is also marked with a D but is on the Upper Floor (for both 3- and 5-player sides).</div>
+                            <div class="p nt black-border">A Pained Unit in a Stairwell Area can go through the Stairwell to the other Floor, because these Areas are adjacent for all purposes.</div>
+                        </div>
+                        <div>&nbsp;</div>
+                        <div class="h1 black-border"><span class="lb inline-block">Archways</span></div>
+                        <div class="white-border">
+                            <div class="p nt black-border">Several Areas contain Archways. These are similar to Stairwells, except that they are not lettered. For purposes of the Move Action and movement-type abilities, each Archway Area is adjacent to EVERY OTHER Archway Area on both Floors of the Library.</div>
+                            <div class="p nt black-border">However, unlike the Stairwells, the Archways are NOT adjacent when being Pained or Retreated. Players using other movement-type abilities to travel may do so freely between the two boards. For instance, Shub-Niggurath can Avatar to either side, Crawling Chaos Hunting Horrors can use Seek and Destroy to access either board, Cthulhu can use Submerge to hit both boards, etc.</div>
+                        </div>
+                    </td>
+                    <td></td>
+                </tr>
+                <tr><td></td><td></td><td></td></tr>
+            </tbody>
+        </table>"""
+
+    def mapUnitOverlay(name : String, rulesText : String, dieText : String) = s"""
+        <table class="spellbook-table" style="">
+            <thead>
+                <tr>
+                    <th style=width:15%></th>
+                    <th style=width:70%></th>
+                    <th style=width:15%></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td></td>
+                    <td>
+                        <div class="h1 black-border"><span class="lb inline-block">${name}</span></div>
+                        <div class="black-border"><span class="cost-color">Action Cost: 0</span></div>
+                        <div>
+                            ${rulesText}
+                            <div class="p black-border"><span class="cost-color">${dieText}</span></div>
+                        </div>
+                    </td>
+                    <td></td>
+                </tr>
+                <tr><td></td><td></td><td></td></tr>
+            </tbody>
+        </table>"""
+
+    def tomeOverlay(name : String, phase : String, text : String, faceUp : Boolean = true) = s"""
+        <table class="spellbook-table" style="">
+            <thead>
+                <tr>
+                    <th style=width:15%></th>
+                    <th style=width:70%></th>
+                    <th style=width:15%></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td></td>
+                    <td>
+                        <div class="h1 black-border"><span class="lb inline-block">${name}</span> <span class="cost-color inline-block">${if (phase.nonEmpty) "(" + phase + ")" else ""}</span></div>
+                        <div class="white-border">
+                            <div class="nt black-border" ${if (!faceUp) "style='opacity:0.4'" else ""}>${text}</div>
+                        </div>
+                    </td>
+                    <td></td>
+                </tr>
+                <tr><td></td><td></td><td></td></tr>
+            </tbody>
+        </table>"""
 
     def spellbook(name : String, phase : String, text : String) = s"""
         <table class="spellbook-table" style="">

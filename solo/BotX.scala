@@ -30,7 +30,9 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
             return actions.head
 
         val ev = ge(game)
-        val eas = actions./(a => ActionEval(a, ev.eval(a)))
+        // Merge faction-specific scores with Library map scores (BotMaps)
+        val mapScores = BotMaps.eval(actions, ev.self)(game).groupBy(_._1).view.mapValues(_./(t => Evaluation(t._2, t._3))).toMap
+        val eas = actions./(a => ActionEval(a, ev.eval(a) ++ mapScores.getOrElse(a, $)))
         Bot3.lastEval = eas
 
         val o = eas.sortWith(compare)
@@ -499,7 +501,7 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
                 if (k.cultist && !k.region.ownGate)     add(  500, "sacrifice off-gate cultist to CG")
                 add(0, "default CG kill choice")
 
-            case FBTheEyeOpensChooseCultistAction(_, _, _, uRef) =>
+            case FBTheEyeOpensChooseCultistAction(_, _, _, uRef, _) =>
                 val u = game.unit(uRef)
                 if (u.uclass == HighPriest)             add(-2000, "don't sacrifice HP to eye opens")
                 if (u.region.ownGate)                   add(-1500, "keep gate keeper from eye opens")
