@@ -3019,8 +3019,15 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             setupQuestions()
                         }
                         n -= 1
-                        if (n == 0)
-                            startOnlineGame(setup)
+                        if (n == 0) {
+                            val hasHuman = setup.seating.exists(f => setup.difficulty(f) == Human)
+                            if (hasHuman)
+                                startOnlineGame(setup)
+                            else {
+                                log("Online games must have at least one human player")
+                                setupQuestions()
+                            }
+                        }
                     }
                 )
             }
