@@ -947,18 +947,18 @@ object FBExpansion extends Expansion {
                 orig.health = Alive
                 orig.state = $
             }
-            // Reset writhe state
+            // Reset writhe state — restore reroll flag to what it was before kills/pains
             game.fbWritheUsedUnits = $
             game.fbWritheKillLog = $
             game.fbWrithePainLog = $
-            game.fbWritheRerolled = false
+            game.fbWritheRerolled = game.fbWritheHadRerolled
             game.fbWritheLastPainRegion = None
             game.fbWritheLastPainedUnit = ""
             self.log(Writhe.styled(FB) + ": undid all choices, back to dice roll")
-            // Re-offer the roll result with reroll available again
             Force(FBWritheRollResultAction(self, numDice, rolls))
 
         case FBWritheApplyAction(self, rolls) =>
+            game.fbWritheHadRerolled = game.fbWritheRerolled
             val kills = rolls.count(_ == Kill)
             val pains = rolls.count(_ == Pain)
             if (kills > 0)

@@ -1168,6 +1168,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var barrierPaid : Boolean = false
     var fbWritheUsedUnits : $[UnitRef] = $
     var fbWritheRerolled : Boolean = false
+    var fbWritheHadRerolled : Boolean = false  // true if reroll was used before kills/pains started
     // Writhe undo: track (originalUnitRef, originalRegion, originalClass, replacementRef) for reversal
     var fbWritheKillLog : $[(UnitRef, Region, UnitClass, |[UnitRef])] = $
     // Writhe undo: track pain selections for reversal
