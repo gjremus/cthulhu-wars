@@ -2791,8 +2791,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         case MapEarth53 => "earth53"
                         case MapEarth55 => "earth55"
                         case MapLibrary33 => "library3"
-                        case MapLibrary35 => "library4b"
-                        case MapLibrary53 => "library4a"
+                        case MapLibrary35 => "library35"
+                        case MapLibrary53 => "library53"
                         case MapLibrary55 => "library5"
                     }
                     val isHorizontal = dom.window.innerWidth > dom.window.innerHeight
@@ -3045,8 +3045,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         case MapEarth53 => "earth53"
                         case MapEarth55 => "earth55"
                         case MapLibrary33 => "library3"
-                        case MapLibrary35 => "library4b"
-                        case MapLibrary53 => "library4a"
+                        case MapLibrary35 => "library35"
+                        case MapLibrary53 => "library53"
                         case MapLibrary55 => "library5"
                     }
                     val isHorizontal = dom.window.innerWidth > dom.window.innerHeight

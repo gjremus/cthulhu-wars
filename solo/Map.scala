@@ -787,8 +787,8 @@ object LibraryCelaeno33 extends Board {
 }
 
 object LibraryCelaeno53 extends Board {
-    val id = "library4a"
-    val name = "Library at Celaeno (4 players, 3U+5L)"
+    val id = "library53"
+    val name = "Library at Celaeno (4 players, 5L3U)"
     override val isLibraryMap = true
     override def silenceTokenMax(f : Faction) : Int = 1
     override val unitScale : Double = 2.0
@@ -883,8 +883,8 @@ object Library3LGates {
 }
 
 object LibraryCelaeno35 extends Board {
-    val id = "library4b"
-    val name = "Library at Celaeno (4 players, 5U+3L)"
+    val id = "library35"
+    val name = "Library at Celaeno (4 players, 3L5U)"
     override val isLibraryMap = true
     override def silenceTokenMax(f : Faction) : Int = 1
     override val unitScale : Double = 2.0

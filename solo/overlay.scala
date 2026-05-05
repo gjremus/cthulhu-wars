@@ -695,7 +695,7 @@ object Overlays {
             (Acolyte,    6, "1",   "0", s""""""),
             (TombHerd,   6, "2",   "3", s"""<div class=p>The first Tomb-Herd in an Area has 3 Combat. Any others have 0 Combat.</div>"""),
             (DeepTendril, 3, "3", "1-3", s"""<div class=p>Combat: 1, +1 if Gla'aki is in the same Area, +1 if in an Ocean/Sea Area.</div>"""),
-            (Glaaki,     1, "6",   "?", s"""<div class=p>Combat: equals the number of Deep Tendrils in play.</div><div class=p>Awaken: control an Ocean/Sea gate. May spend Death's Head as Power.</div><div class=p><span class=ability-color>Shepherd of the Crypt</span> (Gather Power Phase): choose an Area and gain 1 Power per Tomb-Herd there.</div>""")
+            (Glaaki,     1, "6",   "?", s"""<div class=p>Combat: equals double the number of Deep Tendrils in play.</div><div class=p>Awaken: control an Ocean/Sea gate. May spend Death's Head as Power.</div><div class=p><span class=ability-color>Shepherd of the Crypt</span> (Gather Power Phase): choose an Area and gain 1 Power per Tomb-Herd there.</div>""")
         ))
 
         // Tombstalker (TS): spellbook requirement info card overlays
