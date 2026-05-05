@@ -471,13 +471,13 @@ object CthulhuWarsSolo {
                     def linkMenu() {
                         val op = ca +: rs.map {
                             case ("#", s) => "<a target=\"_blank\" rel=\"noopener\" href=\"" + server + "play/" + s + v + "\"><div>" + "Spectator".hl + "</div></a>"
-                            case (f, s) => "<a target=\"_blank\" rel=\"noopener\" href=\"" + server + "play/" + s + v + "\"><div>" + "Play as".hl + " " + Serialize.parseFaction(f).|(NoFaction) + "</div></a>"
+                            case (f, s) => "<a target=\"_blank\" rel=\"noopener\" href=\"" + server + "play/" + s + v + "\"><div>" + "Play as".hl + " " + Serialize.parseFaction(f).get + "</div></a>"
                         }
                         ask(name.hl, op, { n =>
                             if (n == 0)
                                 ca = clipboard(name + "\n" + rs.map {
                                     case ("#", s) => "Spectate " + server + "play/" + s + v
-                                    case (f, s) => Serialize.parseFaction(f).|(NoFaction).short + " " + server + "play/" + s + v
+                                    case (f, s) => Serialize.parseFaction(f).get.short + " " + server + "play/" + s + v
                                 }.mkString("\n")).?("Copied links to clipboard").|("Error copying to clipboard").hl
 
                             linkMenu()
