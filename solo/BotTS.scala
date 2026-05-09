@@ -1407,8 +1407,8 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 // AP2: ABSOLUTE PRIORITY — Glaaki must awaken NOW
                 // [DEAD] secondAP && !have(Glaaki) && self.gates.%(_.glyph == Ocean).any |=> 5000 -> "#79 AP2: MUST awaken glaaki"
                 // [DEAD] secondAP && !have(Glaaki) |=> 3000 -> "#86 AP2: glaaki is critical"
-                // DH >= 6: Glaaki costs 0 power — ALWAYS awaken immediately
-                dh >= 6 && !have(Glaaki) |=> 100000 -> "#114 DH >= 6: FREE Glaaki, awaken NOW"
+                // DH >= 7: Glaaki costs 0 power (after the 1-power floor) — ALWAYS awaken immediately
+                dh >= 7 && !have(Glaaki) |=> 100000 -> "#114 DH >= 7: FREE Glaaki, awaken NOW"
                 // [DEAD] dh >= 4 && !have(Glaaki) |=> 5000 -> "#151 DH >= 4: very cheap Glaaki"
                 // Standard: awaken with 2 gates and ocean
                 // [DEAD] self.gates.num >= 2 && self.gates.%(_.glyph == Ocean).any |=> 2996 -> "#192 2 gates + ocean: awaken glaaki now"
@@ -1422,8 +1422,8 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 firstAP && !gcAdjacentCost |=> -1000000 -> "#73 AP1 COST: no GC target"
                 // AP2: MUST awaken — replicate from AwakenMainAction
                 secondAP && !have(Glaaki) |=> 100000 -> "#77 AP2 COST: MUST awaken glaaki"
-                // DH >= 6: free Glaaki
-                dh >= 6 && !have(Glaaki) |=> 100000 -> "#115 COST: DH >= 6 free glaaki"
+                // DH >= 7: free Glaaki
+                dh >= 7 && !have(Glaaki) |=> 100000 -> "#115 COST: DH >= 7 free glaaki"
                 val remaining = self.power - gPower
                 dhCost > 0 |=> dhCost * 150 -> "#439 prefer dh toward glaaki"
                 // Glaaki is the engine; awaken ASAP at any stage
@@ -1441,8 +1441,8 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 // [RARELY] firstAP && !gcAdjacentPay |=> -1000000 -> "#74 AP1 PAY: no GC target, build gate"
                 // AP2: MUST awaken
                 secondAP && !have(Glaaki) |=> 100000 -> "#78 AP2 PAY: MUST awaken glaaki"
-                // DH >= 6: free Glaaki
-                dh >= 6 && !have(Glaaki) |=> 100000 -> "#116 PAY: DH >= 6 free glaaki"
+                // DH >= 7: free Glaaki
+                dh >= 7 && !have(Glaaki) |=> 100000 -> "#116 PAY: DH >= 7 free glaaki"
                 val remaining = self.power - gPower
                 dhCost > 0 |=> dhCost * 150 -> "#439 prefer dh toward glaaki"
                 remaining >= 3 |=> 400 -> "#399 awaken glaaki plenty left"

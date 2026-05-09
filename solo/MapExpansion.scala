@@ -174,21 +174,45 @@ case class CustodianMoveToOublietteAction(self : Faction, r : Region, target : F
 case class SpendOnLibrarianAction(self : Faction) extends OptionFactionAction(implicit g => "Activate " + "Librarian".styled("lb")) with MainQuestion
 case class LibrarianMoveAction(self : Faction, r : Region) extends BaseFactionAction(implicit g => "Move " + "Librarian".styled("lb") + " to", r)
 case class LibrarianStayAction(self : Faction, r : Region) extends BaseFactionAction(implicit g => "Librarian".styled("lb") + " stays in", implicit g => r.toString + " " + "(+1 to Agony roll)".styled("power"))
-case class LibrarianAssignAgonyAction(self : Faction, r : Region, remaining : Int, assigned : Map[Faction, Int]) extends ForcedAction
-case class LibrarianAssignToFactionAction(self : Faction, r : Region, remaining : Int, assigned : Map[Faction, Int], target : Faction) extends BaseFactionAction(implicit g => "Assign 1 " + "Agony".styled("lb") + " to", implicit g => target.full + " (" + remaining + " remaining)")
-case class LibrarianResolveAgonyAction(self : Faction, assigned : Map[Faction, Int]) extends ForcedAction
-case class LibrarianSatisfyAgonyAction(target : Faction, agony : Int, remaining : Map[Faction, Int], activator : Faction) extends ForcedAction
-case class LibrarianEliminateUnitMainAction(self : Faction, agony : Int, remaining : Map[Faction, Int], activator : Faction) extends OptionFactionAction("Eliminate a unit (1 " + "Agony".styled("lb") + ")") {
+// Librarian agony distribution: activator picks a faction, then picks how many of
+// the remaining agony to assign to them, repeating until all agony is allocated.
+// `total` is the original agony rolled (for "Reset agony assignments").
+// `remaining` is the unassigned amount; `assigned` maps faction → count assigned;
+// `order` preserves the activator's selection sequence so resolution walks in
+// the same order the activator chose.
+case class LibrarianAssignAgonyAction(self : Faction, r : Region, total : Int, remaining : Int, assigned : Map[Faction, Int], order : $[Faction]) extends ForcedAction
+case class LibrarianAssignToFactionAction(self : Faction, r : Region, total : Int, remaining : Int, assigned : Map[Faction, Int], order : $[Faction], target : Faction) extends BaseFactionAction(
+    implicit g => self.full + " — choose a faction to assign up to " + remaining + " " + "Agony".styled("lb") + " to",
+    implicit g => {
+        val sofar = assigned.getOrElse(target, 0)
+        if (sofar > 0) target.full + " (" + sofar + " assigned)" else target.full
+    }
+)
+case class LibrarianAssignAmountAction(self : Faction, r : Region, total : Int, remaining : Int, assigned : Map[Faction, Int], order : $[Faction], target : Faction, amount : Int) extends BaseFactionAction(
+    implicit g => self.full + " — assign " + "Agony".styled("lb") + " to " + target.full + " (up to " + remaining + ")",
+    implicit g => amount.toString + " " + "Agony".styled("lb")
+)
+case class LibrarianAssignCancelAction(self : Faction, r : Region, total : Int, remaining : Int, assigned : Map[Faction, Int], order : $[Faction]) extends BaseFactionAction(
+    implicit g => self.full + " — assign " + "Agony".styled("lb"),
+    implicit g => "Cancel"
+)
+case class LibrarianResetAgonyAction(self : Faction, r : Region, total : Int) extends BaseFactionAction(
+    implicit g => self.full + " — choose a faction to assign up to " + total + " " + "Agony".styled("lb") + " to",
+    implicit g => "Reset agony assignments"
+)
+case class LibrarianResolveAgonyAction(self : Faction, assigned : Map[Faction, Int], order : $[Faction]) extends ForcedAction
+case class LibrarianSatisfyAgonyAction(target : Faction, agony : Int, remaining : Map[Faction, Int], activator : Faction, order : $[Faction]) extends ForcedAction
+case class LibrarianEliminateUnitMainAction(self : Faction, agony : Int, remaining : Map[Faction, Int], activator : Faction, order : $[Faction]) extends OptionFactionAction("Eliminate a unit (1 " + "Agony".styled("lb") + ")") {
     def question(implicit game : Game) = self.full + " " + "Satisfy Agony".styled("lb") + " — " + agony + " remaining"
 }
-case class LibrarianEliminateRegionAction(self : Faction, r : Region, agony : Int, remaining : Map[Faction, Int], activator : Faction, eliminated : $[UnitRef]) extends ForcedAction
-case class LibrarianEliminateUnitAction(self : Faction, uRef : UnitRef, r : Region, agony : Int, remaining : Map[Faction, Int], activator : Faction, eliminated : $[UnitRef]) extends BaseFactionAction(implicit g => "Eliminate", implicit g => g.unit(uRef).full)
-case class LibrarianEliminateDoneAction(self : Faction, agony : Int, remaining : Map[Faction, Int], activator : Faction, eliminated : $[UnitRef]) extends ForcedAction
-case class LibrarianReturnTomeMainAction(self : Faction, agony : Int, remaining : Map[Faction, Int], activator : Faction) extends OptionFactionAction("Return " + "Overdue Tome".styled("lb") + " (1 " + "Agony".styled("lb") + ")") {
+case class LibrarianEliminateRegionAction(self : Faction, r : Region, agony : Int, remaining : Map[Faction, Int], activator : Faction, order : $[Faction], eliminated : $[UnitRef]) extends ForcedAction
+case class LibrarianEliminateUnitAction(self : Faction, uRef : UnitRef, r : Region, agony : Int, remaining : Map[Faction, Int], activator : Faction, order : $[Faction], eliminated : $[UnitRef]) extends BaseFactionAction(implicit g => "Eliminate", implicit g => g.unit(uRef).full)
+case class LibrarianEliminateDoneAction(self : Faction, agony : Int, remaining : Map[Faction, Int], activator : Faction, order : $[Faction], eliminated : $[UnitRef]) extends ForcedAction
+case class LibrarianReturnTomeMainAction(self : Faction, agony : Int, remaining : Map[Faction, Int], activator : Faction, order : $[Faction]) extends OptionFactionAction("Return " + "Overdue Tome".styled("lb") + " (1 " + "Agony".styled("lb") + ")") {
     def question(implicit game : Game) = self.full + " " + "Satisfy Agony".styled("lb") + " — " + agony + " remaining"
 }
-case class LibrarianReturnTomeAction(self : Faction, tome : LibraryTome, agony : Int, remaining : Map[Faction, Int], activator : Faction) extends BaseFactionAction(implicit g => "Return", implicit g => tome.elem)
-case class LibrarianLoseDoomAction(self : Faction, agony : Int, remaining : Map[Faction, Int], activator : Faction) extends OptionFactionAction("Lose 1 " + "Doom".styled("doom") + " (1 " + "Agony".styled("lb") + ")") {
+case class LibrarianReturnTomeAction(self : Faction, tome : LibraryTome, agony : Int, remaining : Map[Faction, Int], activator : Faction, order : $[Faction]) extends BaseFactionAction(implicit g => "Return", implicit g => tome.elem)
+case class LibrarianLoseDoomAction(self : Faction, agony : Int, remaining : Map[Faction, Int], activator : Faction, order : $[Faction]) extends OptionFactionAction("Lose 1 " + "Doom".styled("doom") + " (1 " + "Agony".styled("lb") + ")") {
     def question(implicit game : Game) = self.full + " " + "Satisfy Agony".styled("lb") + " — " + agony + " remaining"
 }
 
@@ -318,40 +342,69 @@ object LibraryExpansion extends Expansion {
         case LibrarianMoveAction(self, r) =>
             game.librarianRegion = |(r)
             self.log("moved", "Librarian".styled("lb"), "to", r)
-            RollAgony(_ => "Roll Agony die for Librarian", x => { log("Agony Die".styled("lb"), "rolled", x.toString.styled("power")); LibrarianAssignAgonyAction(self, r, x, Map()) })
+            RollAgony(_ => "Roll Agony die for Librarian", x => { log("Agony Die".styled("lb"), "rolled", x.toString.styled("power")); LibrarianAssignAgonyAction(self, r, x, x, Map(), $) })
 
         case LibrarianStayAction(self, r) =>
             self.log("Librarian".styled("lb"), "stays in", r, "(+1 to Agony roll)")
-            RollAgony(_ => "Roll Agony die for Librarian (+1 for staying)", x => { log("Agony Die".styled("lb"), "rolled", x.toString.styled("power"), "+ 1 for staying =", (x + 1).toString.styled("power"), "total"); LibrarianAssignAgonyAction(self, r, x + 1, Map()) })
+            RollAgony(_ => "Roll Agony die for Librarian (+1 for staying)", x => { val total = x + 1; log("Agony Die".styled("lb"), "rolled", x.toString.styled("power"), "+ 1 for staying =", total.toString.styled("power"), "total"); LibrarianAssignAgonyAction(self, r, total, total, Map(), $) })
 
         // ── LIBRARIAN AGONY DISTRIBUTION ──
-        case LibrarianAssignAgonyAction(self, r, remaining, assigned) =>
+        // Step 1: pick a faction (or reset). Eligible = ANY other faction with
+        // units in the librarian's region — overdue-tome status is NOT a filter
+        // (the activator may target any faction with units; that target then
+        // satisfies the agony however they can — eliminate units, lose doom, OR
+        // return an overdue tome if they hold one). If only one faction is
+        // eligible AND nothing is assigned yet, skip the chooser.
+        case LibrarianAssignAgonyAction(self, r, total, remaining, assigned, order) =>
             val eligibleTargets = factions.but(self).%(f =>
-                game.tomeOverdue.exists { case (tome, overdue) => overdue && game.tomeHolders.get(tome).flatten.has(f) } &&
                 f.at(r).%(u => u.uclass.utype != MapUnit).any)
 
             if (remaining <= 0 || eligibleTargets.none)
-                Force(LibrarianResolveAgonyAction(self, assigned))
-            else
-                Ask(self).each(eligibleTargets)(f =>
-                    LibrarianAssignToFactionAction(self, r, remaining, assigned, f))
-
-        case LibrarianAssignToFactionAction(self, r, remaining, assigned, target) =>
-            val newAssigned = assigned.updated(target, assigned.getOrElse(target, 0) + 1)
-            Force(LibrarianAssignAgonyAction(self, r, remaining - 1, newAssigned))
-
-        // ── LIBRARIAN AGONY RESOLUTION — victim chooses ──
-        case LibrarianResolveAgonyAction(self, assigned) =>
-            val next = assigned.find(_._2 > 0)
-            next match {
-                case None => EndAction(self)
-                case Some((target, agony)) =>
-                    Force(LibrarianSatisfyAgonyAction(target, agony, assigned.updated(target, 0), self))
+                Force(LibrarianResolveAgonyAction(self, assigned, order))
+            else if (eligibleTargets.num == 1 && assigned.isEmpty)
+                Force(LibrarianAssignAmountAction(self, r, total, remaining, assigned, order, eligibleTargets.head, remaining))
+            else {
+                val base = Ask(self).each(eligibleTargets)(f =>
+                    LibrarianAssignToFactionAction(self, r, total, remaining, assigned, order, f))
+                if (assigned.values.sum > 0)
+                    base.add(LibrarianResetAgonyAction(self, r, total))
+                else
+                    base
             }
 
-        case LibrarianSatisfyAgonyAction(target, agony, remaining, activator) =>
+        // Step 2: pick how many agony to assign to the chosen target. Cancel
+        // returns to step 1 with no change.
+        case LibrarianAssignToFactionAction(self, r, total, remaining, assigned, order, target) =>
+            Ask(self).each((1 to remaining).toList)(n =>
+                LibrarianAssignAmountAction(self, r, total, remaining, assigned, order, target, n)
+            ).add(LibrarianAssignCancelAction(self, r, total, remaining, assigned, order))
+
+        case LibrarianAssignAmountAction(self, r, total, remaining, assigned, order, target, amount) =>
+            val newAssigned = assigned.updated(target, assigned.getOrElse(target, 0) + amount)
+            val newOrder = if (order.has(target)) order else order :+ target
+            self.log("assigned", amount.toString.styled("power"), "Agony".styled("lb"), "to", target.full)
+            Force(LibrarianAssignAgonyAction(self, r, total, remaining - amount, newAssigned, newOrder))
+
+        case LibrarianAssignCancelAction(self, r, total, remaining, assigned, order) =>
+            Force(LibrarianAssignAgonyAction(self, r, total, remaining, assigned, order))
+
+        case LibrarianResetAgonyAction(self, r, total) =>
+            self.log("reset", "Agony".styled("lb"), "assignments")
+            Force(LibrarianAssignAgonyAction(self, r, total, total, Map(), $))
+
+        // ── LIBRARIAN AGONY RESOLUTION — victim chooses ──
+        // Walk factions in the activator's selection order.
+        case LibrarianResolveAgonyAction(self, assigned, order) =>
+            order.find(f => assigned.getOrElse(f, 0) > 0) match {
+                case None => EndAction(self)
+                case Some(target) =>
+                    val agony = assigned(target)
+                    Force(LibrarianSatisfyAgonyAction(target, agony, assigned.updated(target, 0), self, order))
+            }
+
+        case LibrarianSatisfyAgonyAction(target, agony, remaining, activator, order) =>
             if (agony <= 0)
-                Force(LibrarianResolveAgonyAction(activator, remaining))
+                Force(LibrarianResolveAgonyAction(activator, remaining, order))
             else {
                 val hasUnits = target.allInPlay.%(u => u.uclass.utype != MapUnit).any
                 val hasDoom = target.doom > 0
@@ -359,38 +412,38 @@ object LibraryExpansion extends Expansion {
                     overdue && game.tomeHolders.get(tome).flatten.has(target) }
 
                 if (!hasUnits && !hasDoom && !hasOverdueTomes)
-                    Force(LibrarianSatisfyAgonyAction(target, 0, remaining, activator))
+                    Force(LibrarianSatisfyAgonyAction(target, 0, remaining, activator, order))
                 else
                     Ask(target)
-                        .when(hasUnits)(LibrarianEliminateUnitMainAction(target, agony, remaining, activator))
-                        .when(hasOverdueTomes)(LibrarianReturnTomeMainAction(target, agony, remaining, activator))
-                        .when(hasDoom)(LibrarianLoseDoomAction(target, agony, remaining, activator))
+                        .when(hasUnits)(LibrarianEliminateUnitMainAction(target, agony, remaining, activator, order))
+                        .when(hasOverdueTomes)(LibrarianReturnTomeMainAction(target, agony, remaining, activator, order))
+                        .when(hasDoom)(LibrarianLoseDoomAction(target, agony, remaining, activator, order))
             }
 
-        case LibrarianEliminateUnitMainAction(self, agony, remaining, activator) =>
+        case LibrarianEliminateUnitMainAction(self, agony, remaining, activator, order) =>
             // Step 1: choose a single region to eliminate units from
             val regions = game.board.regions.%(r => self.at(r).%(u => u.uclass.utype != MapUnit).any)
             Ask(self).each(regions)(r =>
-                LibrarianEliminateRegionAction(self, r, agony, remaining, activator, $)
+                LibrarianEliminateRegionAction(self, r, agony, remaining, activator, order, $)
                     .as(r)("Choose a region to eliminate units from"))
 
-        case LibrarianEliminateRegionAction(self, r, agony, remaining, activator, eliminated) =>
+        case LibrarianEliminateRegionAction(self, r, agony, remaining, activator, order, eliminated) =>
             // Step 2: choose units in the selected region (with cancel/done)
             val units = self.at(r).%(u => u.uclass.utype != MapUnit && !eliminated.has(u.ref))
             if (units.none || agony <= 0)
-                Force(LibrarianEliminateDoneAction(self, agony, remaining, activator, eliminated))
+                Force(LibrarianEliminateDoneAction(self, agony, remaining, activator, order, eliminated))
             else {
                 val q = self.full + " " + "Satisfy Agony".styled("lb") + " - eliminate units in " + r
                 Ask(self).each(units)(u =>
-                    LibrarianEliminateUnitAction(self, u.ref, r, agony, remaining, activator, eliminated)
-                ).add(LibrarianEliminateDoneAction(self, agony, remaining, activator, eliminated).as("Done")(q))
+                    LibrarianEliminateUnitAction(self, u.ref, r, agony, remaining, activator, order, eliminated)
+                ).add(LibrarianEliminateDoneAction(self, agony, remaining, activator, order, eliminated).as("Done")(q))
             }
 
-        case LibrarianEliminateUnitAction(self, uRef, r, agony, remaining, activator, eliminated) =>
+        case LibrarianEliminateUnitAction(self, uRef, r, agony, remaining, activator, order, eliminated) =>
             // Don't eliminate yet - just mark as selected, reduce agony counter
-            Force(LibrarianEliminateRegionAction(self, r, agony - 1, remaining, activator, eliminated :+ uRef))
+            Force(LibrarianEliminateRegionAction(self, r, agony - 1, remaining, activator, order, eliminated :+ uRef))
 
-        case LibrarianEliminateDoneAction(self, agony, remaining, activator, eliminated) =>
+        case LibrarianEliminateDoneAction(self, agony, remaining, activator, order, eliminated) =>
             // Now actually eliminate all selected units
             eliminated.foreach { ref =>
                 val u = game.unit(ref)
@@ -398,28 +451,28 @@ object LibraryExpansion extends Expansion {
                 game.eliminate(u)
                 self.log("eliminated", u.uclass.styled(self), "in", r, "to satisfy", "Agony".styled("lb"))
             }
-            Force(LibrarianSatisfyAgonyAction(self, agony, remaining, activator))
+            Force(LibrarianSatisfyAgonyAction(self, agony, remaining, activator, order))
 
 
-        case LibrarianReturnTomeMainAction(self, agony, remaining, activator) =>
+        case LibrarianReturnTomeMainAction(self, agony, remaining, activator, order) =>
             val overdueTomes = $(TomeBarrier, TomeGuardian, TomeLarvae, TomeYr).%(tome =>
                 game.tomeOverdue.getOrElse(tome, false) && game.tomeHolders.get(tome).flatten.has(self))
             if (overdueTomes.num == 1)
-                Force(LibrarianReturnTomeAction(self, overdueTomes.head, agony, remaining, activator))
+                Force(LibrarianReturnTomeAction(self, overdueTomes.head, agony, remaining, activator, order))
             else
                 Ask(self).each(overdueTomes)(t =>
-                    LibrarianReturnTomeAction(self, t, agony, remaining, activator))
+                    LibrarianReturnTomeAction(self, t, agony, remaining, activator, order))
 
-        case LibrarianReturnTomeAction(self, tome, agony, remaining, activator) =>
+        case LibrarianReturnTomeAction(self, tome, agony, remaining, activator, order) =>
             game.tomeHolders = game.tomeHolders + (tome -> None)
             game.tomeOverdue = game.tomeOverdue + (tome -> false)
             self.log("returned", tome.elem, "to satisfy", "Agony".styled("lb"))
-            Force(LibrarianSatisfyAgonyAction(self, agony - 1, remaining, activator))
+            Force(LibrarianSatisfyAgonyAction(self, agony - 1, remaining, activator, order))
 
-        case LibrarianLoseDoomAction(self, agony, remaining, activator) =>
+        case LibrarianLoseDoomAction(self, agony, remaining, activator, order) =>
             self.doom -= 1
             self.log("lost", 1.doom, "to satisfy", "Agony".styled("lb"))
-            Force(LibrarianSatisfyAgonyAction(self, agony - 1, remaining, activator))
+            Force(LibrarianSatisfyAgonyAction(self, agony - 1, remaining, activator, order))
 
         // ── TOME FLIP VIA SILENCE TOKEN ──
         case SpendToFlipTomeAction(self, tome) =>
@@ -580,15 +633,21 @@ object LibraryExpansion extends Expansion {
                 val gateOwner = factions.find(_.gates.has(tome.region))
                 val currentHolder = game.tomeHolders.getOrElse(tome, None)
                 gateOwner match {
-                    case Some(f) if !currentHolder.has(f) =>
+                    // Initial acquisition: tome is unheld and a faction now controls
+                    // its gate. They take the tome.
+                    case Some(f) if currentHolder.isEmpty =>
                         game.tomeHolders = game.tomeHolders + (tome -> |(f))
                         game.tomeOverdue = game.tomeOverdue + (tome -> false)
                         log(f, "acquired", tome.elem)
+                    // Holder still controls the tome's gate — clear overdue if set.
                     case Some(f) if currentHolder.has(f) && game.tomeOverdue.getOrElse(tome, false) =>
-                        // Faction regained control of the tome's gate — no longer overdue
                         game.tomeOverdue = game.tomeOverdue + (tome -> false)
                         log(f, tome.elem, "is no longer", "Overdue".styled("lb"))
-                    case None if currentHolder.isDefined =>
+                    // Holder no longer controls the gate (uncontrolled OR another
+                    // faction controls it). Tome stays with the original holder —
+                    // it is only released via the Librarian "return cursed tome"
+                    // action — but it is now Overdue so the Librarian can target it.
+                    case _ if currentHolder.isDefined && !gateOwner.has(currentHolder.get) =>
                         if (!game.tomeOverdue.getOrElse(tome, false)) {
                             game.tomeOverdue = game.tomeOverdue + (tome -> true)
                             log(currentHolder.get, tome.elem, "is now", "Overdue".styled("lb"))

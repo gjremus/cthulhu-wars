@@ -831,21 +831,31 @@ case class Bot3(faction : Faction) {
                 case LibrarianStayAction(_, _) =>
                     true |=> 200 -> "librarian stay +1 bonus"
 
-                case LibrarianAssignToFactionAction(_, _, _, _, target) =>
+                case LibrarianAssignToFactionAction(_, _, _, _, _, _, target) =>
                     (target != self)                       |=> 1000 -> "assign librarian agony to enemy"
                     (target == self)                       |=> -5000 -> "avoid librarian agony to self"
 
-                case LibrarianEliminateUnitMainAction(_, _, _, _) =>
+                case LibrarianAssignAmountAction(_, _, _, _, _, _, target, _) =>
+                    (target != self)                       |=> 1000 -> "assign librarian agony to enemy"
+                    (target == self)                       |=> -5000 -> "avoid librarian agony to self"
+
+                case LibrarianAssignCancelAction(_, _, _, _, _, _) =>
+                    true |=> -500 -> "avoid cancel during librarian agony assignment"
+
+                case LibrarianResetAgonyAction(_, _, _) =>
+                    true |=> -2000 -> "avoid reset during librarian agony assignment"
+
+                case LibrarianEliminateUnitMainAction(_, _, _, _, _) =>
                     true |=> -500 -> "eliminate unit is costly"
 
-                case LibrarianEliminateRegionAction(_, r, _, _, _, _) =>
+                case LibrarianEliminateRegionAction(_, r, _, _, _, _, _) =>
                     val units = self.at(r).%(u => u.uclass.utype != MapUnit)
                     val hasGoo = units.exists(_.goo)
                     hasGoo                                  |=> -5000 -> "region has GOO"
                     (units.num == 1 && units.head.is(Acolyte)) |=> 1000 -> "region with lone acolyte"
                     true                                   |=>     0 -> "default region"
 
-                case LibrarianEliminateUnitAction(_, uRef, _, _, _, _, _) =>
+                case LibrarianEliminateUnitAction(_, uRef, _, _, _, _, _, _) =>
                     val u = game.unit(uRef)
                     u.goo                                  |=> -5000 -> "don't eliminate own GOO"
                     (u.uclass == HighPriest)               |=> -3000 -> "don't eliminate own HP"
@@ -853,18 +863,18 @@ case class Bot3(faction : Faction) {
                     (u.is(Acolyte) && !u.region.ownGate)   |=>  1000 -> "eliminate off-gate acolyte"
                     true                                   |=>     0 -> "default eliminate"
 
-                case LibrarianEliminateDoneAction(_, _, _, _, eliminated) =>
+                case LibrarianEliminateDoneAction(_, _, _, _, _, eliminated) =>
                     (eliminated.any)                        |=>  2000 -> "done eliminating"
                     true                                   |=>  -100 -> "done with nothing"
 
 
-                case LibrarianReturnTomeMainAction(_, _, _, _) =>
+                case LibrarianReturnTomeMainAction(_, _, _, _, _) =>
                     true |=> -1000 -> "returning a tome is bad"
 
-                case LibrarianReturnTomeAction(_, tome, _, _, _) =>
+                case LibrarianReturnTomeAction(_, tome, _, _, _, _) =>
                     true |=> 0 -> "return tome"
 
-                case LibrarianLoseDoomAction(_, _, _, _) =>
+                case LibrarianLoseDoomAction(_, _, _, _, _) =>
                     true |=> -800 -> "losing doom is bad"
 
                 case SpendToFlipTomeAction(_, _) =>

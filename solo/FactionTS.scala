@@ -9,7 +9,7 @@ import html._
 // DeepTendril (monster, combat bonus in ocean and with Gla'aki), Gla'aki (GOO, combat = Deep Tendrils in play)
 case object TombHerd extends FactionUnitClass(TS, "Tomb-Herd", Monster, 2)
 case object DeepTendril extends FactionUnitClass(TS, "Deep Tendril", Monster, 3)
-case object Glaaki extends FactionUnitClass(TS, "Gla'aki", GOO, 6)
+case object Glaaki extends FactionUnitClass(TS, "Gla'aki", GOO, 7)
 
 // Tombstalker (TS) SPELLBOOKS: Death March (unique ability), Eleven Revelations, Oleaginous,
 // Grasping Dead, Hecatomb, Green Decay, Undulate
@@ -48,7 +48,7 @@ case object TS extends Faction { f =>
         6.times(Acolyte)
 
     override def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = u match {
-        case Glaaki => (f.gates.has(r) && f.gates.exists(_.glyph == Ocean)).?(max(1, 6 - game.deathsHead))
+        case Glaaki => (f.gates.has(r) && f.gates.exists(_.glyph == Ocean)).?(max(1, 7 - game.deathsHead))
         case _ => None
     }
 
@@ -388,10 +388,11 @@ object TSExpansion extends Expansion {
         case AwakenMainAction(self, Glaaki, locations) if self == TS =>
             // Compute the range of valid power values across all eligible regions
             // [2026-04-01 18:12] Fixed: was max(1,...) which blocked 0-power awakening with 6+ DH
-            val minPower = max(0, 6 - game.deathsHead)
-            val maxPower = locations./(r => min(6, self.power - self.taxIn(r))).maxOr(0)
+            // [2026-05-08] Glaaki cost bumped from 6 to 7 — DH threshold for free awakening shifts to 7.
+            val minPower = max(0, 7 - game.deathsHead)
+            val maxPower = locations./(r => min(7, self.power - self.taxIn(r))).maxOr(0)
             Ask(self)
-                .list((minPower to maxPower)./(power => TSAwakenGlaakiChooseCostAction(self, power, 6 - power)))
+                .list((minPower to maxPower)./(power => TSAwakenGlaakiChooseCostAction(self, power, 7 - power)))
                 .cancel
 
         // AWAKEN GLA'AKI — step 2: pick region

@@ -116,6 +116,9 @@ case class FBWritheMainAction(self : Faction) extends OptionFactionAction(implic
 }) with MainQuestion
 case class FBWritheRollAction(self : Faction, numDice : Int) extends ForcedAction
 case class FBWritheRollResultAction(self : Faction, numDice : Int, rolls : $[BattleRoll]) extends ForcedAction
+// Re-entry into the post-roll menu without re-logging the roll line. Used by
+// FBWritheUndoAllAction so the dice-roll log isn't duplicated each rollback.
+case class FBWritheRollResultMenuAction(self : Faction, numDice : Int, rolls : $[BattleRoll]) extends ForcedAction
 case class FBWritheRerollAction(self : Faction, rolls : $[BattleRoll]) extends OptionFactionAction("Reroll ALL dice with " + Writhe.styled(FB)) with PowerNeutral { def question(implicit game : Game) = Writhe.styled(FB) }
 case class FBWritheKeepAction(self : Faction, rolls : $[BattleRoll]) extends OptionFactionAction("Keep current " + Writhe.styled(FB) + " results") with PowerNeutral { def question(implicit game : Game) = Writhe.styled(FB) }
 case class FBWritheApplyAction(self : Faction, rolls : $[BattleRoll]) extends ForcedAction with PowerNeutral
@@ -278,7 +281,15 @@ case class FBDevilsMarkChooseRegionAction(self : Faction, regions : $[Region]) e
 case class FBDevilsMarkPlaceCraterAction(self : Faction, r : Region) extends BaseFactionAction(
     "Devil's Mark".styled(FB) + ": place Crater in",
     implicit g => {
-        val hasGlyph = g.factions.exists(f => g.starting.get(f).has(r))
+        // A region has a faction glyph if EITHER:
+        //   (a) it's the printed-on-map starting region of a base faction
+        //       (GC/CC/YS/BG/SL/WW — printed regardless of who's playing), OR
+        //   (b) it's the chosen starting region of an in-game dynamic-start
+        //       faction (OW, FB, TS, DS, AN — they place their glyph there).
+        val printedGlyphFactions = $(GC, CC, YS, BG, SL, WW)
+        val hasPrintedGlyph = printedGlyphFactions.exists(f => g.board.starting(f).has(r))
+        val hasDynamicGlyph = g.factions.exists(f => g.starting.get(f).has(r))
+        val hasGlyph = hasPrintedGlyph || hasDynamicGlyph
         if (hasGlyph) {
             val preview = g.fbCraters.num + 1 // crater count AFTER placing this one
             r.toString + " with faction glyph +" + preview.toString + " power"
@@ -589,8 +600,17 @@ object FBExpansion extends Expansion {
             self.takeES(1)
             self.log("gained", 1.es, "from", "Devil's Mark".styled(FB))
 
-            // Check if region has any faction glyph
-            val hasGlyph = game.factions.exists(f => game.starting.get(f).has(r))
+            // A region has a faction glyph if EITHER:
+            //   (a) it's the printed-on-map starting region of a base faction
+            //       (GC/CC/YS/BG/SL/WW — printed regardless of who's playing).
+            //       WW has 2 (one ocean, one land); only land matters here since
+            //       Devil's Mark places craters on land only.
+            //   (b) it's the chosen starting region of an in-game dynamic-start
+            //       faction (OW, FB, TS, DS, AN — they place their glyph there).
+            val printedGlyphFactions = $(GC, CC, YS, BG, SL, WW)
+            val hasPrintedGlyph = printedGlyphFactions.exists(f => game.board.starting(f).has(r))
+            val hasDynamicGlyph = game.factions.exists(f => game.starting.get(f).has(r))
+            val hasGlyph = hasPrintedGlyph || hasDynamicGlyph
             if (hasGlyph) {
                 val craterCount = game.fbCraters.num
                 self.power += craterCount
@@ -820,12 +840,18 @@ object FBExpansion extends Expansion {
             RollBattle(self, Writhe.styled(FB), numDice, rolls => FBWritheRollResultAction(self, numDice, rolls))
 
         case FBWritheRollResultAction(self, numDice, rolls) =>
+            val kills = rolls.count(_ == Kill)
+            val pains = rolls.count(_ == Pain)
+            val misses = rolls.count(_ == Miss)
+            self.log("rolled", kills, Kill, pains, Pain, misses, "Miss" + (misses != 1).?("es").|(("")))
+            Force(FBWritheRollResultMenuAction(self, numDice, rolls))
+
+        case FBWritheRollResultMenuAction(self, numDice, rolls) =>
             game.fbWritheRolls = rolls
             game.fbWritheNumDice = numDice
             val kills = rolls.count(_ == Kill)
             val pains = rolls.count(_ == Pain)
             val misses = rolls.count(_ == Miss)
-            self.log("rolled", kills, Kill, pains, Pain, misses, "Miss" + (misses != 1).?("es").|(("")))
 
             // Offer reroll if not yet rerolled
             if (!game.fbWritheRerolled) {
@@ -955,7 +981,7 @@ object FBExpansion extends Expansion {
             game.fbWritheLastPainRegion = None
             game.fbWritheLastPainedUnit = ""
             self.log(Writhe.styled(FB) + ": undid all choices, back to dice roll")
-            Force(FBWritheRollResultAction(self, numDice, rolls))
+            Force(FBWritheRollResultMenuAction(self, numDice, rolls))
 
         case FBWritheApplyAction(self, rolls) =>
             game.fbWritheHadRerolled = game.fbWritheRerolled

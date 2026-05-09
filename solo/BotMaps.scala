@@ -166,7 +166,7 @@ object BotMaps {
                     $((action, score, "agony: target " + target.short + " (score " + score + ")"))
                 }
 
-            case LibrarianAssignToFactionAction(f, r, remaining, _, target) =>
+            case LibrarianAssignToFactionAction(f, r, _, remaining, _, _, target) =>
                 if (target == f) $((action, -10000, "agony: never target self (activator last resort)"))
                 else {
                     val hasGOO = target.allInPlay.%(_.uclass.utype == GOO).any
@@ -181,11 +181,25 @@ object BotMaps {
                     $((action, score, "agony: target " + target.short + " (score " + score + ")"))
                 }
 
+            // Bot heuristic for amount-pick step: assign as much as possible to
+            // the highest-priority enemy at once (mirrors the per-faction logic
+            // above; we only score "max amount = remaining" plays high).
+            case LibrarianAssignAmountAction(f, r, _, remaining, _, _, target, amount) =>
+                if (target == f) $((action, -10000, "agony amount: never target self"))
+                else if (amount == remaining) $((action, 100, "agony amount: assign all"))
+                else $((action, 50 - (remaining - amount), "agony amount: partial"))
+
+            case LibrarianAssignCancelAction(_, _, _, _, _, _) =>
+                $((action, -1000, "agony amount: avoid cancel"))
+
+            case LibrarianResetAgonyAction(_, _, _) =>
+                $((action, -2000, "agony amount: avoid reset"))
+
             // ── AGONY RESOLUTION: prefer returning tome > cultist > monster > doom > GOO ──
-            case LibrarianReturnTomeMainAction(_, _, _, _) =>
+            case LibrarianReturnTomeMainAction(_, _, _, _, _) =>
                 $((action, -100, "agony resolve: return tome (least bad)"))
 
-            case LibrarianEliminateUnitAction(_, uRef, _, _, _, _, _) =>
+            case LibrarianEliminateUnitAction(_, uRef, _, _, _, _, _, _) =>
                 val u = game.unit(uRef)
                 val score = u.uclass.utype match {
                     case Cultist => -300
@@ -196,7 +210,7 @@ object BotMaps {
                 }
                 $((action, score, "agony resolve: eliminate " + u.uclass.name))
 
-            case LibrarianLoseDoomAction(_, _, _, _) =>
+            case LibrarianLoseDoomAction(_, _, _, _, _) =>
                 $((action, -2000, "agony resolve: lose doom"))
 
             // ── BARRIER OF NAACH-TITH: avoid battling barrier holder without token ──

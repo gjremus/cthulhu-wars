@@ -1759,13 +1759,13 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             // ──────────────────────────────────────────────────────────────────
             // LIBRARIAN AGONY — FB-specific satisfaction priority
             // ──────────────────────────────────────────────────────────────────
-            case LibrarianReturnTomeMainAction(_, _, _, _) =>
+            case LibrarianReturnTomeMainAction(_, _, _, _, _) =>
                 true |=> 5000 -> "FB agony: return overdue tome (best option)"
 
-            case LibrarianEliminateUnitMainAction(_, _, _, _) =>
+            case LibrarianEliminateUnitMainAction(_, _, _, _, _) =>
                 true |=> 3000 -> "FB agony: eliminate units"
 
-            case LibrarianEliminateRegionAction(_, r, _, _, _, _) =>
+            case LibrarianEliminateRegionAction(_, r, _, _, _, _, _) =>
                 // Prefer regions with expendable units
                 val hasCultOffGate = self.at(r).%(u => u.canControlGate && !u.onGate).any
                 val hasDesc = self.at(r, Desiccated).any
@@ -1773,7 +1773,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 hasDesc |=> 1500 -> "FB agony region: has desiccated"
                 true |=> 500 -> "FB agony region: default"
 
-            case LibrarianEliminateUnitAction(_, uRef, _, _, _, _, _) =>
+            case LibrarianEliminateUnitAction(_, uRef, _, _, _, _, _, _) =>
                 val u = game.unit(uRef)
                 val isOnGate = u.onGate
                 val isCultist = u.canControlGate
@@ -1788,11 +1788,11 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 (isGhato && ghatoCost >= 5)    |=> -5000 -> "FB agony: don't eliminate expensive ghato"
                 (u.uclass == RevenantOfKnaa)   |=> -3000 -> "FB agony: don't eliminate revenant"
 
-            case LibrarianEliminateDoneAction(_, _, _, _, eliminated) =>
+            case LibrarianEliminateDoneAction(_, _, _, _, _, eliminated) =>
                 eliminated.any |=> 2000 -> "FB agony: done eliminating"
                 true |=> -100 -> "FB agony: done with nothing"
 
-            case LibrarianLoseDoomAction(_, _, _, _) =>
+            case LibrarianLoseDoomAction(_, _, _, _, _) =>
                 true |=> -1000 -> "FB agony: lose doom (worst option)"
 
             // ──────────────────────────────────────────────────────────────────

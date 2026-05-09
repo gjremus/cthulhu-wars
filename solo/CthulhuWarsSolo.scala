@@ -772,6 +772,18 @@ object CthulhuWarsSolo {
             // dispatches to fb-glyph or ts-glyph based on the faction passed to DrawItem.
             case object StartingGlyph extends UnitClass("Starting Glyph", Token, 0)
 
+            // Per-render cache: per-unit-class shrink ratio applied during placement
+            // and rendering on library maps. Populated at the start of drawMap. Sprites
+            // without an entry (or with entry == 1.0) render at full size.
+            // Class-global: any region forcing shrink shrinks every instance of that
+            // class on the map for visual consistency.
+            val classShrink = scala.collection.mutable.Map[UnitClass, Double]()
+            // Per-game cache: bounding box geometry for each region in placement-bitmap
+            // coords (regionWidth, availableHeightAboveGate). Built from one full scan
+            // of the placement bitmap on first library-map render.
+            val regionGeom = scala.collection.mutable.Map[Region, (Int, Int)]()
+            var regionGeomComputed = false
+
             case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0)
 
             case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int) {
@@ -974,8 +986,11 @@ object CthulhuWarsSolo {
                 def scaledProto : DrawRect = {
                     val p = proto
                     if (p == null) return null
-                    val s = if (region != null) board.unitScale else 1.0
-                    if (s > 1.01) p.copy(
+                    val baseScale = if (region != null) board.unitScale else 1.0
+                    // Apply class-global shrink only for on-map units on library maps.
+                    val shrinkK = if (region != null && board.isLibraryMap) classShrink.getOrElse(unit, 1.0) else 1.0
+                    val s = baseScale * shrinkK
+                    if (math.abs(s - 1.0) > 0.01) p.copy(
                         x = (x + (p.x - x) * s).toInt,
                         y = (y + (p.y - y) * s).toInt,
                         width = (p.width * s).toInt,
@@ -1143,6 +1158,111 @@ object CthulhuWarsSolo {
                 oldPositions = $
 
                 var draws : $[DrawItem] = $
+
+                // Pre-pass: compute per-unit-class shrink ratio for library maps.
+                //
+                // Eligibility: only sprite classes with max(width,height) > 100 unscaled.
+                // Smaller sprites (Acolytes, basic Monsters) always fit, never shrink.
+                //
+                // Trigger (per region with an instance of the class):
+                //   shrink kicks in when full-size sprite fails the F2 fallback caps
+                //   (bottom 0%, top ≤60%, sides ≤30%).
+                //
+                // Shrink target:
+                //   the smallest k such that the shrunk sprite satisfies the PRIMARY
+                //   caps (bottom 0%, top ≤30%, sides ≤10%), with a floor at 0.35.
+                //
+                // Class-global: classShrink(uc) = min(k_per_region) across all regions
+                // where the class has an instance. So a single tight region forces
+                // every instance of the class on the map to render at the same size.
+                classShrink.clear()
+                if (board.isLibraryMap && place.nonEmpty) {
+                    if (!regionGeomComputed) {
+                        val pw = place.length
+                        val ph = if (pw > 0) place(0).length else 0
+                        val bounds = scala.collection.mutable.Map[Int, (Int, Int, Int, Int)]()
+                        var py0 = 0
+                        while (py0 < ph) {
+                            var px0 = 0
+                            while (px0 < pw) {
+                                val c = place(px0)(py0)
+                                val r0 = (c >> 16) & 0xFF
+                                val g0 = (c >> 8) & 0xFF
+                                val b0 = c & 0xFF
+                                val isWhite = r0 > 240 && g0 > 240 && b0 > 240
+                                if (c != 0 && !isWhite) {
+                                    bounds.get(c) match {
+                                        case Some((mnX, mxX, mnY, mxY)) =>
+                                            bounds(c) = (math.min(mnX, px0), math.max(mxX, px0), math.min(mnY, py0), math.max(mxY, py0))
+                                        case None =>
+                                            bounds(c) = (px0, px0, py0, py0)
+                                    }
+                                }
+                                px0 += 1
+                            }
+                            py0 += 1
+                        }
+                        board.regions.foreach { rg =>
+                            val (gx0, gy0) = gateXY(rg)
+                            val gx = gx0.min(pw - 1).max(0)
+                            val gy = gy0.min(ph - 1).max(0)
+                            val color = place(gx)(gy)
+                            bounds.get(color).foreach { case (mnX, mxX, mnY, _) =>
+                                val regionWidth = mxX - mnX
+                                val gateTopY = gy0 - (38 * board.unitScale).toInt
+                                val availAbove = (gateTopY - mnY).max(0)
+                                regionGeom(rg) = (regionWidth, availAbove)
+                            }
+                        }
+                        regionGeomComputed = true
+                    }
+
+                    // Map UnitClass -> set of regions where instances are currently placed.
+                    val classRegions = scala.collection.mutable.Map[UnitClass, scala.collection.mutable.Set[Region]]()
+                    factions.foreach { f =>
+                        f.allInPlay.foreach { u =>
+                            if (u.region != null && regionGeom.contains(u.region)) {
+                                val sample = DrawItem(u.region, f, u.uclass, u.health, u.state, 0, 0)
+                                val protoR = sample.proto
+                                if (protoR != null) {
+                                    val maxDim = math.max(protoR.width, protoR.height)
+                                    if (maxDim > 100) {
+                                        val set = classRegions.getOrElseUpdate(u.uclass, scala.collection.mutable.Set.empty)
+                                        set += u.region
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    classRegions.foreach { case (uc, regs) =>
+                        val sampleAny = DrawItem(regs.head, null, uc, Alive, $, 0, 0)
+                        val protoR = sampleAny.proto
+                        if (protoR != null) {
+                            val swScaled = (protoR.width * board.unitScale).toDouble
+                            val shScaled = (protoR.height * board.unitScale).toDouble
+                            val ks = regs.toList.flatMap { rg =>
+                                regionGeom.get(rg).map { case (regionW, availAbove) =>
+                                    // F2 fit check at full size: top ≤60% (40% must fit
+                                    // above gate), sides ≤30% (40% must fit width-wise).
+                                    val vertK_F2 = if (shScaled > 0) (availAbove / 0.4) / shScaled else 1.0
+                                    val horK_F2  = if (swScaled > 0) (regionW / 0.4)  / swScaled else 1.0
+                                    val f2Fits = vertK_F2 >= 1.0 && horK_F2 >= 1.0
+                                    if (f2Fits) 1.0
+                                    else {
+                                        // F2 fails — shrink to fit primary caps.
+                                        // Primary: top ≤30% (70% above gate), sides ≤10% (80% in region).
+                                        val vertK = if (shScaled > 0) (availAbove / 0.7) / shScaled else 1.0
+                                        val horK  = if (swScaled > 0) (regionW / 0.8)  / swScaled else 1.0
+                                        math.min(math.min(vertK, horK), 1.0).max(0.35)
+                                    }
+                                }
+                            }
+                            val effectiveK = if (ks.isEmpty) 1.0 else ks.min
+                            if (effectiveK < 0.999) classShrink(uc) = effectiveK
+                        }
+                    }
+                }
 
                 areas.foreach { r =>
                     val (rawPx, rawPy) = gateXY(r)
@@ -1388,24 +1508,138 @@ object CthulhuWarsSolo {
                         case GOO => 4
                     }
 
-                    free.sortBy(d => -rank(d)).foreach { d =>
-                        sticking +:= Array.tabulate(40)(n => find(px, py)).sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }.map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y) }.minBy { dd =>
-                            val overlapScore = (draws ++ fixed ++ sticking).map { oo =>
-                                val d = dd.rect
-                                val o = oo.rect
-                                if (d == null || o == null) 0.0
-                                else {
-                                    val w = min(o.x + o.width, d.x + d.width) - max(o.x, d.x)
-                                    val h = min(o.y + o.height, d.y + d.height) - max(o.y, d.y)
-                                    val s = (w > 0 && h > 0).?(w * h).|(0)
-                                    s * (1.0 / (o.width * o.height) + 1.0 / (d.width * d.height))
-                                }
-                            }.sum
-                            // Add proximity penalty to keep units near gate center
-                            val distFromGate = ((dd.x - px).abs + (dd.y - py).abs).toDouble / 1000.0
-                            overlapScore + distFromGate
-                        }
+                    // Library maps: perspective-aware placement. Sprites are bottom-
+                    // anchored (the bottom row at y is the unit's "footprint" on the
+                    // board, like a real game piece). Apply directional spill caps
+                    // matching a perspective view: bottom must be in region, but the
+                    // top of the sprite (further from the viewer) may extend into a
+                    // neighboring region, and left/right may extend slightly.
+                    //
+                    // Primary caps (D-perspective):
+                    //   bottom 0%, top ≤ 30%, left ≤ 10%, right ≤ 10%
+                    // Fallback caps when nothing qualifies (F2):
+                    //   bottom 0%, top ≤ 60%, left ≤ 30%, right ≤ 30%
+                    //
+                    // Within qualifying candidates: minimize unit-on-unit overlap
+                    // (the gate sits in `fixed`, so its overlap penalty avoids
+                    // placing units on the gate). Earth maps fall through to base
+                    // overlap-only behavior unchanged.
+                    val unitRegionColor = if (board.isLibraryMap && place.nonEmpty)
+                        place(px.min(place.length - 1).max(0))(py.min(place(0).length - 1).max(0))
+                    else 0
 
+                    // For a given rect, compute (bottomOut, topOut, leftOut, rightOut)
+                    // as fractions in [0, 1] of the sprite's height/width respectively
+                    // that fall outside the region color.
+                    def directionalSpill(rect : DrawRect) : (Double, Double, Double, Double) = {
+                        if (rect == null || !board.isLibraryMap || place.isEmpty) return (0.0, 0.0, 0.0, 0.0)
+                        val pw = place.length
+                        val ph = place(0).length
+                        // Sample the bottom row (1px tall): count out-of-region samples horizontally.
+                        var bottomBad = 0; var bottomTotal = 0
+                        var sx = rect.x
+                        while (sx < rect.x + rect.width) {
+                            val cx = sx.min(pw - 1).max(0)
+                            val cy = (rect.y + rect.height - 1).min(ph - 1).max(0)
+                            if (place(cx)(cy) != unitRegionColor) bottomBad += 1
+                            bottomTotal += 1
+                            sx += 4
+                        }
+                        // Sample top row (just the very top of the sprite).
+                        // Per-DIRECTION top spill: how many TOP rows are entirely out of region,
+                        // measured as fraction of sprite height.
+                        var topRowsOut = 0
+                        var sy = rect.y
+                        var topRowsScanned = 0
+                        var topDone = false
+                        while (sy < rect.y + rect.height && !topDone) {
+                            var allOut = true
+                            var rx = rect.x
+                            while (rx < rect.x + rect.width && allOut) {
+                                val cx = rx.min(pw - 1).max(0)
+                                val cy = sy.min(ph - 1).max(0)
+                                if (place(cx)(cy) == unitRegionColor) allOut = false
+                                rx += 4
+                            }
+                            if (allOut) topRowsOut += 1 else topDone = true
+                            sy += 1
+                            topRowsScanned += 1
+                            if (topRowsScanned > rect.height) topDone = true
+                        }
+                        // Per-direction left/right: leftmost contiguous columns where the entire
+                        // column is out of region, as fraction of width. (Likewise on the right.)
+                        var leftColsOut = 0
+                        var lx = rect.x
+                        var leftDone = false
+                        while (lx < rect.x + rect.width && !leftDone) {
+                            var allOut = true
+                            var ly = rect.y
+                            while (ly < rect.y + rect.height && allOut) {
+                                val cx = lx.min(pw - 1).max(0)
+                                val cy = ly.min(ph - 1).max(0)
+                                if (place(cx)(cy) == unitRegionColor) allOut = false
+                                ly += 4
+                            }
+                            if (allOut) leftColsOut += 1 else leftDone = true
+                            lx += 1
+                        }
+                        var rightColsOut = 0
+                        var rx2 = rect.x + rect.width - 1
+                        var rightDone = false
+                        while (rx2 >= rect.x && !rightDone) {
+                            var allOut = true
+                            var ry2 = rect.y
+                            while (ry2 < rect.y + rect.height && allOut) {
+                                val cx = rx2.min(pw - 1).max(0)
+                                val cy = ry2.min(ph - 1).max(0)
+                                if (place(cx)(cy) == unitRegionColor) allOut = false
+                                ry2 += 4
+                            }
+                            if (allOut) rightColsOut += 1 else rightDone = true
+                            rx2 -= 1
+                        }
+                        val bottomFrac = if (bottomTotal > 0) bottomBad.toDouble / bottomTotal else 0.0
+                        val topFrac = topRowsOut.toDouble / rect.height.max(1)
+                        val leftFrac = leftColsOut.toDouble / rect.width.max(1)
+                        val rightFrac = rightColsOut.toDouble / rect.width.max(1)
+                        (bottomFrac, topFrac, leftFrac, rightFrac)
+                    }
+
+                    def passesCaps(spill : (Double, Double, Double, Double),
+                                   bottomCap : Double, topCap : Double,
+                                   leftCap : Double, rightCap : Double) : Boolean = {
+                        val (b, t, l, r) = spill
+                        b <= bottomCap && t <= topCap && l <= leftCap && r <= rightCap
+                    }
+
+                    def overlapOf(dd : DrawItem) : Double = (draws ++ fixed ++ sticking).map { oo =>
+                        val d = dd.rect
+                        val o = oo.rect
+                        if (d == null || o == null) 0.0
+                        else {
+                            val w = min(o.x + o.width, d.x + d.width) - max(o.x, d.x)
+                            val h = min(o.y + o.height, d.y + d.height) - max(o.y, d.y)
+                            val s = (w > 0 && h > 0).?(w * h).|(0)
+                            s * (1.0 / (o.width * o.height) + 1.0 / (d.width * d.height))
+                        }
+                    }.sum
+
+                    free.sortBy(d => -rank(d)).foreach { d =>
+                        val candidates = Array.tabulate(40)(n => find(px, py)).sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }
+                            .map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y) }
+
+                        // Library map: filter via perspective caps, primary then fallback.
+                        // Earth map: skip filter, base overlap-only behavior.
+                        val chosen : DrawItem = if (board.isLibraryMap && place.nonEmpty) {
+                            val withSpill = candidates.toSeq.map(c => (c, directionalSpill(c.rect)))
+                            val primary = withSpill.filter { case (_, s) => passesCaps(s, 0.0, 0.30, 0.10, 0.10) }
+                            val pool = if (primary.nonEmpty) primary
+                                       else withSpill.filter { case (_, s) => passesCaps(s, 0.0, 0.60, 0.30, 0.30) }
+                            if (pool.nonEmpty) pool.minBy { case (c, _) => overlapOf(c) }._1
+                            else candidates.minBy(overlapOf)
+                        } else candidates.minBy(overlapOf)
+
+                        sticking +:= chosen
                     }
 
                     draws ++= fixed
@@ -1665,7 +1899,12 @@ object CthulhuWarsSolo {
 
                 val doom = div()(tsStack + ("" + f.doom + " Doom").styled("doom") + f.es.any.?(" + " + (f.es.num == 1).?("ES").|("" + f.es.num + " ES").styled("es")).|("") + libraryTomeStr + tomeStr)
                 val doomL = div()(tsStack + ("" + f.doom + " Doom").styled("doom") + f.es.any.?(" + " + (f.es.num == 1).?("Elder Sign").|("" + f.es.num + " Elder Signs").styled("es")).|("") + libraryTomeStr + tomeStr)
-                val doomS = div()(("" + f.doom + "D").styled("doom") + f.es.any.?("+" + ("" + f.es.num + "ES").styled("es")).|("") + tomeSStr)
+                // Mobile (small) doom row: include tsStack (TS-only "next tome to give"
+                // badge), libraryTomeStr (Library-map held-tome icons w/ overdue marker),
+                // and replace tomeSStr text with the tomeStr image badge so cursed-tome
+                // state is visible on small screens — desktop already shows these via
+                // the `doom` / `doomL` variants.
+                val doomS = div()(tsStack + ("" + f.doom + "D").styled("doom") + f.es.any.?("+" + ("" + f.es.num + "ES").styled("es")).|("") + libraryTomeStr + tomeStr)
 
                 val sb = f.spellbooks./{ sb =>
                     // Firstborn (FB): append augury skull image and stored kill count next to the Augury spellbook entry

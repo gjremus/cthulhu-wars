@@ -1,6 +1,6 @@
 name := "Cthulhu Wars Solo HRF"
 
-version := "1.18"
+version := "library-at-celaeno-v2"
 
 scalaVersion := "2.13.16"
 
