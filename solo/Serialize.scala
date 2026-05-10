@@ -35,6 +35,14 @@ class Serialize(val game : Game) {
 
         case mm : Map[_, _] => mm.toList./{ case (k, v) => write(k) + "->" + write(v) }.mkString("{", ", ", "}")
 
+        // Firstborn (FB) helper case classes (used as fields in FB actions and state).
+        // Follow the AzathothOffer pattern: function-call form with productIterator.
+        // Parser reconstructs via the reflection-based EApply catch-all.
+        case x : FBEyeOpensTarget => "FBEyeOpensTarget(" + x.productIterator.$./(write).mkString(", ") + ")"
+        case x : FBCyclopeanGazeSource => "FBCyclopeanGazeSource(" + x.productIterator.$./(write).mkString(", ") + ")"
+        case x : FBWritheKillEntry => "FBWritheKillEntry(" + x.productIterator.$./(write).mkString(", ") + ")"
+        case x : FBWrithePainEntry => "FBWrithePainEntry(" + x.productIterator.$./(write).mkString(", ") + ")"
+
         case x => x.getClass.getSimpleName.stripSuffix("$")
     }
 
@@ -149,6 +157,12 @@ class Serialize(val game : Game) {
         case EList(l) => l.map(parseExpr)
         case EMap(entries) => entries.map(e => (parseExpr(e.pair._1), parseExpr(e.pair._2))).toMap
         case EApply("AzathothOffer", ps) => AzathothOffer(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[Int])
+        // Firstborn (FB) helper case classes — explicit parser cases mirror the
+        // writer cases in Serialize.write. Same pattern as AzathothOffer above.
+        case EApply("FBEyeOpensTarget", ps) => FBEyeOpensTarget(parseExpr(ps(0)).asInstanceOf[Region], parseExpr(ps(1)).asInstanceOf[Faction], parseExpr(ps(2)).asInstanceOf[UnitRef])
+        case EApply("FBCyclopeanGazeSource", ps) => FBCyclopeanGazeSource(parseExpr(ps(0)).asInstanceOf[Region], parseExpr(ps(1)).asInstanceOf[UnitClass])
+        case EApply("FBWritheKillEntry", ps) => FBWritheKillEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[UnitClass], parseExpr(ps(3)).asInstanceOf[|[UnitRef]])
+        case EApply("FBWrithePainEntry", ps) => FBWrithePainEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Region])
         // Library at Celaeno actions with Map parameters (reflection fails on Map types)
         case EApply("CustodianAssignToFactionAction", ps) => CustodianAssignToFactionAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Int], parseExpr(ps(3)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(4)).asInstanceOf[Faction])
         case EApply("CustodianMoveToOublietteAction", ps) => CustodianMoveToOublietteAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Faction], parseExpr(ps(3)).asInstanceOf[UnitRef], parseExpr(ps(4)).asInstanceOf[Map[Faction, Int]])

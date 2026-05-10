@@ -1170,9 +1170,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var fbWritheRerolled : Boolean = false
     var fbWritheHadRerolled : Boolean = false  // true if reroll was used before kills/pains started
     // Writhe undo: track (originalUnitRef, originalRegion, originalClass, replacementRef) for reversal
-    var fbWritheKillLog : $[(UnitRef, Region, UnitClass, |[UnitRef])] = $
+    var fbWritheKillLog : $[FBWritheKillEntry] = $
     // Writhe undo: track pain selections for reversal
-    var fbWrithePainLog : $[(UnitRef, Region, Region)] = $ // (unit, fromRegion, toRegion)
+    var fbWrithePainLog : $[FBWrithePainEntry] = $ // (unit, fromRegion, toRegion)
     // Writhe undo: save rolls and dice count for "undo all back to dice roll"
     var fbWritheRolls : $[BattleRoll] = $
     var fbWritheNumDice : Int = 0
@@ -1205,7 +1205,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var fbCyclopeanGazeActionRegions : $[Region] = $
     // Two-pass CG: FBExpansion.AfterAction computes sources and stores here;
     // Game.scala.AfterAction fires CG AFTER triggers()/SBRs resolve.
-    var fbCyclopeanGazePendingSources : $[(Region, UnitClass)] = $
+    var fbCyclopeanGazePendingSources : $[FBCyclopeanGazeSource] = $
     var fbCyclopeanGazePendingActor : |[Faction] = None
 
     def forNPowerWithTax(r : Region, f : Faction, n : Int) : String = { val p = n + f.taxIn(r) ; " for " + p.power }

@@ -206,25 +206,36 @@ case class FBAwakenGhatanothoaAction(self : Faction, cost : Int) extends OptionF
 // consumeDiscount + power -= cost). Soft excludes the action from undo replay, so undoing
 // across The Eye Opens corrupted state (lost power changes, eliminated units lost track).
 // Now Hard — undo will correctly reverse the power deduction and elimination chain.
+// FB helper case classes used as fields in FB actions and Writhe state. These
+// follow the named-case-class pattern (like Offer, AzathothOffer, UnitRef in
+// base) so the serializer's existing per-type handling works. Bare tuples DO
+// NOT serialize correctly through Serialize.write (falls to the catch-all that
+// emits only the class name); the cases below are added explicitly to the
+// writer in Serialize.scala.
+case class FBEyeOpensTarget(region : Region, faction : Faction, unit : UnitRef)
+case class FBCyclopeanGazeSource(region : Region, unit : UnitClass)
+case class FBWritheKillEntry(unit : UnitRef, region : Region, origClass : UnitClass, replacement : |[UnitRef])
+case class FBWrithePainEntry(unit : UnitRef, fromRegion : Region, toRegion : Region)
+
 case class FBTheEyeOpensMainAction(self : Faction) extends OptionFactionAction(implicit g => {
     val ipDiscount = min(g.fbInfernalPactDiscount, 1)
     val effectiveCost = 1 - ipDiscount
     TheEyeOpens.styled(FB) + " (" + effectiveCost.power + ")" + (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")")
 }) with MainQuestion
-case class FBTheEyeOpensRegionAction(self : Faction, r : Region, pending : $[(Region, Faction, UnitRef)]) extends BaseFactionAction(
+case class FBTheEyeOpensRegionAction(self : Faction, r : Region, pending : $[FBEyeOpensTarget]) extends BaseFactionAction(
     implicit g => TheEyeOpens.styled(FB) + ": Choose", r) {
     override def question(implicit game : Game) = TheEyeOpens.styled(FB) + ": Choose Region"
 }
-case class FBTheEyeOpensFactionAction(self : Faction, r : Region, f : Faction, pending : $[(Region, Faction, UnitRef)]) extends BaseFactionAction(
+case class FBTheEyeOpensFactionAction(self : Faction, r : Region, f : Faction, pending : $[FBEyeOpensTarget]) extends BaseFactionAction(
     implicit g => "Target", f.full) {
     override def question(implicit game : Game) = TheEyeOpens.styled(FB) + ": Choose target faction"
 }
-case class FBTheEyeOpensChooseCultistAction(self : Faction, f : Faction, r : Region, u : UnitRef, pending : $[(Region, Faction, UnitRef)]) extends BaseFactionAction(
+case class FBTheEyeOpensChooseCultistAction(self : Faction, f : Faction, r : Region, u : UnitRef, pending : $[FBEyeOpensTarget]) extends BaseFactionAction(
     TheEyeOpens.styled(FB) + ": eliminate", implicit g => g.unit(u).full
 )
-case class FBTheEyeOpensLoopAction(self : Faction, pending : $[(Region, Faction, UnitRef)]) extends ForcedAction
+case class FBTheEyeOpensLoopAction(self : Faction, pending : $[FBEyeOpensTarget]) extends ForcedAction
 case class FBTheEyeOpensCancelAction(self : Faction) extends ForcedAction
-case class FBTheEyeOpensCommitAction(self : Faction, pending : $[(Region, Faction, UnitRef)]) extends ForcedAction
+case class FBTheEyeOpensCommitAction(self : Faction, pending : $[FBEyeOpensTarget]) extends ForcedAction
 
 // ── CYCLOPEAN GAZE ACTIONS ── Ongoing: after opponent actions/battles, pain enemy units in areas with Revenants/Ghatanothoa
 // Bug fix Round 4: each Revenant and each Ghatanothoa is its own pain source — sourcesPending tracks
@@ -233,8 +244,8 @@ case class FBTheEyeOpensCommitAction(self : Faction, pending : $[(Region, Factio
 // `fromBattle` indicates this chain was triggered from a post-battle hook (Battle.scala) rather
 // than from the AfterAction expansion handler — when true the chain ends with FBCyclopeanGazeBattleDoneAction
 // which Battle.scala catches to resume battle flow via proceed().
-case class FBCyclopeanGazePhaseAction(self : Faction, actor : Faction, sourcesPending : $[(Region, UnitClass)], fromBattle : Boolean) extends ForcedAction with PowerNeutral
-case class FBCyclopeanGazeAssignPainAction(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[(Region, UnitClass)], fromBattle : Boolean) extends ForcedAction with PowerNeutral
+case class FBCyclopeanGazePhaseAction(self : Faction, actor : Faction, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends ForcedAction with PowerNeutral
+case class FBCyclopeanGazeAssignPainAction(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends ForcedAction with PowerNeutral
 // Firstborn (FB): Cyclopean Gaze — actor chooses which of their units to pain.
 // Round 8 Bug 57: the painted faction (NOT FB) picks which of their units to pain.
 // `self` is set to the painted faction so:
@@ -243,7 +254,7 @@ case class FBCyclopeanGazeAssignPainAction(self : Faction, actor : Faction, r : 
 //   - The action's `self.style` matches the menu styling.
 // Title format includes the painted faction name styled in their color so it's
 // visually obvious WHO is being asked to choose.
-case class FBCyclopeanGazePainUnitAction(self : Faction, actor : Faction, u : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[(Region, UnitClass)], fromBattle : Boolean) extends BaseFactionAction(
+case class FBCyclopeanGazePainUnitAction(self : Faction, actor : Faction, u : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends BaseFactionAction(
     implicit g => CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + self.name.styled(self) + " choose unit to pain",
     implicit g => g.unit(u).full + " in " + r
 ) with PowerNeutral
@@ -251,7 +262,7 @@ case class FBCyclopeanGazePainUnitAction(self : Faction, actor : Faction, u : Un
 // `self` is FB (set by the dispatcher in FBCyclopeanGazePainUnitAction), so the menu border
 // is in FB's color and the title is attributed to FB. The title shows the unit being
 // retreated and FB as the chooser.
-case class FBCyclopeanGazeDestinationAction(self : Faction, u : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[(Region, UnitClass)], actor : Faction, fromBattle : Boolean) extends BaseFactionAction(
+case class FBCyclopeanGazeDestinationAction(self : Faction, u : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], actor : Faction, fromBattle : Boolean) extends BaseFactionAction(
     implicit g => CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + FB.name.styled(FB) + " retreat " + g.unit(u).full + " to", r
 ) with PowerNeutral
 // Round 8 Bug 51: when CG pain has no legal destinations, the painted faction's owner
@@ -261,7 +272,7 @@ case class FBCyclopeanGazeDestinationAction(self : Faction, u : UnitRef, r : Reg
 // Round 8 Bug 57: title format updated for consistency with the unit-pick menu.
 // `self` should be the painted faction so the menu border is in their color (set by
 // the dispatcher in FBCyclopeanGazePainUnitAction's no-destinations branch).
-case class FBCyclopeanGazeKillChoiceAction(self : Faction, painedFaction : Faction, killRef : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[(Region, UnitClass)], actor : Faction, fromBattle : Boolean) extends BaseFactionAction(
+case class FBCyclopeanGazeKillChoiceAction(self : Faction, painedFaction : Faction, killRef : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], actor : Faction, fromBattle : Boolean) extends BaseFactionAction(
     implicit g => CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + painedFaction.name.styled(painedFaction) + " choose unit to eliminate (no retreat)",
     implicit g => g.unit(killRef).full
 ) with PowerNeutral
@@ -910,7 +921,7 @@ object FBExpansion extends Expansion {
         case FBWritheUndoLastKillAction(self, remainingKills, remainingPains) =>
             // Reverse the last kill transformation
             if (game.fbWritheKillLog.any) {
-                val (origRef, origRegion, origClass, replacementRef) = game.fbWritheKillLog.last
+                val FBWritheKillEntry(origRef, origRegion, origClass, replacementRef) = game.fbWritheKillLog.last
                 game.fbWritheKillLog = game.fbWritheKillLog.dropRight(1)
                 // Remove replacement Desiccated if one was placed
                 replacementRef.foreach { rRef =>
@@ -940,7 +951,7 @@ object FBExpansion extends Expansion {
         case FBWritheUndoLastMoveAction(self, uRef, remaining) =>
             // Reverse the last pain movement
             if (game.fbWrithePainLog.any) {
-                val (movedRef, fromRegion, toRegion) = game.fbWrithePainLog.last
+                val FBWrithePainEntry(movedRef, fromRegion, toRegion) = game.fbWrithePainLog.last
                 game.fbWrithePainLog = game.fbWrithePainLog.dropRight(1)
                 val movedUnit = game.unit(movedRef)
                 movedUnit.region = fromRegion
@@ -954,13 +965,13 @@ object FBExpansion extends Expansion {
 
         case FBWritheUndoAllAction(self, rolls, numDice) =>
             // Reverse all pain movements (in reverse order)
-            game.fbWrithePainLog.reverse.foreach { case (uRef, fromRegion, toRegion) =>
+            game.fbWrithePainLog.reverse.foreach { case FBWrithePainEntry(uRef, fromRegion, toRegion) =>
                 val u = game.unit(uRef)
                 u.region = fromRegion
                 u.onGate = false
             }
             // Reverse all kills (in reverse order)
-            game.fbWritheKillLog.reverse.foreach { case (origRef, origRegion, origClass, replacementRef) =>
+            game.fbWritheKillLog.reverse.foreach { case FBWritheKillEntry(origRef, origRegion, origClass, replacementRef) =>
                 // If a replacement was placed (Acolyte → Desiccated), remove it
                 replacementRef.foreach { rRef =>
                     val replacement = game.unit(rRef)
@@ -1027,11 +1038,11 @@ object FBExpansion extends Expansion {
                 self.place(Desiccated, r)
                 val placedDesc = self.at(r, Desiccated).last
                 game.fbWritheUsedUnits = game.fbWritheUsedUnits.but(placedDesc.ref)
-                game.fbWritheKillLog :+= (uRef, r, origClass, |(placedDesc.ref))
+                game.fbWritheKillLog :+= FBWritheKillEntry(uRef, r, origClass, |(placedDesc.ref))
                 self.log(Writhe.styled(FB) + ": Acolyte replaced with", Desiccated.styled(FB), "in", r)
             } else {
                 game.eliminate(u)
-                game.fbWritheKillLog :+= (uRef, r, origClass, None)
+                game.fbWritheKillLog :+= FBWritheKillEntry(uRef, r, origClass, None)
                 self.log(Writhe.styled(FB) + ": eliminated", u.uclass.styled(self), "in", r)
             }
             Force(FBWritheAssignKillAction(self, remainingKills - 1, remainingPains, $))
@@ -1096,7 +1107,7 @@ object FBExpansion extends Expansion {
             chosen.foreach { uRef =>
                 val u = game.unit(uRef)
                 val from = u.region
-                game.fbWrithePainLog :+= (uRef, from, r)
+                game.fbWrithePainLog :+= FBWrithePainEntry(uRef, from, r)
                 u.region = r
                 u.onGate = false
                 game.fbWritheUsedUnits :+= uRef
@@ -1145,7 +1156,7 @@ object FBExpansion extends Expansion {
         case FBWritheMoveOneToRegionAction(self, uRef, r, remaining) =>
             val u = game.unit(uRef)
             val from = u.region
-            game.fbWrithePainLog :+= (uRef, from, r)
+            game.fbWrithePainLog :+= FBWrithePainEntry(uRef, from, r)
             u.region = r
             u.onGate = false
             // Bug fix Round 6: store destination for "join" hint on next unit's region list
@@ -1161,7 +1172,7 @@ object FBExpansion extends Expansion {
         case FBWritheMoveOneJoinAction(self, uRef, r, remaining, _) =>
             val u = game.unit(uRef)
             val from = u.region
-            game.fbWrithePainLog :+= (uRef, from, r)
+            game.fbWrithePainLog :+= FBWrithePainEntry(uRef, from, r)
             u.region = r
             u.onGate = false
             game.fbWritheLastPainRegion = |(r)
@@ -1393,7 +1404,7 @@ object FBExpansion extends Expansion {
 
         case FBTheEyeOpensLoopAction(self, pending) =>
             // Find eligible regions: have desiccated + enemy cultist, not already targeted
-            val doneRegions = pending./(t => t._1)
+            val doneRegions = pending./(_.region)
             val eligible = areas.%(r => !doneRegions.has(r) && self.at(r, Desiccated).any &&
                 self.enemies.exists(_.at(r).%(_.uclass.utype == Cultist).any))
             if (eligible.none)
@@ -1410,7 +1421,7 @@ object FBExpansion extends Expansion {
                 val f = enemyFactions.head
                 val cultists = f.at(r).%(_.uclass.utype == Cultist)
                 if (cultists.num == 1) {
-                    Force(FBTheEyeOpensLoopAction(self, pending :+ (r, f, cultists.head.ref)))
+                    Force(FBTheEyeOpensLoopAction(self, pending :+ FBEyeOpensTarget(r, f, cultists.head.ref)))
                 } else {
                     Ask(f).each(cultists)(u => FBTheEyeOpensChooseCultistAction(self, f, r, u.ref, pending))
                 }
@@ -1423,17 +1434,17 @@ object FBExpansion extends Expansion {
         case FBTheEyeOpensFactionAction(self, r, f, pending) =>
             val cultists = f.at(r).%(_.uclass.utype == Cultist)
             if (cultists.num == 1) {
-                Force(FBTheEyeOpensLoopAction(self, pending :+ (r, f, cultists.head.ref)))
+                Force(FBTheEyeOpensLoopAction(self, pending :+ FBEyeOpensTarget(r, f, cultists.head.ref)))
             } else {
                 Ask(f).each(cultists)(u => FBTheEyeOpensChooseCultistAction(self, f, r, u.ref, pending))
             }
 
         case FBTheEyeOpensChooseCultistAction(self, f, r, uRef, pending) =>
-            Force(FBTheEyeOpensLoopAction(self, pending :+ (r, f, uRef)))
+            Force(FBTheEyeOpensLoopAction(self, pending :+ FBEyeOpensTarget(r, f, uRef)))
 
         case FBTheEyeOpensCommitAction(self, pending) =>
             // Execute all pending eliminations
-            pending.foreach { case (r, f, uRef) =>
+            pending.foreach { case FBEyeOpensTarget(r, f, uRef) =>
                 val u = game.unit(uRef)
                 game.eliminate(u)
                 val d = self.at(r, Desiccated).head
@@ -1620,13 +1631,13 @@ object FBExpansion extends Expansion {
             val triggerRegions : $[Region] = (moveTriggeredRegions ++
                 edgeCaseRegions.%(r => gazeRegions.has(r) && actor.at(r).%(_.uclass.utype != Building).any)).distinct
 
-            val sources : $[(Region, UnitClass)] = triggerRegions./~ { r =>
+            val sources : $[FBCyclopeanGazeSource] = triggerRegions./~ { r =>
                 val sourceUnits : $[UnitClass] =
                     FB.at(r, RevenantOfKnaa).num.times(RevenantOfKnaa : UnitClass) ++
                     FB.at(r, Ghatanothoa).num.times(Ghatanothoa : UnitClass)
                 // Each source (Revenant/Ghatanothoa) causes exactly 1 pain regardless
                 // of how many enemy units arrived — do NOT cap at the arrival count
-                sourceUnits./((r, _))
+                sourceUnits./(u => FBCyclopeanGazeSource(r, u))
             }
             // Two-pass CG: store sources for Game.scala to fire AFTER triggers()/SBRs
             if (sources.any) {
@@ -1641,7 +1652,7 @@ object FBExpansion extends Expansion {
             // against the faction that took the action ending in a gaze region). Skip
             // sources whose region has no actor units.
             if (sourcesPending.any) {
-                val (r, srcUnit) = sourcesPending.head
+                val FBCyclopeanGazeSource(r, srcUnit) = sourcesPending.head
                 val rest = sourcesPending.tail
                 val units = actor.at(r).%(u => u.uclass.utype != Building)
                 if (units.any)

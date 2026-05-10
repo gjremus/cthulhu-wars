@@ -1068,9 +1068,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     if ((revsHere + ghatosHere) > 0 && enemyHere) {
                         fbCyclopeanGazeFiredThisBattle = true
                         // One source per Revenant + one per Ghatanothoa, all in the arena
-                        val sources : $[(Region, UnitClass)] =
-                            revsHere.times((arena, RevenantOfKnaa : UnitClass)) ++
-                            ghatosHere.times((arena, Ghatanothoa : UnitClass))
+                        val sources : $[FBCyclopeanGazeSource] =
+                            revsHere.times(FBCyclopeanGazeSource(arena, RevenantOfKnaa)) ++
+                            ghatosHere.times(FBCyclopeanGazeSource(arena, Ghatanothoa))
                         return Force(FBCyclopeanGazePhaseAction(FB, attacker, sources, fromBattle = true))
                     }
                 }
