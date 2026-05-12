@@ -529,18 +529,14 @@ object FBExpansion extends Expansion {
 
             game.rituals(f)
 
-            // Bug fix Round 4 (Bug 4): Infernal Pact must also be offered in the doom phase so the
-            // player can discount Ritual of Annihilation costs. The doom-phase variant flips
-            // spellbooks and bumps power identically to the main-action version; rituals
-            // re-evaluate against the bumped power when the menu re-renders. Cancel button shows
-            // separately if there's an active discount, mirroring the main-action UI.
-            // Bug fix Round 6: only show cancel if there's an active discount to cancel
-            // Round 8 Bug 66: ALSO require !f.acted so cancel disappears after a ritual is enacted.
-            if (game.fbInfernalPactDiscount > 0 && !f.acted)
-                + FBInfernalPactCancelDoomAction(f)
-            // Bug fix Round 6: only show Infernal Pact if faction hasn't acted yet (no ritual enacted).
-            if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && faceUpSpellbooks.any && !f.acted)
-                + FBInfernalPactDoomMainAction(f)
+            // 2026-05-12 v4: Infernal Pact entirely removed from the doom phase per
+            // user direction. IP is now an action-phase-only mechanic; the IP
+            // discount cannot be used to reduce Ritual of Annihilation cost. The
+            // doom-phase entry points (FBInfernalPactDoomMainAction +
+            // FBInfernalPactCancelDoomAction) are no longer offered here. The
+            // case classes and handlers are kept for backward compatibility with
+            // existing replay logs but are unreachable in new games.
+            // Devil's Mark is unaffected and remains a doom-phase ability.
 
             // Firstborn (FB): Devil's Mark — place crater at controlled land gate (once per doom phase)
             if (f.has(DevilsMark) && !FB.oncePerGame.has(DevilsMark) && !game.fbDevilsMarkUsedThisDoom) {
@@ -1221,20 +1217,14 @@ object FBExpansion extends Expansion {
             game.fbInfernalPactDiscount += 1
             game.fbInfernalPactFlipped :+= sb
             self.log("Infernal Pact".styled(FB) + ": flipped", sb.name.styled(FB), "facedown, discount now", game.fbInfernalPactDiscount.power)
-            // Round 8 Bug 72: check FBTwoFacedownSpellbooks IMMEDIATELY so the player
-            // can flip the newly-earned spellbook in the same IP session.
-            // Previously this check only ran at EndTurnAction / DoomDoneAction, so
-            // the spellbook earned by the 2nd facedown was not available until next
-            // turn. Now we satisfy the requirement here and wrap the return in
-            // CheckSpellbooksAction — the game will prompt FB to pick the new
-            // spellbook before re-entering the IP sub-menu. The new spellbook is
-            // immediately in FB.spellbooks (not in oncePerGame), so faceUpSpellbooks
-            // includes it and FB can flip it for more discount. If FB later cancels,
-            // the snapshot restore in the Cancel handlers reverts the spellbook.
-            if (self.needs(FBTwoFacedownSpellbooks) && faceDownCount >= 2)
-                self.satisfy(FBTwoFacedownSpellbooks, "2 Facedown Spellbooks")
-            // Return via CheckSpellbooksAction so any newly-satisfied requirement
-            // prompts a spellbook pick before returning to the IP sub-menu.
+            // 2026-05-12 v4: FBTwoFacedownSpellbooks SBR no longer satisfied
+            // immediately on the 2nd facedown flip. Moved to EndAction(FB) so the
+            // player can't flip 2, earn a new SB, and immediately flip that new SB
+            // in the SAME action. The SBR now fires after the action completes —
+            // CheckSpellbooksAction at the natural AfterAction → PreMainAction
+            // transition (Game.scala line 2573) handles the SB pick BEFORE any
+            // unlimited actions are offered, so the 6th-SBR-grants-unlimited
+            // scenario still lets FB IP-discount the unlimited battle.
             CheckSpellbooksAction(FBInfernalPactResumeAction(self))
 
         case FBInfernalPactResumeAction(self) =>
@@ -1365,18 +1355,30 @@ object FBExpansion extends Expansion {
             self.log("Cancelled", "Infernal Pact".styled(FB))
             Force(DoomAction(self))
 
-        // ── COMMIT IP FLIPS ON MAIN-ACTION FINISH ──
-        // When FB's main action completes (EndAction / AfterAction reached),
-        // any flipped SBs from the pre-main IP session must become
-        // non-cancelable — a subsequent post-main IP cancel should NOT undo
-        // them. Snapshot the current discount as the committed floor and
-        // clear the flipped list so the new session starts fresh.
-        case EndAction(self) if self == FB && (game.fbInfernalPactFlipped.any || game.fbInfernalPactCommittedDiscount != game.fbInfernalPactDiscount) =>
-            game.fbInfernalPactCommittedDiscount = game.fbInfernalPactDiscount
-            game.fbInfernalPactFlipped = $
-            game.fbInfernalPactStartPower = -1
-            game.fbInfernalPactSpellbooksBeforeSession = $
-            game.fbInfernalPactUnfulfilledBeforeSession = $
+        // ── END OF MAIN ACTION ──
+        // When FB's main action completes (EndAction / AfterAction reached), two
+        // things must happen:
+        //   1. Commit any IP flips from the pre-main session as non-cancelable
+        //      (a subsequent post-main IP cancel should NOT undo them). Only
+        //      runs if flips actually occurred.
+        //   2. 2026-05-12 v4: check FBTwoFacedownSpellbooks SBR. Moved from
+        //      the immediate post-flip path to here so that flipping 2 SBs and
+        //      earning the 5th/6th doesn't let FB immediately flip that newly
+        //      earned SB in the SAME action. The SB pick fires naturally at
+        //      Game.scala:2573 (AfterAction → CheckSpellbooks → PreMainAction),
+        //      which is BEFORE unlimited actions get offered — so if this is
+        //      FB's final SBR and unlimited combat unlocks, FB can IP-discount
+        //      the unlimited battle using the freshly-earned 6th SB.
+        case EndAction(self) if self == FB =>
+            if (game.fbInfernalPactFlipped.any || game.fbInfernalPactCommittedDiscount != game.fbInfernalPactDiscount) {
+                game.fbInfernalPactCommittedDiscount = game.fbInfernalPactDiscount
+                game.fbInfernalPactFlipped = $
+                game.fbInfernalPactStartPower = -1
+                game.fbInfernalPactSpellbooksBeforeSession = $
+                game.fbInfernalPactUnfulfilledBeforeSession = $
+            }
+            if (self.needs(FBTwoFacedownSpellbooks) && faceDownCount >= 2)
+                self.satisfy(FBTwoFacedownSpellbooks, "2 Facedown Spellbooks")
             UnknownContinue
 
         // ── END TURN: reset Infernal Pact and check gate requirement ──
