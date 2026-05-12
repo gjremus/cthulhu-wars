@@ -550,6 +550,33 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
             case DragonAscendingCancelAction(_, _) =>
                 true |=> 1000 -> "not now"
 
+            // 2026-05-11 Dragon Ascending cancel-loop fix.
+            // The engine offers DragonAscendingPromptAction (and the doom/main
+            // variants) whenever OW *can* use DA and the raise meets the
+            // engine's minimum threshold (default 1). The bot's Action scoring
+            // above only goes positive when `n > power + 7`, so for any
+            // 1 ≤ raise ≤ 7 the bot enters the DA flow, finds Action scored
+            // 0 vs Cancel scored 1000, picks Cancel, returns to the same
+            // PreMain, gets re-offered the prompt, and loops 60-90 times
+            // until the watchdog kills the game.
+            //
+            // Fix: refuse to enter the DA flow at all unless the raise would
+            // be enough to make the Action attractive. Same threshold (> 7).
+            case DragonAscendingPromptAction(_, _, _) =>
+                val raise = factions./(_.power).max - self.power
+                raise <= 7 |=> -10000 -> "DA: raise too small, don't enter (avoid cancel loop)"
+                raise > 7  |=>   2000 -> "DA: raise worth it"
+
+            case DragonAscendingMainAction(_) =>
+                val raise = factions./(_.power).max - self.power
+                raise <= 7 |=> -10000 -> "DA: raise too small, don't enter (avoid cancel loop)"
+                raise > 7  |=>   2000 -> "DA: raise worth it"
+
+            case DragonAscendingDoomAction(_) =>
+                val raise = factions./(_.power).max - self.power
+                raise <= 7 |=> -10000 -> "DA: raise too small, don't enter (avoid cancel loop)"
+                raise > 7  |=>   2000 -> "DA: raise worth it"
+
             case AvatarReplacementAction(_, _, r, o, u) =>
                 u.cultist && o.capturers.%(_.power > 0).any |=> -100 -> "don't send cultist to be captured"
                 u.cultist && o.capturers.none |=> 150 -> "no capturers"

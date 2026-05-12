@@ -708,7 +708,11 @@ object FBExpansion extends Expansion {
             // available. After f.acted is true (faction has spent its action this turn), only
             // Soft / PowerNeutral options remain, so Infernal Pact discount cannot be applied
             // and the menu entry would be a dead end. Suppress it in that state.
-            if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && faceUpSpellbooks.any && !f.acted)
+            // 2026-05-11: also suppress if FB cancelled an IP session this turn —
+            // prevents Cancel→IPMain→Cancel watchdog loop when wantIP score keeps
+            // pulling bot in but every flip is blocked by per-SB scoring.
+            if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && faceUpSpellbooks.any && !f.acted &&
+                !game.fbInfernalPactCancelledThisTurn)
                 + FBInfernalPactMainAction(f)
 
             // ── Round 8 Bug 75: Transient power boost for offer checks ──
@@ -1257,6 +1261,9 @@ object FBExpansion extends Expansion {
             game.fbInfernalPactFlipped = $
             game.fbInfernalPactSpellbooksBeforeSession = $
             game.fbInfernalPactUnfulfilledBeforeSession = $
+            // 2026-05-11: block IPMain re-offers this turn — see Game.scala
+            // var declaration for rationale.
+            game.fbInfernalPactCancelledThisTurn = true
             self.log("Cancelled", "Infernal Pact".styled(FB))
             Force(MainAction(self))
 
@@ -1383,6 +1390,8 @@ object FBExpansion extends Expansion {
             game.fbInfernalPactFlipped = $
             game.fbInfernalPactSpellbooksBeforeSession = $
             game.fbInfernalPactUnfulfilledBeforeSession = $
+            // 2026-05-11: reset the cancel-loop guard so next turn FB can use IP again.
+            game.fbInfernalPactCancelledThisTurn = false
             // Check Most Doom OR More Gates at end of turn (not mid-turn)
             // Bug fix Round 3: delegate to FBExpansion.checkMostDoomOrGates so the exact same
             // condition is also applied from DoomPhaseAction and DoomDoneAction (see Game.scala).

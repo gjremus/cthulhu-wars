@@ -865,7 +865,13 @@ case class Bot3(faction : Faction) {
 
                 case LibrarianEliminateDoneAction(_, _, _, _, _, eliminated) =>
                     (eliminated.any)                        |=>  2000 -> "done eliminating"
-                    true                                   |=>  -100 -> "done with nothing"
+                    // 2026-05-11: -100 was tied/beat by HP (-3000) and gateKeeper
+                    // (-2000) unit picks but was the *least* negative, so the bot
+                    // picked Done-with-nothing and looped. Make Done-with-empty
+                    // worse than the worst-but-still-eligible unit so the bot will
+                    // bite the bullet and eliminate something. Handler-side safety
+                    // in MapExpansion.scala also breaks the loop if this still loses.
+                    eliminated.isEmpty                     |=> -10000 -> "done with nothing (avoid loop)"
 
 
                 case LibrarianReturnTomeMainAction(_, _, _, _, _) =>

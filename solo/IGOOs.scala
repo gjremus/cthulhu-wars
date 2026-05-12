@@ -273,6 +273,28 @@ object IGOOsExpansion extends Expansion {
 
             case _ =>
         }
+
+        // 2026-05-11 §20 root-cause fix: if the case above removed `u` from
+        // `f.units` (every iGOO case does — except the "another Nyogtha
+        // remains" guard), the active battle's Side.forces may still hold a
+        // reference to the now-orphaned UnitFigure. The next pain/retreat
+        // Ask iterates Side.forces and emits AssignPainAction/RetreatUnitAction
+        // options whose UnitRefs no longer resolve via `game.unit(ur)`. The
+        // UI then crashes with None.get when rendering the action's
+        // description (e.g. `AssignPainAction.option(game)` →
+        // `unitRefFullToDesc(ur)` → `game.unit(ur).full`).
+        //
+        // Mirror what `Battle.eliminate` already does (it always calls
+        // `exempt(u)` first), but for the `game.eliminate(u)` paths that
+        // bypass `Battle.eliminate` — most notably DS's
+        // `CosmicRulerSacrificeAction` and any other handler that eliminates
+        // a unit via `game.eliminate` while a battle is in progress.
+        if (!f.units.contains(u)) {
+            game.battle.foreach { b =>
+                b.attackers.forces = b.attackers.forces.but(u)
+                b.defenders.forces = b.defenders.forces.but(u)
+            }
+        }
     }
 
     override def afterAction()(implicit game : Game) {

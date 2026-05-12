@@ -1142,6 +1142,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // be refunded by a subsequent Cancel, set when the main action's state
     // mutates (EndAction) and cleared at end of turn.
     var fbInfernalPactCommittedDiscount : Int = 0
+    // 2026-05-11 IP cancel-loop guard: bots can pick IPMain → Cancel → IPMain →
+    // Cancel forever when wantIP conditions stay true but no flip improves the
+    // committed state. After a cancel, this flag blocks new IPMain offers for
+    // the remainder of FB's turn (reset at EndTurn).
+    var fbInfernalPactCancelledThisTurn : Boolean = false
     // Round 9 bug fix: some action handlers (e.g. AN GiveWorstMonster /
     // GiveBestMonster SBRs) place units into other factions' pools/regions
     // as a game-level effect, not as a region-targeting action by the

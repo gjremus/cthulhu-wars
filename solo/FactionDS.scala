@@ -592,8 +592,11 @@ object DSExpansion extends Expansion {
 
         // COSMIC RULER: save a killed/eliminated Avatar by sacrificing another Avatar in its stead
         case CosmicRulerSacrificeAction(self, saved, sacrificed) =>
-            game.eliminate(sacrificed)
+            // Log BEFORE eliminate: if the sacrifice is a transferred iGOO (Ygolonac
+            // via Orifices), IGOOs.eliminate removes the UnitFigure from f.units, which
+            // would make the post-eliminate `desc(sacrificed)` lookup fail with None.get.
             self.log("used", CosmicRuler.styled(self), "eliminating", sacrificed, "to save", saved)
+            game.eliminate(sacrificed)
             saved.health = Alive
             Force(BattleDoneAction(self))
 

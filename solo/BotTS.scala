@@ -508,13 +508,16 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
                 hasNMCard |=> -100000 -> "NU: already have NM card"
                 true |=> 1000 -> "NU: nm base"
-                (lc.unit == StarVampire) |=> 2000 -> "NU: star vampire top"
-                (lc.unit == Gug)        |=> 1800 -> "NU: gug combat"
-                (lc.unit == DimensionalShamblerUnit) |=> 1600 -> "NU: shambler"
-                (lc.unit == Ghast)      |=> 1400 -> "NU: ghast"
-                (lc.unit == Gnorri)     |=> 1200 -> "NU: gnorri"
-                (lc.unit == Voonith)    |=> 1000 -> "NU: voonith"
-                (lc.unit == Shantak)    |=> -2000 -> "NU: shantak not useful"
+                // 2026-05-11 v6 boost: TS combat-focused with jitter on the top three
+                // (Gug/Voonith/Gnorri) so all three rotate into actual picks across runs
+                // instead of Gug winning every game. 1-NM-per-faction cap still enforced.
+                (lc.unit == Gug)        |=> (1900 + (math.random() * 300).toInt) -> "NU: gug combat"
+                (lc.unit == Voonith)    |=> (1800 + (math.random() * 300).toInt) -> "NU: voonith combat"
+                (lc.unit == Gnorri)     |=> (1700 + (math.random() * 300).toInt) -> "NU: gnorri summons"
+                (lc.unit == Ghast)      |=> 1500 -> "NU: ghast"
+                (lc.unit == DimensionalShamblerUnit) |=> 1400 -> "NU: shambler"
+                (lc.unit == StarVampire) |=> 1300 -> "NU: star vampire"
+                (lc.unit == Shantak)    |=> 1200 -> "NU: shantak"
 
             case SacrificeHighPriestMainAction(_) =>
                 // [NU-TEST 2026-04-04] HP main sacrifice: costs 1 power, gains +2 (net +1). Moderate.

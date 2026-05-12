@@ -1262,6 +1262,42 @@ object CthulhuWarsSolo {
                             if (effectiveK < 0.999) classShrink(uc) = effectiveK
                         }
                     }
+
+                    // 2026-05-11: enforce a per-GOO floor so GOOs always render
+                    // larger than the largest cultist sprite. Without this, the
+                    // 0.35 hard floor + library-map tight regions could shrink
+                    // a GOO below an un-shrunk Acolyte/HP, which is wrong.
+                    // Cultists never shrink (maxDim < 100 eligibility check).
+                    val cultistDims = factions.flatMap { f =>
+                        f.allInPlay.%(_.uclass.utype == Cultist).flatMap { u =>
+                            val sample = DrawItem(u.region, f, u.uclass, u.health, u.state, 0, 0)
+                            Option(sample.proto).map(p => math.max(p.width, p.height))
+                        }
+                    }
+                    val maxCultistDim = if (cultistDims.nonEmpty) cultistDims.max else 0
+                    if (maxCultistDim > 0) {
+                        // Target: GOO effective dim >= 1.10 * largest cultist dim.
+                        val gooMinDim = maxCultistDim * 1.10
+                        classShrink.toList.foreach { case (uc, k) =>
+                            if (uc.utype == GOO) {
+                                // Find any on-map instance of this GOO to read its proto.
+                                val gooInstance = factions.iterator.flatMap(_.allInPlay.iterator)
+                                    .find(u => u.uclass == uc && u.region != null && u.region.glyph.inPlay)
+                                gooInstance.foreach { u =>
+                                    val sample = DrawItem(u.region, u.faction, u.uclass, u.health, u.state, 0, 0)
+                                    val protoR = sample.proto
+                                    if (protoR != null) {
+                                        val gooMaxDim = math.max(protoR.width, protoR.height).toDouble
+                                        val effective = gooMaxDim * k
+                                        if (effective < gooMinDim) {
+                                            val raisedK = math.min(1.0, gooMinDim / gooMaxDim)
+                                            classShrink(uc) = raisedK
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 areas.foreach { r =>

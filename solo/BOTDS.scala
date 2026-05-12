@@ -662,13 +662,16 @@ class GameEvaluationDS(implicit game : Game) extends GameEvaluation(DS)(game) {
                 val hasIGOO = self.loyaltyCards.of[IGOOLoyaltyCard].any
                 (hasNMCard || hasIGOO) |=> -100000 -> "NU: already have neutral unit"
                 true |=> 1000 -> "NU: nm base"
-                (lc.unit == DimensionalShamblerUnit) |=> 1200 -> "NU: shambler"
-                (lc.unit == Gug) |=> 1000 -> "NU: gug"
-                (lc.unit == Voonith) |=> 900 -> "NU: voonith"
-                (lc.unit == StarVampire) |=> 900 -> "NU: star vampire"
-                (lc.unit == Ghast) |=> 800 -> "NU: ghast"
-                (lc.unit == Shantak) |=> 600 -> "NU: shantak"
-                (lc.unit == Gnorri) |=> 700 -> "NU: gnorri"
+                // 2026-05-11 v5 boost: DS's top three (Shambler/SV/Ghast) all get jitter
+                // so the per-game pick rotates among them — Shambler is most common,
+                // SV second, Ghast occasional. Ensures all 7 NMs see use across runs.
+                (lc.unit == DimensionalShamblerUnit) |=> (2000 + (math.random() * 300).toInt) -> "NU: shambler deploy"
+                (lc.unit == StarVampire) |=> (1900 + (math.random() * 300).toInt) -> "NU: star vampire"
+                (lc.unit == Ghast) |=> (1800 + (math.random() * 300).toInt) -> "NU: ghast swarm"
+                (lc.unit == Gnorri) |=> 1400 -> "NU: gnorri summons"
+                (lc.unit == Voonith) |=> 1300 -> "NU: voonith"
+                (lc.unit == Gug) |=> 1200 -> "NU: gug"
+                (lc.unit == Shantak) |=> 1200 -> "NU: shantak"
 
             case LoyaltyCardSummonAction(_, uc, r) =>
                 r.ownGate && r.allies.cultists.any |=> 1500 -> "NU: place NM at own gate"
@@ -711,6 +714,9 @@ class GameEvaluationDS(implicit game : Game) extends GameEvaluation(DS)(game) {
                 (lc == DaolothCard) |=> 700 -> "NU: daoloth"
                 (lc == NyogthaCard) |=> 600 -> "NU: nyogtha"
                 (lc == ByatisCard) |=> 500 -> "NU: byatis"
+                // 2026-05-11 boost: Ygolonac iGOO had 0 awakenings across 254 iGOO-enabled
+                // games. Adding explicit DS score so it competes with mid-tier iGOOs.
+                (lc == YgolonacCard) |=> 750 -> "NU: ygolonac kills/orifices"
                 true |=> 400 -> "NU: igoo base"
 
             case IndependentGOOAction(_, lc, r, _) =>
@@ -819,13 +825,20 @@ class GameEvaluationDS(implicit game : Game) extends GameEvaluation(DS)(game) {
                     case EliminateNoWayAction(_, u)   => elim(u)
 
                     case RetreatUnitAction(_, u, r) =>
-                        u.cultist && r.allies.goos.any      |=> 2000 -> "retreat cultist to goo"
-                        u.cultist && r.allies.monsterly.any |=> 1000 -> "retreat cultist to monsters"
-                        u.cultist && r.ownGate              |=> 300  -> "retreat cultist to own gate"
-                        u.cultist && r.foes.none && !r.gate |=> 200  -> "retreat to safety"
-                        u.cultist && r.freeGate             |=> 1500 -> "retreat to free gate"
-                        u.goo && r.allies.num >= 3          |=> 1000 -> "regroup goo"
-                        u.goo && r.ownGate                  |=> 400  -> "goo to own gate"
+                        // 2026-05-11: use UnitRef.uclass directly to avoid the
+                        // UnitRef→UnitFigure implicit (which throws None.get when
+                        // the unit is no longer in faction.units — see §20). The
+                        // scoring only needs the unit's TYPE, which is encoded in
+                        // the UnitRef itself.
+                        val uIsCultist = u.uclass.utype == Cultist
+                        val uIsGoo     = u.uclass.utype == GOO
+                        uIsCultist && r.allies.goos.any      |=> 2000 -> "retreat cultist to goo"
+                        uIsCultist && r.allies.monsterly.any |=> 1000 -> "retreat cultist to monsters"
+                        uIsCultist && r.ownGate              |=> 300  -> "retreat cultist to own gate"
+                        uIsCultist && r.foes.none && !r.gate |=> 200  -> "retreat to safety"
+                        uIsCultist && r.freeGate             |=> 1500 -> "retreat to free gate"
+                        uIsGoo && r.allies.num >= 3          |=> 1000 -> "regroup goo"
+                        uIsGoo && r.ownGate                  |=> 400  -> "goo to own gate"
                         true |=> (r.connected ++ r.connected./~(_.connected)).distinct.num -> "reachable"
 
                     case _ =>

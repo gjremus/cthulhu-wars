@@ -1228,9 +1228,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 self.log("had nowhere to retreat but", u, "remained as an", Emissary)
             }
             else {
-                eliminate(u)
-
+                // Log BEFORE eliminate: see UnholyGroundEliminateAction comment
+                // (~line 1444) for the iGOO `f.units :-= u` rationale.
                 self.log("had nowhere to retreat and eliminated", u)
+                eliminate(u)
             }
             self.forces.foreach(_.health = Alive)
             proceed()
@@ -1239,8 +1240,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             jump(EliminatePhase)
 
         case CosmicRulerDeclineNoWayAction(self, u) =>
-            eliminate(u)
+            // Log BEFORE eliminate: see UnholyGroundEliminateAction comment
+            // (~line 1444) for the iGOO `f.units :-= u` rationale.
             self.log("had nowhere to retreat and eliminated", u)
+            eliminate(u)
             self.forces.foreach(_.health = Alive)
             proceed()
 

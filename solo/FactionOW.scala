@@ -234,7 +234,16 @@ object OWExpansion extends Expansion {
                 f.gates :+= r
                 f.at(o).%(_.onGate).single.foreach(_.region = r)
             }
-            self.at(o).one(uc).region = r
+            // 2026-05-11 (HP expansion): use `headOption` instead of `.one` here.
+            // When OW Beyond One's its own gate, the only OW unit OW can use to
+            // occupy the gate (cost-3+) is a High Priest, which IS the on-gate
+            // keeper. The loop above already moved that HP to `r`, so
+            // `self.at(o).one(uc)` would crash with head-of-empty-list. The
+            // intent of this line is "also move the unit OW spent to power
+            // Beyond One" — but when that unit was the keeper, the loop did
+            // it already, so we no-op. Yog-Sothoth IS a gate (not on a gate)
+            // and can't be the `uc` here.
+            self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
             self.log("moved gate with", uc.styled(self), "from", o, "to", r)
             EndAction(self)
 

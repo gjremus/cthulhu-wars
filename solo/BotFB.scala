@@ -1649,7 +1649,12 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                     infernalDiscount < 1
                 // IP flips ONLY for ritual discount OR writhe-kill — both require ritualCost > 6
                 // TwoFD SBR earned naturally from these flips. No early flips for defense writhe.
-                val shouldFlip = ritualDiscount || killConditionsMet
+                // 2026-05-11: must also OR in readyForTwoFD here so the per-SB
+                // scoring stays aligned with the IPMain gate (line 1620). Without
+                // this, FB enters IPMain "for TwoFD" but every flip scores -5000,
+                // so it Cancels (-500), MainAction is re-forced, wantIP is still
+                // true → IPMain → Cancel → 7000-action watchdog loop.
+                val shouldFlip = ritualDiscount || killConditionsMet || readyForTwoFD
                 (shouldFlip && sb == Augury && auguryKills == 0) |=> 1500 -> "flip Augury (ritual/kill discount)"
                 (shouldFlip && sb == TheEyeOpens) |=> 1200 -> "flip Eye Opens (ritual/kill discount)"
                 (shouldFlip && sb == Carnage) |=> 1000 -> "flip Carnage (ritual/kill discount)"
@@ -2356,14 +2361,17 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val hasIGOO = self.loyaltyCards.of[IGOOLoyaltyCard].any
                 hasNMCard |=> -100000 -> "NU: already have NM card"
                 (hasNMCard || hasIGOO) |=> -100000 -> "NU: already have neutral unit"
-                true |=> 1000 -> "NU: nm base"
-                (lc.unit == DimensionalShamblerUnit) |=> 1200 -> "NU: shambler deploy versatility"
-                (lc.unit == Gug)        |=> 1000 -> "NU: gug 3 combat"
-                (lc.unit == Voonith)    |=> 900 -> "NU: voonith combat"
-                (lc.unit == StarVampire) |=> 900 -> "NU: star vampire"
-                (lc.unit == Ghast)      |=> 800 -> "NU: ghast swarm"
-                (lc.unit == Shantak)    |=> 600 -> "NU: shantak carry"
-                (lc.unit == Gnorri)     |=> 700 -> "NU: gnorri summons"
+                // 2026-05-11 v3: FB specializes in iGOOs (Ygolonac top). Keep NM scores
+                // intentionally low so FB doesn't pick an NM card and then become unable
+                // to awaken an iGOO. TS and DS cover NM diversity instead.
+                true |=> 500 -> "NU: nm base (deprioritized for FB)"
+                (lc.unit == Shantak)    |=> 800 -> "NU: shantak carry to gates"
+                (lc.unit == Ghast)      |=> 700 -> "NU: ghast swarm"
+                (lc.unit == Gnorri)     |=> 600 -> "NU: gnorri summons"
+                (lc.unit == Voonith)    |=> 600 -> "NU: voonith combat"
+                (lc.unit == Gug)        |=> 500 -> "NU: gug 3 combat"
+                (lc.unit == StarVampire) |=> 500 -> "NU: star vampire"
+                (lc.unit == DimensionalShamblerUnit) |=> 500 -> "NU: shambler"
 
             // ── NM: Placement of summoned NM units ──────────────────────────
             case LoyaltyCardSummonAction(_, uc, r) =>
@@ -2414,12 +2422,15 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 remaining >= 3 |=> 2500 -> "NU: igoo comfortable power"
                 remaining >= 1 |=> 2000 -> "NU: igoo affordable"
                 remaining == 0 |=> 1000 -> "NU: igoo spends all power"
+                // 2026-05-11 v2: FB takes Ygolonac as primary iGOO (cheap at 2 power,
+                // works with FB's swarm strategy). TS still picks Tulzscha as its top.
+                // This diversifies iGOO picks across factions instead of all-Tulzscha.
+                (lc == YgolonacCard) |=> 3500 -> "NU: ygolonac cheap+kills (FB primary)"
                 (lc == TulzschaCard) |=> 3000 -> "NU: tulzscha undying"
                 (lc == AbhothCard)   |=> 2800 -> "NU: abhoth filth"
                 (lc == DaolothCard)  |=> 2800 -> "NU: daoloth gate builder"
                 (lc == NyogthaCard)  |=> 2500 -> "NU: nyogtha fighter"
                 (lc == ByatisCard)   |=> 2000 -> "NU: byatis anchor"
-                (lc == YgolonacCard) |=> 1500 -> "NU: ygolonac cheapest"
                 true                 |=> 1800 -> "NU: igoo base"
 
             case IndependentGOOAction(_, lc, r, _) =>

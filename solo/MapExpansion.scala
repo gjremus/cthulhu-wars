@@ -336,8 +336,18 @@ object LibraryExpansion extends Expansion {
             val stayActions = currentRegion./(r => LibrarianStayAction(self, r)).$
             val moveActions = validRegions.%(r => !currentRegion.has(r))./( r =>
                 LibrarianMoveAction(self, r))
+            val allActions = stayActions ++ moveActions
 
-            Ask(self).each(stayActions ++ moveActions)(identity)
+            // Offer guard at Game.scala:1622 only checks that *some* faction has an
+            // overdue tome; it does not check that the holder has non-MapUnit units
+            // on the map for the Librarian to actually visit. If the bot picks
+            // SpendOnLibrarianAction and no valid move/stay action exists, `Ask` would
+            // produce an empty action list and crash BotX.askE with `head of empty list`.
+            // End the action cleanly in that case.
+            if (allActions.isEmpty)
+                EndAction(self)
+            else
+                Ask(self).each(allActions)(identity)
 
         case LibrarianMoveAction(self, r) =>
             game.librarianRegion = |(r)
@@ -451,7 +461,15 @@ object LibraryExpansion extends Expansion {
                 game.eliminate(u)
                 self.log("eliminated", u.uclass.styled(self), "in", r, "to satisfy", "Agony".styled("lb"))
             }
-            Force(LibrarianSatisfyAgonyAction(self, agony, remaining, activator, order))
+            // 2026-05-11 loop-break: if the bot reaches Done with no eliminations,
+            // it picked into Eliminate path but then refused every unit (Bot3 scoring
+            // can rate every available unit more negatively than the empty-Done -100).
+            // Without this guard, SatisfyAgony re-offers Eliminate, same outcome,
+            // and the game enters a 7000-action `ControlGate`/`Eliminate` loop that
+            // the SimRunner watchdog has to kill. Treat empty-Done as "waive the
+            // current agony" so the satisfy loop exits.
+            val newAgony = if (eliminated.isEmpty) 0 else agony
+            Force(LibrarianSatisfyAgonyAction(self, newAgony, remaining, activator, order))
 
 
         case LibrarianReturnTomeMainAction(self, agony, remaining, activator, order) =>
