@@ -500,8 +500,17 @@ object LibraryExpansion extends Expansion {
             EndAction(self)
 
         // ── BARRIER OF NAACH-TITH — battle gate cost ──
+        // v5 (2026-05-13): when the attacker targets a region defended by
+        // Barrier of Naach-Tith, immediately prompt with the payment menu.
+        // Per spellbook text the override can be paid by:
+        //   (a) releasing a captured enemy cultist
+        //   (b) discarding 1 Elder Sign
+        //   (c) discarding 1 Silence Token
+        // Only options the attacker can actually afford are offered. If they
+        // can't pay anything, the battle is auto-blocked (no menu shown).
+        // Cancel returns to the main action menu so the attacker picks a
+        // different action; pay options proceed into the battle.
         case BarrierCheckAction(attacker, defender, then) =>
-            // Factions whose cultists the attacker holds captive
             val captiveFactions = factions.%(f => attacker.at(f.prison).%(_.uclass.utype == Cultist).any)
             val hasES = attacker.es.any
             val hasToken = game.board.isLibraryMap && game.silenceTokens.getOrElse(attacker, 0) > 0
@@ -512,16 +521,15 @@ object LibraryExpansion extends Expansion {
                 EndAction(attacker)
             }
             else {
-                val q = "Battle blocked by " + TomeBarrier.elem + ", pay to override"
+                val q = "Pay " + TomeBarrier.elem + " cost"
                 Ask(attacker)
                     .each(captiveFactions)(f =>
                         BarrierReleaseCultistFactionAction(attacker, f, then)
-                            .as(f.full + " cultist")(q))
+                            .as("Release captured " + f.full + " cultist")(q))
                     .when(hasES)(BarrierDiscardESAction(attacker, then)
-                        .as("Discard an " + "Elder Sign".styled("es"))(q))
+                        .as("Discard 1 " + "Elder Sign".styled("es"))(q))
                     .when(hasToken)(BarrierDiscardTokenAction(attacker, then)
-                        .as("Discard a " + "Silence Token".styled("lb"))(q))
-                    .add(BarrierBlockedAction(attacker).as("None")(q))
+                        .as("Discard 1 " + "Silence Token".styled("lb"))(q))
                     .cancel
             }
 

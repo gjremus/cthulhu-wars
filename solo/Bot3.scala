@@ -10,6 +10,49 @@ object Bot3 {
     // uses it to filter decisions. Replaces per-bot `traceWeights` flags so
     // new factions can opt in by setting this variable (no per-bot change).
     var traceFaction : Option[Faction] = None
+
+    /**
+     * Shared per-unit devour/elimination value ranking (v5.6 — 2026-05-13).
+     * Higher score = better target to devour or eliminate. Callable from any
+     * bot file as `Bot3.devourRanking(u)`. Drives DevourAction (GC Cthulhu)
+     * and any other "pick the best enemy unit to kill" decision that wants
+     * consistent priorities across factions.
+     *
+     *   Cultist (off-gate)            1000
+     *   Cultist on gate                900
+     *   Any 1-power neutral monster    800
+     *   Desiccated (FB)                700
+     *   Any other 2-power neutral      600
+     *   Any 3-power neutral or terror  500
+     *   Revenant of K'Naa (FB)         400
+     *   Any 4-power monster or terror  300
+     *   Any 5-power monster or terror  200
+     *   Any 6+ power monster or terror 100
+     *   else                             0
+     */
+    def devourRanking(u : UnitFigure) : Int = {
+        val uc = u.uclass
+        val utype = uc.utype
+        val cost = uc.cost
+        val isFactionUnit = uc.isInstanceOf[FactionUnitClass]
+        val isNeutralMonster = !isFactionUnit && (utype == Monster || utype == Terror)
+        val isMonsterOrTerror = utype == Monster || utype == Terror
+
+        // Unit-class overrides — specific FB / cultist tiers take precedence.
+        if (utype == Cultist) {
+            if (u.onGate) 900 else 1000
+        }
+        else if (uc == Desiccated) 700
+        else if (uc == RevenantOfKnaa) 400
+        // Generic cost-based tiers
+        else if (isNeutralMonster && cost == 1) 800
+        else if (isNeutralMonster && cost == 2) 600
+        else if (isMonsterOrTerror && cost == 3) 500
+        else if (isMonsterOrTerror && cost == 4) 300
+        else if (isMonsterOrTerror && cost == 5) 200
+        else if (isMonsterOrTerror && cost > 5) 100
+        else 0
+    }
 }
 
 case class Bot3(faction : Faction) {

@@ -909,6 +909,11 @@ case object StartAction extends ForcedAction
 case object SetupFactionsAction extends ForcedAction
 case class CheckSpellbooksAction(then : ForcedAction) extends ForcedAction
 case object AfterPowerGatherAction extends ForcedAction
+// v5 (2026-05-13): RaiseToHalfPowerAction must be the LAST step of the
+// gather-power flow. Runs after AfterPowerGatherAction (which handles
+// MaoCeremony / Shepherd of the Crypt / etc. via faction triggers).
+// See Game.scala AfterPowerGatherAction handler for the ordering note.
+case object RaiseToHalfPowerAction extends ForcedAction
 case class BeforeFirstPlayerAction(l : $[Faction]) extends ForcedAction
 case object FirstPlayerDeterminationAction extends ForcedAction
 case object PlayOrderAction extends ForcedAction
@@ -1126,6 +1131,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Round 8 Bug 40: widened from $[FactionSpellbook] to $[Spellbook] to support
     // IGOO spellbooks (NeutralSpellbook) being flipped facedown via Infernal Pact
     var fbInfernalPactFlipped : $[Spellbook] = $
+    // v4 (2026-05-12): Library tomes flipped via Infernal Pact in the current
+    // (uncommitted) session. Cleared on commit (EndAction) and end of turn.
+    // Used by FBInfernalPactCancel* handlers to restore the tomes face-up.
+    // Per designer Q1: TomeBarrier is flippable for IP discount (only for IP — its
+    // passive battle-block remains otherwise). Per Q2: tome flips count toward
+    // FBTwoFacedownSpellbooks SBR via faceDownCount (see FactionFB.scala).
+    var fbInfernalPactFlippedTomes : $[LibraryTome] = $
     // Round 8 Bug 72: snapshots of FB.spellbooks and FB.unfulfilled taken on the
     // first flip of an IP session. Used by IP Cancel handlers to revert any
     // spellbook awarded mid-session (when flipping the 2nd spellbook facedown
@@ -1874,23 +1886,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 }
             }
 
-            val max = factions./(_.power).max
-            val min = (max + 1) / 2
-
-            if (min == 0) {
-                log("Humanity won")
-
-                return GameOver($)
-            }
-
-            factions.foreach { f =>
-                if (f.power < min) {
-                   f.log("power increased to", min.power)
-                   f.power = min
-                }
-
-                f.active = true
-            }
+            // v5 (2026-05-13) — ORDERING NOTE:
+            // The "raise to half of the highest power" rule MUST be the LAST
+            // gather-power step, AFTER every other gather-power effect
+            // (Shepherd of the Crypt, MaoCeremony, etc.). Moved out of this
+            // block to AfterPowerGatherAction below — see RaiseToHalfPowerAction.
+            // Do NOT insert any additional gather-power functions AFTER the
+            // raise-to-half — anything that grants power must run BEFORE it,
+            // so the floor is computed against the final per-faction totals.
+            factions.foreach { f => f.active = true }
 
             gatherPowerPhase = true
             triggers()
@@ -1904,6 +1908,29 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     f.cultists.onMap.some.foreach { l =>
                         return Ask(f).each(l)(c => MaoCeremonyAction(f, c.region, c.uclass)).add(MaoCeremonyDoneAction(f))
                     }
+                }
+            }
+
+            // v5 (2026-05-13): "raise to half of the highest power" runs LAST,
+            // after every other gather-power effect (Shepherd of the Crypt /
+            // MaoCeremony / etc.). Any future faction power-gain mechanic must
+            // be inserted BEFORE this step (i.e., before RaiseToHalfPowerAction)
+            // — never after — so the floor is computed against the final totals.
+            RaiseToHalfPowerAction
+
+        case RaiseToHalfPowerAction =>
+            val max = factions./(_.power).max
+            val min = (max + 1) / 2
+
+            if (min == 0) {
+                log("Humanity won")
+                return GameOver($)
+            }
+
+            factions.foreach { f =>
+                if (f.power < min) {
+                    f.log("power increased to", min.power)
+                    f.power = min
                 }
             }
 

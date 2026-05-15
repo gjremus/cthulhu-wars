@@ -168,6 +168,10 @@ case class FBInfernalPactMainAction(self : Faction) extends OptionFactionAction(
 // Widened from FactionSpellbook to Spellbook so IGOO spellbooks (NeutralSpellbook) can
 // also be flipped facedown via Infernal Pact (Round 8, Bug 40).
 case class FBInfernalPactChooseAction(self : Faction, sb : Spellbook) extends BaseFactionAction("Flip facedown", sb.name.styled(FB)) with PowerNeutral
+// v4 (2026-05-12): Library tomes are IP-flippable per the v4 rule clarification.
+// Per designer Q1: TomeBarrier is included (passive normally; flippable only via IP).
+// Per Q2: tome flips count toward FBTwoFacedownSpellbooks SBR (via faceDownCount).
+case class FBInfernalPactChooseTomeAction(self : Faction, tome : LibraryTome) extends BaseFactionAction(implicit g => "Flip facedown", implicit g => tome.elem) with PowerNeutral
 case class FBInfernalPactDoneAction(self : Faction) extends OptionFactionAction("Done".styled("power")) with Soft with PowerNeutral { def question(implicit game : Game) = "Infernal Pact" }
 // Bug fix: Infernal Pact cancel actions are Hard, not Soft. They mutate state (flip spellbooks back up,
 // restore faction power, reset game.fbInfernalPact* vars). Soft would prevent undo from replaying them.
@@ -486,8 +490,16 @@ object FBExpansion extends Expansion {
     def faceDownIGOOSpellbooks(implicit game : Game) : $[NeutralSpellbook] =
         FB.upgrades.%(_.isInstanceOf[NeutralSpellbook]).map(_.asInstanceOf[NeutralSpellbook]).%(sb => FB.oncePerGame.has(sb))
 
-    // Count facedown spellbooks (faction + IGOO combined, for FBTwoFacedownSpellbooks requirement)
-    def faceDownCount(implicit game : Game) : Int = faceDownSpellbooks.num + faceDownIGOOSpellbooks.num
+    // v4 (2026-05-12): FB-held library tomes currently face-down. Per designer Q2,
+    // these count toward FBTwoFacedownSpellbooks SBR. Includes tomes flipped either
+    // by IP, by normal use (Guardian/Larvae/Yr power), or by Silence Token — any
+    // face-down state on an FB-held tome counts.
+    def faceDownTomesHeld(implicit game : Game) : Int =
+        $(TomeBarrier, TomeGuardian, TomeLarvae, TomeYr).%(t =>
+            game.tomeHolders.get(t).flatten.has(FB) && !game.tomeFaceUp.getOrElse(t, true)).num
+
+    // Count facedown spellbooks (faction + IGOO combined + FB-held tomes, for FBTwoFacedownSpellbooks requirement)
+    def faceDownCount(implicit game : Game) : Int = faceDownSpellbooks.num + faceDownIGOOSpellbooks.num + faceDownTomesHeld
 
     // Effective cost after Infernal Pact discount
     def effectiveCost(baseCost : Int)(implicit game : Game) : Int = max(0, baseCost - game.fbInfernalPactDiscount)
@@ -810,6 +822,17 @@ object FBExpansion extends Expansion {
             }
             faceDownIGOOSpellbooks.foreach { sb =>
                 flipSpellbookUp(sb)
+            }
+            // v4 (2026-05-12): also flip any FB-held face-down library tomes back up.
+            // For Guardian/Larvae/Yr this overlaps with the doom-phase auto-restore,
+            // but Ghato awakening can happen pre-doom and restores immediately. For
+            // TomeBarrier (no auto-restore) this is the only systematic restore short
+            // of a Silence Token spend.
+            $(TomeBarrier, TomeGuardian, TomeLarvae, TomeYr).foreach { t =>
+                if (game.tomeHolders.get(t).flatten.has(FB) && !game.tomeFaceUp.getOrElse(t, true)) {
+                    game.tomeFaceUp = game.tomeFaceUp + (t -> true)
+                    self.log("Awaken Ghatanothoa: flipped", t.elem, "face-up")
+                }
             }
 
             game.triggers()
@@ -1185,12 +1208,20 @@ object FBExpansion extends Expansion {
 
         // ── INFERNAL PACT ──
         case FBInfernalPactMainAction(self) =>
-            // Round 8 Bug 40: offer both faction spellbooks and IGOO spellbooks for flipping
+            // Round 8 Bug 40: offer both faction spellbooks and IGOO spellbooks for flipping.
+            // v4 (2026-05-12): also offer FB-held face-up library tomes (TomeBarrier
+            // included per designer Q1).
             val available : $[Spellbook] = faceUpSpellbooks ++ faceUpIGOOSpellbooks
-            if (available.any) {
+            val faceUpTomes : $[LibraryTome] = $(TomeBarrier, TomeGuardian, TomeLarvae, TomeYr)
+                .%(t => game.tomeHolders.get(t).flatten.has(FB))
+                .%(t => game.tomeFaceUp.getOrElse(t, true))
+            if (available.any || faceUpTomes.any) {
                 implicit val asking = Asking(self)
                 available.foreach { sb =>
                     + FBInfernalPactChooseAction(self, sb)
+                }
+                faceUpTomes.foreach { t =>
+                    + FBInfernalPactChooseTomeAction(self, t)
                 }
                 + FBInfernalPactDoneAction(self)
                 + FBInfernalPactCancelAction(self)
@@ -1227,6 +1258,24 @@ object FBExpansion extends Expansion {
             // scenario still lets FB IP-discount the unlimited battle.
             CheckSpellbooksAction(FBInfernalPactResumeAction(self))
 
+        // v4 (2026-05-12): Library-tome IP flip. Mirrors FBInfernalPactChooseAction
+        // but mutates `game.tomeFaceUp` (game-global tome state) instead of
+        // `oncePerGame` (per-faction SB state). Tomes are tracked in a separate
+        // session list `fbInfernalPactFlippedTomes` so Cancel can revert them
+        // without disturbing the SB-flipped list. Tome flips count toward
+        // FBTwoFacedownSpellbooks SBR via faceDownCount.
+        case FBInfernalPactChooseTomeAction(self, tome) =>
+            if (game.fbInfernalPactStartPower < 0) {
+                game.fbInfernalPactStartPower = self.power
+                game.fbInfernalPactSpellbooksBeforeSession = self.spellbooks
+                game.fbInfernalPactUnfulfilledBeforeSession = self.unfulfilled
+            }
+            game.tomeFaceUp = game.tomeFaceUp + (tome -> false)
+            game.fbInfernalPactDiscount += 1
+            game.fbInfernalPactFlippedTomes :+= tome
+            self.log("Infernal Pact".styled(FB) + ": flipped", tome.elem, "facedown, discount now", game.fbInfernalPactDiscount.power)
+            CheckSpellbooksAction(FBInfernalPactResumeAction(self))
+
         case FBInfernalPactResumeAction(self) =>
             Force(FBInfernalPactMainAction(self))
 
@@ -1241,6 +1290,10 @@ object FBExpansion extends Expansion {
             game.fbInfernalPactFlipped.foreach { sb =>
                 flipSpellbookUp(sb)
             }
+            // v4 (2026-05-12): also restore tomes flipped this session.
+            game.fbInfernalPactFlippedTomes.foreach { t =>
+                game.tomeFaceUp = game.tomeFaceUp + (t -> true)
+            }
             if (game.fbInfernalPactStartPower >= 0) {
                 self.spellbooks = game.fbInfernalPactSpellbooksBeforeSession
                 self.unfulfilled = game.fbInfernalPactUnfulfilledBeforeSession
@@ -1249,6 +1302,7 @@ object FBExpansion extends Expansion {
             game.fbInfernalPactDiscount = game.fbInfernalPactCommittedDiscount
             game.fbInfernalPactStartPower = -1
             game.fbInfernalPactFlipped = $
+            game.fbInfernalPactFlippedTomes = $
             game.fbInfernalPactSpellbooksBeforeSession = $
             game.fbInfernalPactUnfulfilledBeforeSession = $
             // 2026-05-11: block IPMain re-offers this turn — see Game.scala
@@ -1265,6 +1319,10 @@ object FBExpansion extends Expansion {
             game.fbInfernalPactFlipped.foreach { sb =>
                 flipSpellbookUp(sb)
             }
+            // v4 (2026-05-12): also restore tomes flipped this session.
+            game.fbInfernalPactFlippedTomes.foreach { t =>
+                game.tomeFaceUp = game.tomeFaceUp + (t -> true)
+            }
             if (game.fbInfernalPactStartPower >= 0) {
                 self.spellbooks = game.fbInfernalPactSpellbooksBeforeSession
                 self.unfulfilled = game.fbInfernalPactUnfulfilledBeforeSession
@@ -1272,6 +1330,7 @@ object FBExpansion extends Expansion {
             game.fbInfernalPactDiscount = game.fbInfernalPactCommittedDiscount
             game.fbInfernalPactStartPower = -1
             game.fbInfernalPactFlipped = $
+            game.fbInfernalPactFlippedTomes = $
             game.fbInfernalPactSpellbooksBeforeSession = $
             game.fbInfernalPactUnfulfilledBeforeSession = $
             self.log("Cancelled", "Infernal Pact".styled(FB))
@@ -1370,9 +1429,11 @@ object FBExpansion extends Expansion {
         //      FB's final SBR and unlimited combat unlocks, FB can IP-discount
         //      the unlimited battle using the freshly-earned 6th SB.
         case EndAction(self) if self == FB =>
-            if (game.fbInfernalPactFlipped.any || game.fbInfernalPactCommittedDiscount != game.fbInfernalPactDiscount) {
+            if (game.fbInfernalPactFlipped.any || game.fbInfernalPactFlippedTomes.any ||
+                game.fbInfernalPactCommittedDiscount != game.fbInfernalPactDiscount) {
                 game.fbInfernalPactCommittedDiscount = game.fbInfernalPactDiscount
                 game.fbInfernalPactFlipped = $
+                game.fbInfernalPactFlippedTomes = $
                 game.fbInfernalPactStartPower = -1
                 game.fbInfernalPactSpellbooksBeforeSession = $
                 game.fbInfernalPactUnfulfilledBeforeSession = $
@@ -1390,6 +1451,7 @@ object FBExpansion extends Expansion {
             game.fbInfernalPactCommittedDiscount = 0
             game.fbInfernalPactStartPower = -1
             game.fbInfernalPactFlipped = $
+            game.fbInfernalPactFlippedTomes = $
             game.fbInfernalPactSpellbooksBeforeSession = $
             game.fbInfernalPactUnfulfilledBeforeSession = $
             // 2026-05-11: reset the cancel-loop guard so next turn FB can use IP again.
