@@ -1,0 +1,289 @@
+package cws
+
+import hrf.colmat._
+
+/**
+ * StateCompareTest — uses the BotOW test wrapper to force OW to take
+ * each neutral unit card, one at a time. Runs multiple games per unit.
+ * Records before/after state for both card acquisition AND ability firing.
+ */
+object StateCompareTest {
+    implicit var game: Game = _
+    val results = new StringBuilder
+    val RUNS_PER_UNIT = 5
+
+    def log(s: String): Unit = {
+        results.append(s + "\n")
+        println(s)
+    }
+
+    def fstate(f: Faction): String = {
+        val p = factionToState(f)
+        val mummified = game.mummifiedCultists.%(_.faction == f).num
+        s"${f.name}: doom=${p.doom} power=${p.power} gates=${p.gates.num} units=${p.units.%(_.region.onMap).num} cultists=${p.cultists.num} es=${p.es.num} sb=${p.spellbooks.num} lc=[${p.loyaltyCards.map(_.unit.name).mkString(",")}]" +
+            (if (mummified > 0) s" mummified=$mummified" else "") +
+            (if (game.azathothGlyphPosition > 0 && p.loyaltyCards.has(AzathothIGOOCard)) s" glyph=${game.azathothGlyphPosition}" else "")
+    }
+
+    def allState(): String = game.factions.map(fstate).mkString("\n      ")
+
+    // Ability action class names to watch for state changes
+    val abilityActions: Set[String] = Set(
+        // Terrors - battle abilities
+        "DholePlanetaryDestructionDoomAction", "DholePlanetaryDestructionPowerAction",
+        "BloodthirstConvertAction", "BloodthirstConvertOpponentAction",
+        "LaughingstockMoveAction", "LaughingstockSideAction",
+        "QuachilDustToDustRemoveAction", "QuachilDustToDustESAction",
+        "PrimeCauseChooseUnitAction", "PrimeCauseChooseReplacementAction",
+        "FireVampiresSpareAction",
+        "VelvetFanCaptureAction",
+        // Monsters - passive/trigger abilities
+        "CronophageTeleportAction",
+        "MoonbeastInitialPlaceAction", "MoonbeastSummonMainAction", "MoonbeastPrematureReturnAction",
+        "ShadowPharaohHebephreniaAction",
+        "BrownJenkinFamiliarAction",
+        // iGOO abilities
+        "NuclearChaosRollAction", "NuclearChaosAdjustAction", "NuclearChaosKeepAction",
+        "AzathothAwakenCommitAction", "AzathothResolveAction",
+        "YigRemoveGateAction",
+        "MessengerOfYigDonateAction", "MessengerOfYigRefuseAction",
+        "FatherDagonTsunamiTargetAction",
+        "MotherHydraAgonyStingTargetAction",
+        "GhatanotoaSBRPayAction",
+        // Card acquisition
+        "NeutralMonstersAction", "IndependentGOOMainAction",
+        "LoyaltyCardDoomAction", "LoyaltyCardSummonAction",
+    )
+
+    // Expected abilities per unit (the ones we want to see fire)
+    // Expected abilities — only actions with their own Action class (not triggers())
+    // Battle-phase abilities: may not fire if unit doesn't enter combat in a given game
+    // triggers() abilities (Shadow Pharaoh, Brown Jenkin, Elder Thing, Satyr): fire inside
+    //   game.perform() with no separate action class — effects visible in state diffs
+    val expectedAbilities: Map[String, Set[String]] = Map(
+        "Dhole" -> Set(), // DholePlanetaryDestructionDoom/PowerAction — battle phase, may not fire
+        "Great Race of Yith" -> Set(), // passive combat bonus, no action
+        "Quachil Uttaus" -> Set(), // QuachilDustToDustRemove/ESAction — battle phase, may not fire
+        "Shadow Pharaoh" -> Set(), // Hebephrenia fires in triggers(), no action class
+        "Hound of Tindalos" -> Set("CronophageTeleportAction"),
+        "Brown Jenkin" -> Set(), // Familiar fires in triggers(), no action class
+        "Elder Shoggoth" -> Set("PrimeCauseChooseUnitAction"),
+        "Moonbeast" -> Set("MoonbeastInitialPlaceAction"),
+        "Albino Penguins" -> Set("LaughingstockSideAction", "LaughingstockMoveAction"),
+        "Elder Thing" -> Set(), // passive suppression in triggers(), no action class
+        "Leng Spider" -> Set(), // BloodthirstConvert — battle phase, may not fire
+        "Satyr" -> Set(), // Fecund fires in LoyaltyCardSummonAction handler, no separate action
+        "Insects from Shaggai" -> Set("LaughingstockMoveAction"), // LaughingstockSideAction only if in battle
+        "Yig" -> Set(), // spellbook abilities — bot may not use them
+        "Mother Hydra" -> Set(), // MotherHydraAgonyStingTargetAction — bot may not use
+        "Father Dagon" -> Set(), // FatherDagonTsunamiTargetAction — bot may not use
+        "Cthugha" -> Set(), // FireVampiresSpareAction — battle phase, may not fire
+        "Bloated Woman" -> Set(), // VelvetFanCaptureAction — battle phase, may not fire
+        "Azathoth" -> Set(), // AzathothAwakenCommitAction — bot may not awaken
+    )
+
+    case class AbilityFiring(action: String, beforeOW: String, afterOW: String, beforeAll: String, afterAll: String)
+
+    def runGameWithAbilityTracking(maxSteps: Int = 8000): (Boolean, Seq[AbilityFiring]) = {
+        val firings = scala.collection.mutable.ArrayBuffer[AbilityFiring]()
+        val (l, cc) = game.perform(StartAction)
+        var c: Continue = cc
+        var n = 0
+        while (!c.isInstanceOf[GameOver] && n < maxSteps) {
+            n += 1
+            val a = Host.askFaction(game, c)
+            val actionName = a.unwrap.getClass.getSimpleName
+
+            if (abilityActions.contains(actionName)) {
+                val beforeOW = fstate(OW)
+                val beforeAll = allState()
+                val (ll, cc2) = game.perform(a.unwrap)
+                val afterOW = fstate(OW)
+                val afterAll = allState()
+                firings += AbilityFiring(actionName, beforeOW, afterOW, beforeAll, afterAll)
+                c = cc2
+            } else {
+                val (ll, cc2) = game.perform(a.unwrap)
+                c = cc2
+            }
+        }
+        (n < maxSteps, firings.toSeq)
+    }
+
+    def makeGame(): Game = {
+        val allOpts: $[GameOption] = $(
+            NeutralMonsters, NeutralTerrors, IGOOs, HighPriests, MapEarth35,
+            UseGhast, UseGug, UseShantak, UseStarVampire, UseVoonith, UseDimensionalShamblers, UseGnorri,
+            UseLengSpider, UseSatyr, UseElderThing, UseMoonbeast, UseAlbinoPenguins, UseInsectsFromShaggai,
+            UseDhole, UseQuachilUttaus, UseBrownJenkin, UseElderShoggoth, UseShadowPharaoh, UseGreatRaceOfYith, UseHoundOfTindalos,
+            UseByatis, UseAbhoth, UseDaoloth, UseNyogtha, UseTulzscha, UseYgolonac,
+            UseYig, UseMotherHydra, UseFatherDagon, UseCthugha, UseGhatanotoaIGOO, UseBloatedWoman, UseAzathothIGOO
+        )
+        new Game(EarthMap4v35, RitualTrack.for4, $(OW, GC, CC, BG), true, allOpts)
+    }
+
+    def logAbilityResults(name: String, allFirings: Seq[AbilityFiring]): Unit = {
+        val grouped = allFirings.groupBy(_.action)
+        if (grouped.isEmpty) {
+            log(s"  ABILITIES FIRED: None across $RUNS_PER_UNIT games")
+        } else {
+            log(s"  ABILITIES FIRED: ${allFirings.size} total across $RUNS_PER_UNIT games")
+            grouped.foreach { case (actionName, fires) =>
+                log(s"\n    ── $actionName (${fires.size}x) ──")
+                // Show first example with state change
+                val withChange = fires.find(f => f.beforeOW != f.afterOW || f.beforeAll != f.afterAll)
+                val example = withChange.getOrElse(fires.head)
+                log(s"      BEFORE: ${example.beforeOW}")
+                log(s"      AFTER:  ${example.afterOW}")
+                if (example.beforeAll != example.afterAll) {
+                    log(s"      ALL BEFORE: ${example.beforeAll}")
+                    log(s"      ALL AFTER:  ${example.afterAll}")
+                }
+            }
+        }
+
+        // Report missing expected abilities
+        val expected = expectedAbilities.getOrElse(name, Set())
+        val fired = grouped.keySet
+        val missing = expected -- fired
+        if (missing.nonEmpty) {
+            log(s"\n  ⚠ EXPECTED BUT NOT FIRED: ${missing.mkString(", ")}")
+        } else if (expected.nonEmpty) {
+            log(s"\n  ✓ All expected abilities fired")
+        }
+    }
+
+    def main(args: Array[String]): Unit = {
+        log("═══════════════════════════════════════════════════════")
+        log(s"  FORCED NEUTRAL UNIT STATE COMPARISON TEST")
+        log(s"  Test faction: Opener of the Way")
+        log(s"  Runs per unit: $RUNS_PER_UNIT")
+        log(s"  Tests: card acquisition + ability state changes")
+        log("═══════════════════════════════════════════════════════\n")
+
+        // Test each card
+        val allCards: $[(String, LoyaltyCard)] = $(
+            ("Dhole", DholeCard), ("Great Race of Yith", GreatRaceOfYithCard),
+            ("Quachil Uttaus", QuachilUttausCard), ("Shadow Pharaoh", ShadowPharaohCard),
+            ("Hound of Tindalos", HoundOfTindalosCard), ("Brown Jenkin", BrownJenkinCard),
+            ("Elder Shoggoth", ElderShoggothCard),
+            ("Moonbeast", MoonbeastCard), ("Albino Penguins", AlbinoPenguinsCard),
+            ("Elder Thing", ElderThingCard), ("Leng Spider", LengSpiderCard),
+            ("Satyr", SatyrCard), ("Insects from Shaggai", InsectsFromShaggaiCard),
+        )
+
+        for ((name, card) <- allCards) {
+            log(s"\n══ Testing: $name ($RUNS_PER_UNIT games) ══")
+            var obtained = 0
+            var crashed = 0
+            var allFirings = Seq[AbilityFiring]()
+
+            for (run <- 1 to RUNS_PER_UNIT) {
+                BotOW.reset()
+                BotOW.forceCard = Some(card)
+                game = makeGame()
+
+                try {
+                    val (finished, firings) = runGameWithAbilityTracking(5000)
+                    val owHasCard = factionToState(OW)(game).loyaltyCards.contains(card)
+                    if (owHasCard) obtained += 1
+                    allFirings ++= firings
+                    if (!finished) log(s"  Run $run: hit step limit")
+                } catch {
+                    case e: Exception =>
+                        crashed += 1
+                        log(s"  Run $run CRASH: ${e.getClass.getSimpleName}: ${e.getMessage}")
+                        e.printStackTrace()
+                }
+            }
+
+            log(s"  OBTAINED: $obtained/$RUNS_PER_UNIT games")
+            log(s"  CRASHED: $crashed/$RUNS_PER_UNIT games")
+            logAbilityResults(name, allFirings)
+        }
+
+        // Test each iGOO
+        val allIGOOs: $[(String, IGOOLoyaltyCard)] = $(
+            ("Yig", YigCard), ("Mother Hydra", MotherHydraCard),
+            ("Father Dagon", FatherDagonCard), ("Cthugha", CthughaCard),
+            ("Bloated Woman", BloatedWomanCard), ("Azathoth", AzathothIGOOCard),
+        )
+
+        for ((name, card) <- allIGOOs) {
+            log(s"\n══ Testing iGOO: $name ($RUNS_PER_UNIT games) ══")
+            var awakened = 0
+            var crashed = 0
+            var allFirings = Seq[AbilityFiring]()
+
+            for (run <- 1 to RUNS_PER_UNIT) {
+                BotOW.reset()
+                BotOW.forceIGOO = Some(card)
+                game = makeGame()
+
+                try {
+                    val (finished, firings) = runGameWithAbilityTracking(8000)
+                    val owHasCard = factionToState(OW)(game).loyaltyCards.contains(card)
+                    if (owHasCard) awakened += 1
+                    allFirings ++= firings
+                    if (!finished) log(s"  Run $run: hit step limit")
+                } catch {
+                    case e: Exception =>
+                        crashed += 1
+                        log(s"  Run $run CRASH: ${e.getClass.getSimpleName}: ${e.getMessage}")
+                        e.printStackTrace()
+                }
+            }
+
+            log(s"  AWAKENED: $awakened/$RUNS_PER_UNIT games")
+            log(s"  CRASHED: $crashed/$RUNS_PER_UNIT games")
+            logAbilityResults(name, allFirings)
+        }
+
+        BotOW.reset()
+
+        // GC-forced tests: units that need combat to verify (GC is more aggressive)
+        val gcCards: $[(String, LoyaltyCard)] = $(
+            ("Leng Spider (GC)", LengSpiderCard),
+        )
+
+        for ((name, card) <- gcCards) {
+            log(s"\n══ Testing via GC: $name (20 games) ══")
+            var obtained = 0
+            var crashed = 0
+            var allFirings = Seq[AbilityFiring]()
+
+            for (run <- 1 to 20) {
+                BotGC.reset()
+                BotGC.forceCard = Some(card)
+                BotGC.forceAbility = Some("Attack")  // Force GC to attack aggressively
+                game = makeGame()
+
+                try {
+                    val (finished, firings) = runGameWithAbilityTracking(5000)
+                    val gcHasCard = factionToState(GC)(game).loyaltyCards.contains(card)
+                    if (gcHasCard) obtained += 1
+                    allFirings ++= firings
+                    if (!finished) log(s"  Run $run: hit step limit")
+                } catch {
+                    case e: Exception =>
+                        crashed += 1
+                        log(s"  Run $run CRASH: ${e.getClass.getSimpleName}: ${e.getMessage}")
+                        e.printStackTrace()
+                }
+            }
+
+            log(s"  OBTAINED: $obtained/20 games")
+            log(s"  CRASHED: $crashed/20 games")
+            logAbilityResults(name, allFirings)
+        }
+
+        BotGC.reset()
+
+        // Summary
+        log(s"\n═══ TEST COMPLETE ═══")
+
+        val outPath = "/Users/gremus/My Drive/Personal/Games/Cthulhu Wars/Neutral Units/state-comparison-results.txt"
+        java.nio.file.Files.write(java.nio.file.Paths.get(outPath), results.toString.getBytes)
+        log(s"Results written to: $outPath")
+    }
+}
