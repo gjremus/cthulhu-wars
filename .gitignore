@@ -17,5 +17,11 @@ solo/web.config
 # main.js, index.html, webp/, fonts/.
 sim/
 
+# 2026-05-22: scripts/ holds local dev tooling (publish/deploy helpers).
+# Any inline secrets must live in ~/.config/cwo/ (outside the repo).
+# Keeping scripts/ untracked entirely is the safest default — if a script
+# needs to be in the repo, add a per-file negation below.
+scripts/
+
 # macOS finder metadata
 **/.DS_Store

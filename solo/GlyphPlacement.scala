@@ -70,6 +70,29 @@ class GlyphPlacement(boardId : String) {
         (xx, yy)
     }
 
+    // Same as findAnother but samples uniformly within an arbitrary [minX..maxX] × [minY..maxY]
+    // bbox (clamped to the bitmap), rejecting pixels whose color doesn't match the region at
+    // (x, y). Used by the L/T-region balanced-placement code: for partitioned regions the
+    // caller picks a sub-rectangle weighted by its area %, then asks for a candidate inside it.
+    def findAnotherInBox(x : Int, y : Int, minX : Int, minY : Int, maxX : Int, maxY : Int) : (Int, Int) = {
+        if (x < 0 || x >= placeb.width || y < 0 || y >= placeb.height)
+            return (x, y)
+        val p = place(x)(y)
+        val lx = math.max(0, minX); val ly = math.max(0, minY)
+        val hx = math.min(placeb.width - 1, maxX); val hy = math.min(placeb.height - 1, maxY)
+        if (lx > hx || ly > hy) return findAnother(x, y)
+        val w = hx - lx + 1; val h = hy - ly + 1
+        var xx = 0; var yy = 0; var tries = 0
+        do {
+            xx = lx + (w * scala.math.random()).toInt
+            yy = ly + (h * scala.math.random()).toInt
+            tries += 1
+            if (tries > 5000) return findAnother(x, y) // box too restrictive — fall back to full region
+        }
+        while (place(xx)(yy) != p)
+        (xx, yy)
+    }
+
     // Deterministic position for a faction glyph.
     // gx, gy: gate center coordinates (the glyph should avoid overlapping the gate).
     // halfGlyph: half-size of the glyph's bounding box (e.g., 33 for a 66x66 glyph).

@@ -185,6 +185,17 @@ object TSCursedTomesOverlay {
     // colored resource names. Inline HTML lets the row td color attribute act only as the
     // fallback (face-down rows use the parent color via opacity, not by overwriting spans).
     private val P  = """<span class="power">Power</span>"""
+    private val P1 = """<span class="power">1 Power</span>"""
+    val tomeFactionPowerBlock : String = {
+        val curse = """<span class="ability-color">Cursed Tomes</span>""" +
+                    """<span class="cost-color"> (Ongoing)</span>""" +
+                    """<span class="nt">: When you perform a Ritual of Annihilation you may remove any of your Tomes on your Faction Sheet from the game.</span>"""
+        val final_rev = """<span class="ability-color">The Final Revelation</span>""" +
+                        """<span class="cost-color"> (Game End)</span>""" +
+                        """<span class="nt">: If at the end of the game, if the Instant Death marker has not been reached on the Ritual Track, each player loses 1 Doom for each face-down Tome that they have on their Faction Sheet.</span>"""
+        s"""<tr><td style="padding:8px 12px;border-top:1px solid grey;font-size:88%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$curse</td></tr>""" +
+        s"""<tr><td style="padding:8px 12px;font-size:88%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$final_rev</td></tr>"""
+    }
     private val TS = """<span class="ts">Tombstalker</span>"""
     private val TH = """<span class="ts">Tomb-Herd</span>"""
     private val DT = """<span class="ts">Deep Tendril</span>"""
@@ -195,17 +206,17 @@ object TSCursedTomesOverlay {
     private val RT = """<span class="doom">Ritual Track</span>"""
 
     val tomeTexts : scala.collection.immutable.Map[Int, String] = scala.collection.immutable.Map(
-        1  -> s"Gain 1 $P. $TS places a $TH at their Controlled Gate if able.",
-        2  -> s"Gain 1 $P. $TS places a $TH at their Controlled Gate if able.",
-        3  -> s"Gain 1 $P. $TS places a $DT at their Controlled Gate if able.",
-        4  -> s"Gain 1 $P. $TS places a $DT at their Controlled Gate if able.",
-        5  -> s"Gain 1 $P. $TS gains $D1.",
-        6  -> s"Gain 1 $P. $TS gains $D1.",
-        7  -> s"Gain 1 $P. $TS gains $DH equal to the number of $TH in play.",
-        8  -> s"Gain 1 $P. $TS gains $DH equal to the number of $TH in play.",
-        9  -> s"Gain 1 $P. $TS gains an $ES.",
-        10 -> s"Gain 1 $P. $TS gains an $ES.",
-        11 -> s"Gain 1 $P. $TS gains $D equal to the $RT marker minus 5."
+        1  -> s"Gain $P1. $TS places a $TH at their Controlled Gate if able.",
+        2  -> s"Gain $P1. $TS places a $TH at their Controlled Gate if able.",
+        3  -> s"Gain $P1. $TS places a $DT at their Controlled Gate if able.",
+        4  -> s"Gain $P1. $TS places a $DT at their Controlled Gate if able.",
+        5  -> s"Gain $P1. $TS gains $D1.",
+        6  -> s"Gain $P1. $TS gains $D1.",
+        7  -> s"Gain $P1. $TS gains $DH equal to the number of $TH in play.",
+        8  -> s"Gain $P1. $TS gains $DH equal to the number of $TH in play.",
+        9  -> s"Gain $P1. $TS gains an $ES.",
+        10 -> s"Gain $P1. $TS gains an $ES.",
+        11 -> s"Gain $P1. $TS gains $D equal to the $RT marker minus 5."
     )
 }
 
@@ -795,18 +806,20 @@ object Overlays {
             // Show all 11 tomes in ascending order — white if still on card, grey if given away
             val onCardRows = (1 to 11)./ { n =>
                 val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
-                val color = if (n <= givenAway) "grey" else "white"
-                s"""<tr><td style="color:$color;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$text</td></tr>"""
+                val opacity = if (n <= givenAway) "0.55" else "1"
+                s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$text</td></tr>"""
             }.mkString("")
             // Show tomes held by other factions
             val factionRows = allTomes.toList.flatMap { case (fs, tomes) =>
                 tomes.sortBy(_._1)./ { case (n, faceDown) =>
                     val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
-                    val color = if (faceDown) "grey" else "white"
-                    s"""<tr><td style="color:$color;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);"><span class="$fs">[$fs]</span> $text</td></tr>"""
+                    val opacity = if (faceDown) "0.55" else "1"
+                    s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);"><span class="$fs">[$fs]</span> $text</td></tr>"""
                 }
             }.mkString("")
-            s"""<table class="spellbook-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">Cursed Tomes</td></tr>$onCardRows$factionRows</tbody></table>"""
+            val anyNonTsHolder = allTomes.exists { case (fs, t) => fs != "ts" && t.nonEmpty }
+            val footer = if (anyNonTsHolder) TSCursedTomesOverlay.tomeFactionPowerBlock else ""
+            s"""<table class="spellbook-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">Cursed Tomes</td></tr>$onCardRows$factionRows$footer</tbody></table>"""
 
         // Tombstalker (TS): Cursed Tomes overlay for other factions — shows tomes held (white=face-up, grey=face-down)
         case $("cursed-tomes", fStyle) =>
@@ -815,10 +828,10 @@ object Overlays {
             else {
                 val rows = tomes.sortBy(_._1)./ { case (n, faceDown) =>
                     val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
-                    val color = if (faceDown) "grey" else "white"
-                    s"""<tr><td style="color:$color;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$text</td></tr>"""
+                    val opacity = if (faceDown) "0.55" else "1"
+                    s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$text</td></tr>"""
                 }.mkString("")
-                s"""<table class="spellbook-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">Cursed Tomes</td></tr>$rows</tbody></table>"""
+                s"""<table class="spellbook-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">Cursed Tomes</td></tr>$rows${TSCursedTomesOverlay.tomeFactionPowerBlock}</tbody></table>"""
             }
 
         case $("RoA") =>

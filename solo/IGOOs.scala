@@ -755,7 +755,8 @@ object IGOOsExpansion extends Expansion {
             }
 
         case AwakenIGOOMainAction(self) =>
-            val available = game.loyaltyCards.of[IGOOLoyaltyCard].%(igoo => game.igooCost(self, igoo) <= self.power).%(igoo => !(igoo == GhatanotoaIGOOCard && game.factions.has(FB))).%(igoo => !(igoo == GlaakiIGOOCard && game.factions.has(TS))).%(igoo => igoo != AzathothIGOOCard).%(igoo => igoo != CthughaCard).%(igoo => {
+            // iGOO Ghatanothoa and iGOO Glaaki are distinct from faction GOOs — allowed even when FB/TS in game
+            val available = game.loyaltyCards.of[IGOOLoyaltyCard].%(igoo => game.igooCost(self, igoo) <= self.power).%(igoo => igoo != AzathothIGOOCard).%(igoo => igoo != CthughaCard).%(igoo => {
                 val cost = game.igooCost(self, igoo)
                 areas.nex.%(self.canAwakenIGOO).%(self.affords(cost)).any
             }).sortBy(_.name)

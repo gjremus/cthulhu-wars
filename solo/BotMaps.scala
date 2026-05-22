@@ -195,23 +195,26 @@ object BotMaps {
             case LibrarianResetAgonyAction(_, _, _) =>
                 $((action, -2000, "agony amount: avoid reset"))
 
-            // ── AGONY RESOLUTION: prefer returning tome > cultist > monster > doom > GOO ──
-            case LibrarianReturnTomeMainAction(_, _, _, _, _) =>
-                $((action, -100, "agony resolve: return tome (least bad)"))
-
+            // ── AGONY RESOLUTION: per user priority order (least painful loss first) ──
+            //   1) 0-power unit (cultist), 2) 1-cost off-gate, 3) return tome,
+            //   4) cost <4 low→high, 5) lose doom, 6) high cost / GOO low→high
             case LibrarianEliminateUnitAction(_, uRef, _, _, _, _, _, _) =>
                 val u = game.unit(uRef)
-                val score = u.uclass.utype match {
-                    case Cultist => -300
-                    case Monster => -500 - u.uclass.cost * 100
-                    case Terror => -1500
-                    case GOO => -10000
-                    case _ => -200
-                }
-                $((action, score, "agony resolve: eliminate " + u.uclass.name))
+                val cost = u.uclass.cost
+                val controlsGate = u.onGate && u.canControlGate
+                val score : Int =
+                    if (cost == 0) -100
+                    else if (cost == 1 && !controlsGate) -200
+                    else if (cost <= 3) -400 - cost * 50
+                    else if (u.uclass.utype == GOO) -1100 - cost * 100
+                    else -1000 - cost * 100
+                $((action, score, "agony resolve: eliminate " + u.uclass.name + " (cost " + cost + ", controlsGate=" + controlsGate + ")"))
+
+            case LibrarianReturnTomeMainAction(_, _, _, _, _) =>
+                $((action, -300, "agony resolve: return tome (bucket 3)"))
 
             case LibrarianLoseDoomAction(_, _, _, _, _) =>
-                $((action, -2000, "agony resolve: lose doom"))
+                $((action, -600, "agony resolve: lose doom (bucket 5)"))
 
             // ── BARRIER OF NAACH-TITH: avoid battling barrier holder without token ──
             case a : FactionAction if a.self == self && barrierActive && !hasSilenceToken =>

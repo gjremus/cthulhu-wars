@@ -33,11 +33,9 @@ class Serialize(val game : Game) {
 
         case ss : List[_] => ss./(write).mkString("[", ", ", "]")
 
-        case mm : Map[_, _] => mm.toList./{ case (k, v) => write(k) + "->" + write(v) }.mkString("{", ", ", "}")
-
-        // Firstborn (FB) helper case classes (used as fields in FB actions and Writhe state).
+        // Firstborn (FB) helper case classes (used as fields in FB actions and state).
         // Follow the AzathothOffer pattern: function-call form with productIterator.
-        // Parser reconstructs via explicit EApply cases below.
+        // Parser reconstructs via the reflection-based EApply catch-all.
         case x : FBEyeOpensTarget => "FBEyeOpensTarget(" + x.productIterator.$./(write).mkString(", ") + ")"
         case x : FBCyclopeanGazeSource => "FBCyclopeanGazeSource(" + x.productIterator.$./(write).mkString(", ") + ")"
         case x : FBWritheKillEntry => "FBWritheKillEntry(" + x.productIterator.$./(write).mkString(", ") + ")"
@@ -55,8 +53,6 @@ class Serialize(val game : Game) {
     case object ENone extends Expr
     case class ESome(value : Expr) extends Expr
     case class EList(values : $[Expr]) extends Expr
-    case class EPair(pair : (Expr, Expr)) extends Expr
-    case class EMap(values : $[EPair]) extends Expr
     case class EApply(f : String, params : $[Expr]) extends Expr
 
     case class EElderSign(value : Int) extends Expr
@@ -65,8 +61,8 @@ class Serialize(val game : Game) {
 
     def space[* : P] = P{ CharsWhileIn(" \r\n", 0) }
 
-    // Region names can have hyphens (Naach-Tith) and apostrophes (Sn'gac)
-    // But hyphen must not be followed by > (would break Map pair arrow ->)
+    // Region names can have hyphens (Naach-Tith) and apostrophes (Sn'gac).
+    // Hyphen must not be followed by > so it doesn't gobble the offer arrow ->.
     def symbol[* : P] = P{ (CharIn("A-Z") ~ (CharsWhileIn("A-Za-z0-9'") | ("-" ~ !">")).rep).! }.map(ESymbol)
 
     def number[* : P] = P{ ("-".? ~ CharsWhileIn("0-9")).! }.map(_.toInt).map(EInt)
@@ -83,17 +79,11 @@ class Serialize(val game : Game) {
 
     def list[* : P] = P{ "[" ~/ params ~ "]" }.map(EList)
 
-    def map[* : P] = P{ "{" ~/ pairs ~ "}" }.map(EMap)
-
-    def pairs[* : P] = P{ pair.rep(sep = ","./) }.map(_.$)
-
-    def pair[* : P] = P{ expr ~ "->" ~ expr }.map(EPair)
-
     def some[* : P] = P{ "Some" ~ space ~ "(" ~/ expr ~ ")" }.map(o => ESome(o))
 
     def none[* : P] = P{ "None" }.map(o => ENone)
 
-    def base[* : P] : P[Expr] = P{ some | none | action | symbol | fractional | number | pfalse | ptrue | list | map | stringQQQ | string }
+    def base[* : P] : P[Expr] = P{ some | none | action | symbol | fractional | number | pfalse | ptrue | list | stringQQQ | string }
 
     def main[* : P] : P[Expr] = P{ action | symbol }
 
@@ -108,11 +98,21 @@ class Serialize(val game : Game) {
 
     def offer[* : P] = P( symbol ~ "->" ~ number ).map(o => EOffer(o._1.value, o._2.value))
 
-    def expr[* : P] : P[Expr] = P{ space ~ ( unitref | es | base | offer ) ~ space }
+    def expr[* : P] : P[Expr] = P{ space ~ ( unitref | es | offer | base ) ~ space }
 
 
     def parseAction(ss : String) : Action = {
-        val s = ss.replace("&gt;", ">")
+        // Legacy log migration: agony tally used to serialize as a Map literal
+        // {F->n, F->n}; it now serializes as an offer list [F->n, F->n] so the
+        // grammar doesn't have to support both `offer = symbol -> number` and
+        // `pair = expr -> expr` (which were ambiguous). Rewrite legacy logs in
+        // place before parsing. Only Custodian/Librarian agony fields ever
+        // emitted braces, so this is the only place braces appear in old logs.
+        val migrated = ss
+            .replaceAll("""\{\}""", "[]")
+            .replaceAll("""\{([A-Z][^{}]*)\}""", "[$1]")
+
+        val s = migrated.replace("&gt;", ">")
 
         if (s.startsWith("// "))
             CommentAction(s.drop("// ".length))
@@ -155,7 +155,6 @@ class Serialize(val game : Game) {
         case ESome(e) => Some(parseExpr(e))
         case ENone => None
         case EList(l) => l.map(parseExpr)
-        case EMap(entries) => entries.map(e => (parseExpr(e.pair._1), parseExpr(e.pair._2))).toMap
         case EApply("AzathothOffer", ps) => AzathothOffer(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[Int])
         // Firstborn (FB) helper case classes — explicit parser cases mirror the
         // writer cases in Serialize.write. Same pattern as AzathothOffer above.
@@ -163,24 +162,6 @@ class Serialize(val game : Game) {
         case EApply("FBCyclopeanGazeSource", ps) => FBCyclopeanGazeSource(parseExpr(ps(0)).asInstanceOf[Region], parseExpr(ps(1)).asInstanceOf[UnitClass])
         case EApply("FBWritheKillEntry", ps) => FBWritheKillEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[UnitClass], parseExpr(ps(3)).asInstanceOf[|[UnitRef]])
         case EApply("FBWrithePainEntry", ps) => FBWrithePainEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Region])
-        // Library at Celaeno actions with Map parameters (reflection fails on Map types)
-        case EApply("CustodianAssignToFactionAction", ps) => CustodianAssignToFactionAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Int], parseExpr(ps(3)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(4)).asInstanceOf[Faction])
-        case EApply("CustodianMoveToOublietteAction", ps) => CustodianMoveToOublietteAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Faction], parseExpr(ps(3)).asInstanceOf[UnitRef], parseExpr(ps(4)).asInstanceOf[Map[Faction, Int]])
-        case EApply("CustodianResolveAgonyAction", ps) => CustodianResolveAgonyAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Map[Faction, Int]])
-        case EApply("LibrarianAssignAgonyAction", ps) => LibrarianAssignAgonyAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Int], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(5)).asInstanceOf[$[Faction]])
-        case EApply("LibrarianAssignToFactionAction", ps) => LibrarianAssignToFactionAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Int], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(5)).asInstanceOf[$[Faction]], parseExpr(ps(6)).asInstanceOf[Faction])
-        case EApply("LibrarianAssignAmountAction", ps) => LibrarianAssignAmountAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Int], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(5)).asInstanceOf[$[Faction]], parseExpr(ps(6)).asInstanceOf[Faction], parseExpr(ps(7)).asInstanceOf[Int])
-        case EApply("LibrarianAssignCancelAction", ps) => LibrarianAssignCancelAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Int], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(5)).asInstanceOf[$[Faction]])
-        case EApply("LibrarianResetAgonyAction", ps) => LibrarianResetAgonyAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Int])
-        case EApply("LibrarianResolveAgonyAction", ps) => LibrarianResolveAgonyAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(2)).asInstanceOf[$[Faction]])
-        case EApply("LibrarianSatisfyAgonyAction", ps) => LibrarianSatisfyAgonyAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(3)).asInstanceOf[Faction], parseExpr(ps(4)).asInstanceOf[$[Faction]])
-        case EApply("LibrarianEliminateUnitMainAction", ps) => LibrarianEliminateUnitMainAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(3)).asInstanceOf[Faction], parseExpr(ps(4)).asInstanceOf[$[Faction]])
-        case EApply("LibrarianEliminateRegionAction", ps) => LibrarianEliminateRegionAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Int], parseExpr(ps(3)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(4)).asInstanceOf[Faction], parseExpr(ps(5)).asInstanceOf[$[Faction]], parseExpr(ps(6)).asInstanceOf[$[UnitRef]])
-        case EApply("LibrarianEliminateUnitAction", ps) => LibrarianEliminateUnitAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(5)).asInstanceOf[Faction], parseExpr(ps(6)).asInstanceOf[$[Faction]], parseExpr(ps(7)).asInstanceOf[$[UnitRef]])
-        case EApply("LibrarianEliminateDoneAction", ps) => LibrarianEliminateDoneAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(3)).asInstanceOf[Faction], parseExpr(ps(4)).asInstanceOf[$[Faction]], parseExpr(ps(5)).asInstanceOf[$[UnitRef]])
-        case EApply("LibrarianReturnTomeMainAction", ps) => LibrarianReturnTomeMainAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(3)).asInstanceOf[Faction], parseExpr(ps(4)).asInstanceOf[$[Faction]])
-        case EApply("LibrarianReturnTomeAction", ps) => LibrarianReturnTomeAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[LibraryTome], parseExpr(ps(2)).asInstanceOf[Int], parseExpr(ps(3)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(4)).asInstanceOf[Faction], parseExpr(ps(5)).asInstanceOf[$[Faction]])
-        case EApply("LibrarianLoseDoomAction", ps) => LibrarianLoseDoomAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[Map[Faction, Int]], parseExpr(ps(3)).asInstanceOf[Faction], parseExpr(ps(4)).asInstanceOf[$[Faction]])
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 
@@ -190,10 +171,7 @@ class Serialize(val game : Game) {
 object Serialize {
     val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS) ++ $(NeutralAbhoth, LibraryFaction)
 
-    val loyaltyCards = $(GhastCard, GugCard, ShantakCard, StarVampireCard, VoonithCard, DimensionalShamblerCard, HighPriestCard, ByatisCard, AbhothCard, DaolothCard, NyogthaCard, TulzschaCard, GnorriCard, YgolonacCard,
-        DholeCard, GreatRaceOfYithCard, QuachilUttausCard, ShadowPharaohCard, HoundOfTindalosCard, BrownJenkinCard, ElderShoggothCard,
-        MoonbeastCard, AlbinoPenguinsCard, ElderThingCard, LengSpiderCard, SatyrCard, InsectsFromShaggaiCard,
-        AzathothIGOOCard, CthughaCard, MotherHydraCard, YigCard, FatherDagonCard, GhatanotoaIGOOCard, BloatedWomanCard)
+    val loyaltyCards = $(GhastCard, GugCard, ShantakCard, StarVampireCard, VoonithCard, DimensionalShamblerCard, HighPriestCard, ByatisCard, AbhothCard, DaolothCard, NyogthaCard, TulzschaCard, GnorriCard, YgolonacCard)
 
     def parseFaction(s : String) : |[Faction] = factions.%(_.short == s).single
 

@@ -69,6 +69,25 @@ case class Bot3(faction : Faction) {
         val others = game.factions.%(_ != self)
         val power = self.power
 
+        // [2026-05-22] Opt #1 — cache per-decision invariants (user-requested).
+        // The implicit classes below close over these vals, so r.allies / r.foes /
+        // r.gate / r.ownGate / r.enemyGate become O(1) instead of linearly scanning
+        // self.units and others.units on every access. Behavior unchanged: caches
+        // are read-only snapshots of game state at eval-time.
+        val _selfAtRegion : scala.collection.Map[Region, $[UnitFigure]] = self.units.groupBy(_.region)
+        val _factionAtRegion : scala.collection.Map[(Faction, Region), $[UnitFigure]] = {
+            val m = scala.collection.mutable.Map[(Faction, Region), $[UnitFigure]]()
+            game.factions.foreach { f =>
+                f.units.groupBy(_.region).foreach { case (r, us) => m((f, r)) = us }
+            }
+            m
+        }
+        val _gatesSet : scala.collection.Set[Region] = game.gates.toSet
+        val _factionGatesSet : scala.collection.Map[Faction, scala.collection.Set[Region]] =
+            game.factions.map(f => f -> f.gates.toSet).toMap
+
+        def _at(f : Faction, r : Region) : $[UnitFigure] = _factionAtRegion.getOrElse((f, r), Nil)
+
         implicit class FactionClassify(val f : Faction) {
             def realDoom = f.doom + f.es./(_.value).sum
             def aprxDoom = f.doom + (f.es.num * 1.67).round.toInt
@@ -79,24 +98,24 @@ case class Bot3(faction : Faction) {
 
         implicit class RegionClassify(val r : Region) {
             def empty = allies.none && foes.none
-            def allies = self.at(r)
-            def foes = others./~(_.at(r))
-            def gate = game.gates.has(r)
-            def ownGate = self.gates.has(r)
-            def enemyGate = others.%(_.gates.has(r)).any
+            def allies = _selfAtRegion.getOrElse(r, Nil)
+            def foes = others./~(f => _at(f, r))
+            def gate = _gatesSet.contains(r)
+            def ownGate = _factionGatesSet.getOrElse(self, Set.empty).contains(r)
+            def enemyGate = others.exists(f => _factionGatesSet.getOrElse(f, Set.empty).contains(r))
             def chaosGate = DS.chaosGateRegions.has(r)
             def freeGate = gate && !ownGate && !enemyGate
             def controllers : $[UnitFigure] = (ownGate || enemyGate).??(owner.at(r).%(_.canControlGate))
             def owner = game.factions.%(_.gates.has(r)).single.get
-            def capturers = allies.goos.none.??(others.%(f => f.at(r).goos.any || (allies.monsterly.none && f.at(r).monsterly.%(_.canCapture).any)))
+            def capturers = allies.goos.none.??(others.%(f => _at(f, r).goos.any || (allies.monsterly.none && _at(f, r).monsterly.%(_.canCapture).any)))
         }
 
         implicit class UnitClassify(val u : UnitFigure) {
             def is(uc : UnitClass) = u.uclass == uc
             def ally = u.faction == self
             def foe = u.faction != self
-            def friends = u.faction.at(u.region).%(_ != u)
-            def enemies = game.factions.%(_ != u.faction)./~(_.at(u.region))
+            def friends = _at(u.faction, u.region).%(_ != u)
+            def enemies = game.factions.%(_ != u.faction)./~(f => _at(f, u.region))
             def ownGate = u.region.ownGate
             def enemyGate = u.region.enemyGate
             def gateController = u.region.gate && u.region.controllers.has(u)
@@ -109,7 +128,7 @@ case class Bot3(faction : Faction) {
             def pretender = u.cultist && !capturable && enemyGate
             def shield = friends.goos.any
             def capturable = u.cultist && capturers.%(_.power > 0).any
-            def capturers = game.factions.%(_ != u.faction).%(f => friends.goos.none && (f.at(u.region).goos.any || (friends.monsterly.none && f.at(u.region).monsterly.%(_.canCapture).any)))
+            def capturers = game.factions.%(_ != u.faction).%(f => friends.goos.none && (_at(f, u.region).goos.any || (friends.monsterly.none && _at(f, u.region).monsterly.%(_.canCapture).any)))
             def vulnerable = u.cultist && friends.goos.none && friends.monsterly.none
         }
 

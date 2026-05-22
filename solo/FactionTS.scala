@@ -125,9 +125,14 @@ case class TSUndulateCarryAction(self : Faction, u : UnitRef, from : Region, to 
 case class TSUndulateSkipAction(self : Faction) extends BaseFactionAction(None, "Skip " + "Undulate".styled(TS) + " carry") with PowerNeutral
 
 // AWAKEN GLA'AKI (two-step: pick cost, then pick region)
+// Header is the question ("Awaken Gla'aki"); each option is a single cost
+// breakdown with styled icons ("4 <power> + 2 <kill> Death's Head"). Matches
+// the format used by TSRitualOfAnnihilationAction (line 83) and the standard
+// power/Death's Head pattern across the codebase.
 case class TSAwakenGlaakiChooseCostAction(self : Faction, power : Int, dh : Int) extends BaseFactionAction(
-    "Awaken " + Glaaki.styled(TS) + ": " + power.power + (dh > 0).?(" + " + dh.toString.styled("kill") + " Death's Head").|(""),
-    (dh > 0).?(s"($power power + $dh DH = 6)").|(s"$power power")) with Soft
+    "Awaken " + Glaaki.styled(TS),
+    power.power + (dh > 0).?(" + " + dh.toString.styled("kill") + " Death's Head").|("")
+) with Soft
 case class TSAwakenGlaakiChooseRegionAction(self : Faction, power : Int, dh : Int) extends ForcedAction
 case class TSAwakenGlaakiPayAction(self : Faction, r : Region, power : Int, dh : Int) extends BaseFactionAction(
     implicit g => "Awaken " + Glaaki.styled(TS) + " in",
@@ -159,8 +164,15 @@ object TSExpansion extends Expansion {
     var graspingDeadActive : Boolean = false
 
     override def eliminate(u : UnitFigure)(implicit game : Game) {
-        // Death March: increment Death's Head when enemy unit dies in battle
-        if (u.faction != TS && u.region.onMap && game.battle.any) {
+        // Death March: increment Death's Head when enemy unit DIES in battle.
+        // 2026-05-22: must check `battle.eliminated.contains(u)` so promotions
+        // (e.g., OW MillionFavoredOnes promoting Mutant → Abomination) don't
+        // tick the counter. Promotions call `exempt(u); game.eliminate(u)`
+        // directly, bypassing `Battle.eliminate` — they add to `exempted` but
+        // NOT to `eliminated`. Real kills go through `Battle.eliminate` which
+        // adds to BOTH lists. Filtering on `eliminated` distinguishes them.
+        if (u.faction != TS && u.region.onMap && game.battle.any &&
+            game.battle.get.eliminated.contains(u)) {
             game.deathsHead += 1
             if (game.factions.has(TS))
                 TS.log("Death March: Death's Head is now", game.deathsHead.toString.styled("kill"))
@@ -216,8 +228,24 @@ object TSExpansion extends Expansion {
         case TSUndulateSkipAction(self) =>
             MoveContinueAction(self, true)
 
-        // SHEPHERD OF THE CRYPT — now runs directly in PowerGatherAction (Game.scala)
-        // before raise-to-half, so Shepherd power is included in the max calculation.
+        // SHEPHERD OF THE CRYPT — dispatched from PowerGatherAction (Game.scala)
+        case TSShepherdGatherPhaseAction(self, remaining) =>
+            if (remaining.any) {
+                implicit val asking = Asking(self)
+                remaining.foreach { r => + TSShepherdGatherAction(self, r, remaining.but(r)) }
+                asking
+            }
+            else
+                UnknownContinue
+
+        case TSShepherdGatherAction(self, r, remaining) =>
+            val n = self.at(r, TombHerd).num
+            self.power += n
+            self.log("Shepherd of the Crypt: gained", n.power, "from", n, TombHerd.styled(TS), "in", r)
+            if (remaining.any)
+                Force(TSShepherdGatherPhaseAction(self, remaining))
+            else
+                UnknownContinue
 
         // DOOM PHASE
         case DoomAction(f) if f == TS =>

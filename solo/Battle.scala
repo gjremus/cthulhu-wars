@@ -258,6 +258,7 @@ class Side(private val self : Faction, var forces : $[UnitFigure], var str : Int
     def remove(s : BattleSpellbook) { effects = effects.but(s) }
     def count(s : BattleSpellbook) = effects.count(s)
     var bloodthirstUsed : Int = 0
+    var cthughaCombatBonus : Int = 0
 }
 
 class Battle(val arena : Region, val attacker : Faction, val defender : Faction, val effect : |[Spellbook])(implicit val game : Game) {
@@ -472,19 +473,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     def preroll(s : Faction) {
-        val str = s.strength(s.forces, s.opponent)
+        val side = if (s == attacker) attackers else defenders
+        // Cthugha combat bonus is a pre-battle choice not included in neutralStrength
+        val str = s.strength(s.forces, s.opponent) + side.cthughaCombatBonus
 
         if (str != s.str) {
             log(s, "strength", (str > s.str).?("increased").|("decreased"), "to", str.str)
             s.str = str
         }
 
-        // Albino Penguins: ensure -2 per penguin is applied even if strength recalculation
-        // didn't include them (redundant safety — neutralStrength should handle this)
+        // Safety: Albino Penguins -2 per penguin
         val penguinCount = s.forces.%(_.uclass == AlbinoPenguins).num
         if (penguinCount > 0 && s.str > 0) {
-            // Verify the penalty is actually reflected in str
-            val withoutPenguins = s.strength(s.forces.%(_.uclass != AlbinoPenguins), s.opponent)
+            val withoutPenguins = s.strength(s.forces.%(_.uclass != AlbinoPenguins), s.opponent) + side.cthughaCombatBonus
             val expected = withoutPenguins + penguinCount * -2
             if (s.str != expected && s.str == withoutPenguins) {
                 s.str = math.max(0, expected)
@@ -492,10 +493,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             }
         }
 
-        // Servitor of the Outer Gods: ensure -1 per servitor is applied (same safety as penguins)
+        // Safety: Servitor of the Outer Gods -1 per servitor
         val servitorCount = s.forces.%(_.uclass == ServitorUnit).num
         if (servitorCount > 0 && s.str > 0) {
-            val withoutServitors = s.strength(s.forces.%(_.uclass != ServitorUnit), s.opponent)
+            val withoutServitors = s.strength(s.forces.%(_.uclass != ServitorUnit), s.opponent) + side.cthughaCombatBonus
             val expected = withoutServitors + servitorCount * -1
             if (s.str != expected && s.str == withoutServitors) {
                 s.str = math.max(0, expected)
@@ -859,6 +860,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             val goo = enemyGOOs.head
                             val combat = enemy.strength($(goo), s)
                             mySide.str += combat
+                            mySide.cthughaCombatBonus = combat
                             log(s, "Cthugha".styled("nt") + ": combat =", combat, "(matching", goo.uclass.styled(enemy) + ")")
                         }
                     }
@@ -1934,6 +1936,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case CthughaCombatChooseGOOAction(self, enemy, goo, combat) =>
             val mySide = if (self == attacker) attackers else defenders
             mySide.str += combat
+            mySide.cthughaCombatBonus = combat
             log(self, "Cthugha".styled("nt") + ": combat =", combat, "(matching", goo.styled(enemy) + ")")
             jump(PreRoll)
 

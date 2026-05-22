@@ -2406,16 +2406,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // TS Shepherd of the Crypt: must run BEFORE raise-to-half.
             // Gather Power ordering: power calc → Shepherd → raise-to-half → triggers → AfterPowerGatherAction (MaoCeremony).
             // Nothing should grant power AFTER raise-to-half.
-            if (factions.has(TS) && TS.has(Glaaki) && TS.onMap(TombHerd).any) {
-                if (ElderThingMindControl.suppresses(TS.goo(Glaaki))) {
+            if (factions.has(TS) && TS.onMap(Glaaki).any && TS.onMap(TombHerd).any) {
+                if (ElderThingMindControl.suppresses(TS.onMap(Glaaki).head)) {
                     TS.log("Shepherd of the Crypt".styled("nt"), "blocked by", "Elder Thing".styled("nt"))
                 } else {
-                    val regions = areas.%(r => TS.at(r, TombHerd).any)
-                    regions.foreach { r =>
-                        val n = TS.at(r, TombHerd).num
-                        TS.power += n
-                        TS.log("Shepherd of the Crypt: gained", n.power, "from", n, TombHerd.styled(TS), "in", r)
-                    }
+                    val regions = areas.nex.%(r => TS.at(r, TombHerd).any)
+                    if (regions.any)
+                        return Force(TSShepherdGatherPhaseAction(TS, regions))
                 }
             }
 
@@ -3896,6 +3893,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // BATTLE
         case action if battle.any =>
             battle.get.perform(action)
+
+        // Defensive: battle-context actions performed when game.battle is None.
+        // Replay or out-of-order continuation can leave a PreBattleQuestion-typed
+        // action queued after the battle that owned it has already cleared. Logging
+        // it and continuing is safer than an uncaught MatchError that kills the
+        // whole engine on a fresh page load. Real bug remains: figure out WHY the
+        // battle was cleared before the continuation ran, but at least the
+        // remaining log replays.
+        case action : PreBattleQuestion =>
+            log("[warn] battle action " + action.getClass.getSimpleName + " skipped — no active battle")
+            UnknownContinue
     }
 
 }
