@@ -148,6 +148,13 @@ case class FBWritheMoveAllAction(self : Faction, chosen : $[UnitRef]) extends Fo
 case class FBWritheMoveAllToRegionAction(self : Faction, r : Region, chosen : $[UnitRef]) extends BaseFactionAction(
     Writhe.styled(FB) + " all units to:", r
 ) with PowerNeutral
+// "Join" variant for FBWritheMoveAllToRegion — shown for regions where FB already
+// has presence outside the chosen-moving set, so the player can cluster the
+// pained units with an existing unit in one click.
+case class FBWritheMoveAllToRegionJoinAction(self : Faction, r : Region, chosen : $[UnitRef], joinUnit : String) extends BaseFactionAction(
+    Writhe.styled(FB) + " all units to:",
+    implicit g => r.toString + " - join " + joinUnit.styled(FB)
+) with PowerNeutral
 case class FBWritheMoveSeparatelyAction(self : Faction, chosen : $[UnitRef]) extends OptionFactionAction(
     Writhe.styled(FB) + " units separately"
 ) with PowerNeutral { def question(implicit game : Game) = Writhe.styled(FB) + " all units to:" }
@@ -197,13 +204,13 @@ case class FBInfernalPactCancelDoomAction(self : Faction) extends OptionFactionA
 case class FBInfernalPactResumeAction(self : Faction) extends ForcedAction with Soft
 case class FBInfernalPactDoomResumeAction(self : Faction) extends ForcedAction with Soft
 
-// ── AWAKEN GHATANOTHOA ── Cost is 11 minus current Ritual cost; placed in start area, no gate needed
-case class FBAwakenGhatanothoaAction(self : Faction, cost : Int) extends OptionFactionAction(implicit g => {
-    val ipDiscount = min(g.fbInfernalPactDiscount, cost)
-    val effectiveCost = cost - ipDiscount
-    "Awaken " + Ghatanothoa.styled(FB) + " for " + effectiveCost.power + " in Start Area" +
-        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")")
-}) with MainQuestion
+// ── AWAKEN GHATANOTHOA ── Cost is 11 minus current Ritual cost; placed in start area, no gate needed.
+// Per design rule: Infernal Pact does NOT discount Ghatanothoa's own awaken, because IP requires
+// Ghatanothoa in play to be used in the first place — discounting his awaken would create a
+// chicken-and-egg ramp. Display the raw cost and pay full cost in the handler.
+case class FBAwakenGhatanothoaAction(self : Faction, cost : Int) extends OptionFactionAction(implicit g =>
+    "Awaken " + Ghatanothoa.styled(FB) + " for " + cost.power + " in Start Area"
+) with MainQuestion
 
 // ── THE EYE OPENS ACTIONS ── Cost 1: eliminate enemy cultists in areas with Desiccated, gain power
 // Round 8 Bug 42: was `with Soft` but the handler mutates state (deducts power via
@@ -490,6 +497,18 @@ object FBExpansion extends Expansion {
     def faceDownIGOOSpellbooks(implicit game : Game) : $[NeutralSpellbook] =
         FB.upgrades.%(_.isInstanceOf[NeutralSpellbook]).map(_.asInstanceOf[NeutralSpellbook]).%(sb => FB.oncePerGame.has(sb))
 
+    // FB-held face-up library tomes — also flippable for IP discount.
+    def faceUpFBTomes(implicit game : Game) : $[LibraryTome] =
+        $(TomeBarrier, TomeGuardian, TomeLarvae, TomeYr)
+            .%(t => game.tomeHolders.get(t).flatten.has(FB))
+            .%(t => game.tomeFaceUp.getOrElse(t, true))
+
+    // True when FB has anything currently face-up that can be spent on Infernal Pact:
+    // its own faction spellbooks, an iGOO neutral spellbook it controls, or a library
+    // tome it holds. Used as the trigger for IP menu availability.
+    def hasAnyIPEligibleFaceUp(implicit game : Game) : Boolean =
+        faceUpSpellbooks.any || faceUpIGOOSpellbooks.any || faceUpFBTomes.any
+
     // v4 (2026-05-12): FB-held library tomes currently face-down. Per designer Q2,
     // these count toward FBTwoFacedownSpellbooks SBR. Includes tomes flipped either
     // by IP, by normal use (Guardian/Larvae/Yr power), or by Silence Token — any
@@ -679,7 +698,10 @@ object FBExpansion extends Expansion {
             // are available, FB can flip SBs to discount the battle cost. The
             // pre-main IP session's flips are now committed (via EndAction
             // commit hook), so any cancel here only reverses post-main flips.
-            if (f.hasAllSB && faceUpSpellbooks.any && game.fbInfernalPactDiscount == game.fbInfernalPactCommittedDiscount) {
+            // Post-main IP: trigger on ANY face-up IP-eligible item (faction SB, iGOO SB,
+            // or library tome). Previously was faction-SB only; expanded so library tomes
+            // and FB-controlled iGOO SBs also qualify per game rules.
+            if (f.hasAllSB && hasAnyIPEligibleFaceUp && game.fbInfernalPactDiscount == game.fbInfernalPactCommittedDiscount) {
                 // Only show "enter new IP session" when there's no pending
                 // uncommitted state — prevents double-entry confusion.
                 + FBInfernalPactMainAction(f)
@@ -719,7 +741,8 @@ object FBExpansion extends Expansion {
             // 2026-05-11: also suppress if FB cancelled an IP session this turn —
             // prevents Cancel→IPMain→Cancel watchdog loop when wantIP score keeps
             // pulling bot in but every flip is blocked by per-SB scoring.
-            if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && faceUpSpellbooks.any && !f.acted &&
+            // Trigger: any face-up IP-eligible item (faction SB, iGOO SB, library tome).
+            if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && hasAnyIPEligibleFaceUp && !f.acted &&
                 !game.fbInfernalPactCancelledThisTurn)
                 + FBInfernalPactMainAction(f)
 
@@ -749,9 +772,10 @@ object FBExpansion extends Expansion {
             game.summons(f)
 
             // Awaken Ghatanothoa - special: no gate required, appears in start area.
-            // Inside the transient-boost scope so f.power already reflects effective power.
+            // IP intentionally does NOT discount this (see FBAwakenGhatanothoaAction docstring),
+            // so subtract ipBoost to gate on REAL power, not boosted power.
             val awakenCost = max(1, 11 - game.ritualCost)
-            if (f.pool(Ghatanothoa).any && f.power >= awakenCost)
+            if (f.pool(Ghatanothoa).any && f.power - ipBoost >= awakenCost)
                 + FBAwakenGhatanothoaAction(f, awakenCost)
 
             game.independents(f)
@@ -805,9 +829,8 @@ object FBExpansion extends Expansion {
 
         // ── AWAKEN GHATANOTHOA ──
         case FBAwakenGhatanothoaAction(self, cost) =>
-            // Round 8 Bug 75: pay from discount first, then power.
-            val discountUsed = consumeDiscount(cost)
-            self.power -= (cost - discountUsed)
+            // IP intentionally does NOT discount this — see class docstring above.
+            self.power -= cost
             val startArea = game.starting(FB)
             self.place(Ghatanothoa, startArea)
             game.fbGhatnothoaAwakenings += 1
@@ -1119,7 +1142,18 @@ object FBExpansion extends Expansion {
             } else {
                 implicit val asking = Asking(self)
                 + FBWritheMoveSeparatelyAction(self, chosen)
-                areas.foreach { r =>
+                // Show "join <unit>" entries first for regions where FB already has
+                // a unit that ISN'T being moved (so the cluster destination is clear).
+                // Regions without an FB presence fall back to plain "writhe all to:"
+                // entries below.
+                val fbRegionRefs = areas.%(r => self.at(r).any).sortBy(_.toString)
+                fbRegionRefs.foreach { r =>
+                    val candidates = self.at(r).%!(u => chosen.has(u.ref))
+                    val rep = candidates.sortBy(-_.uclass.cost).headOption
+                    val label = rep./(_.uclass.name).|(game.unit(chosen.head).uclass.name)
+                    + FBWritheMoveAllToRegionJoinAction(self, r, chosen, label)
+                }
+                areas.%!(fbRegionRefs.has).foreach { r =>
                     + FBWritheMoveAllToRegionAction(self, r, chosen)
                 }
                 + (FBWritheUndoAllAction(self, game.fbWritheRolls, game.fbWritheNumDice).as("Undo all back to dice roll")(Writhe.styled(FB)))
@@ -1127,6 +1161,18 @@ object FBExpansion extends Expansion {
             }
 
         case FBWritheMoveAllToRegionAction(self, r, chosen) =>
+            chosen.foreach { uRef =>
+                val u = game.unit(uRef)
+                val from = u.region
+                game.fbWrithePainLog :+= FBWrithePainEntry(uRef, from, r)
+                u.region = r
+                u.onGate = false
+                game.fbWritheUsedUnits :+= uRef
+                self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
+            }
+            EndAction(self)
+
+        case FBWritheMoveAllToRegionJoinAction(self, r, chosen, _) =>
             chosen.foreach { uRef =>
                 val u = game.unit(uRef)
                 val from = u.region
@@ -1344,12 +1390,18 @@ object FBExpansion extends Expansion {
         // update game.fbInfernalPact* vars) are identical so the existing end-of-turn cleanup
         // in EndTurnAction works for both phases without modification.
         case FBInfernalPactDoomMainAction(self) =>
-            // Round 8 Bug 40: offer both faction spellbooks and IGOO spellbooks for flipping
+            // Round 8 Bug 40: offer both faction spellbooks and IGOO spellbooks for flipping.
+            // 2026-05-21: also offer FB-held face-up library tomes — same eligibility as the
+            // main-action variant.
             val available : $[Spellbook] = faceUpSpellbooks ++ faceUpIGOOSpellbooks
-            if (available.any) {
+            val tomes = faceUpFBTomes
+            if (available.any || tomes.any) {
                 implicit val asking = Asking(self)
                 available.foreach { sb =>
                     + FBInfernalPactDoomChooseAction(self, sb)
+                }
+                tomes.foreach { t =>
+                    + FBInfernalPactChooseTomeAction(self, t)
                 }
                 + FBInfernalPactDoomDoneAction(self)
                 + FBInfernalPactDoomCancelAction(self)
@@ -1931,6 +1983,105 @@ object FBExpansion extends Expansion {
             game.fbInfernalPactDiscount -= consumed
             f.power += consumed
             FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on capture")
+            UnknownContinue
+
+        // 2026-05-22: extend IP intercept to every action-phase power-costing
+        // action that fires outside Game.scala's shared cost handlers. Pattern
+        // is identical to the seven intercepts above: pre-consume IP discount,
+        // pre-add the consumed amount to f.power, return UnknownContinue so
+        // the base handler's `self.power -= cost` runs against the boosted
+        // value. Net effect: real power loses (cost - consumed); IP pool
+        // loses consumed. Per design rule: NOT applied to FBAwakenGhatanothoaAction
+        // (IP requires Ghatanothoa on-map and would create a chicken-and-egg
+        // ramp into Ghatanothoa's own awaken).
+
+        // iGOO awaken (Abhoth, Daoloth, Tulzscha, Nyogtha-via-IndependentGOOAction,
+        // Byatis, Ygolonac, Yog-Sothoth, Hastur). Cost = lc.power.
+        case IndependentGOOAction(f, lc, r, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val consumed = min(game.fbInfernalPactDiscount, lc.power)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on iGOO awaken")
+            UnknownContinue
+
+        // Byatis God of Forgetfulness — 1 power
+        case GodOfForgetfulnessAction(f, _, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val consumed = min(game.fbInfernalPactDiscount, 1)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on God of Forgetfulness")
+            UnknownContinue
+
+        // Abhoth Filth placement — 1 power
+        case FilthAction(f, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val consumed = min(game.fbInfernalPactDiscount, 1)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Filth")
+            UnknownContinue
+
+        // Nightmare Web Nyogtha awaken — 2 power
+        case NightmareWebAction(f, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val consumed = min(game.fbInfernalPactDiscount, 2)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Nightmare Web")
+            UnknownContinue
+
+        // Library tomes (Guardian / Larvae / Yr) — 1 power each
+        case UseTomeGuardianDestAction(f, _, _, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val consumed = min(game.fbInfernalPactDiscount, 1)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Guardian under the Lake")
+            UnknownContinue
+
+        case UseTomeLarvaeAction(f) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val consumed = min(game.fbInfernalPactDiscount, 1)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Larvae of the Outer Gods")
+            UnknownContinue
+
+        case UseTomeYrMonsterChooseAction(f, _, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val consumed = min(game.fbInfernalPactDiscount, 1)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Yr and the Nhhngr")
+            UnknownContinue
+
+        case UseTomeYrPowerAction(f) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val consumed = min(game.fbInfernalPactDiscount, 1)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Yr and the Nhhngr")
+            UnknownContinue
+
+        // Neutral spellbook actions — 1 / 2 power
+        case RecriminationsAction(f, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val consumed = min(game.fbInfernalPactDiscount, 1)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Recriminations")
+            UnknownContinue
+
+        // Undimensioned pays 2 power only on the first move of the chain
+        // (when no FB units are tagged Moved). Match that gate exactly so the
+        // discount fires once.
+        case UndimensionedAction(f, _, _, _, _) if f == FB && game.fbInfernalPactDiscount > 0 && f.units.onMap.tag(Moved).none =>
+            val consumed = min(game.fbInfernalPactDiscount, 2)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Undimensioned")
+            UnknownContinue
+
+        // Dimensional Shambler summon to faction card — variable cost
+        case ShamblerSummonAction(f) if f == FB && game.fbInfernalPactDiscount > 0 =>
+            val baseCost = f.summonCost(DimensionalShamblerUnit, f.reserve)
+            val consumed = min(game.fbInfernalPactDiscount, baseCost)
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Dimensional Shambler summon")
             UnknownContinue
 
         // ── Round 8 Bug 73: end-of-doom-phase IP cleanup for FB ──

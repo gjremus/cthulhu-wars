@@ -558,6 +558,47 @@ object EarthMap6 extends Board {
 // LIBRARY AT CELAENO — Two-floor map with Archway and Stairwell adjacency
 // ══════════════════════════════════════════════════════════════════════════════
 
+// Canonical region color palette for the library placement bitmaps.
+// Each entry maps a Region → the (r,g,b) packed-int color used to mark that
+// region's pixels in library{3,5,35,53}-place.webp. Colors were extracted by
+// pixel-sampling library5-place.webp at each region's hand-coded gateXY
+// (verified to be inside the right region on 5U/5L). User-confirmed that the
+// same palette applies to 3U/3L/35/53 bitmaps as well — only the regions'
+// PIXEL POSITIONS shift between bitmaps, not their colors. The pre-pass in
+// CthulhuWarsSolo.scala uses this table to identify region pixels by color
+// instead of by seed XY, which previously mis-identified regions on 3U/3L
+// where the hand-coded XY would land on a neighbor's color (e.g., Lake of
+// Hali Overlook gate appearing way to the left on 3p).
+object RegionPalette {
+    private[cws] val table : Map[Region, Int] = Map(
+        LibraryCelaeno55.FloatingTower       -> 0xfec800,
+        LibraryCelaeno55.Byakhiary           -> 0x6e5424,
+        LibraryCelaeno55.Horrorium           -> 0xdc2928,
+        LibraryCelaeno55.Fountain            -> 0x0150c7,
+        LibraryCelaeno55.YrAndTheNhhngr      -> 0xff9a06,
+        LibraryCelaeno55.GuardianUnderLake   -> 0x00ff01,
+        LibraryCelaeno55.Gloomloft           -> 0x808080,
+        LibraryCelaeno55.CursedHall          -> 0xfcff00,
+        LibraryCelaeno55.BarrierOfNaachTith  -> 0x638c28,
+        LibraryCelaeno55.LarvaeOfOuterGods   -> 0xdc6400,
+        LibraryCelaeno55.LakeOfHaliOverlook  -> 0x962d90,
+        LibraryCelaeno55.LakeOfHaliBalcony   -> 0x01ffff,
+        LibraryCelaeno55.ChamberOfSngac      -> 0xf93cc9,
+        LibraryCelaeno55.Oubliette           -> 0xf9e53c,
+        LibraryCelaeno55.BlueHall            -> 0x011896,
+        LibraryCelaeno55.ScorchedChamber     -> 0xcffa3c,
+        LibraryCelaeno55.PorphyrHall         -> 0x2c0839,
+        LibraryCelaeno55.RedHall             -> 0xc18c3c,
+        LibraryCelaeno55.BlackHall           -> 0xbe97b9,
+        LibraryCelaeno55.ChamberOfApkallu    -> 0xff84ad,
+        LibraryCelaeno55.Hyperquarium        -> 0x01b58c,
+        LibraryCelaeno55.CharnelHall         -> 0xfbc386,
+        LibraryCelaeno55.TheCrawlingOnes     -> 0x5079dd,
+    )
+    def get(r : Region) : Option[Int] = table.get(r)
+    def getOrElse(r : Region, fallback : => Int) : Int = table.getOrElse(r, fallback)
+}
+
 object LibraryCelaeno55 extends Board {
     val id = "library5"
     val name = "Library at Celaeno (5 players)"
@@ -733,7 +774,9 @@ object LibraryCelaeno33 extends Board {
         ChamberOfSngac, Oubliette, BlueHall, ChamberOfApkallu, BlackHall,
         Hyperquarium, TheCrawlingOnes)
 
-    val nonFactionRegions = regions.diff($(FloatingTower, Fountain, ChamberOfSngac, Hyperquarium, LakeOfHaliOverlook, Oubliette)).diff(tomeRegions)
+    // BlueHall (CC's pre-printed glyph) added to align with LibraryCelaeno55 / 53 —
+    // AN/TS should be locked out of every faction starting area including CC's.
+    val nonFactionRegions = regions.diff($(FloatingTower, Fountain, BlueHall, ChamberOfSngac, Hyperquarium, LakeOfHaliOverlook, Oubliette)).diff(tomeRegions)
     val west = $(FloatingTower, Fountain, YrAndTheNhhngr, GuardianUnderLake, BarrierOfNaachTith, Gloomloft, LarvaeOfOuterGods, LakeOfHaliOverlook)
     val east = $(ChamberOfSngac, Oubliette, BlueHall, ChamberOfApkallu, BlackHall, Hyperquarium, TheCrawlingOnes)
 
@@ -774,7 +817,7 @@ object LibraryCelaeno33 extends Board {
         else if (connected(a)./~(connected)./~(connected).contains(b)) 3 else 4
 
     def starting(faction : Faction) = faction match {
-        case GC => $(Hyperquarium); case BG => $(Fountain); case YS => $(FloatingTower)
+        case GC => $(Hyperquarium); case CC => $(BlueHall); case BG => $(Fountain); case YS => $(FloatingTower)
         case SL => $(ChamberOfSngac); case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
         case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $()
@@ -902,7 +945,8 @@ object LibraryCelaeno35 extends Board {
         ChamberOfSngac, Oubliette, BlueHall, ChamberOfApkallu, BlackHall,
         Hyperquarium, TheCrawlingOnes)
 
-    val nonFactionRegions = regions.diff($(FloatingTower, Fountain, ChamberOfSngac, Hyperquarium, LakeOfHaliOverlook, Oubliette)).diff(tomeRegions)
+    // BlueHall (CC's pre-printed glyph) added to align with LibraryCelaeno55 / 53.
+    val nonFactionRegions = regions.diff($(FloatingTower, Fountain, BlueHall, ChamberOfSngac, Hyperquarium, LakeOfHaliOverlook, Oubliette)).diff(tomeRegions)
     val west = $(FloatingTower, Byakhiary, Horrorium, Fountain, YrAndTheNhhngr, GuardianUnderLake, BarrierOfNaachTith, Gloomloft, CursedHall, LarvaeOfOuterGods, LakeOfHaliOverlook, LakeOfHaliBalcony)
     val east = $(ChamberOfSngac, Oubliette, BlueHall, ChamberOfApkallu, BlackHall, Hyperquarium, TheCrawlingOnes)
 

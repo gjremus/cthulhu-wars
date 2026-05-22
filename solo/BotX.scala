@@ -72,6 +72,26 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
 abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) {
     val others = game.factions.%(_ != self)
 
+    // [2026-05-22] Opt #1 — cache per-decision invariants (user-requested).
+    // BotX constructs a fresh GameEvaluation per askE call (~50 candidates per
+    // decision). The implicit RegionClassify / UnitClassify below close over
+    // these vals, so r.allies / r.foes / r.gate / r.ownGate / r.enemyGate
+    // become O(1) lookups instead of repeated linear scans of self.units and
+    // others.units. Read-only snapshot — game state never mutates during eval.
+    val _selfAtRegion : scala.collection.Map[Region, $[UnitFigure]] = self.units.groupBy(_.region)
+    val _factionAtRegion : scala.collection.Map[(Faction, Region), $[UnitFigure]] = {
+        val m = scala.collection.mutable.Map[(Faction, Region), $[UnitFigure]]()
+        game.factions.foreach { f =>
+            f.units.groupBy(_.region).foreach { case (r, us) => m((f, r)) = us }
+        }
+        m
+    }
+    val _gatesSet : scala.collection.Set[Region] = game.gates.toSet
+    val _factionGatesSet : scala.collection.Map[Faction, scala.collection.Set[Region]] =
+        game.factions.map(f => f -> f.gates.toSet).toMap
+
+    def _at(f : Faction, r : Region) : $[UnitFigure] = _factionAtRegion.getOrElse((f, r), Nil)
+
     implicit class SelfFactionClassify(val f : F) {
         def realDoom = self.doom + self.es./(_.value).sum
     }
@@ -147,21 +167,21 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
 
     implicit class RegionClassify(val r : Region) {
         def empty = allies.none && foes.none
-        def allies = self.at(r)
-        def foes = others./~(_.at(r))
-        def of(f : Faction) = f.at(r)
+        def allies = _selfAtRegion.getOrElse(r, Nil)
+        def foes = others./~(f => _at(f, r))
+        def of(f : Faction) = _at(f, r)
         def str(f : Faction) = f.strength(of(f), self)
         def ownStr = str(self)
-        def gate = game.gates.contains(r)
+        def gate = _gatesSet.contains(r)
         def noGate = !gate
-        def ownGate = self.gates.contains(r)
-        def enemyGate = others.%(_.gates.contains(r)).any
+        def ownGate = _factionGatesSet.getOrElse(self, Set.empty).contains(r)
+        def enemyGate = others.exists(f => _factionGatesSet.getOrElse(f, Set.empty).contains(r))
         def chaosGate = DS.chaosGateRegions.has(r)
         def freeGate = gate && !ownGate && !enemyGate && !chaosGate
         def controllers = (ownGate || enemyGate).??(owner.at(r).%(_.canControlGate))
-        def gateOf(f : Faction) = f.gates.contains(r)
+        def gateOf(f : Faction) = _factionGatesSet.getOrElse(f, Set.empty).contains(r)
         def owner = game.factions.%(_.gates.contains(r)).single.get
-        def capturers = allies.goos.none.??(others.%(f => f.at(r).goos.any || (allies.monsterly.none && f.at(r).monsterly.%(_.canCapture).any)))
+        def capturers = allies.goos.none.??(others.%(f => _at(f, r).goos.any || (allies.monsterly.none && _at(f, r).monsterly.%(_.canCapture).any)))
         def desecrated = game.desecrated.contains(r)
         def near = r.connected
         def near2 = r.connected./~(_.connected).but(r).%!(near.has)
@@ -184,8 +204,8 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
         def is(uc : UnitClass) = u.uclass == uc
         def ally = u.faction == self
         def foe = u.faction != self
-        def friends = u.faction.at(u.region).%(_ != u)
-        def enemies = game.factions.%(_ != u.faction)./~(_.at(u.region))
+        def friends = _at(u.faction, u.region).%(_ != u)
+        def enemies = game.factions.%(_ != u.faction)./~(f => _at(f, u.region))
         def ownGate = u.region.ownGate
         def enemyGate = u.region.enemyGate
         def gateController = u.region.gate && u.region.controllers.contains(u)

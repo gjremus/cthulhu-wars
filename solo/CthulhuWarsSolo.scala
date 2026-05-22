@@ -782,7 +782,122 @@ object CthulhuWarsSolo {
             // coords (regionWidth, availableHeightAboveGate). Built from one full scan
             // of the placement bitmap on first library-map render.
             val regionGeom = scala.collection.mutable.Map[Region, (Int, Int)]()
+            val regionArea = scala.collection.mutable.Map[Region, Int]()
+            // Pixel centroid (mean of all region pixels) per region. Used to auto-center
+            // the gate icon for non-tome library regions where the hand-coded XY is in
+            // Map.scala (and may be off-kilter for some bitmaps — e.g. Lake of Hali
+            // Overlook in library3-place.webp where the region shape differs from
+            // library5-place.webp despite the same hand-coded XY).
+            val regionCentroid = scala.collection.mutable.Map[Region, (Int, Int)]()
+            // Uniform shrink applied to EVERY object (units, gates, tokens, etc.) in
+            // regions that meet the "small region" criterion (library maps only,
+            // bbox area ≤ Gloomloft 5U). Factor 0.852 is the midpoint of the average
+            // shrinkage needed to bring large units down to 1.30× cultist height —
+            // computed one-off across all unit protos (see Region Geometry analysis).
+            val regionUniformShrink = scala.collection.mutable.Map[Region, Double]()
             var regionGeomComputed = false
+            // Constants tied to the resize redesign (computed one-off from bitmaps).
+            //   SmallRegionAreaCutoff = Gloomloft 5U bbox area in placement-bitmap pixels.
+            //   SmallRegionUniformShrink = 1 − (avg(% needed to bring proto.maxDim > 1.3×cultist
+            //                                       down to 1.3× cultist) / 2)  =  0.852.
+            //   LargeUnitTriggerMaxDim = 1.60 × cultist height = 96 (only applies to non-small regions).
+            val SmallRegionAreaCutoff = 154128
+            val SmallRegionUniformShrink = 0.852
+            val LargeUnitTriggerMaxDim = 96
+
+            // L/T-region balanced placement table.
+            // Key: (boardId, regionName). Value: list of (x1, y1, x2, y2, pct) sub-rectangles
+            // in placement-bitmap pixel coords; the candidate generator picks a sub-rectangle
+            // weighted by pct and samples within its bbox (rejecting non-region pixels). Source:
+            // one-off analysis (see Region Geometry/lt-partitions.json and the annotated PNGs).
+            //
+            // Library5 (id "library5"): 5U + 5L regions analyzed against library5-place.webp.
+            // Library35 (id "library35"): 5U regions reuse library5 partitions (upper-floor
+            // bitmap layout is identical between library5-place.webp and library35-place.webp).
+            // 3L regions in library35 are NOT yet partitioned.
+            // Library3 (id "library3"): only Fountain (3U) is partitioned for now.
+            // v3 (2026-05-21) — partition cuts revised per user feedback on v1/v2.
+            // See Region Geometry/lt-partitions-v3.json + library*-v3-annotated.png.
+            val lt5U : List[(String, List[(Int, Int, Int, Int, Double)])] = List(
+                // Yr: T-shape, h=928 + v=[166, 430]. 4 parts: left tab, top center, right tab, bottom stem.
+                "Yr and the Nhhngr" -> List(
+                    (120,  627,  165,  913,   6.4),
+                    (166,  627,  429,  927,  57.6),
+                    (430,  627,  503,  920,  13.4),
+                    (187,  928,  429, 1067,  22.5)
+                ),
+                // Guardian: T-shape, h=926 + v=[1274, 1534]. 4 parts (top-left, top-center, top-right, bottom stem).
+                "Guardian under the Lake" -> List(
+                    (1115, 627, 1273,  925, 19.7),
+                    (1274, 627, 1533,  925, 36.0),
+                    (1534, 627, 1676,  925, 19.7),
+                    (1274, 926, 1533, 1139, 24.6)
+                ),
+                "Gloomloft" -> List(
+                    (580, 1106,  768, 1230, 19.6),
+                    (769,  897, 1036, 1235, 80.4)
+                ),
+                "Larvae of the Outer Gods" -> List(
+                    (1102, 1169, 1335, 1462, 24.3),
+                    (1336, 1178, 1694, 1768, 75.7)
+                )
+            )
+            val lt5L : List[(String, List[(Int, Int, Int, Int, Double)])] = List(
+                "Red Hall" -> List(
+                    (1504, 2242, 1653, 2374, 11.2),
+                    (1384, 2375, 1651, 2589, 88.8)
+                ),
+                // Black Hall: h=[2242, 2630]. v5 — top cut sits exactly at Red Hall's top
+                // line (corner where the right side turns from vertical to angled).
+                "Black Hall" -> List(
+                    (1183, 2031, 1290, 2241,  9.0),
+                    (1175, 2242, 1349, 2629, 46.2),
+                    (1181, 2630, 1442, 2862, 44.8)
+                ),
+                // Charnel: v=1350. v4 — moved LEFT from 1380 (user: "too far right, by
+                // about the width of the gap").
+                "Charnel Hall" -> List(
+                    (1215, 2905, 1349, 3425, 62.4),
+                    (1350, 2905, 1520, 3391, 37.6)
+                ),
+                // Crawling: v=1554 (moved right from 1519 per user).
+                "The Crawling Ones" -> List(
+                    (1384, 2989, 1553, 3442, 39.3),
+                    (1554, 2913, 1653, 3442, 60.7)
+                )
+            )
+            val LtPartitions : Map[(String, String), List[(Int, Int, Int, Int, Double)]] = (
+                lt5U.map { case (n, parts) => ("library5",  n) -> parts } ++
+                lt5L.map { case (n, parts) => ("library5",  n) -> parts } ++
+                lt5U.map { case (n, parts) => ("library35", n) -> parts } ++
+                List(("library3", "Fountain") -> List(
+                    // Fountain (3U) v5: lower cut 905 → 920 (user: "still too high").
+                    ( 560,  649, 1086,  770, 55.6),
+                    ( 828,  771, 1037,  919, 33.6),
+                    ( 832,  920, 1037, 1015, 10.8)
+                ))
+            ).toMap
+
+            // Pick a sub-rectangle weighted by its area pct, sample a candidate inside it
+            // via GlyphPlacement.findAnotherInBox. Falls back to the standard find if the
+            // region has no partition entry for the current board.
+            def findWeighted(ox : Int, oy : Int, r : Region) : (Int, Int) = {
+                LtPartitions.get((board.id, r.name)) match {
+                    case Some(parts) =>
+                        val totalPct = parts.map(_._5).sum
+                        var pick = scala.math.random() * totalPct
+                        var chosen = parts.head
+                        var i = 0
+                        while (i < parts.size) {
+                            pick -= parts(i)._5
+                            if (pick <= 0) { chosen = parts(i); i = parts.size }
+                            else i += 1
+                        }
+                        val (x1, y1, x2, y2, _) = chosen
+                        activeGlyphPlacer.findAnotherInBox(ox, oy, x1, y1, x2, y2)
+                    case None => activeGlyphPlacer.findAnother(ox, oy)
+                }
+            }
 
             case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0)
 
@@ -974,8 +1089,8 @@ object CthulhuWarsSolo {
                     case StartingGlyph if faction == OW => DrawRect("ow-glyph", None, x - 33, y - 33, 66, 66, alpha = 0.55)
 
                     // Library map units — larger than monsters, smaller than GOOs
-                    case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 65, y - 130, 130, 130)
-                    case TheLibrarian => DrawRect("librarian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 58, y - 182, 117, 182)
+                    case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 52, y - 104, 104, 104)
+                    case TheLibrarian => DrawRect("librarian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 47, y - 146, 94, 146)
 
                     case _ => null
                 }
@@ -987,8 +1102,14 @@ object CthulhuWarsSolo {
                     val p = proto
                     if (p == null) return null
                     val baseScale = if (region != null) board.unitScale else 1.0
-                    // Apply class-global shrink only for on-map units on library maps.
-                    val shrinkK = if (region != null && board.isLibraryMap) classShrink.getOrElse(unit, 1.0) else 1.0
+                    // Two shrink factors for on-map units on library maps:
+                    //   classK   — class-global per-region shrink for "large" units (proto maxDim > 1.6×cultist)
+                    //              in non-small regions where they'd otherwise pack too tight.
+                    //   uniformK — flat per-region shrink that applies to EVERY object (units, gates, tokens)
+                    //              in regions ≤ Gloomloft 5U bbox area. classK is suppressed there.
+                    val classK   = if (region != null && board.isLibraryMap) classShrink.getOrElse(unit, 1.0) else 1.0
+                    val uniformK = if (region != null && board.isLibraryMap) regionUniformShrink.getOrElse(region, 1.0) else 1.0
+                    val shrinkK  = classK * uniformK
                     val s = baseScale * shrinkK
                     if (math.abs(s - 1.0) > 0.01) p.copy(
                         x = (x + (p.x - x) * s).toInt,
@@ -1022,6 +1143,10 @@ object CthulhuWarsSolo {
 
             var oldPositions : $[DrawItem] = $
             var oldGates : $[Region] = $
+            // Track per-tome "currently on map" state across redraws. When a tome's state
+            // flips (picked up = was-on-map → off-map), the units sticky to positions that
+            // avoided the tome's old space need to be re-placed so they can flow back in.
+            var oldTomeOnMap : Map[LibraryTome, Boolean] = Map.empty
             var horizontal = true
 
             var cachedMapWidth : Double = 0
@@ -1170,7 +1295,8 @@ object CthulhuWarsSolo {
                 //
                 // Shrink target:
                 //   the smallest k such that the shrunk sprite satisfies the PRIMARY
-                //   caps (bottom 0%, top ≤30%, sides ≤10%), with a floor at 0.35.
+                //   caps (bottom 0%, top ≤30%, sides ≤10%), with a floor at 0.455
+                //   (bumped from 0.35 — minimum was visually too small for large units).
                 //
                 // Class-global: classShrink(uc) = min(k_per_region) across all regions
                 // where the class has an instance. So a single tight region forces
@@ -1181,6 +1307,8 @@ object CthulhuWarsSolo {
                         val pw = place.length
                         val ph = if (pw > 0) place(0).length else 0
                         val bounds = scala.collection.mutable.Map[Int, (Int, Int, Int, Int)]()
+                        // sum_x, sum_y, count per region color for centroid computation.
+                        val centroidSums = scala.collection.mutable.Map[Int, (Long, Long, Int)]()
                         var py0 = 0
                         while (py0 < ph) {
                             var px0 = 0
@@ -1197,36 +1325,87 @@ object CthulhuWarsSolo {
                                         case None =>
                                             bounds(c) = (px0, px0, py0, py0)
                                     }
+                                    centroidSums.get(c) match {
+                                        case Some((sx, sy, n)) =>
+                                            centroidSums(c) = (sx + px0, sy + py0, n + 1)
+                                        case None =>
+                                            centroidSums(c) = (px0.toLong, py0.toLong, 1)
+                                    }
                                 }
                                 px0 += 1
                             }
                             py0 += 1
                         }
                         board.regions.foreach { rg =>
+                            // 2026-05-22: identify region pixels by PALETTE color, not by
+                            // sampling the hand-coded gateXY. The seed-XY approach broke on
+                            // 3U / 3L bitmaps where region layouts shift vs the canonical 5U / 5L
+                            // (e.g., Lake of Hali Overlook centroid drifts 250+ px on 3U, gateXY
+                            // landed in a neighbor's color → centroid computed from the wrong
+                            // region). RegionPalette is the canonical (r,g,b) per region, baked
+                            // from library5-place.webp pixel samples; colors are consistent
+                            // across 3U/3L/5U/5L bitmaps so the same table works for every
+                            // board. Tome regions still use the hand-coded XY further down for
+                            // tome-graphic offset; this only affects gate auto-centering.
                             val (gx0, gy0) = gateXY(rg)
-                            val gx = gx0.min(pw - 1).max(0)
-                            val gy = gy0.min(ph - 1).max(0)
-                            val color = place(gx)(gy)
-                            bounds.get(color).foreach { case (mnX, mxX, mnY, _) =>
+                            val color = RegionPalette.getOrElse(rg, place(gx0.min(pw - 1).max(0))(gy0.min(ph - 1).max(0)))
+                            bounds.get(color).foreach { case (mnX, mxX, mnY, mxY) =>
                                 val regionWidth = mxX - mnX
                                 val gateTopY = gy0 - (38 * board.unitScale).toInt
                                 val availAbove = (gateTopY - mnY).max(0)
                                 regionGeom(rg) = (regionWidth, availAbove)
+                                regionArea(rg) = (mxX - mnX) * (mxY - mnY)
+                            }
+                            centroidSums.get(color).foreach { case (sx, sy, n) =>
+                                if (n > 0) regionCentroid(rg) = ((sx / n).toInt, (sy / n).toInt)
                             }
                         }
                         regionGeomComputed = true
                     }
 
-                    // Map UnitClass -> set of regions where instances are currently placed.
-                    val classRegions = scala.collection.mutable.Map[UnitClass, scala.collection.mutable.Set[Region]]()
+                    // Identify "small" library regions (bbox area ≤ Gloomloft 5U).
+                    // Every object in these regions gets a flat 0.852 shrink applied
+                    // up front. Class-global shrink (below) is suppressed for these,
+                    // since the uniform handles them.
+                    regionUniformShrink.clear()
+                    regionArea.foreach { case (rg, area) =>
+                        if (area <= SmallRegionAreaCutoff) regionUniformShrink(rg) = SmallRegionUniformShrink
+                    }
+
+                    // 2026-05-21: any non-small region that contains a "large" unit
+                    // (proto.maxDim > LargeUnitTriggerMaxDim) ALSO gets the flat uniform
+                    // shrink applied to every object in that region — per user spec
+                    // "If a large unit triggers the shrinking rule in an area, then
+                    // apply the all unit resizing to that area." This replaces the
+                    // per-class shrink behavior that used to run for those regions.
                     factions.foreach { f =>
                         f.allInPlay.foreach { u =>
-                            if (u.region != null && regionGeom.contains(u.region)) {
+                            if (u.region != null && regionGeom.contains(u.region) && !regionUniformShrink.contains(u.region)) {
                                 val sample = DrawItem(u.region, f, u.uclass, u.health, u.state, 0, 0)
                                 val protoR = sample.proto
                                 if (protoR != null) {
                                     val maxDim = math.max(protoR.width, protoR.height)
-                                    if (maxDim > 100) {
+                                    if (maxDim > LargeUnitTriggerMaxDim)
+                                        regionUniformShrink(u.region) = SmallRegionUniformShrink
+                                }
+                            }
+                        }
+                    }
+
+                    // classRegions: now only ever contains regions that have a large unit
+                    // AND aren't yet uniform-shrink (which is none, after the loop above).
+                    // The set stays empty in practice; the loop is kept as a defensive
+                    // no-op so the rest of the code (which iterates classRegions) doesn't
+                    // need to be deleted.
+                    val classRegions = scala.collection.mutable.Map[UnitClass, scala.collection.mutable.Set[Region]]()
+                    factions.foreach { f =>
+                        f.allInPlay.foreach { u =>
+                            if (u.region != null && regionGeom.contains(u.region) && !regionUniformShrink.contains(u.region)) {
+                                val sample = DrawItem(u.region, f, u.uclass, u.health, u.state, 0, 0)
+                                val protoR = sample.proto
+                                if (protoR != null) {
+                                    val maxDim = math.max(protoR.width, protoR.height)
+                                    if (maxDim > LargeUnitTriggerMaxDim) {
                                         val set = classRegions.getOrElseUpdate(u.uclass, scala.collection.mutable.Set.empty)
                                         set += u.region
                                     }
@@ -1254,7 +1433,7 @@ object CthulhuWarsSolo {
                                         // Primary: top ≤30% (70% above gate), sides ≤10% (80% in region).
                                         val vertK = if (shScaled > 0) (availAbove / 0.7) / shScaled else 1.0
                                         val horK  = if (swScaled > 0) (regionW / 0.8)  / swScaled else 1.0
-                                        math.min(math.min(vertK, horK), 1.0).max(0.35)
+                                        math.min(math.min(vertK, horK), 1.0).max(0.455)
                                     }
                                 }
                             }
@@ -1265,9 +1444,9 @@ object CthulhuWarsSolo {
 
                     // 2026-05-11: enforce a per-GOO floor so GOOs always render
                     // larger than the largest cultist sprite. Without this, the
-                    // 0.35 hard floor + library-map tight regions could shrink
+                    // 0.455 hard floor + library-map tight regions could shrink
                     // a GOO below an un-shrunk Acolyte/HP, which is wrong.
-                    // Cultists never shrink (maxDim < 100 eligibility check).
+                    // Cultists never shrink via classShrink (maxDim < 1.6×cultist eligibility check).
                     val cultistDims = factions.flatMap { f =>
                         f.allInPlay.%(_.uclass.utype == Cultist).flatMap { u =>
                             val sample = DrawItem(u.region, f, u.uclass, u.health, u.state, 0, 0)
@@ -1276,22 +1455,26 @@ object CthulhuWarsSolo {
                     }
                     val maxCultistDim = if (cultistDims.nonEmpty) cultistDims.max else 0
                     if (maxCultistDim > 0) {
-                        // Target: GOO effective dim >= 1.10 * largest cultist dim.
-                        val gooMinDim = maxCultistDim * 1.10
+                        // Per-non-cultist floor: any unit whose proto is naturally larger than
+                        // the largest cultist must render at least 1.30× cultist max dim.
+                        // Units whose proto is <= cultist size (e.g. Ghouls) are intentionally
+                        // small and are skipped — they shrink as before.
+                        val nonCultistMinDim = maxCultistDim * 1.30
                         classShrink.toList.foreach { case (uc, k) =>
-                            if (uc.utype == GOO) {
-                                // Find any on-map instance of this GOO to read its proto.
-                                val gooInstance = factions.iterator.flatMap(_.allInPlay.iterator)
-                                    .find(u => u.uclass == uc && u.region != null && u.region.glyph.inPlay)
-                                gooInstance.foreach { u =>
+                            if (uc.utype != Cultist) {
+                                val instance = factions.iterator.flatMap(_.allInPlay.iterator)
+                                    .find(u => u.uclass == uc && u.region != null)
+                                instance.foreach { u =>
                                     val sample = DrawItem(u.region, u.faction, u.uclass, u.health, u.state, 0, 0)
                                     val protoR = sample.proto
                                     if (protoR != null) {
-                                        val gooMaxDim = math.max(protoR.width, protoR.height).toDouble
-                                        val effective = gooMaxDim * k
-                                        if (effective < gooMinDim) {
-                                            val raisedK = math.min(1.0, gooMinDim / gooMaxDim)
-                                            classShrink(uc) = raisedK
+                                        val unitMaxDim = math.max(protoR.width, protoR.height).toDouble
+                                        if (unitMaxDim > nonCultistMinDim) {  // eligibility: naturally bigger than the floor target
+                                            val effective = unitMaxDim * k
+                                            if (effective < nonCultistMinDim) {
+                                                val raisedK = math.min(1.0, nonCultistMinDim / unitMaxDim)
+                                                classShrink(uc) = raisedK
+                                            }
                                         }
                                     }
                                 }
@@ -1304,28 +1487,75 @@ object CthulhuWarsSolo {
                     val (rawPx, rawPy) = gateXY(r)
                     val gated = game.gates.has(r)
 
+                    // Auto-center the gate at the region's pixel centroid for library
+                    // regions that DON'T host a tome on the map. The hand-coded XYs in
+                    // Map.scala are shared across multiple boards, but the region shapes
+                    // can differ (e.g., Lake of Hali Overlook in library3-place.webp vs
+                    // library5-place.webp), so a hand-coded XY that centers nicely on
+                    // one bitmap can drift to the edge on another. Tome regions keep the
+                    // hand-coded XY because that XY was hand-placed to avoid the tome
+                    // graphic; auto-centering them would overlap the tome image.
+                    val isTomeRegion = board.isLibraryMap && TomePlacement.positions.exists(_._1.region == r)
+                    val (centeredPx, centeredPy) =
+                        if (board.isLibraryMap && !isTomeRegion && regionCentroid.contains(r))
+                            regionCentroid(r)
+                        else
+                            (rawPx, rawPy)
+
                     // Library: check if an unclaimed tome is in this region
                     val tomeInRegion = if (board.isLibraryMap) TomePlacement.positions.find { case (tome, _, _, _, _) =>
                         tome.region == r && !game.tomeHolders.getOrElse(tome, None).isDefined
                     } else None
 
-                    // Gate position: offset away from tome when tome is present
+                    // Gate position: offset away from tome when tome is present.
+                    // Uses (centeredPx, centeredPy) as base — equal to (rawPx, rawPy)
+                    // for tome regions and to the bitmap centroid otherwise.
                     val (gatePx, gatePy) = tomeInRegion match {
-                        case Some((_, _, _, _, th)) if gated => (rawPx, rawPy + (th * 0.7).toInt)
-                        case _ => (rawPx, rawPy)
+                        case Some((_, _, _, _, th)) if gated => (centeredPx, centeredPy + (th * 0.7).toInt)
+                        case _ => (centeredPx, centeredPy)
                     }
                     // Unit anchor: when tome present WITHOUT gate, offset units around tome
-                    // When tome+gate both present, or no tome, use gate position
-                    val (px, py) = tomeInRegion match {
+                    // When tome+gate both present, or no tome, use gate position.
+                    // Tome-present branch keeps the hand-coded XY base (rawPx/rawPy) because
+                    // that base was chosen to position units relative to the tome graphic.
+                    val (pxRaw, pyRaw) = tomeInRegion match {
                         case Some((_, _, _, _, th)) if !gated => (rawPx, rawPy + (th * 0.7).toInt)
                         case _ => (gatePx, gatePy)
                     }
 
-                    // Library maps: validate gate fits inside region, nudge if needed
+                    // 2026-05-21: the tome-offset above is a fixed shift (0.7 × tome height)
+                    // and can overshoot the region's bottom edge when the region is shorter
+                    // in 3U than in 5U (e.g. Guardian Under the Lake in library3-place.webp).
+                    // If the resulting anchor lands on white/empty, walk back UP toward the
+                    // gate until we re-enter the region. Without this, findAnother samples
+                    // white pixels and units get scattered onto the map periphery.
+                    val (px, py) = if (board.isLibraryMap && place.nonEmpty) {
+                        val ax = pxRaw.min(place.length - 1).max(0)
+                        val ay0 = pyRaw.min(place(0).length - 1).max(0)
+                        val targetY = gatePy.min(place(0).length - 1).max(0)
+                        def isWhite(c : Int) =
+                            (c >> 16 & 0xFF) > 240 && (c >> 8 & 0xFF) > 240 && (c & 0xFF) > 240
+                        if (isWhite(place(ax)(ay0))) {
+                            var ny = ay0
+                            // Step back toward the gate (typically upward) until we hit a
+                            // non-white pixel or reach the gate Y.
+                            val step = if (ay0 > targetY) -1 else 1
+                            var tries = 0
+                            while (ny != targetY && isWhite(place(ax)(ny)) && tries < 400) {
+                                ny += step; tries += 1
+                            }
+                            if (isWhite(place(ax)(ny))) (gatePx, gatePy) else (ax, ny)
+                        } else (ax, ay0)
+                    } else (pxRaw, pyRaw)
+
+                    // Library maps: validate gate fits inside region, nudge if needed.
+                    // Sample regionColor at the (possibly auto-centered) gatePx/gatePy
+                    // rather than the hand-coded rawPx/rawPy, so the nudge loop is anchored
+                    // to the centroid for non-tome regions.
                     val (adjGatePx, adjGatePy) = if (board.isLibraryMap && place.nonEmpty) {
                         val halfGate = (38 * board.unitScale).toInt
-                        val gpx = rawPx.min(place.length - 1).max(0)
-                        val gpy = rawPy.min(place(0).length - 1).max(0)
+                        val gpx = gatePx.min(place.length - 1).max(0)
+                        val gpy = gatePy.min(place(0).length - 1).max(0)
                         var regionColor = place(gpx)(gpy)
                         // If center lands on white boundary, search nearby for the real region color
                         val isWhite = (regionColor >> 16 & 0xFF) > 240 && (regionColor >> 8 & 0xFF) > 240 && (regionColor & 0xFF) > 240
@@ -1529,7 +1759,19 @@ object CthulhuWarsSolo {
                         }
                     }
 
-                    if (free.num > sticking.num * 0 + 3 || free.%(_.unit.utype == GOO).any || (oldGates.has(r).not && game.gates.has(r))) {
+                    // Detect tome state change in this region: was on-map last redraw,
+                    // now held (off-map) or vice versa. When that flips, sticky units that
+                    // were placed avoiding the tome's space need to be re-placed so they
+                    // can flow into the now-vacant area.
+                    val tomeStateChangedHere = board.isLibraryMap && TomePlacement.positions.exists { case (tome, _, _, _, _) =>
+                        tome.region == r && {
+                            val isOnMapNow = !game.tomeHolders.getOrElse(tome, None).isDefined
+                            val wasOnMap   = oldTomeOnMap.getOrElse(tome, isOnMapNow)
+                            wasOnMap != isOnMapNow
+                        }
+                    }
+
+                    if (free.num > sticking.num * 0 + 3 || free.%(_.unit.utype == GOO).any || (oldGates.has(r).not && game.gates.has(r)) || tomeStateChangedHere) {
                         free = free ++ sticking
                         sticking = $
                     }
@@ -1656,12 +1898,43 @@ object CthulhuWarsSolo {
                             val w = min(o.x + o.width, d.x + d.width) - max(o.x, d.x)
                             val h = min(o.y + o.height, d.y + d.height) - max(o.y, d.y)
                             val s = (w > 0 && h > 0).?(w * h).|(0)
-                            s * (1.0 / (o.width * o.height) + 1.0 / (d.width * d.height))
+                            val base = s * (1.0 / (o.width * o.height) + 1.0 / (d.width * d.height))
+                            val isGate = oo.unit == Gate || oo.unit == ChaosGate
+                            val gateWeight = if (isGate) 25.0 else 1.0
+                            // Hard cliff: ANY non-zero overlap with the gate adds a 500.0
+                            // flat penalty. Typical unit-on-unit overlap scores are < 5, so any
+                            // candidate that touches the gate is dwarfed by any candidate that
+                            // doesn't. The 25× weight remains as a tie-breaker WITHIN the
+                            // gate-overlapping set when no clear position exists.
+                            val gateFlatPenalty = if (isGate && s > 0) 500.0 else 0.0
+                            base * gateWeight + gateFlatPenalty
                         }
                     }.sum
 
+                    // Conditional enhanced candidate generation: 200 random samples instead of 40,
+                    // applied only when a large unit (>= 80% of Ghatanothoa's proto max-dim) is
+                    // being placed in a region whose bbox area is no more than 10% larger than
+                    // Black Hall's. Black Hall is the canonical "cramped" region where the gate
+                    // pile-on happens; any region that size or smaller gets the extra search budget.
+                    // Outside this case, 40 candidates is plenty and faster.
+                    val ghatoLikeThreshold = (176 * 0.80).toInt   // 80% of Ghatanothoa proto maxDim (96x176)
+                    val blackHallAreaOpt = board.regions.find(_.name == "Black Hall").flatMap(regionArea.get)
+                    val tightRegionThreshold = blackHallAreaOpt.map(a => (a * 1.10).toInt)
+
                     free.sortBy(d => -rank(d)).foreach { d =>
-                        val candidates = Array.tabulate(40)(n => find(px, py)).sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }
+                        val protoR = d.proto
+                        val isLargeUnit = d.unit.utype != Cultist && protoR != null &&
+                                          math.max(protoR.width, protoR.height) >= ghatoLikeThreshold
+                        val isTightRegion = tightRegionThreshold.exists(t => regionArea.get(r).exists(_ <= t))
+                        val candidateCount = if (board.isLibraryMap && isLargeUnit && isTightRegion) 200 else 40
+
+                        // L/T-partitioned library regions get balanced placement: each
+                        // candidate samples a sub-rectangle weighted by its area %. Other
+                        // regions use the standard uniform find().
+                        val partitioned = board.isLibraryMap && LtPartitions.contains((board.id, r.name))
+                        val candidates = Array.tabulate(candidateCount)(n =>
+                            if (partitioned) findWeighted(px, py, r) else find(px, py)
+                        ).sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }
                             .map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y) }
 
                         // Library map: filter via perspective caps, primary then fallback.
@@ -1684,6 +1957,11 @@ object CthulhuWarsSolo {
                 }
 
                 oldGates = game.gates
+                // Snapshot per-tome on-map state for next redraw's stickiness decision.
+                if (board.isLibraryMap)
+                    oldTomeOnMap = TomePlacement.positions.map { case (tome, _, _, _, _) =>
+                        tome -> !game.tomeHolders.getOrElse(tome, None).isDefined
+                    }.toMap
 
                 // DS starting region glyph (DS isn't in the DrawItem loop above because
                 // it only shows when cultists are present, unlike FB/TS/AN/OW which show always)
@@ -2428,7 +2706,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         top: 0%;
                         width: 100%;
                         height: 100%;
-                        z-index: 1;
+                        z-index: 10;
                         pointer-events: none;
                     ">
                         <div style="
@@ -2455,7 +2733,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 onpointerover="event.stopPropagation(); onExternalOver('RoA')"
                                 onpointerout="event.stopPropagation(); onExternalOut('RoA')">
                                 <img src="${Overlays.imageSource("roa-icon")}"
-                                     style="height: 1.7em; width: auto; display: block;" />
+                                     style="height: max(2.5em, 7vmin); width: auto; display: block;" />
                                 <span id="roa-cost-num"
                                       style="
                                           position: absolute;
@@ -2463,7 +2741,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                           left: 50%;
                                           transform: translateX(-50%);
                                           color: white;
-                                          font-size: 110%;
+                                          font-size: max(1.1em, 3vmin);
                                           font-weight: bold;
                                           line-height: 1;
                                           text-shadow: 0 0 3px black, 0 0 3px black, 0 0 3px black;
@@ -3057,6 +3335,17 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
             val setup = new Setup(seatings(0), Human)
 
+            // 2026-05-21: online-only option defaults per user spec.
+            //   GateDiplomacy + AsyncActions → on by default.
+            //   Opener4P10Gates → on when OW is in a 4-player game.
+            //   DemandTsathoggua → on when SL is in the game.
+            // User can still toggle any of these off in the setup screen below.
+            setup.options ++= $(GateDiplomacy, AsyncActions)
+            if (factions.has(OW) && factions.num == 4)
+                setup.options :+= Opener4P10Gates
+            if (factions.has(SL))
+                setup.options :+= DemandTsathoggua
+
             def showMapPreview() {
                 val mapDiv = getElem("map-small")
                 setup.options.of[MapOption].lastOption.foreach { opt =>
@@ -3611,7 +3900,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 if (dom.window.location.pathname.startsWith("/play/").not)
                     dom.window.history.pushState("initilaize", "", "/play/" + hash)
 
-                if (role != "$") {
+                // Master role "$" loads the game as a spectator (self = None).
+                // The downstream startGame path already supports a None self
+                // ("Spectating" log line at line ~3800); the previous early-return
+                // for "$" left the screen blank.
+                {
                     get(server + "read/" + hash + "/0") { read =>
                         val logs = read.split("\n").toList
 
@@ -3641,64 +3934,88 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             case _ =>
                         }
 
+                        // Defensive guard: a normal game log has at least 3 header lines
+                        // (version, name, factions/options). If a /create call lost the
+                        // body mid-write the persisted log can have only 2 lines, and the
+                        // logs(2) read at line ~3994 will throw IndexOutOfBoundsException.
+                        // Show a clear page-level error instead of an uncaught throw so the
+                        // owner can act (delete the broken game in the admin console).
+                        if (logs.size < 3) {
+                            val err = dom.document.createElement("div")
+                            err.asInstanceOf[html.Element].setAttribute("style",
+                                "position:fixed; top:20px; left:20px; right:20px; padding:20px; " +
+                                "background:#2a1f1f; border:2px solid #cc5555; color:#ffd6d6; " +
+                                "font-family:monospace; font-size:11pt; z-index:9999; max-width:800px;")
+                            err.innerHTML =
+                                "<b>Game log header is incomplete.</b><br/>" +
+                                "Only " + logs.size + " of the required 3 header lines were written. " +
+                                "This game was created but lost data mid-write and cannot be loaded.<br/><br/>" +
+                                "Use the admin console at /admin.html to delete the broken game " +
+                                "(its game id and master secret are visible there)."
+                            dom.document.body.appendChild(err)
+                            return
+                        }
+
+                        // Title overlay (online): pinned to the BODY with position: fixed at
+                        // the viewport's top-left. Earlier this was appended to mapSmall, but
+                        // mapSmall's overflow:hidden + its absolute-positioned children
+                        // (canvas, etc.) made the icon disappear on mobile and in some
+                        // online sessions. Attaching to body with position:fixed gets it out
+                        // of any map-container stacking context entirely.
                         val title = dom.document.createElement("div")
                         title.innerHTML = s"""
                             <div style="
-                                position: absolute;
-                                left: 0%;
-                                top: 0%;
-                                width: 100%;
-                                height: 100%;
-                                z-index: 1;
+                                position: fixed;
+                                left: 0;
+                                top: 0;
+                                z-index: 9999;
                                 pointer-events: none;
+                                padding: 0.4vmin 0.8vmin;
+                                color: rgb(255, 255, 255);
+                                font-size: 100%;
+                                font-weight: bold;
+                                filter: drop-shadow(0 0 6px black) drop-shadow(0 0 6px black) drop-shadow(0 0 6px black);
+                                display: flex;
+                                align-items: center;
+                                flex-wrap: nowrap;
+                                max-width: 95vw;
                             ">
-                                <div style="
-                                    color: rgb(255, 255, 255);
-                                    font-size: 100%;
-                                    font-weight: bold;
-                                    filter: drop-shadow(rgb(0, 0, 0) 0px 0px 6px) drop-shadow(rgb(0, 0, 0) 0px 0px 6px) drop-shadow(rgb(0, 0, 0) 0px 0px 6px);
-                                    text-align: left;
-                                    display: flex;
-                                    align-items: center;
-                                    flex-wrap: nowrap;
-                                ">
-                                    <span data-elem="text" style="white-space: nowrap;">
-                                        ${logs(1)}
-                                    </span>
-                                    <span
-                                        style="
-                                            pointer-events: auto;
-                                            cursor: pointer;
-                                            display: inline-flex;
-                                            align-items: center;
-                                            position: relative;
-                                            margin-left: 0.5em;
-                                            vertical-align: middle;
-                                            flex-shrink: 0;
-                                        "
-                                        onclick="event.stopPropagation(); onExternalClick('RoA')"
-                                        onpointerover="event.stopPropagation(); onExternalOver('RoA')"
-                                        onpointerout="event.stopPropagation(); onExternalOut('RoA')">
-                                        <img src="${Overlays.imageSource("roa-icon")}"
-                                             style="height: 1.7em; width: auto; display: block;" />
-                                        <span id="roa-cost-num"
-                                              style="
-                                                  position: absolute;
-                                                  bottom: 0;
-                                                  left: 50%;
-                                                  transform: translateX(-50%);
-                                                  color: white;
-                                                  font-size: 110%;
-                                                  font-weight: bold;
-                                                  line-height: 1;
-                                                  text-shadow: 0 0 3px black, 0 0 3px black, 0 0 3px black;
-                                                  pointer-events: none;
-                                              ">5</span>
-                                    </span>
-                                </div>
+                                <span
+                                    style="
+                                        pointer-events: auto;
+                                        cursor: pointer;
+                                        display: inline-flex;
+                                        align-items: center;
+                                        position: relative;
+                                        vertical-align: middle;
+                                        flex-shrink: 0;
+                                    "
+                                    onclick="event.stopPropagation(); onExternalClick('RoA')"
+                                    onpointerover="event.stopPropagation(); onExternalOver('RoA')"
+                                    onpointerout="event.stopPropagation(); onExternalOut('RoA')">
+                                    <img src="${Overlays.imageSource("roa-icon")}"
+                                         style="height: max(2em, 5.3vmin); width: auto; display: block;"
+                                         alt="RoA" />
+                                    <span id="roa-cost-num"
+                                          style="
+                                              position: absolute;
+                                              top: 50%;
+                                              left: 50%;
+                                              transform: translate(-50%, -50%);
+                                              color: white;
+                                              font-size: max(0.9em, 2.4vmin);
+                                              font-weight: bold;
+                                              line-height: 1;
+                                              text-shadow: 0 0 3px black, 0 0 3px black, 0 0 3px black;
+                                              pointer-events: none;
+                                          ">5</span>
+                                </span>
+                                <span data-elem="text" style="white-space: nowrap; margin-left: 0.5em; overflow: hidden; text-overflow: ellipsis; min-width: 0;">
+                                    ${logs(1)}
+                                </span>
                             </div>"""
 
-                        mapSmall.appendChild(title)
+                        dom.document.body.appendChild(title)
 
                         dom.document.title = logs(1) + " - Cthulhu Wars HRF"
 
@@ -3724,7 +4041,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 // Round 8: replaced hardcoded cwo.im URL with the page's own origin so the
                 // "Online game" link goes to localhost when running locally. For production
                 // (data-server set to a real backend URL), the link still goes to that URL.
-                ask("Cthulhu Wars", $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='" + origin + "' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "Extra", "About", "Test").take(menu), {
+                ask("Cthulhu Wars", $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='" + origin + "' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "Extra", "About", "Test", "Betas".hl).take(menu), {
                     case 998_0 =>
                         val setup = new Setup(randomSeating($(GC, BG, WW, OW)), Normal)
                         setup.difficulty += OW -> Debug
@@ -3820,6 +4137,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             "Board game by " + "Peterson Games".hl,
                             "All graphics in the app belong to Petersen Games.<br>Used with permission.",
                             "Back"
+                        ), { _ => topMenu() })
+                    case 6 =>
+                        // "Beta builds" — links to the More Neutral Units beta at /mnu/.
+                        ask("Beta builds", $(
+                            "<a href='/mnu/' target='_blank'><div>More Neutral Units</div></a>",
+                            "Cancel"
                         ), { _ => topMenu() })
                     case 5 =>
                         val setup = new Setup(randomSeating($(GC, BG, WW)), Normal)

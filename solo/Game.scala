@@ -2851,14 +2851,29 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val variants = ll./~(r => ee.%(_.present(r)).%(f.canAttack(r)).sortBy(e => -e.strength(e.at(r), f))./(e => r -> e))
 
             Ask(f)
-                .each(variants)((r, e) => AttackAction(f, r, e, effect))
+                .each(variants)((r, e) =>
+                    // Library at Celaeno: targets whose faction currently holds the
+                    // (face-up, not overdue) Barrier of Naach-Tith become the entry
+                    // point for the payment sub-menu instead of triggering AttackAction
+                    // directly. The variant item is labeled "n/a" and routes through
+                    // a SOFT BarrierMenuOpenAction so the payment Ask's Cancel button
+                    // returns cleanly to this target picker. Non-barrier targets keep
+                    // the upstream AttackAction path unchanged.
+                    if (board.isLibraryMap && tomeHolders.get(TomeBarrier).flatten.has(e) && !tomeOverdue.getOrElse(TomeBarrier, false))
+                        BarrierMenuOpenAction(f, r, e, effect)
+                    else
+                        AttackAction(f, r, e, effect))
                 .group(" ")
                 .cancelIf(effect.none)
                 .cancelIf(effect.has(EnergyNexus))
                 .skipIf(effect.has(FromBelow))(ProceedBattlesAction)
 
         case AttackAction(self, r, f, effect) =>
-            // Library at Celaeno: Barrier of Naach-Tith — attacker must pay a cost
+            // Library at Celaeno: if barrier still active for this faction and not yet
+            // paid (the BarrierMenuOpenAction payment route should have set barrierPaid
+            // when the user paid; this branch is the SAFETY NET for any caller that
+            // bypasses the picker — e.g. spellbook-triggered re-attacks). Original
+            // upstream pattern preserved.
             if (board.isLibraryMap && !barrierPaid && tomeHolders.get(TomeBarrier).flatten.has(f) && !tomeOverdue.getOrElse(TomeBarrier, false)) {
                 barrierPaid = true
                 return Force(BarrierCheckAction(self, f, AttackAction(self, r, f, effect)))
@@ -3181,6 +3196,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // BATTLE
         case action if battle.any =>
             battle.get.perform(action)
+
+        // Defensive: battle-context actions performed when game.battle is None.
+        // Replay or out-of-order continuation can leave a PreBattleQuestion-typed
+        // action queued after the battle that owned it has already cleared. Logging
+        // it and continuing is safer than an uncaught MatchError that kills the
+        // whole engine on a fresh page load. Real bug remains: figure out WHY the
+        // battle was cleared before the continuation ran, but at least the
+        // remaining log replays.
+        case action : PreBattleQuestion =>
+            log("[warn] battle action " + action.getClass.getSimpleName + " skipped — no active battle")
+            UnknownContinue
     }
 
 }

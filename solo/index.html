@@ -1,7 +1,7 @@
 <html>
     <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <title id="cws-options" data-server="###SERVER-URL###" data-delay="1" data-menu="222" data-scroll="true" data-online="true">Cthulhu Wars Solo library-at-celaeno-v2</title>
+        <title id="cws-options" data-server="###SERVER-URL###" data-delay="1" data-menu="222" data-scroll="true" data-online="true">Cthulhu Wars Solo library-at-celaeno-v4</title>
         <style>
             html {
                 height: 100%;
@@ -547,10 +547,30 @@
                 font-size: 100%;
                 table-layout: fixed;
                 width: 100%;
+                /* fill the overlay's height so vertical-align: middle has a tall row to center within */
+                height: 100%;
                 min-height: 100%;
                 padding: 1ex;
                 text-align: center;
                 overflow: hidden;
+            }
+            /* Vertically center the requirement text inside its cell — was top-aligned by
+               default, which left the text hugging the top of the overlay. */
+            .requirement-table td,
+            .requirement-table th {
+                vertical-align: middle;
+            }
+            /* On mobile (and any case where the parchment area is taller than the text)
+               vertical-align: middle on the <td> alone wasn't enough — the inner
+               .white-border div still rendered at intrinsic height and the text sat at
+               the top of the td. Make the inner div flex-fill the cell so the text is
+               centered both horizontally and vertically. */
+            .requirement-table .white-border {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 100%;
+                min-height: 100%;
             }
 
             .loyalty-card-table {
@@ -1039,7 +1059,6 @@
         <img class="asset" id="info:ow-acolyte" src="webp/info/ow-acolyte.svg" />
         <img class="asset" id="info:ow-background" src="webp/info/ow-background.webp" />
         <img class="asset" id="info:ow-mutant" src="webp/info/ow-mutant.svg" />
-        <img class="asset" id="info:ow-sothoth" src="webp/info/ow-sothoth.svg" />
         <img class="asset" id="info:ow-spawn-of-yog-sothoth" src="webp/info/ow-spawn-of-yog-sothoth.svg" />
         <img class="asset" id="info:ow-yog-sothoth" src="webp/info/ow-yog-sothoth.svg" />
 
@@ -1247,7 +1266,7 @@
         <!-- } | ASSETS | } -->
 
         <!-- { | SCRIPT | { -->
-        <script id="script" type="text/javascript" src="./target/scala-2.13/cthulhu-wars-solo-hrf-fastopt/main.js?v=20260504-lace49"></script>
+        <script id="script" type="text/javascript" src="./target/scala-2.13/cthulhu-wars-solo-hrf-opt/main.js?v=20260522-122734"></script>
         <!-- } | SCRIPT | } -->
 
     </body>
