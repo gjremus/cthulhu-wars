@@ -12,12 +12,12 @@ solo/fonts/*
 solo/webp/*
 solo/web.config
 
-# Firstborn (Round 8) — sim build directory artifacts and run output
-sim/target/
-sim/project/target/
-sim/project/project/
-sim/game-error*
-sim/win-logs/
+# User direction 2026-05-22: sim/ tooling is NOT part of the live build and
+# should not be tracked by the repo at all. Live builds (publish-pages.sh
+# and deploy-mnu-to-vm.sh) only copy main.js, index.html, webp/, fonts/ —
+# sim/ was never deployed. This rule keeps the sim source on the dev
+# working tree without committing it.
+sim/
 
 # macOS finder metadata
 **/.DS_Store
