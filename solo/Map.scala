@@ -558,6 +558,69 @@ object EarthMap6 extends Board {
 // LIBRARY AT CELAENO — Two-floor map with Archway and Stairwell adjacency
 // ══════════════════════════════════════════════════════════════════════════════
 
+// [2026-05-23] Canonical region color palette for Earth boards — Option B fix
+// for the portrait/mobile glyph-misplacement bug. The placement bitmaps
+// (earth33/35/53/55-place.webp) store each region as a distinct solid color
+// separated by black GAP pixels. Hard-coding the canonical color per region
+// per board means the glyph-placement algorithm never has to SAMPLE the
+// bitmap at the gate XY to learn the region's color — eliminating the entire
+// class of "sampled at a boundary or rotated coord → wrong region" bugs.
+// Colors were sampled from the unrotated landscape bitmap at each board's
+// gateXYO; verified visually distinct per region.
+object EarthRegionPalette {
+    private[cws] val byBoard : Map[String, Map[Region, Int]] = {
+        import EarthMap3._
+        val earth33 = Map[Region, Int](
+            ArcticOcean -> 0xafbeb3, Europe -> 0x857d3f, Asia -> 0xba441e, Africa -> 0x9f9a7f,
+            NorthAtlantic -> 0x505c70, SouthAtlantic -> 0x597f7d, Antarctica -> 0xcdac85,
+            SouthPacific -> 0x405061, SouthAmerica -> 0xcc4438, NorthAmerica -> 0xd8952d,
+            NorthPacific -> 0x274a66, IndianOcean -> 0x506a8c, Australia -> 0x8d6919,
+        )
+        val earth35 = {
+            import EarthMap4v35._
+            Map[Region, Int](
+                ArcticOcean -> 0xafbeb3, Scandinavia -> 0xa3741a, Europe -> 0x857d3f,
+                NorthAsia -> 0xba441e, SouthAsia -> 0x670f0b, Arabia -> 0xcba750,
+                EastAfrica -> 0x9d6d63, WestAfrica -> 0x9f9a7f,
+                NorthAtlantic -> 0x505c70, SouthAtlantic -> 0x597f7d, Antarctica -> 0xcdac85,
+                SouthPacific -> 0x405061, SouthAmerica -> 0xcc4438, NorthAmerica -> 0xd8952d,
+                NorthPacific -> 0x274a66, IndianOcean -> 0x506a8c, Australia -> 0x8d6919,
+            )
+        }
+        val earth53 = {
+            import EarthMap4v53._
+            Map[Region, Int](
+                ArcticOcean -> 0xafbeb3, Europe -> 0x857d3f, Asia -> 0xba441e, Africa -> 0x9f9a7f,
+                NorthAtlantic -> 0x505c70, SouthAtlantic -> 0x597f7d, Antarctica -> 0xcdac85,
+                SouthPacific -> 0x405061, SouthAmerica -> 0xcc4438, NorthAmerica -> 0xa6905f,
+                NorthPacific -> 0x274a66, IndianOcean -> 0x506a8c, Australia -> 0x8d6919,
+            )
+        }
+        val earth55 = {
+            import EarthMap5._
+            Map[Region, Int](
+                ArcticOcean -> 0xafbeb3, Europe -> 0x857d3f, Asia -> 0x670f0b, Africa -> 0x9f9a7f,
+                NorthAtlantic -> 0x505c70, SouthAtlantic -> 0x597f7d, Antarctica -> 0xcdac85,
+                SouthPacific -> 0x405061,
+                SouthAmericaWest -> 0xcc4438, SouthAmericaEast -> 0x6b5540,
+                CentralAmerica -> 0xd8952d,
+                NorthAmericaWest -> 0xa6905f, NorthAmericaEast -> 0xc87c5c,
+                NorthPacific -> 0x274a66, IndianOcean -> 0x506a8c,
+                Australia -> 0x8a3a0f, NewZealand -> 0x8d6919,
+            )
+        }
+        Map(
+            "earth33" -> earth33,
+            "earth35" -> earth35,
+            "earth53" -> earth53,
+            "earth55" -> earth55,
+        )
+    }
+    def get(boardId : String, r : Region) : Option[Int] =
+        byBoard.get(boardId).flatMap(_.get(r))
+}
+
+
 // Canonical region color palette — see Library build for context. Same palette
 // applies across 3U/3L/5U/5L bitmaps; only region pixel positions shift between
 // bitmaps. Used by CthulhuWarsSolo.scala pre-pass to identify region pixels by

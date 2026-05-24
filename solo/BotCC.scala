@@ -1042,6 +1042,8 @@ class GameEvaluationCC(implicit game : Game) extends GameEvaluation(CC)(game) {
                             // Daemon Sultan (DS): opponent combat evaluation
                             case DS =>
                                 0 -> "todo"
+                            case _ =>
+                                0 -> "neutral opponent"
                         }
 
                     case InvisibilityAction(_, ifp, u) =>
@@ -1133,6 +1135,9 @@ class GameEvaluationCC(implicit game : Game) extends GameEvaluation(CC)(game) {
                             // Daemon Sultan (DS): opponent combat evaluation
                             case DS =>
                                 true |=> 0 -> "todo"
+
+                            case _ =>
+                                true |=> 0 -> "neutral opponent"
                         }
 
                     case SeekAndDestroyAction(_, _, r) =>
@@ -1170,6 +1175,9 @@ class GameEvaluationCC(implicit game : Game) extends GameEvaluation(CC)(game) {
                             // Daemon Sultan (DS): opponent combat evaluation
                             case DS =>
                                 emissary && egug + esht + esv > 0 |=> -3000 -> "dont seek emissary"
+
+                            case _ =>
+                                true |=> 0 -> "neutral opponent"
                         }
 
                         true |=> 2000 -> "seek seek destroy destroy"

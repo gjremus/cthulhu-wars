@@ -86,17 +86,41 @@ case class FireVampiresSpareAction(self : Faction, uRef : UnitRef) extends BaseF
     implicit g => "Fire Vampires".styled("nt"), implicit g => "Spare " + g.unit(uRef).uclass.styled(g.unit(uRef).faction) + " for " + "1 Power".styled("power")) {
     override def question(implicit game : Game) = self.full + " — " + "Fire Vampires".styled("nt")
 }
-case class FireVampiresDoneAction(self : Faction) extends BaseFactionAction("Fire Vampires".styled("nt"), "Done") {
+case class FireVampiresSkipAction(self : Faction) extends BaseFactionAction("Fire Vampires".styled("nt"), "Skip") {
     override def question(implicit game : Game) = self.full + " — " + "Fire Vampires".styled("nt")
 }
 
 // Elder Shoggoth: Prime Cause choices
+// [2026-05-23 REVERT] Earlier this tick I added `with Soft` thinking it would
+// fix the Cancel button on the replacement sub-menu. It DID get Cancel firing
+// but broke Unholy Ground (and likely other post-battle powers) — adding Soft
+// to a battle-phase Choose action shifts how `proceed()` re-enters the battle
+// phase chain, skipping later phases for the same side. None of the other
+// post-battle Choose actions in this file (FireVampiresSpareAction,
+// QuachilDustToDustRemoveAction, DholePlanetaryDestructionDoomAction, etc.)
+// are Soft — that's the established pattern. Reverting to Hard. Cancel button
+// remains a known follow-up: use `.cancel` on the sub-Ask plus a non-Soft
+// rewind path (TODO).
 case class PrimeCauseChooseUnitAction(self : Faction, uRef : UnitRef) extends BaseFactionAction(
     implicit g => "Prime Cause".styled("nt"), implicit g => "Replace " + g.unit(uRef).uclass.styled(self)) {
     override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt") + " — choose Unit to replace"
 }
 case class PrimeCauseChooseReplacementAction(self : Faction, oldRef : UnitRef, newUC : UnitClass) extends BaseFactionAction(
-    implicit g => "Prime Cause".styled("nt"), implicit g => { val oldUC = g.unit(oldRef).uclass ; val cost = if (oldUC == ElderShoggoth) 0 else oldUC.cost / 2 ; "Replace with " + newUC.styled(self) + (cost > 0).??(" (" + cost.power + ")") }) {
+    implicit g => "Prime Cause".styled("nt"),
+    implicit g => {
+        val oldU = g.unit(oldRef)
+        val r = oldU.region
+        // [2026-05-23] Per user: cost = current cost of the NEW unit / 2 (rounded
+        // down). Use awakenCost for faction GOOs (e.g., GC re-awakening Cthulhu
+        // for 2 = 4/2), and summonCost for everything else (which already
+        // applies discounts like BG Brainless → Reanimated cost 0, Yothan
+        // without Extinction → 6, with Extinction → 4, etc.). Replacing an
+        // Elder Shoggoth itself still costs 0 (free swap-out).
+        val cost = if (oldU.uclass == ElderShoggoth) 0
+                   else if (newUC.utype == GOO) self.awakenCost(newUC, r)(g).getOrElse(newUC.cost) / 2
+                   else self.summonCost(newUC, r)(g) / 2
+        "Replace with " + newUC.styled(self) + (cost > 0).??(" (" + cost.power + ")")
+    }) {
     override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt") + " — choose replacement from Pool"
 }
 case class PrimeCauseSkipAction(self : Faction) extends BaseFactionAction("Prime Cause".styled("nt"), "Skip") {
@@ -278,6 +302,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     var dustToDustProcessed : $[UnitRef] = $
     // Elder Shoggoth: track sides that already used Prime Cause this battle (1 replacement max)
     var primeCauseUsed : $[Faction] = $
+    // Cthugha: track sides that already saw the Fire Vampires prompt this battle
+    // (so Done/Skip properly advances past the phase instead of re-offering the same units)
+    var fireVampiresUsed : $[Faction] = $
 
     // Round 8 Bug 45: flag preventing the post-battle Cyclopean Gaze hook from
     // re-firing each time the battle re-enters PostBattlePhase. After CG completes,
@@ -933,7 +960,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val extra = max(0, vooniths - kills)
             if (extra > 0) {
                 s.rolls ++= extra.times(Kill)
-                log(Voonith.styled(s), "Vicious added", extra, "Kill".s(extra).styled("kill"))
+                log(Voonith.styled(s), "Vicious".styled("nt") + ": added", extra, "Kill".s(extra).styled("kill"))
             }
         }
     }
@@ -1017,7 +1044,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                 if (eligible.num == 1) {
                                     // Only one target — auto-assign
                                     assignKill(eligible.head)
-                                    log(eligible.head.uclass.styled(enemy), "was", "killed".styled("kill"), "by Snakebite")
+                                    log(eligible.head.uclass.styled(enemy), "was", "killed".styled("kill"), "by", "Snakebite".styled("nt"))
                                     return jump(HarbingerKillPhase)
                                 } else {
                                     // Multiple targets — enemy chooses
@@ -1136,12 +1163,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 sides.foreach { s =>
                     if (s.forces.exists(_.uclass == Cthugha) && s.forces(Cthugha).exists(u => ElderThingMindControl.suppresses(u)))
                         log(s, "Fire Vampires".styled("nt"), "blocked by", "Elder Thing".styled("nt"))
-                    if (s.forces.exists(_.uclass == Cthugha) && !s.forces(Cthugha).exists(u => ElderThingMindControl.suppresses(u))) {
+                    if (s.forces.exists(_.uclass == Cthugha) && !s.forces(Cthugha).exists(u => ElderThingMindControl.suppresses(u)) && !fireVampiresUsed.has(s)) {
                         val killed = s.opponent.forces.%(_.health == Killed)
                         if (killed.any) {
                             return Ask(s)
                                 .each(killed)(u => FireVampiresSpareAction(s, u.ref))
-                                .add(FireVampiresDoneAction(s))
+                                .add(FireVampiresSkipAction(s))
                         }
                     }
                 }
@@ -1184,7 +1211,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         val opponent = s.opponent
                         // Owner gains 2 ES
                         dholeOwner.takeES(2)
-                        log(Dhole.styled(dholeOwner), "Planetary Destruction:", dholeOwner.full, "gained", 2.es)
+                        log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
                         // Exempt Dhole from forces to prevent re-trigger on re-entry
                         // Don't eliminate yet — EliminatePhase will handle that (avoids stale UnitRef crash)
                         killedDholes.foreach(exempt)
@@ -1564,12 +1591,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 val returned = new UnitFigure(origOwner.get, u.uclass, u.index, VelvetFanHold(self))
                 origOwner.get.units :+= returned
                 exempt(u)
-                log(self.full, "The Velvet Fan: captured", u.uclass.styled(origOwner.get), "onto Loyalty Card")
+                log(self.full, "Velvet Fan".styled("nt") + ": captured", u.uclass.styled(origOwner.get), "onto Loyalty Card")
             } else {
                 exempt(u)
                 u.region = VelvetFanHold(self)
                 u.health = Alive
-                log(self.full, "The Velvet Fan: captured", u.uclass.styled(u.faction), "onto Loyalty Card")
+                log(self.full, "Velvet Fan".styled("nt") + ": captured", u.uclass.styled(u.faction), "onto Loyalty Card")
             }
             // ONE unit only — jump past Velvet Fan phase
             jump(CthughaFireVampiresPhase)
@@ -1584,25 +1611,38 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Firestorm spellbook: also gain 1 ES per spare
             if (self.upgrades.has(Firestorm) && !self.oncePerGame.has(Firestorm)) {
                 self.takeES(1)
-                log(self.full, "Fire Vampires + Firestorm: spared", u.uclass.styled(u.faction), "for", 1.power, "and", 1.es)
+                log(self.full, "Fire Vampires".styled("nt") + " + " + Firestorm.styled(self) + ": spared", u.uclass.styled(u.faction), "for", 1.power, "and", 1.es)
             } else {
-                log(self.full, "Fire Vampires: spared", u.uclass.styled(u.faction), "for", 1.power)
+                log(self.full, "Fire Vampires".styled("nt") + ": spared", u.uclass.styled(u.faction), "for", 1.power)
             }
             // Re-offer remaining killed
             val moreKilled = self.opponent.forces.%(_.health == Killed)
             if (moreKilled.any)
                 Ask(self)
                     .each(moreKilled)(u2 => FireVampiresSpareAction(self, u2.ref))
-                    .add(FireVampiresDoneAction(self))
-            else
+                    .add(FireVampiresSkipAction(self))
+            else {
+                fireVampiresUsed :+= self
                 proceed()
+            }
 
-        case FireVampiresDoneAction(self) =>
+        case FireVampiresSkipAction(self) =>
+            fireVampiresUsed :+= self
             proceed()
 
         case PrimeCauseChooseUnitAction(self, uRef) =>
-            // Show pool units as replacement options
-            val poolUnits = self.pool./~(u => $(u.uclass)).distinct
+            // [2026-05-23] Show pool units AS WELL AS faction GOOs whose awaken
+            // conditions are met in the battle region. Per user: faction GOOs
+            // that have been awakened once (and are now in pool) can be
+            // re-awakened via Prime Cause IF the standard awaken conditions
+            // for THIS region are met. `self.awakenCost(uc, r)` returns Some
+            // only when the awaken conditions are satisfied; we filter on that.
+            val battleRegion = game.unit(uRef).region
+            val poolNonGoo  = self.pool.%(_.uclass.utype != GOO)./(_.uclass).distinct
+            val poolGooKnown = self.pool.%(_.uclass.utype == GOO).%(u =>
+                u.uclass.isInstanceOf[FactionUnitClass] && self.awakenCost(u.uclass, battleRegion).nonEmpty
+            )./(_.uclass).distinct
+            val poolUnits = (poolNonGoo ++ poolGooKnown).distinct
             Ask(self).each(poolUnits)(uc => PrimeCauseChooseReplacementAction(self, uRef, uc)).cancel
 
         case PrimeCauseChooseReplacementAction(self, oldRef, newUC) =>
@@ -1610,8 +1650,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val oldUnit = game.unit(oldRef)
             val r = oldUnit.region
             val isES = oldUnit.uclass == ElderShoggoth
+            // [2026-05-23] Cost is half the CURRENT cost of the NEW unit:
+            //   awakenCost(newUC, r)/2 for faction GOOs (so GC re-awakening
+            //   Cthulhu for 2 = 4/2; awakening conditions enforced by the
+            //   filter in PrimeCauseChooseUnitAction).
+            //   summonCost(newUC, r)/2 for everything else (already applies
+            //   faction discounts: BG Brainless drops Reanimated to 0; Yothan
+            //   without Extinction → 3 = 6/2; with Extinction → 2 = 4/2; etc.).
+            //   Replacing an Elder Shoggoth itself still costs 0.
+            val cost = if (isES) 0
+                       else if (newUC.utype == GOO) self.awakenCost(newUC, r).getOrElse(newUC.cost) / 2
+                       else self.summonCost(newUC, r) / 2
+            // [2026-05-23] Prime Cause logs split into 4 separate events per user spec:
+            //   1) unit removed, 2) unit replaced, 3) ES given (GOO penalty), 4) doom given (Terror penalty)
+            //   Cost-paid log kept as a 5th (cost > 0 only).
             // Remove old unit
             game.eliminate(oldUnit)
+            log(self.full, "Prime Cause".styled("nt") + ": removed", oldUnit.uclass.styled(self), "from", r)
             // Place new unit (guard: ensure pool has the unit)
             if (self.pool(newUC).any)
                 self.place(newUC, r)
@@ -1620,25 +1675,25 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 val u = new UnitFigure(self, newUC, self.units.%(_.uclass == newUC).num + 1, r)
                 self.units :+= u
             }
-            // Cost and consequences (based on the REPLACED unit, not the new one)
+            log(self.full, "Prime Cause".styled("nt") + ": replaced with", newUC.styled(self), "in", r)
+            // Cost
+            if (cost > 0) {
+                self.power -= cost
+                log(self.full, "Prime Cause".styled("nt") + ": paid", cost.power)
+            }
+            // Penalties (based on the REPLACED unit's type; ES replacement = no penalty).
             if (!isES) {
-                val cost = oldUnit.uclass.cost / 2
-                if (cost > 0) {
-                    self.power -= cost
-                    log(self.full, "paid", cost.power, "for Prime Cause replacement")
-                }
                 if (oldUnit.uclass.utype == Terror) {
                     val enemy = self.opponent
                     enemy.doom += 1
-                    log(enemy.full, "gained", 1.doom, "from Prime Cause (Terror replaced)")
+                    log(enemy.full, "Prime Cause".styled("nt") + ": gained", 1.doom, "(Terror replaced)")
                 }
                 if (oldUnit.uclass.utype == GOO) {
                     val enemy = self.opponent
                     enemy.takeES(1)
-                    log(enemy.full, "gained", 1.es, "from Prime Cause (GOO replaced)")
+                    log(enemy.full, "Prime Cause".styled("nt") + ": gained", 1.es, "(GOO replaced)")
                 }
             }
-            log(self.full, "Prime Cause: replaced", oldUnit.uclass.styled(self), "with", newUC.styled(self), "in", r)
             proceed()
 
         case PrimeCauseSkipAction(self) =>
@@ -1650,14 +1705,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             exempt(u)
             // Permanently remove from game
             self.units = self.units.%(_.ref != uRef)
-            log(self.full, "permanently removed", u.uclass.styled(self), "from the game (Dust to Dust)")
+            log(self.full, "permanently removed", u.uclass.styled(self), "from the game via", "Dust to Dust".styled("nt"))
             dustToDustProcessed :+= uRef
             proceed()
 
         case QuachilDustToDustESAction(self, uRef, quOwner) =>
             val u = game.unit(uRef)
             quOwner.takeES(1)
-            log(quOwner.full, "gained", 1.es, "from Dust to Dust (", u.uclass.styled(self), "killed)")
+            log(quOwner.full, "gained", 1.es, "from", "Dust to Dust".styled("nt"), "(", u.uclass.styled(self), "killed)")
             // Unit is still killed — exempt from forces and eliminate normally
             exempt(u)
             eliminate(u)
@@ -1764,11 +1819,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         case Pain if f.opponent.power > 0 =>
                             f.opponent.power -= 1
                             f.power += 1
-                            log(StarVampire.styled(f), "drained", 1.power, "from", f.opponent, "with a", "Pain".styled("pain"))
+                            log(StarVampire.styled(f), "Sapping".styled("nt") + ": drained", 1.power, "from", f.opponent, "with a", "Pain".styled("pain"))
                         case Kill if f.opponent.doom > 0 =>
                             f.opponent.doom -= 1
                             f.doom += 1
-                            log(StarVampire.styled(f), "drained", 1.doom, "from", f.opponent, "with a", "Kill".styled("kill"))
+                            log(StarVampire.styled(f), "Sapping".styled("nt") + ": drained", 1.doom, "from", f.opponent, "with a", "Kill".styled("kill"))
                         case _ =>
                     }
             }
@@ -1929,7 +1984,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case YigSnakebiteAssignAction(self, yigOwner, uc) =>
             val u = self.forces.%(_.uclass == uc).%(u => canAssignKills(u) > 0).sortBy(_.uclass.cost).head
             assignKill(u)
-            log(u.uclass.styled(self), "was", "killed".styled("kill"), "by Snakebite")
+            log(u.uclass.styled(self), "was", "killed".styled("kill"), "by", "Snakebite".styled("nt"))
             jump(HarbingerKillPhase)
 
         // CTHUGHA COMBAT CHOICE (pre-battle)

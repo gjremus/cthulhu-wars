@@ -279,7 +279,8 @@ object NeutralMonstersExpansion extends Expansion {
             if (uc == InsectsFromShaggai)
                 MindParasite.checkConversions()
 
-            // Satyr Fecund: also place 1 Acolyte with the first Satyr on loyalty card acquisition
+            // Satyr Fecund: place 1 Acolyte from Pool with every Satyr placed (LC path here;
+            // SummonedAction handler below covers subsequent regular-summon placements).
             if (uc == Satyr && self.loyaltyCards.has(SatyrCard) && self.pool(Acolyte).any) {
                 self.place(Acolyte, r)
                 self.log("Fecund".styled("nt") + ": placed", Acolyte.styled(self), "in", r, "with", Satyr.styled(self))
@@ -299,7 +300,7 @@ object NeutralMonstersExpansion extends Expansion {
                 self.payTax(r)
 
             self.place(uc, r)
-            self.log("summoned", uc.styled(self), "in", r, "for free")
+            self.log("Frenzy".styled("nt") + ": summoned", uc.styled(self), "in", r, "for free")
 
             SummonedAction(self, uc, r, l :+ r)
 
@@ -354,7 +355,7 @@ object NeutralMonstersExpansion extends Expansion {
             u.add(Moved)
             u.add(MovedForFree)
 
-            log(Shantak, "carried", u, "to", r)
+            log(Shantak.styled(self), "Riding the Shantak".styled("nt") + ": carried", u, "to", r)
 
             MoveContinueAction(self, true)
 

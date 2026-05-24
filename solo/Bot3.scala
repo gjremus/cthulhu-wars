@@ -1418,6 +1418,375 @@ case class Bot3(faction : Faction) {
                         isFactionUnit && (utype == Monster || utype == Terror) && uc.cost >= 3 |=> 300 -> "give ES for expensive faction monster"
                         isNeutral && uc.cost >= 3 |=> 300 -> "give ES for expensive neutral monster"
 
+                    // ── [2026-05-24] FULL MNU SCORING AUDIT ──────────────────
+                    // Per direction: every ability/SB/SBR/response gets a score.
+                    // Magnitudes mirror existing MNU entries (-1000..+1000 range
+                    // for preferences; -100000 for hard blocks; +100000 for
+                    // forced choices). When in doubt, neutral positive (~200)
+                    // so the action surfaces in bot reasoning without dominating
+                    // strategic moves.
+
+                    // ── Loyalty card pickup (general entry point) ───────────
+                    case LoyaltyCardDoomAction(_) =>
+                        // Take a loyalty card at doom phase if we don't already have one
+                        val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
+                        val hasTerrorCard = self.loyaltyCards.of[NeutralTerrorLoyaltyCard].any
+                        val hasIGOO = self.loyaltyCards.of[IGOOLoyaltyCard].any
+                        (!hasNMCard && !hasTerrorCard && !hasIGOO) |=> 2000 -> "obtain LC (none yet)"
+                        (hasNMCard || hasTerrorCard) |=> -500 -> "already have a neutral card"
+                        hasIGOO |=> -500 -> "already have IGOO"
+
+                    // ── LC unit placement (initial place from new LC) ────────
+                    case LoyaltyCardSummonAction(_, uc, r) =>
+                        // Generally place at own gate if possible, else any sane area
+                        self.gates.has(r) |=> 800 -> "place LC unit at own gate"
+                        self.at(r).any |=> 400 -> "place LC unit near own units"
+                        true |=> 200 -> "place LC unit"
+
+                    // ── Ghast Frenzy chain (free summon) ────────────────────
+                    case FreeSummonAction(_, _, r, _) =>
+                        // Always good — free unit
+                        self.gates.has(r) |=> 1000 -> "frenzy at own gate"
+                        true |=> 500 -> "frenzy summon"
+
+                    // ── Brown Jenkin Familiar respawn ───────────────────────
+                    case BrownJenkinFamiliarPlaceAction(_, r, _) =>
+                        // Prefer enemy gate (Loathsome Titter triggers there) over own gate
+                        val enemyGate = self.enemies.exists(_.gates.has(r))
+                        enemyGate |=> 600 -> "familiar at enemy gate (loathsome titter)"
+                        self.gates.has(r) |=> 300 -> "familiar at own gate"
+                        true |=> 100 -> "familiar respawn"
+
+                    // ── Moonbeast: 2-power summon onto enemy SB (Action) ────
+                    case MoonbeastSummonMainAction(_) =>
+                        // Worth 2 power to block a key enemy SB
+                        self.pool(MoonbeastUnit).any |=> 800 -> "use moonbeast block"
+
+                    case MoonbeastChooseFactionAction(_, target) =>
+                        // Target the enemy with most spellbooks (most to lose)
+                        val maxSB = self.enemies./(_.spellbooks.num).max
+                        (target.spellbooks.num == maxSB) |=> 600 -> "block enemy with most SBs"
+                        // Or the leader
+                        val maxDoom = self.enemies./(_.doom).max
+                        (target.doom == maxDoom) |=> 400 -> "block leader"
+                        true |=> 100 -> "moonbeast block faction"
+
+                    case MoonbeastChooseSpellbookAction(_, target, sb) =>
+                        // Prefer blocking already-earned SBs (immediate impact)
+                        val earned = target.spellbooks.has(sb)
+                        earned |=> 800 -> "block earned SB"
+                        // BattleSpellbooks have more in-game impact
+                        sb.isInstanceOf[BattleSpellbook] |=> 400 -> "block battle SB"
+                        true |=> 200 -> "block any SB"
+
+                    case MoonbeastInitialPlaceAction(_, target, sb) =>
+                        // Same logic as ChooseSpellbookAction — pick highest-impact target
+                        target.spellbooks.has(sb) |=> 800 -> "initial block earned SB"
+                        sb.isInstanceOf[BattleSpellbook] |=> 400 -> "initial block battle SB"
+                        true |=> 200 -> "initial moonbeast block"
+
+                    case MoonbeastReturnChooseGateAction(_, _, r, _) =>
+                        // Return MB to own gate if possible
+                        self.gates.has(r) |=> 500 -> "return moonbeast to own gate"
+                        true |=> 200 -> "return moonbeast"
+
+                    // ── Dimensional Shambler (deploy + summon) ──────────────
+                    case ShamblerSummonMainAction(_) =>
+                        // Park on Faction Card for later pre-battle deploy
+                        self.pool(DimensionalShamblerUnit).any |=> 500 -> "park shambler on card"
+
+                    case ShamblerSummonAction(_) =>
+                        true |=> 500 -> "summon shambler to faction card"
+
+                    case ShamblerDeployMainAction(_, _) =>
+                        // Always deploy when offered pre-battle (free unit on side)
+                        true |=> 1000 -> "deploy shambler"
+
+                    case ShamblerDeployAction(_, r, _) =>
+                        // Deploy to battle area
+                        true |=> 800 -> "deploy shambler to battle"
+
+                    // ── IGOO awakening ──────────────────────────────────────
+                    case AwakenIGOOMainAction(_) =>
+                        // Always want to awaken if affordable
+                        val hasIGOO = self.loyaltyCards.of[IGOOLoyaltyCard].any
+                        !hasIGOO |=> 1500 -> "awaken IGOO"
+
+                    case IndependentGOOMainAction(_, lc, _) =>
+                        // Per-IGOO choice from the sub-menu
+                        true |=> 1000 -> ("awaken IGOO " + lc.unit.name)
+
+                    case IndependentGOOAction(_, lc, r, cost) =>
+                        // Place at own gate where possible
+                        self.gates.has(r) |=> 1000 -> "awaken IGOO at own gate"
+                        self.at(r).any |=> 500 -> "awaken IGOO near units"
+                        cost <= self.power / 2 |=> 200 -> "cheap awaken"
+                        true |=> 300 -> "awaken IGOO"
+
+                    // ── Cthugha-specific awaken (replace own GOO) ──────────
+                    case CthughaAwakenMainAction(_) =>
+                        self.allInPlay.%(_.uclass.utype == GOO).%(_.uclass != Cthugha).any |=> 1500 -> "use cthugha replace"
+
+                    case CthughaAwakenAction(_, _, replacedGOO, cost) =>
+                        // Replace cheapest GOO first
+                        val isFactionGOO = replacedGOO.isInstanceOf[FactionUnitClass]
+                        isFactionGOO |=> 800 -> "replace own faction GOO"
+                        !isFactionGOO |=> 200 -> "replace own IGOO (loses LC + SB)"
+                        cost <= 2 |=> 400 -> "cheap cthugha replace"
+
+                    // ── Azathoth awaken (forum + dice) ──────────────────────
+                    case AzathothAwakenMainAction(_) =>
+                        true |=> 1500 -> "awaken azathoth"
+
+                    // ── Ghatanothoa Mummify (Action 1 power) ────────────────
+                    case GhatanotoaMummifyAction(_) =>
+                        // Always want to mummify enemy cultists in area
+                        true |=> 800 -> "use mummify action"
+
+                    // ── Place Spinneret (target region, when offered) ───────
+                    // PlaceSpinneretMainAction already scored above (line 553)
+
+                    // ── Father Dagon Tsunami (Action) ───────────────────────
+                    case FatherDagonTsunamiMainAction(_) =>
+                        true |=> 800 -> "use father dagon tsunami"
+
+                    case FatherDagonTsunamiTargetAction(_, r) =>
+                        // Prefer area with most enemy cultists
+                        val enemyCults = self.enemies./~(_.at(r, Cultist)).num
+                        enemyCults >= 3 |=> 1000 -> "tsunami high-density"
+                        enemyCults >= 1 |=> 500 -> "tsunami enemy cultists"
+                        true |=> 100 -> "tsunami land"
+
+                    // ── Mother Hydra Agony Sting (Action) ───────────────────
+                    case MotherHydraAgonyStingMainAction(_) =>
+                        true |=> 800 -> "use agony sting"
+
+                    case MotherHydraAgonyStingTargetAction(_, r) =>
+                        val enemyCults = self.enemies./~(_.at(r, Cultist)).num
+                        enemyCults >= 3 |=> 1000 -> "agony sting high-density"
+                        enemyCults >= 1 |=> 500 -> "agony sting enemy cultists"
+                        true |=> 100 -> "agony sting ocean"
+
+                    // ── Tsunami / Agony Sting cultist move (response) ───────
+                    case TsunamiMoveCultistAction(_, u, dest, _, _) =>
+                        // Cultist owner picks where forced cultist goes
+                        self.gates.has(dest) |=> 500 -> "tsunami: move to own gate"
+                        self.at(dest).any |=> 300 -> "tsunami: move near own units"
+                        self.enemies.exists(_.gates.has(dest)) |=> -200 -> "tsunami: avoid enemy gate"
+                        true |=> 100 -> "tsunami move"
+
+                    // ── Innsmouth Look (Doom phase SB) ──────────────────────
+                    case InnsmouthLookChooseAction(_, u, _) =>
+                        // Remove cheapest acolyte; +6 power makes it worth it
+                        !u.onGate |=> 400 -> "innsmouth: remove off-gate acolyte"
+                        u.onGate |=> -200 -> "innsmouth: dont remove gate-controlling acolyte"
+
+                    // ── The Zygote (MH SB Action) ───────────────────────────
+                    case TheZygoteMainAction(_) =>
+                        self.pool(Acolyte).num >= 3 |=> 1000 -> "zygote with pool acolytes"
+                        true |=> 200 -> "use zygote"
+
+                    case TheZygoteTargetAction(_, r, remaining) =>
+                        self.gates.has(r) |=> 600 -> "zygote at own gate"
+                        self.at(r).any |=> 300 -> "zygote near own units"
+                        true |=> 100 -> "zygote target"
+
+                    // ── Nuclear Chaos (Az SB Doom phase) ────────────────────
+                    case NuclearChaosMainAction(_) =>
+                        // Always trigger — random benefit + doom penalty for lowest
+                        true |=> 800 -> "trigger nuclear chaos"
+
+                    case NuclearChaosAdjustAction(_, rolls, adjust) =>
+                        // Owner adjusts own roll +/- 1; prefer adjusting up
+                        val myRoll = rolls(self)
+                        (adjust == 1 && myRoll <= 5) |=> 500 -> "nuclear chaos: bump roll up"
+                        (adjust == -1 && myRoll == 6) |=> 300 -> "nuclear chaos: bump 6→5"
+                        true |=> 0 -> "nuclear chaos adjust"
+
+                    case NuclearChaosKeepAction(_, rolls) =>
+                        // Keep if my roll is already 5+
+                        val myRoll = rolls(self)
+                        myRoll >= 5 |=> 400 -> "nuclear chaos: keep high roll"
+                        myRoll <= 2 |=> -200 -> "nuclear chaos: dont keep low roll"
+                        true |=> 100 -> "nuclear chaos keep"
+
+                    // ── Byatis: God of Forgetfulness (SB) ───────────────────
+                    case GodOfForgetfulnessMainAction(_, _, _) =>
+                        true |=> 400 -> "use god of forgetfulness"
+
+                    case GodOfForgetfulnessAction(_, _, r) =>
+                        // Pick region with most enemy cultists to suck in
+                        val enemyCults = self.enemies./~(_.at(r, Cultist)).num
+                        (enemyCults > 0) |=> enemyCults * 100 -> "GoF region density"
+                        true |=> 100 -> "GoF region"
+
+                    // ── Abhoth: Filth placement (SB) ────────────────────────
+                    case FilthMainAction(_, _) =>
+                        true |=> 500 -> "use filth ability"
+
+                    case FilthAction(_, r) =>
+                        // Place filth at enemy controlled gate to disable their SBs
+                        val enemyGate = self.enemies.exists(_.gates.has(r))
+                        enemyGate |=> 700 -> "filth at enemy gate"
+                        true |=> 100 -> "filth"
+
+                    // ── Nyogtha: Nightmare Web (SB) ─────────────────────────
+                    case NightmareWebMainAction(_, _) =>
+                        true |=> 800 -> "use nightmare web"
+
+                    case NightmareWebAction(_, r) =>
+                        self.gates.has(r) |=> 500 -> "nightmare web at own gate"
+                        true |=> 200 -> "nightmare web"
+
+                    // ── Tulzscha: Give Power SBR ────────────────────────────
+                    case TulzschaGivePowerMainAction(_) =>
+                        true |=> 800 -> "satisfy tulzscha SBR"
+
+                    case TulzschaGivePowerAction(_) =>
+                        true |=> 800 -> "give each enemy 2 power for SBR"
+
+                    // ── Tulzscha: Ceremony of Annihilation (SB doom action) ─
+                    case CeremonyOfAnnihilationChoiceAction(_) =>
+                        // Replaces ritual with power gain = ritual cost; usually positive
+                        true |=> 600 -> "use ceremony of annihilation"
+
+                    // ── Yig: Remove Gate (SBR) ──────────────────────────────
+                    case YigRemoveGateMainAction(_) =>
+                        true |=> 500 -> "satisfy yig SBR (remove gate)"
+
+                    case YigRemoveGateAction(_, r) =>
+                        // Prefer removing a less valuable gate
+                        val isOwn = self.gates.has(r)
+                        isOwn |=> 200 -> "remove own gate for SBR"
+
+                    // ── Ghatanothoa IGOO: Pay 3 Power SBR (Execration of Mu) ─
+                    case GhatanotoaSBRPayAction(_) =>
+                        // Pay 3 power for Execration of Mu SB
+                        self.power >= 5 |=> 600 -> "pay for execration of mu"
+                        self.power >= 3 |=> 200 -> "barely afford execration"
+
+                    // ── Messenger of Yig (donate / refuse) ──────────────────
+                    case MessengerOfYigDonateAction(_, yigOwner) =>
+                        // Donate 1 power; alternative is yig owner gets 1 doom
+                        // Prefer donate if we have extra power
+                        self.power > 5 |=> 500 -> "donate power (have plenty)"
+                        self.power <= 2 |=> -300 -> "dont donate (low power)"
+                        true |=> 100 -> "donate power to yig"
+
+                    case MessengerOfYigRefuseAction(_, yigOwner) =>
+                        // Refuse — yig owner gets 1 doom; bad if yig owner is leader
+                        val yigDoom = yigOwner.doom
+                        val maxDoom = self.enemies./(_.doom).max
+                        yigDoom >= maxDoom - 2 |=> -500 -> "refuse: yig owner near doom lead"
+                        true |=> 200 -> "refuse: dont feed yig owner"
+
+                    // ── Velvet Fan capture (battle, BW owner picks) ─────────
+                    case VelvetFanCaptureAction(_, uRef) =>
+                        val u = game.unit(uRef)
+                        val uc = u.uclass
+                        // Prefer capturing high-value units
+                        (uc.utype == GOO) |=> 1500 -> "velvet fan: capture GOO"
+                        (uc.utype == Terror) |=> 1000 -> "velvet fan: capture Terror"
+                        (uc.utype == Monster && uc.cost >= 2) |=> 500 -> "velvet fan: capture good Monster"
+                        true |=> 200 -> "velvet fan: capture"
+
+                    case VelvetFanSkipAction(_) =>
+                        true |=> -300 -> "velvet fan: skip (prefer to capture something)"
+
+                    // ── Fire Vampires (battle, CC/Ct owner) ─────────────────
+                    case FireVampiresSpareAction(_, uRef) =>
+                        val u = game.unit(uRef)
+                        val uc = u.uclass
+                        // Spare for 1 power; prefer sparing low-value units
+                        (uc.utype == Cultist) |=> 600 -> "spare cultist for 1 power"
+                        (uc.utype == Monster && uc.cost <= 2) |=> 400 -> "spare cheap monster"
+                        // Don't spare high-value — they should die
+                        (uc.utype == GOO) |=> -500 -> "dont spare enemy GOO"
+                        (uc.utype == Terror) |=> -300 -> "dont spare enemy Terror"
+
+                    case FireVampiresSkipAction(_) =>
+                        true |=> -200 -> "fire vampires: skip (prefer to spare for power)"
+
+                    // ── Prime Cause (battle, ES owner replaces own unit) ────
+                    case PrimeCauseChooseUnitAction(_, uRef) =>
+                        val u = game.unit(uRef)
+                        // Replace own killed/spared units; not full-health alive
+                        u.health match {
+                            case Killed => true |=> 800 -> "prime cause: replace killed unit"
+                            case Pained => true |=> 200 -> "prime cause: replace pained unit"
+                            case _ =>
+                        }
+                        true |=> 100 -> "prime cause: choose unit"
+
+                    case PrimeCauseChooseReplacementAction(_, _, newUC) =>
+                        // Pick highest-value replacement
+                        (newUC.utype == GOO) |=> 1000 -> "prime cause: bring GOO"
+                        (newUC.utype == Terror) |=> 600 -> "prime cause: bring Terror"
+                        (newUC.utype == Monster && newUC.cost >= 2) |=> 300 -> "prime cause: bring Monster"
+                        true |=> 100 -> "prime cause: replacement"
+
+                    case PrimeCauseSkipAction(_) =>
+                        true |=> -200 -> "prime cause: skip"
+
+                    // ── Dhole Planetary Destruction (opponent's choice) ─────
+                    case DholePlanetaryDestructionDoomAction(_, _) =>
+                        // Opponent picks own doom vs own power. Doom is worse for us.
+                        // We're the opponent of dhole owner here. Pick LESS bad option.
+                        self.power > 5 |=> 200 -> "take power penalty (have plenty)"
+                        self.power <= 2 |=> -500 -> "dont take power loss when low"
+                        true |=> 100 -> "planetary destruction: doom choice"
+
+                    case DholePlanetaryDestructionPowerAction(_, _) =>
+                        self.power > 5 |=> -300 -> "dont take power loss when high (prefer doom)"
+                        self.power <= 2 |=> 500 -> "take doom when low power"
+                        true |=> 200 -> "planetary destruction: power choice"
+
+                    // ── Laughingstock (Penguin owner) ───────────────────────
+                    case LaughingstockMoveAction(_, uRef) =>
+                        // Move Penguin into battle area
+                        true |=> 600 -> "laughingstock: move penguins"
+
+                    case LaughingstockDoneAction(_) =>
+                        // Skip — keep penguins where they are
+                        true |=> 100 -> "laughingstock: keep penguins still"
+
+                    case LaughingstockSideAction(_, side) =>
+                        // Pick which side Penguins fight for; prefer the weaker / our ally
+                        val isUs = side == self
+                        isUs |=> 800 -> "laughingstock: penguins on our side"
+                        // Else weakest enemy
+                        val weakest = self.enemies./(_.str).min
+                        (side.str == weakest) |=> 400 -> "laughingstock: penguins on weakest enemy"
+
+                    // ── Yig Snakebite (battle, Yig owner picks Kill target) ─
+                    case YigSnakebiteAssignAction(_, _, uc) =>
+                        // Assign extra Kill to highest-value enemy unit
+                        (uc.utype == GOO) |=> 1500 -> "snakebite: kill GOO"
+                        (uc.utype == Terror) |=> 1000 -> "snakebite: kill Terror"
+                        (uc.utype == Monster && uc.cost >= 2) |=> 500 -> "snakebite: kill good Monster"
+                        true |=> 200 -> "snakebite: kill"
+
+                    // ── Cthugha combat match (battle, Ct owner picks enemy GOO) ─
+                    case CthughaCombatChooseGOOAction(_, _, goo, combat) =>
+                        // Match the HIGHEST-combat enemy GOO
+                        (combat >= 6) |=> 1000 -> "cthugha: match highest GOO combat"
+                        (combat >= 4) |=> 500 -> "cthugha: match good GOO combat"
+                        true |=> 200 -> "cthugha: match combat"
+
+                    // ── Cronophage teleport (Hound battle-time) ─────────────
+                    case CronophageTeleportAction(_, _, dest) =>
+                        // Teleport to a gate where Hound contributes most
+                        val enemyGate = self.enemies.exists(_.gates.has(dest))
+                        enemyGate |=> 800 -> "cronophage: teleport to enemy gate"
+                        self.gates.has(dest) |=> 400 -> "cronophage: teleport to own gate"
+                        true |=> 200 -> "cronophage: teleport"
+
+                    // ── Shantak Riding (carry cultist) ──────────────────────
+                    case ShantakCarryCultistAction(_, _, _, r) =>
+                        self.gates.has(r) |=> 600 -> "shantak ride: carry to own gate"
+                        self.enemies.exists(_.gates.has(r)) |=> 400 -> "shantak ride: carry to enemy gate"
+                        true |=> 200 -> "shantak ride: carry"
+
                     case _ =>
 
                 }

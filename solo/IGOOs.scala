@@ -737,13 +737,23 @@ object IGOOsExpansion extends Expansion {
             self.units :+= new UnitFigure(self, Cthugha, 1, r)
             self.log("awakened", "Cthugha".styled("nt"), "in", r, (if (cost >= 0) "for" else "gaining"), (if (cost >= 0) cost else -cost).power, "(replacing", replacedGOO.styled(self) + ")")
 
-            // Return the replaced GOO to pool
+            // [2026-05-24] If the replaced GOO is an IGOO, fully eliminate it
+            // (revoke its LC + SBs, return LC to game pool) per user direction:
+            // "the faction that had that iGOO loses the iGOO, loses their
+            // powers, and loses access to their spellbooks, even if already earned."
+            // For faction GOOs (Cthulhu, Hastur, etc.), return to reserve as before
+            // so the faction can re-awaken normally.
             factionGOO.foreach { goo =>
-                goo.region = self.reserve
-                goo.onGate = false
-                goo.health = Alive
-                goo.state = $
                 self.log(goo.uclass.styled(self), "replaced by", Cthugha.styled(self))
+                if (goo.uclass.isInstanceOf[IGOO]) {
+                    IGOOsExpansion.eliminate(goo)
+                    self.log(goo.uclass.styled(self), "loyalty card returned to pool; spellbooks revoked")
+                } else {
+                    goo.region = self.reserve
+                    goo.onGate = false
+                    goo.health = Alive
+                    goo.state = $
+                }
             }
 
             if (self.has(Immortal)) {
@@ -755,16 +765,46 @@ object IGOOsExpansion extends Expansion {
             }
 
         case AwakenIGOOMainAction(self) =>
-            // iGOO Ghatanothoa and iGOO Glaaki are distinct from faction GOOs — allowed even when FB/TS in game
-            val available = game.loyaltyCards.of[IGOOLoyaltyCard].%(igoo => game.igooCost(self, igoo) <= self.power).%(igoo => igoo != AzathothIGOOCard).%(igoo => igoo != CthughaCard).%(igoo => {
-                val cost = game.igooCost(self, igoo)
-                areas.nex.%(self.canAwakenIGOO).%(self.affords(cost)).any
-            }).sortBy(_.name)
-            Ask(self).each(available)(igoo => {
+            // [2026-05-23] Unified iGOO awaken sub-menu. Standard iGOOs go
+            // through IndependentGOOMainAction; Azathoth and Cthugha — which
+            // used to be top-level entries — now ride here too, sorted by
+            // name alongside the others.
+            val standardAvailable = game.loyaltyCards.of[IGOOLoyaltyCard]
+                .%(igoo => game.igooCost(self, igoo) <= self.power)
+                .%(igoo => igoo != AzathothIGOOCard)
+                .%(igoo => igoo != CthughaCard)
+                .%(igoo => {
+                    val cost = game.igooCost(self, igoo)
+                    areas.nex.%(self.canAwakenIGOO).%(self.affords(cost)).any
+                })
+
+            val cthughaAvailable = game.loyaltyCards.has(CthughaCard) && {
+                val allGOOs = self.allInPlay.%(_.uclass.utype == GOO).%(u => u.uclass != Cthugha)
+                allGOOs.%(goo => {
+                    val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) self.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
+                    val cthughaCost = 6 - gooCost
+                    self.power >= cthughaCost && self.gates.has(goo.region)
+                }).any
+            }
+
+            val azathothAvailable = game.loyaltyCards.has(AzathothIGOOCard) && self.power >= 8 &&
+                self.allGates.onMap.%(r => self.at(r).goos.any).any
+
+            // Build name-keyed entries (Entry case class) and sort by name.
+            // The action is what gets dispatched when the user picks an item.
+            case class IGOOEntry(name : String, action : Action)
+            val standardEntries : $[IGOOEntry] = standardAvailable./(igoo => {
                 val cost = game.igooCost(self, igoo)
                 val gates = areas.nex.%(self.canAwakenIGOO).%(self.affords(cost))
-                IndependentGOOMainAction(self, igoo, gates)
-            }).cancel
+                IGOOEntry(igoo.name, IndependentGOOMainAction(self, igoo, gates))
+            })
+            val cthughaEntry : $[IGOOEntry] =
+                cthughaAvailable.?($(IGOOEntry("Cthugha", CthughaAwakenMainAction(self)))).|($)
+            val azathothEntry : $[IGOOEntry] =
+                azathothAvailable.?($(IGOOEntry("Azathoth", AzathothAwakenMainAction(self)))).|($)
+            val sorted = (standardEntries ++ cthughaEntry ++ azathothEntry).sortBy(_.name)
+
+            Ask(self).each(sorted)(_.action).cancel
 
         case IndependentGOOMainAction(self, lc, l) =>
             val cost = game.igooCost(self, lc)
@@ -973,13 +1013,13 @@ object IGOOsExpansion extends Expansion {
         case MessengerOfYigDonateAction(self, yigOwner) =>
             self.power -= 1
             yigOwner.power += 1
-            self.log("donated", 1.power, "to", yigOwner.full, "(Messenger of Yig)")
+            self.log("donated", 1.power, "to", yigOwner.full, "via", "Messenger of Yig".styled("nt"))
             self.oncePerTurn :+= MessengerOfYig
             Force(DoomAction(self))
 
         case MessengerOfYigRefuseAction(self, yigOwner) =>
             yigOwner.doom += 1
-            self.log("refused Messenger of Yig;", yigOwner.full, "gained", 1.doom)
+            self.log("refused", "Messenger of Yig".styled("nt") + ";", yigOwner.full, "gained", 1.doom)
             self.oncePerTurn :+= MessengerOfYig
             Force(DoomAction(self))
 
@@ -1156,7 +1196,7 @@ object IGOOsExpansion extends Expansion {
         case NuclearChaosMainAction(self) =>
             // All players roll 1d6
             val rolls = factions.map(f => f -> (1::2::3::4::5::6).shuffle.first).toMap
-            factions.foreach { f => f.log(s"rolled a ${rolls(f)} for Nuclear Chaos") }
+            factions.foreach { f => f.log("rolled a " + rolls(f) + " for", "Nuclear Chaos".styled("nt")) }
             // Owner may adjust their roll +/-1
             val myRoll = rolls(self)
             val canPlus = myRoll < 6
@@ -1342,8 +1382,10 @@ object IGOOsExpansion extends Expansion {
 
         case DoomSarnathChooseFactionAction(self, option, target, then) =>
             if (option == 1) {
-                // Enemy chooses one of Bokrug owner's monsters/cultists to eliminate
-                val units = self.allInPlay.%(u => u.uclass.utype == Monster || u.uclass.utype == Cultist)
+                // [2026-05-23] Doom that Came to Sarnath: only ON-MAP units are eligible.
+                // Elimination moves a unit out-of-play into the pool, so pool / slumber /
+                // sorcery / deep units (region.onMap == false) cannot be targeted.
+                val units = self.units.%(u => u.region.onMap && (u.uclass.utype == Monster || u.uclass.utype == Cultist))
                 val regionSorted = units.sortBy(u => u.region.name)
                 Ask(target).each(regionSorted)(u => DoomSarnathEliminateUnit(target, self, u, then))
             } else {

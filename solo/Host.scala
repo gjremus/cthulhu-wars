@@ -62,6 +62,12 @@ object Host {
                     case TS => BotTS.ask(actions, 0.03)(g)
                     case FB => BotFB.ask(actions, 0.03)(g)
                     case DS => TestBotDS.ask(actions, 0.03)(g)
+                    // [2026-05-24] Neutral / Library factions (NeutralAbhoth,
+                    // LibraryFaction, etc.) don't have a strategic bot — when
+                    // asked, just pick the first action. This is a no-op for
+                    // factions whose only action is forced/trivial; mirrors
+                    // how the engine handles other neutral-controlled units.
+                    case _ => actions.head
                 }
         }
     }

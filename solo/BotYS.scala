@@ -432,11 +432,11 @@ class GameEvaluationYS(implicit game : Game) extends GameEvaluation(YS)(game) {
 
                 impunity && safe && power > 1 && !d.enemyGate && d.foes.cultists.any && d.foes.goos.none |=> 40000 -> "impunity scream"
 
-                impunity && safe && d.enemyGate && d.controllers.monsterly.none && d.of(d.owner).goos.none && power - 1 <  d.controllers.num |=> 100000 * (power - 1) / power -> "impunity scream"
+                impunity && safe && d.enemyGate && d.controllers.monsterly.none && d.of(d.owner).goos.none && power - 1 <  d.controllers.num |=> 100000 * (power - 1) / math.max(1, power) -> "impunity scream"
                 impunity && safe && d.enemyGate && d.controllers.monsterly.none && d.of(d.owner).goos.none && power - 1 == d.controllers.num |=> 100000 -> "impunity scream"
                 impunity && safe && d.enemyGate && d.controllers.monsterly.none && d.of(d.owner).goos.none && power - 1 >  d.controllers.num |=> 120000 -> "impunity scream"
 
-                impunity && safe && d.near.%(n => isSafe(n) && n.enemyGate && n.controllers.monsterly.none && n.of(n.owner).goos.none && power - 2 <  n.controllers.num).any |=> 100000 * (power - 2) / power -> "impunity scream"
+                impunity && safe && d.near.%(n => isSafe(n) && n.enemyGate && n.controllers.monsterly.none && n.of(n.owner).goos.none && power - 2 <  n.controllers.num).any |=> 100000 * (power - 2) / math.max(1, power) -> "impunity scream"
                 impunity && safe && d.near.%(n => isSafe(n) && n.enemyGate && n.controllers.monsterly.none && n.of(n.owner).goos.none && power - 2 == n.controllers.num).any |=> 60000 -> "impunity scream"
                 impunity && safe && d.near.%(n => isSafe(n) && n.enemyGate && n.controllers.monsterly.none && n.of(n.owner).goos.none && power - 2 >  n.controllers.num).any |=> 110000 -> "impunity scream"
 

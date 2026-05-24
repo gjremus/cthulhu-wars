@@ -117,11 +117,16 @@ class GlyphPlacement(boardId : String) {
     //
     // Constraint: the chosen position itself must be in the place map's core region
     // (not a gap pixel) so the glyph CENTER is in the playable area.
-    def findStaticGlyphPos(gx : Int, gy : Int, halfGlyph : Int = 33, halfGate : Int = 38, maxRadius : Int = 200) : (Int, Int) = {
+    def findStaticGlyphPos(gx : Int, gy : Int, halfGlyph : Int = 33, halfGate : Int = 38, maxRadius : Int = 200, explicitRegionColor : Int = -1) : (Int, Int) = {
         // Bounds check: if gate coords exceed bitmap, return gate coords as fallback
         if (gx < 0 || gx >= placeb.width || gy < 0 || gy >= placeb.height)
             return (gx, gy)
-        val regionColor = place(gx)(gy)
+        // [2026-05-23] explicitRegionColor (Option B fix): when provided
+        // (>= 0), use it directly instead of sampling the bitmap. Caller
+        // passes the canonical color from EarthRegionPalette, eliminating
+        // the "sample at a gap pixel" failure mode that misplaced Australia's
+        // glyph in portrait mode.
+        val regionColor = if (explicitRegionColor >= 0) explicitRegionColor else place(gx)(gy)
         val GAP = 0
         val MaxExpansion = 12
         val MaxRadiusFromGate = maxRadius

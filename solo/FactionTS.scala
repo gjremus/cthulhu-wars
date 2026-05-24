@@ -152,6 +152,16 @@ case class GraspingDeadBattleAction(self : Faction, r : Region, f : Faction) ext
 object TSExpansion extends Expansion {
     // Sentinel: prevents Shepherd of the Crypt from firing twice in one power-gather phase
     var shepherdDoneThisGather : Boolean = false
+    // [2026-05-23] When the inline Shepherd dispatch in Game.scala PowerGatherAction
+    // exits via Force(TSShepherdGatherPhaseAction), we lose the `last` faction
+    // arg of PowerGatherAction. Stash it here so when Shepherd completes we can
+    // re-enter PowerGatherAction with the original `last` and let raise-to-half
+    // + triggers + AfterPowerGatherAction run normally. Without this, the
+    // TSShepherdGatherAction with empty-remaining returned UnknownContinue
+    // which produced a MatchError in Game.scala perform — caught by the online
+    // 30-game MNU sim 2026-05-23. The Library build solved this differently
+    // via a RaiseToHalfPowerAction split; this is the minimal MNU mirror.
+    var pgrLastFaction : Faction = null
     // [2026-04-03] Pure DH hecatomb tracking
     var pureDHRitualsDone : Int = 0              // count of pure DH rituals performed
     var pureDHMarkerIndices : $[Int] = $         // ritual marker index at time of each pure DH ritual
@@ -235,17 +245,24 @@ object TSExpansion extends Expansion {
                 remaining.foreach { r => + TSShepherdGatherAction(self, r, remaining.but(r)) }
                 asking
             }
-            else
-                UnknownContinue
+            else {
+                // Shepherd loop done — mark and re-enter PowerGatherAction so
+                // raise-to-half + triggers + AfterPowerGatherAction can run.
+                TSExpansion.shepherdDoneThisGather = true
+                Force(PowerGatherAction(TSExpansion.pgrLastFaction))
+            }
 
         case TSShepherdGatherAction(self, r, remaining) =>
             val n = self.at(r, TombHerd).num
             self.power += n
-            self.log("Shepherd of the Crypt: gained", n.power, "from", n, TombHerd.styled(TS), "in", r)
+            self.log("Shepherd of the Crypt".styled("nt") + ": gained", n.power, "from", n, TombHerd.styled(TS), "in", r)
             if (remaining.any)
                 Force(TSShepherdGatherPhaseAction(self, remaining))
-            else
-                UnknownContinue
+            else {
+                // Last region — mark and re-enter PowerGatherAction (see comment above).
+                TSExpansion.shepherdDoneThisGather = true
+                Force(PowerGatherAction(TSExpansion.pgrLastFaction))
+            }
 
         // DOOM PHASE
         case DoomAction(f) if f == TS =>

@@ -220,11 +220,14 @@ object CthulhuWarsSolo {
             case _ =>
                 val path = dom.window.location.pathname
 
-                if (path.startsWith("/play/quick"))
+                if (path.startsWith("/play/quick") || path.startsWith("/mnu/play/quick"))
                     ("", true)
                 else
                 if (path.startsWith("/play/"))
                     (path.drop("/play/".length), false)
+                else
+                if (path.startsWith("/mnu/play/"))
+                    (path.drop("/mnu/play/".length), false)
                 else
                     ("", false)
         }
@@ -754,8 +757,8 @@ object CthulhuWarsSolo {
             // on every map redraw — consuming 85% of all CPU time.
             val glyphPosCache = scala.collection.mutable.Map[(Int, Int), (Int, Int)]()
             var glyphPosCacheHorizontal : Boolean = false
-            def findStaticGlyphPos(gx : Int, gy : Int) : (Int, Int) =
-                glyphPosCache.getOrElseUpdate((gx, gy), activeGlyphPlacer.findStaticGlyphPos(gx, gy, halfGlyph = (33 * board.unitScale).toInt, halfGate = (38 * board.unitScale).toInt, maxRadius = (200 * board.unitScale).toInt))
+            def findStaticGlyphPos(gx : Int, gy : Int, explicitRegionColor : Int = -1) : (Int, Int) =
+                glyphPosCache.getOrElseUpdate((gx, gy), activeGlyphPlacer.findStaticGlyphPos(gx, gy, halfGlyph = (33 * board.unitScale).toInt, halfGate = (38 * board.unitScale).toInt, maxRadius = (200 * board.unitScale).toInt, explicitRegionColor = explicitRegionColor))
 
             case object DesecrationToken extends FactionUnitClass(YS, "Desecration", Token, 0)
             case object WebToken extends UnitClass("Web Token", Token, 0)
@@ -1448,6 +1451,28 @@ object CthulhuWarsSolo {
                             }
                         }
                     }
+                    // [2026-05-23] Custodian + Librarian belong to LibraryFaction, which
+                    // isn't in `factions` (real players only). Without this they bypass
+                    // classShrink entirely and render full-size everywhere. Treat them
+                    // as a synthetic "library faction" iteration so they're eligible
+                    // for the same per-region shrink as other large units. The
+                    // uniformK in small regions already applied (it's region-based,
+                    // not faction-based); this is the missing classK path.
+                    $((TheCustodian, game.custodianRegion), (TheLibrarian, game.librarianRegion)).foreach { case (uc, regionOpt) =>
+                        regionOpt.foreach { r =>
+                            if (regionGeom.contains(r) && !regionUniformShrink.contains(r)) {
+                                val sample = DrawItem(r, LibraryFaction, uc, Alive, $, 0, 0)
+                                val protoR = sample.proto
+                                if (protoR != null) {
+                                    val maxDim = math.max(protoR.width, protoR.height)
+                                    if (maxDim > LargeUnitTriggerMaxDim) {
+                                        val set = classRegions.getOrElseUpdate(uc, scala.collection.mutable.Set.empty)
+                                        set += r
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     classRegions.foreach { case (uc, regs) =>
                         val sampleAny = DrawItem(regs.head, null, uc, Alive, $, 0, 0)
@@ -1757,12 +1782,22 @@ object CthulhuWarsSolo {
                                 }
                                 (bestX, bestY)
                             } else if (!horizontal && !board.isLibraryMap) {
-                                // Portrait/mobile: rotate coords to original space, find glyph, rotate back
+                                // Portrait/mobile: rotate coords to original space, find glyph, rotate back.
+                                // [2026-05-23] Pass the canonical EarthRegionPalette color so
+                                // findStaticGlyphPos doesn't sample the bitmap at the rotated
+                                // gate XY (which can land on a GAP pixel and cause the
+                                // algorithm to operate on the wrong region — the Australia bug).
                                 val (ox, oy) = (rawPy, mp.height - rawPx)
-                                val (fx, fy) = findStaticGlyphPos(ox, oy)
+                                val rc = EarthRegionPalette.get(board.id, r).getOrElse(-1)
+                                val (fx, fy) = findStaticGlyphPos(ox, oy, rc)
                                 (mp.height - fy, fx)
-                            } else
-                                findStaticGlyphPos(rawPx, rawPy)
+                            } else {
+                                // Landscape Earth path. Same palette hardening — the bitmap
+                                // sample CAN be wrong even in landscape on certain mobile
+                                // viewers / cached asset states. Belt-and-braces.
+                                val rc = if (!board.isLibraryMap) EarthRegionPalette.get(board.id, r).getOrElse(-1) else -1
+                                findStaticGlyphPos(rawPx, rawPy, rc)
+                            }
                             fixed +:= DrawItem(r, f, StartingGlyph, Alive, $, glyphX, glyphY)
                         }
                     }
@@ -1925,6 +1960,21 @@ object CthulhuWarsSolo {
                         b <= bottomCap && t <= topCap && l <= leftCap && r <= rightCap
                     }
 
+                    // [2026-05-23] Library tomes that are still on the map (not held
+                    // by a faction) are visual fixtures the same way gates are. Without
+                    // adding them to the overlap calculation, units (faction or neutral
+                    // including iGOOs like Father Dagon) would happily place over the
+                    // tome image. Treat tome overlap with the same 25× weight + 500
+                    // flat-penalty cliff as gates so candidates that touch a tome are
+                    // strongly avoided.
+                    val onMapTomes : $[(Int, Int, Int, Int)] = if (board.isLibraryMap)
+                        TomePlacement.positions.collect {
+                            case (tome, tcx, tcy, tw, th)
+                                if tome.region == r && !game.tomeHolders.getOrElse(tome, None).isDefined =>
+                                (tcx - tw/2, tcy - th/2, tw, th)
+                        }
+                    else $
+
                     def overlapOf(dd : DrawItem) : Double = (draws ++ fixed ++ sticking).map { oo =>
                         val d = dd.rect
                         val o = oo.rect
@@ -1943,6 +1993,17 @@ object CthulhuWarsSolo {
                             // gate-overlapping set when no clear position exists.
                             val gateFlatPenalty = if (isGate && s > 0) 500.0 else 0.0
                             base * gateWeight + gateFlatPenalty
+                        }
+                    }.sum + onMapTomes.map { case (ox, oy, ow, oh) =>
+                        val d = dd.rect
+                        if (d == null) 0.0
+                        else {
+                            val w = min(ox + ow, d.x + d.width) - max(ox, d.x)
+                            val h = min(oy + oh, d.y + d.height) - max(oy, d.y)
+                            val s = (w > 0 && h > 0).?(w * h).|(0)
+                            val base = s * (1.0 / (ow * oh) + 1.0 / (d.width * d.height))
+                            val tomeFlatPenalty = if (s > 0) 500.0 else 0.0
+                            base * 25.0 + tomeFlatPenalty
                         }
                     }.sum
 
@@ -2228,9 +2289,13 @@ object CthulhuWarsSolo {
                 val totalTomes = game.cursedTomesOwned.get(f).|(Nil).num
                 val fStyle = f.style
                 val tomeImgSrc = Overlays.imageSource("ts-cursed-tome")
-                val tomeBadge = s"""<span style="position:absolute;top:-0.5em;right:-0.5em;font-size:65%;font-weight:bold;line-height:1;" class="ts">$totalTomes</span>"""
-                val tomeImgSpan = s"""<span style="position:relative;display:inline-block;vertical-align:middle;"><img src="$tomeImgSrc" style="height:1.2em;display:block;"/>$tomeBadge</span>"""
-                val tomeStr = (totalTomes > 0).?(" " + "- ".styled(TS) + s"""<span onclick='event.stopPropagation(); onExternalClick("cursed-tomes", "$fStyle")' onpointerover='event.stopPropagation(); onExternalOver("cursed-tomes", "$fStyle")' onpointerout='event.stopPropagation(); onExternalOut("cursed-tomes", "$fStyle")' style='cursor:pointer'>""" + faceDownTomes.toString.styled(TS) + " " + tomeImgSpan + "</span>").|("")
+                // [2026-05-23] Per user: face-down tome count is centered ON the
+                // tome image (was: count text to the LEFT of the image, with a
+                // small total-count badge in the top-right corner). Both old
+                // numbers are replaced by a single centered face-down count.
+                val tomeBadge = s"""<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:90%;font-weight:bold;line-height:1;text-shadow:0 0 3px black,0 0 3px black,0 0 3px black;" class="ts">$faceDownTomes</span>"""
+                val tomeImgSpan = s"""<span style="position:relative;display:inline-block;vertical-align:middle;"><img src="$tomeImgSrc" style="height:1.4em;display:block;"/>$tomeBadge</span>"""
+                val tomeStr = (totalTomes > 0).?(" " + "- ".styled(TS) + s"""<span onclick='event.stopPropagation(); onExternalClick("cursed-tomes", "$fStyle")' onpointerover='event.stopPropagation(); onExternalOver("cursed-tomes", "$fStyle")' onpointerout='event.stopPropagation(); onExternalOut("cursed-tomes", "$fStyle")' style='cursor:pointer'>""" + tomeImgSpan + "</span>").|("")
                 val tomeSStr = (totalTomes > 0).?(" " + "-".styled(TS) + faceDownTomes.toString.styled(TS) + "T".styled(TS)).|("")
                 // Tombstalker (TS): show next available tome from the stack (tsTomesOnCard = # already given away)
                 val tsNextTome = game.tsTomesOnCard + 1
@@ -2892,9 +2957,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 <span id="roa-cost-num"
                                       style="
                                           position: absolute;
-                                          bottom: 0;
+                                          top: 50%;
                                           left: 50%;
-                                          transform: translateX(-50%);
+                                          transform: translate(-50%, -50%);
                                           color: white;
                                           font-size: max(1.1em, 3vmin);
                                           font-weight: bold;
@@ -4133,6 +4198,386 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Tombstalker (TS), Firstborn (FB), and Daemon Sultan (DS): included in the master faction list for game setup and replay parsing
         val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS)
 
+        // [2026-05-23] MNU alt faction picker. Replaces the combinations dropdown
+        // for users who want to: (a) lock specific factions onto specific player
+        // slots and/or limit which factions are eligible per slot before
+        // randomizing, (b) name the players, (c) randomize seating order.
+        // After Generate → Continue, the resulting `factions` list (already in
+        // the desired seating order) is fed to startSetup, which builds the
+        // standard Setup object and proceeds to the normal player-order +
+        // game-flags + start flow.
+        def altFactionPicker(pn : Int, onContinue : $[Faction] => Unit = startSetup) {
+            clear(actionDiv)
+            // Inject the alt-picker stylesheet once per page load — keyed by id
+            // so subsequent picker entries don't duplicate it.
+            if (dom.document.getElementById("alt-picker-style") == null) {
+                val style = dom.document.createElement("style").asInstanceOf[html.Style]
+                style.id = "alt-picker-style"
+                style.innerHTML = """
+                    @media (max-width: 720px) {
+                        .alt-picker-cb-wrap { flex-basis: 100% !important; }
+                    }
+                """
+                dom.document.head.appendChild(style)
+            }
+            val playerNames = scala.collection.mutable.ArrayBuffer.fill(pn)("")
+            for (i <- 0 until pn) playerNames(i) = "Player " + (i + 1)
+            val enabledFactions = scala.collection.mutable.ArrayBuffer.fill(pn)(scala.collection.mutable.Set[Faction]())
+            for (i <- 0 until pn) allFactions.foreach(f => enabledFactions(i) += f)
+            var randomizeOrder = false
+
+            // [2026-05-23] Per user: HIDE the other screen sections (map halves,
+            // faction status panels, game log) for the duration of the alt
+            // picker flow. Save their display values + the action panel's
+            // outer container so they can be restored when the picker exits
+            // (cancel / continue / back).
+            val sectionsToHide = $("map-west", "map-east", "log", "status-1", "status-2", "status-3", "status-4", "status-5")
+            val savedDisplays = scala.collection.mutable.Map[String, String]()
+            val actionOuter = actionDiv.parentNode.parentNode.asInstanceOf[html.Element]
+            val savedActionOuter = actionOuter.style.cssText
+            def hideOtherSections() {
+                sectionsToHide.foreach { id =>
+                    val el = dom.document.getElementById(id)
+                    if (el != null) {
+                        val outer = el.parentNode.parentNode.asInstanceOf[html.Element]
+                        savedDisplays(id) = outer.style.display
+                        outer.style.display = "none"
+                    }
+                }
+                // Expand action panel to fill the screen for the picker UI.
+                actionOuter.style.cssText =
+                    "position:absolute; left:0; top:0; width:100vw; height:100vh; " +
+                    "left:0dvw; top:0dvh; width:100dvw; height:100dvh; background:#0d1117; z-index:100;"
+            }
+            def restoreOtherSections() {
+                sectionsToHide.foreach { id =>
+                    val el = dom.document.getElementById(id)
+                    if (el != null) {
+                        val outer = el.parentNode.parentNode.asInstanceOf[html.Element]
+                        outer.style.display = savedDisplays.getOrElse(id, "")
+                    }
+                }
+                actionOuter.style.cssText = savedActionOuter
+            }
+            hideOtherSections()
+
+            val root = dom.document.createElement("div").asInstanceOf[html.Div]
+            root.style.cssText =
+                "padding:14px 16px; max-width:100%; box-sizing:border-box; height:100%; overflow-y:auto;" +
+                "font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;" +
+                "color:#e6edf3;"
+
+            // ── Lock logic + feasibility ─────────────────────────────────────
+            // A faction is "locked-to" a player iff that player has exactly one
+            // checked faction. Locked factions are forcibly disabled in every
+            // OTHER player's row (greyed-out, can't be checked even if the user
+            // tries). Cascade: when greying-out reduces another player's set
+            // to size 1, THAT becomes a lock too. We recompute the lock map on
+            // every render so the UI always reflects the current cascade.
+            def computeLocks() : Map[Faction, Int] = {
+                // Repeat until stable.
+                val effective = scala.collection.mutable.ArrayBuffer[scala.collection.mutable.Set[Faction]]()
+                for (i <- 0 until pn) effective += enabledFactions(i).clone()
+                var locked : Map[Faction, Int] = Map()
+                var changed = true
+                while (changed) {
+                    changed = false
+                    for (i <- 0 until pn) {
+                        val pool = effective(i) -- locked.keySet
+                        if (pool.size == 1 && !locked.values.toSet.contains(i)) {
+                            val f = pool.head
+                            if (!locked.contains(f)) {
+                                locked = locked + (f -> i)
+                                changed = true
+                            }
+                        }
+                    }
+                }
+                locked
+            }
+
+            // Hall's theorem via brute-force bipartite matching: does any
+            // complete assignment of distinct factions to all players exist
+            // under the current enabled sets? Players × factions are small.
+            def isFeasible() : Boolean = {
+                def search(remaining : List[Int], used : Set[Faction]) : Boolean = remaining match {
+                    case Nil => true
+                    case _ =>
+                        // Pick the most-constrained player first for efficiency.
+                        val p = remaining.minBy(i => (enabledFactions(i) -- used).size)
+                        val pool = (enabledFactions(p) -- used).toList
+                        if (pool.isEmpty) false
+                        else pool.exists(f => search(remaining.filterNot(_ == p), used + f))
+                }
+                search((0 until pn).toList, Set.empty)
+            }
+
+            // For Generate: assign factions, processing players with FEWEST
+            // eligible factions first (per user direction).
+            def generateAssignment() : |[$[Faction]] = {
+                val locked = computeLocks()
+                // Players whose faction is forced by lock get it immediately.
+                val assignment = scala.collection.mutable.Map[Int, Faction]()
+                locked.foreach { case (f, i) => assignment(i) = f }
+
+                val remaining = (0 until pn).toList.filterNot(assignment.contains)
+                val usedFactions = scala.collection.mutable.Set[Faction]() ++ assignment.values
+
+                // Backtrack to find ANY valid completion; randomize at each
+                // branch so different runs produce different lineups.
+                def backtrack(rem : List[Int]) : Boolean = rem match {
+                    case Nil => true
+                    case _ =>
+                        val p = rem.minBy(i => (enabledFactions(i) -- usedFactions -- locked.keySet).size)
+                        val pool = (enabledFactions(p).toList.diff(locked.keySet.toList).diff(usedFactions.toList))
+                        if (pool.isEmpty) false
+                        else {
+                            val shuffled = scala.util.Random.shuffle(pool)
+                            shuffled.find { f =>
+                                usedFactions += f
+                                assignment(p) = f
+                                val ok = backtrack(rem.filterNot(_ == p))
+                                if (!ok) { usedFactions -= f; assignment -= p }
+                                ok
+                            }.isDefined
+                        }
+                }
+                if (!backtrack(remaining)) None
+                else |((0 until pn).toList.map(assignment))
+            }
+
+            def glyphSrc(f : Faction) : String =
+                "webp/images/" + f.short.toLowerCase + "-glyph.webp"
+
+            def render() {
+                clear(root)
+                val title = dom.document.createElement("div").asInstanceOf[html.Div]
+                title.style.cssText = "font-size:14pt;font-weight:600;margin-bottom:8px;color:#fff;"
+                title.innerHTML = "Choose factions included for random selection"
+                root.appendChild(title)
+
+                val help = dom.document.createElement("div").asInstanceOf[html.Div]
+                help.style.cssText = "font-size:9.5pt;color:#8c95a0;margin-bottom:16px;"
+                help.innerHTML = "Type each player's name. Uncheck factions you don't want that player to be eligible for. When a player has only ONE faction checked, that faction is reserved for them — it's auto-greyed-out in every other player's row."
+                root.appendChild(help)
+
+                val locked = computeLocks()
+                val lockedFactions = locked.keySet
+
+                for (i <- 0 until pn) {
+                    val row = dom.document.createElement("div").asInstanceOf[html.Div]
+                    row.style.cssText =
+                        "display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;" +
+                        "padding:8px 6px;border-bottom:1px solid #2a2e36;margin-bottom:6px;"
+
+                    val nameIn = dom.document.createElement("input").asInstanceOf[html.Input]
+                    nameIn.`type` = "text"
+                    nameIn.value = playerNames(i)
+                    nameIn.style.cssText = "flex:0 0 140px;padding:5px 8px;background:#0d1117;border:1px solid #30363d;border-radius:5px;color:#e6edf3;font-family:inherit;font-size:10.5pt;"
+                    nameIn.oninput = (_) => { playerNames(i) = nameIn.value }
+                    row.appendChild(nameIn)
+
+                    // [2026-05-23] Layout: the checkbox container has internal
+                    // flex-wrap so individual checkboxes flow into multiple
+                    // sub-rows when the container isn't wide enough. A media
+                    // query on the .alt-picker-cb-wrap class (injected once via
+                    // <style> below) forces flex-basis:100% at viewport widths
+                    // < 720px, which drops the whole container beneath the name
+                    // on narrow screens. On wider screens the container flows
+                    // inline with the name and partial-wraps as needed.
+                    val cbWrap = dom.document.createElement("div").asInstanceOf[html.Div]
+                    cbWrap.className = "alt-picker-cb-wrap"
+                    cbWrap.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;flex:1 1 auto;"
+
+                    // "All" toggle for this row
+                    val allLbl = dom.document.createElement("label").asInstanceOf[html.Label]
+                    allLbl.style.cssText = "display:inline-flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5pt;color:#8c95a0;"
+                    val allCb = dom.document.createElement("input").asInstanceOf[html.Input]
+                    allCb.`type` = "checkbox"
+                    val unlockableForThisPlayer = allFactions.filter(f => !lockedFactions.contains(f) || locked(f) == i)
+                    allCb.checked = unlockableForThisPlayer.forall(enabledFactions(i).contains)
+                    allCb.style.cssText = "margin:0;cursor:pointer;"
+                    allLbl.appendChild(newDiv("", "All"))
+                    allLbl.appendChild(allCb)
+                    cbWrap.appendChild(allLbl)
+
+                    val factionCbs = scala.collection.mutable.ArrayBuffer[(Faction, html.Input)]()
+                    allFactions.foreach { f =>
+                        val lockedElsewhere = lockedFactions.contains(f) && locked(f) != i
+                        val lbl = dom.document.createElement("label").asInstanceOf[html.Label]
+                        lbl.style.cssText =
+                            "display:inline-flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5pt;color:#8c95a0;" +
+                            (if (lockedElsewhere) "opacity:0.35;cursor:not-allowed;" else "")
+
+                        // Glyph image instead of acronym text.
+                        val glyph = dom.document.createElement("img").asInstanceOf[html.Image]
+                        glyph.src = glyphSrc(f)
+                        glyph.alt = f.short
+                        glyph.style.cssText = "width:32px;height:32px;object-fit:contain;"
+                        glyph.title = f.full
+
+                        val cb = dom.document.createElement("input").asInstanceOf[html.Input]
+                        cb.`type` = "checkbox"
+                        cb.checked = enabledFactions(i).contains(f) && !lockedElsewhere
+                        cb.disabled = lockedElsewhere
+                        cb.style.cssText = "margin:0;cursor:" + (if (lockedElsewhere) "not-allowed" else "pointer") + ";"
+                        cb.onchange = (_) => {
+                            if (cb.checked) enabledFactions(i) += f else enabledFactions(i) -= f
+                            render()  // re-cascade
+                        }
+                        lbl.appendChild(glyph)
+                        lbl.appendChild(cb)
+                        cbWrap.appendChild(lbl)
+                        factionCbs += ((f, cb))
+                    }
+                    allCb.onchange = (_) => {
+                        // [2026-05-23] All-toggle has clean semantics now:
+                        //   ON  → enabledFactions(i) = allFactions minus those
+                        //         locked to OTHER players (their lock wins).
+                        //   OFF → enabledFactions(i) = empty.
+                        // Never touches any other player's set. The locked-
+                        // elsewhere check guarantees that flipping All on player
+                        // B cannot dislodge player A's single-faction lock.
+                        enabledFactions(i).clear()
+                        if (allCb.checked) {
+                            allFactions.foreach { f =>
+                                if (!lockedFactions.contains(f) || locked(f) == i)
+                                    enabledFactions(i) += f
+                            }
+                        }
+                        render()
+                    }
+
+                    row.appendChild(cbWrap)
+                    root.appendChild(row)
+                }
+
+                // Randomize-order row
+                val rndRow = dom.document.createElement("div").asInstanceOf[html.Div]
+                rndRow.style.cssText = "padding:10px 6px;display:flex;align-items:center;gap:8px;margin-top:6px;"
+                val rndCb = dom.document.createElement("input").asInstanceOf[html.Input]
+                rndCb.`type` = "checkbox"
+                rndCb.checked = randomizeOrder
+                rndCb.style.cssText = "margin:0;cursor:pointer;"
+                rndCb.onchange = (_) => { randomizeOrder = rndCb.checked }
+                val rndLbl = dom.document.createElement("label").asInstanceOf[html.Label]
+                rndLbl.style.cssText = "color:#e6edf3;font-size:10.5pt;cursor:pointer;"
+                rndLbl.innerHTML = "Randomize player order"
+                rndLbl.onclick = (_) => { rndCb.checked = !rndCb.checked; randomizeOrder = rndCb.checked }
+                rndRow.appendChild(rndCb)
+                rndRow.appendChild(rndLbl)
+                root.appendChild(rndRow)
+
+                // Feasibility warning + button row
+                val feasible = isFeasible()
+                if (!feasible) {
+                    val warn = dom.document.createElement("div").asInstanceOf[html.Div]
+                    warn.style.cssText = "color:#f85149;font-weight:600;font-size:11pt;margin-top:10px;"
+                    warn.innerHTML = "Not enough factions selected — some players will have no eligible faction. Widen the checkboxes."
+                    root.appendChild(warn)
+                }
+
+                val btnRow = dom.document.createElement("div").asInstanceOf[html.Div]
+                btnRow.style.cssText = "display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;"
+                val genBtn = dom.document.createElement("button").asInstanceOf[html.Button]
+                genBtn.innerHTML = "Generate"
+                genBtn.disabled = !feasible
+                genBtn.style.cssText =
+                    "padding:8px 18px;border:none;border-radius:6px;font-weight:600;font-size:11pt;" +
+                    (if (feasible) "background:#2f81f7;color:#fff;cursor:pointer;"
+                     else "background:#30363d;color:#7d8590;cursor:not-allowed;")
+                genBtn.onclick = (_) => if (feasible) attemptGenerate()
+                val backBtn = dom.document.createElement("button").asInstanceOf[html.Button]
+                backBtn.innerHTML = "Back"
+                backBtn.style.cssText = "padding:8px 18px;background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;cursor:pointer;font-size:11pt;"
+                backBtn.onclick = (_) => { restoreOtherSections(); clear(actionDiv); dom.window.location.reload() }
+                btnRow.appendChild(genBtn)
+                btnRow.appendChild(backBtn)
+                root.appendChild(btnRow)
+            }
+
+            def attemptGenerate() {
+                generateAssignment() match {
+                    case None =>
+                        // Should be unreachable now that the button is disabled
+                        // when infeasible, but keep the alert as belt-and-braces.
+                        dom.window.alert("No valid assignment exists. Widen at least one player's faction set.")
+                    case Some(picked) =>
+                        // [2026-05-23] Keep (name, faction) paired through the
+                        // shuffle. Previously the faction list was reshuffled
+                        // independently while playerNames stayed at fixed
+                        // indices — so the confirmation screen mixed up which
+                        // name belonged to which faction. Build paired tuples
+                        // first, then if randomizeOrder is on pick a valid
+                        // seating and reorder the PAIRS so the factions match
+                        // it (carrying each player name with its faction).
+                        val pairs : $[(String, Faction)] =
+                            picked.zipWithIndex.map { case (f, idx) => (playerNames(idx), f) }
+                        val orderedPairs : $[(String, Faction)] =
+                            if (randomizeOrder) {
+                                val seatings = allSeatings(picked.toList)
+                                if (seatings.nonEmpty) {
+                                    val chosen = seatings(scala.util.Random.nextInt(seatings.size))
+                                    // Reorder pairs to match the chosen seating's faction order.
+                                    chosen.map(f => pairs.find(_._2 == f).get)
+                                } else pairs
+                            } else pairs
+                        showConfirmation(orderedPairs)
+                }
+            }
+
+            def showConfirmation(ordered : $[(String, Faction)]) {
+                clear(actionDiv)
+                val box = dom.document.createElement("div").asInstanceOf[html.Div]
+                // [2026-05-23] Per user: each player is centered, name above
+                // glyph, tight enough that the whole lineup + buttons fit on
+                // one mobile screen. No indent, no border rows.
+                box.style.cssText = "padding:10px 12px;color:#e6edf3;font-family:-apple-system,sans-serif;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;box-sizing:border-box;overflow-y:auto;"
+                val ttl = dom.document.createElement("div").asInstanceOf[html.Div]
+                ttl.style.cssText = "font-size:13pt;font-weight:600;margin-bottom:8px;color:#fff;text-align:center;"
+                ttl.innerHTML = "Player seating order"
+                box.appendChild(ttl)
+                ordered.foreach { case (name, f) =>
+                    val block = dom.document.createElement("div").asInstanceOf[html.Div]
+                    block.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;margin:6px 0;text-align:center;"
+                    val nm = dom.document.createElement("div").asInstanceOf[html.Div]
+                    nm.style.cssText = "font-size:15pt;font-weight:700;color:#fff;line-height:1.1;"
+                    nm.innerHTML = name
+                    block.appendChild(nm)
+                    val gImg = dom.document.createElement("img").asInstanceOf[html.Image]
+                    gImg.src = glyphSrc(f)
+                    gImg.alt = f.full
+                    gImg.title = f.full
+                    gImg.style.cssText = "width:64px;height:64px;object-fit:contain;"
+                    block.appendChild(gImg)
+                    box.appendChild(block)
+                }
+
+                val br = dom.document.createElement("div").asInstanceOf[html.Div]
+                br.style.cssText = "display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;justify-content:center;"
+                val cont = dom.document.createElement("button").asInstanceOf[html.Button]
+                cont.innerHTML = "Continue"
+                cont.style.cssText = "padding:8px 18px;background:#3fb950;color:#0d1117;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:11pt;"
+                cont.onclick = (_) => {
+                    restoreOtherSections()
+                    clear(actionDiv)
+                    onContinue(ordered.map(_._2))
+                }
+                val backBtn = dom.document.createElement("button").asInstanceOf[html.Button]
+                backBtn.innerHTML = "Back to picker"
+                backBtn.style.cssText = "padding:8px 18px;background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;cursor:pointer;font-size:11pt;"
+                backBtn.onclick = (_) => { clear(actionDiv); render(); actionDiv.appendChild(root) }
+                br.appendChild(cont)
+                br.appendChild(backBtn)
+                box.appendChild(br)
+
+                actionDiv.appendChild(box)
+            }
+
+            render()
+            actionDiv.appendChild(root)
+        }
+
         val replay = getElem("replay").?./(_.innerHTML).|("")
 
         if (replay.trim != "") {
@@ -4156,8 +4601,22 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     case None =>
                 }
 
-                if (dom.window.location.pathname.startsWith("/play/").not)
-                    dom.window.history.pushState("initilaize", "", "/play/" + hash)
+                // [2026-05-24] Preserve the /mnu/ prefix when rewriting the URL.
+                // Previously this always pushed /play/<hash>, which on refresh would
+                // serve the root (Library) build — the user would then crash on any
+                // MNU-specific action because Library's main.js doesn't know MNU units.
+                {
+                    val curPath = dom.window.location.pathname
+                    val targetPath =
+                        if (curPath.startsWith("/mnu/play/")) "/mnu/play/" + hash
+                        else if (curPath.startsWith("/mnu/")) "/mnu/play/" + hash
+                        else "/play/" + hash
+                    val needsRewrite =
+                        !curPath.startsWith("/play/") &&
+                        !curPath.startsWith("/mnu/play/")
+                    if (needsRewrite)
+                        dom.window.history.pushState("initilaize", "", targetPath)
+                }
 
                 // Master role "$" loads the game as a spectator (self = None).
                 // The downstream startGame path already supports a None self
@@ -4335,9 +4794,17 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             if (n < 3) {
                                 val pn = n + 3
                                 val combinations = allFactions.combinations(pn).toList
-                                ask("Choose factions", combinations./(_.mkString(", "))./(smaller) :+ "Back", n => {
-                                    if (n < combinations.num)
-                                        startSetup(combinations(n))
+                                // [2026-05-23] Alt faction picker entry at top of the
+                                // faction-selection list. Picking it opens the per-player
+                                // glyph-checkbox UI; the rest of the list is the existing
+                                // combinatorial dropdown for users who want the literal
+                                // faction set.
+                                val opts = (("Alt faction picker".hl) +: combinations./(_.mkString(", "))./(smaller).toList) :+ "Back"
+                                ask("Choose factions", opts, n2 => {
+                                    if (n2 == 0)
+                                        altFactionPicker(pn)
+                                    else if (n2 - 1 < combinations.num)
+                                        startSetup(combinations(n2 - 1))
                                     else
                                         topMenu()
                                 })
@@ -4350,9 +4817,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             if (n < 3) {
                                 val pn = n + 3
                                 val combinations = allFactions.combinations(pn).toList
-                                ask("Choose factions", combinations./(_.mkString(", "))./(smaller) :+ "Back", n => {
-                                    if (n < combinations.num)
-                                        startOnlineSetup(combinations(n))
+                                // [2026-05-23] Alt faction picker at top of online flow too.
+                                val opts = (("Alt faction picker".hl) +: combinations./(_.mkString(", "))./(smaller).toList) :+ "Back"
+                                ask("Choose factions", opts, n2 => {
+                                    if (n2 == 0)
+                                        altFactionPicker(pn, startOnlineSetup)
+                                    else if (n2 - 1 < combinations.num)
+                                        startOnlineSetup(combinations(n2 - 1))
                                     else
                                         topMenu()
                                 })

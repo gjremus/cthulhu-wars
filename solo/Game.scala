@@ -1940,29 +1940,39 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def independents(f : Faction)(implicit w : AskWrapper) {
-        // Ghatanothoa IGOO cannot be used when FB is in the game (FB uses Ghatanothoa as faction GOO)
-        // Azathoth excluded — uses custom awakening flow (AzathothAwakenMainAction)
-        // Cthugha also excluded — uses custom awakening with per-GOO cost display
-        // Collapsed into one "Awaken Independent GOO" sub-menu
-        val availableIGOOs = loyaltyCards.of[IGOOLoyaltyCard].%(igoo => igooCost(f, igoo) <= f.power).%(igoo => !(igoo == GhatanotoaIGOOCard && factions.has(FB))).%(igoo => !(igoo == GlaakiIGOOCard && factions.has(TS))).%(igoo => igoo != AzathothIGOOCard).%(igoo => igoo != CthughaCard).%(igoo => {
-            val cost = igooCost(f, igoo)
-            areas.nex.%(f.canAwakenIGOO).%(f.affords(cost)).any
-        })
-        if (availableIGOOs.any)
-            + AwakenIGOOMainAction(f)
+        // [2026-05-23] All awakenable iGOOs — including Azathoth and Cthugha
+        // (which used to be top-level menu entries) — are routed through the
+        // single AwakenIGOOMainAction sub-menu so they sort alphabetically
+        // alongside the others. Ghatanothoa IGOO still excluded when FB is
+        // in the game (FB uses Ghatanothoa as faction GOO); Glaaki IGOO
+        // excluded when TS is in the game.
+        val availableStandardIGOOs = loyaltyCards.of[IGOOLoyaltyCard]
+            .%(igoo => igooCost(f, igoo) <= f.power)
+            .%(igoo => !(igoo == GhatanotoaIGOOCard && factions.has(FB)))
+            .%(igoo => !(igoo == GlaakiIGOOCard && factions.has(TS)))
+            .%(igoo => igoo != AzathothIGOOCard)
+            .%(igoo => igoo != CthughaCard)
+            .%(igoo => {
+                val cost = igooCost(f, igoo)
+                areas.nex.%(f.canAwakenIGOO).%(f.affords(cost)).any
+            })
 
-        // Cthugha: main menu entry → sub-menu with all GOOs (faction + iGOO)
-        if (loyaltyCards.has(CthughaCard)) {
+        // Cthugha: replace any non-Cthugha GOO at one of f's gates (cost = 6 - replaced.cost)
+        val cthughaAvailable = loyaltyCards.has(CthughaCard) && {
             val allGOOs = f.allInPlay.%(_.uclass.utype == GOO).%(u => u.uclass != Cthugha)
-            val affordable = allGOOs.%(goo => {
-                // For faction GOOs use awakenCost; for iGOOs use unit cost directly
+            allGOOs.%(goo => {
                 val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) f.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
                 val cthughaCost = 6 - gooCost
                 f.power >= cthughaCost && f.gates.has(goo.region)
-            })
-            if (affordable.any)
-                + CthughaAwakenMainAction(f)
+            }).any
         }
+
+        // Azathoth: needs ≥8 power and an own GOO at a controlled gate to "replace"
+        val azathothAvailable = loyaltyCards.has(AzathothIGOOCard) && f.power >= 8 &&
+            f.allGates.onMap.%(r => f.at(r).goos.any).any
+
+        if (availableStandardIGOOs.any || cthughaAvailable || azathothAvailable)
+            + AwakenIGOOMainAction(f)
 
         // Round 8 Bug 40: also check facedown state for IGOO spellbooks
         if (f.has(NightmareWeb) && !f.oncePerGame.has(NightmareWeb) && f.pool(Nyogtha).any) {
@@ -1995,12 +2005,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (f.has(NuclearChaos) && !f.oncePerGame.has(NuclearChaos) && f.has(AzathothIGOO) && f.allInPlay.%(_.uclass == AzathothIGOO).any)
             + NuclearChaosMainAction(f)
 
-        // Azathoth IGOO: custom awakening (card still in game pool, not yet acquired)
-        if (loyaltyCards.has(AzathothIGOOCard) && f.power >= 8) {
-            val gooAtGate = f.allGates.onMap.%(r => f.at(r).goos.any)
-            if (gooAtGate.any)
-                + AzathothAwakenMainAction(f)
-        }
+        // [2026-05-23] Azathoth top-level entry removed — now offered inside
+        // AwakenIGOOMainAction sub-menu (alphabetical, with the others).
 
         // Bokrug: re-awakening (owner keeps card, Bokrug in pool)
         if (f.loyaltyCards.has(BokrugCard) && f.pool(Bokrug).any && f.power >= 6) {
@@ -2256,18 +2262,29 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             PreMainAction(last)
 
         case PowerGatherAction(last) =>
-            turn += 1
+            // [2026-05-24] Guard the whole power-calc / per-turn-reset / log
+            // block so it only fires on FIRST entry. The TS Shepherd of the
+            // Crypt re-enters PowerGatherAction via
+            // Force(PowerGatherAction(TSExpansion.pgrLastFaction)) after the
+            // Shepherd phase completes — without this guard, that re-entry
+            // doubled turn increment (skipping odd turns 3/5/7…), re-logged
+            // POWER GATHER, re-computed power (effectively giving every
+            // faction double power), and re-released captives. On re-entry
+            // (shepherdDoneThisGather == true), we skip directly to
+            // raise-to-half + triggers + AfterPowerGatherAction.
+            if (!TSExpansion.shepherdDoneThisGather) {
+                turn += 1
 
-            // Reset Gla'aki IGOO SBR tracking for the new turn
-            reachedZeroPowerFirst = None
+                // Reset Gla'aki IGOO SBR tracking for the new turn
+                reachedZeroPowerFirst = None
 
-            factions.foreach { f =>
-                f.oncePerTurn = $
-                f.ignorePerTurn = $
-            }
+                factions.foreach { f =>
+                    f.oncePerTurn = $
+                    f.ignorePerTurn = $
+                }
 
-            log(CthulhuWarsSolo.DoubleLine)
-            log("POWER GATHER")
+                log(CthulhuWarsSolo.DoubleLine)
+                log("POWER GATHER")
 
             // Library at Celaeno: discard all Silence Tokens before power is gathered
             if (board.isLibraryMap) {
@@ -2341,13 +2358,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 f.log("got", f.power.power, "(" + $(fromHibernate, fromGates, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP).flatten.mkString(" + ") + ")")
 
                 if (greenDecayCultists > 0) {
-                    f.log("Green Decay:", greenDecayCultists, "captured " + "cultist".s(greenDecayCultists), "→", greenDecayCultists.es, "(not power)")
+                    f.log("Green Decay".styled("nt") + ":", greenDecayCultists, "captured " + "cultist".s(greenDecayCultists), "→", greenDecayCultists.es, "(not power)")
                     f.takeES(greenDecayCultists)
                 }
 
                 // Gla'aki IGOO Green Decay: captured enemy cultists give ES instead of power
                 if (glaakiIGOOGreenDecayCultists > 0) {
-                    f.log("Green Decay:", glaakiIGOOGreenDecayCultists, "captured " + "cultist".s(glaakiIGOOGreenDecayCultists), "→", glaakiIGOOGreenDecayCultists.es, "(not power)")
+                    f.log("Green Decay".styled("nt") + ":", glaakiIGOOGreenDecayCultists, "captured " + "cultist".s(glaakiIGOOGreenDecayCultists), "→", glaakiIGOOGreenDecayCultists.es, "(not power)")
                     f.takeES(glaakiIGOOGreenDecayCultists)
                 }
 
@@ -2388,7 +2405,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     val poolCultists = f.pool.%(_.uclass.utype == Cultist).num
                     if (poolCultists > 0) {
                         f.power += poolCultists
-                        f.log("gained", poolCultists.power, "from", poolCultists, "cultist".s(poolCultists), "in their pool via Tomb Herd")
+                        f.log("gained", poolCultists.power, "from", poolCultists, "cultist".s(poolCultists), "in their pool via", "Tomb Herd".styled("nt"))
                     }
                 }
             }
@@ -2402,17 +2419,24 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     f.log("released", captured.mkString(", "))
                 }
             }
+            } // end of `if (!shepherdDoneThisGather)` — closes the initial-entry guard
 
             // TS Shepherd of the Crypt: must run BEFORE raise-to-half.
             // Gather Power ordering: power calc → Shepherd → raise-to-half → triggers → AfterPowerGatherAction (MaoCeremony).
             // Nothing should grant power AFTER raise-to-half.
-            if (factions.has(TS) && TS.onMap(Glaaki).any && TS.onMap(TombHerd).any) {
+            // [2026-05-23] Guarded by !shepherdDoneThisGather so the re-entry
+            // path from TSExpansion.TSShepherdGatherAction (after Shepherd
+            // completes) doesn't loop. `last` is stashed into TSExpansion so
+            // the re-entry can rebuild PowerGatherAction(last). See FactionTS.scala.
+            if (factions.has(TS) && TS.onMap(Glaaki).any && TS.onMap(TombHerd).any && !TSExpansion.shepherdDoneThisGather) {
                 if (ElderThingMindControl.suppresses(TS.onMap(Glaaki).head)) {
                     TS.log("Shepherd of the Crypt".styled("nt"), "blocked by", "Elder Thing".styled("nt"))
                 } else {
                     val regions = areas.nex.%(r => TS.at(r, TombHerd).any)
-                    if (regions.any)
+                    if (regions.any) {
+                        TSExpansion.pgrLastFaction = last
                         return Force(TSShepherdGatherPhaseAction(TS, regions))
+                    }
                 }
             }
 
@@ -2443,6 +2467,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // AfterPowerGatherAction runs AFTER raise-to-half.
         // MaoCeremony MUST be after raise-to-half — do not move it before.
         case AfterPowerGatherAction =>
+            // [2026-05-23] Reset the Shepherd guard so the NEXT gather-power
+            // round fires Shepherd again. The flag stayed true from Shepherd
+            // completion through the re-entry to PowerGatherAction so the
+            // inline dispatch could be skipped on re-entry; now we're past
+            // raise-to-half and can safely clear it.
+            TSExpansion.shepherdDoneThisGather = false
             factions.foreach { f =>
                 if (f.want(MaoCeremony)) {
                     f.cultists.onMap.some.foreach { l =>
@@ -2673,7 +2703,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Ghatanothoa IGOO: un-mummify all cultists at Doom Phase
                 if (mummifiedCultists.any) {
                     mummifiedCultists = $
-                    log("Mummified cultists are freed")
+                    log("Mummify".styled("nt") + ": all mummified cultists are freed at Doom Phase")
                 }
 
                 factions.foreach(f => f.satisfyIf(FirstDoomPhase, "The first Doom phase", turn == 2))
@@ -3165,7 +3195,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             // Atlach-Nacha: Cosmic Web — immediate victory
             factions.find(f => f.upgrades.has(CosmicWeb)).foreach { winner =>
-                log(winner.full, "won the game via Cosmic Web.")
+                log(winner.full, "won the game via", "Cosmic Web".styled("nt"))
                 return GameOver($(winner))
             }
 
@@ -3555,6 +3585,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case CaptureTargetAction(self, r, f, u, effect) =>
             val unitFig = unit(u)
+            // Great Race of Yith: detect Possession-overridden captures
+            val yithPresent = f.at(r, GreatRaceOfYith).any
+            // [2026-05-23] Possession overrides normal blockers (enemy GOO/Terror/Monster)
+            // Enemy faction here is the unit's owner (not necessarily self)
+            val victimOwner = unitFig.faction
+            val overrideUsed = yithPresent && (victimOwner.at(r, GOO).any || victimOwner.at(r, Terror).any || victimOwner.at(r, Monster).any)
             // If MPC captured by third faction, unparasitize first — restore to original faction, then capture that acolyte
             if (unitFig.uclass == MindParasiteCultist) {
                 val origFac = mindParasiteOriginalFaction.get(u)
@@ -3572,6 +3608,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 eliminate(unitFig)
                 unitFig.region = f.prison
                 f.log("captured", unitFig, "in", r, effect./("with " + _).|(""))
+            }
+
+            if (yithPresent) {
+                if (overrideUsed)
+                    f.log("Possession".styled("nt") + ":", GreatRaceOfYith.styled(f), "captured in", r, "(overrode normal capture restrictions)")
+                else
+                    f.log("Possession".styled("nt") + ":", GreatRaceOfYith.styled(f), "captured in", r)
             }
 
             f.satisfy(CaptureCultist, "Capture Cultist")
@@ -3679,9 +3722,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val bwInPlay = bwOwner.allInPlay.%(_.uclass == BloatedWoman).any
                 if (bwInPlay) {
                     bwOwner.power += cost
-                    self.log("recruited", uc.styled(self), "from Velvet Fan in", r, "— paid", cost.power, "to", bwOwner.full)
+                    self.log("recruited", uc.styled(self), "in", r, "from", "Velvet Fan".styled("nt"), "— paid", cost.power, "to", bwOwner.full)
                 } else {
-                    self.log("recruited", uc.styled(self), "from Velvet Fan in", r, "— Bloated Woman out of play, no payment")
+                    self.log("recruited", uc.styled(self), "in", r, "from", "Velvet Fan".styled("nt"), "— Bloated Woman out of play, no payment")
                 }
             } else {
                 self.place(uc, r)
@@ -3751,9 +3794,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     val bwInPlay = bwOwner.allInPlay.%(_.uclass == BloatedWoman).any
                     if (bwInPlay) {
                         bwOwner.power += cost
-                        self.log("summoned", uc.styled(self), "from Velvet Fan in", r, "— paid", cost.power, "to", bwOwner.full)
+                        self.log("summoned", uc.styled(self), "in", r, "from", "Velvet Fan".styled("nt"), "— paid", cost.power, "to", bwOwner.full)
                     } else {
-                        self.log("summoned", uc.styled(self), "from Velvet Fan in", r, "— Bloated Woman out of play, no payment")
+                        self.log("summoned", uc.styled(self), "in", r, "from", "Velvet Fan".styled("nt"), "— Bloated Woman out of play, no payment")
                     }
                 } else {
                     self.place(uc, r)
