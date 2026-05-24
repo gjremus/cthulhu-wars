@@ -666,7 +666,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val extra = max(0, vooniths - kills)
             if (extra > 0) {
                 s.rolls ++= extra.times(Kill)
-                log(Voonith.styled(s), "Vicious added", extra, "Kill".s(extra).styled("kill"))
+                log(Voonith.styled(s), "Vicious".styled("nt") + ": added", extra, "Kill".s(extra).styled("kill"))
             }
         }
     }
@@ -1156,11 +1156,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         case Pain if f.opponent.power > 0 =>
                             f.opponent.power -= 1
                             f.power += 1
-                            log(StarVampire.styled(f), "drained", 1.power, "from", f.opponent, "with a", "Pain".styled("pain"))
+                            log(StarVampire.styled(f), "Sapping".styled("nt") + ": drained", 1.power, "from", f.opponent, "with a", "Pain".styled("pain"))
                         case Kill if f.opponent.doom > 0 =>
                             f.opponent.doom -= 1
                             f.doom += 1
-                            log(StarVampire.styled(f), "drained", 1.doom, "from", f.opponent, "with a", "Kill".styled("kill"))
+                            log(StarVampire.styled(f), "Sapping".styled("nt") + ": drained", 1.doom, "from", f.opponent, "with a", "Kill".styled("kill"))
                         case _ =>
                     }
             }

@@ -112,7 +112,7 @@ object NeutralMonstersExpansion extends Expansion {
                 self.payTax(r)
 
             self.place(uc, r)
-            self.log("summoned", uc.styled(self), "in", r, "for free")
+            self.log("Frenzy".styled("nt") + ": summoned", uc.styled(self), "in", r, "for free")
 
             SummonedAction(self, uc, r, l :+ r)
 
@@ -128,7 +128,7 @@ object NeutralMonstersExpansion extends Expansion {
             u.add(Moved)
             u.add(MovedForFree)
 
-            log(Shantak, "carried", u, "to", r)
+            log(Shantak.styled(self), "Riding the Shantak".styled("nt") + ": carried", u, "to", r)
 
             MoveContinueAction(self, true)
 

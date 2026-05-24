@@ -6,6 +6,7 @@ import slick.jdbc.HsqldbProfile.api.DBIO.seq
 import akka.actor.ActorSystem
 import akka.http.scaladsl.{Http, HttpsConnectionContext}
 import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.{RawHeader, CacheDirectives, `Cache-Control`}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 
@@ -310,8 +311,20 @@ object CthulhuWarsOnline {
             // configured), every admin endpoint returns 404 so it's invisible.
             // Serve the admin UI as a static file at /admin.html. Reads from
             // ../solo/admin.html on the VM (which we upload separately).
+            // [2026-05-23] No-cache headers so the admin UI is never served
+            // from the browser's stale cache — every page load fetches the
+            // current /opt/cwo/solo/admin.html. Without this, users running
+            // the admin tool across deploys see the OLD JS and report
+            // "polling/refresh isn't working" when the new endpoints aren't
+            // even being called from their cached page.
             (get & path("admin.html")) {
-                getFromFile("../solo/admin.html")
+                respondWithHeaders(
+                    `Cache-Control`(CacheDirectives.`no-cache`, CacheDirectives.`no-store`, CacheDirectives.`must-revalidate`),
+                    RawHeader("Pragma", "no-cache"),
+                    RawHeader("Expires", "0"),
+                ) {
+                    getFromFile("../solo/admin.html")
+                }
             } ~
             // Serve the MNU beta build under /mnu/. Assets in ../mnu/ on the VM.
             pathPrefix("mnu") {
@@ -486,6 +499,152 @@ object CthulhuWarsOnline {
                     val msg = out.toString.trim
                     if (exitCode == 0) complete(StatusCodes.OK -> msg)
                     else complete(StatusCodes.UnprocessableEntity -> msg)
+                }
+            } ~
+            // [2026-05-23] SimRunner admin endpoints — list past run logs, tail a
+            // specific log, and spawn a new run with validated args. All inputs
+            // are whitelisted against known faction / option / map codes so a
+            // bad query can't smuggle arbitrary args into the java command line.
+            (get & path("admin" / Segment / "sim-runs")) { token =>
+                if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
+                else {
+                    val dir = new java.io.File("/tmp")
+                    val files = Option(dir.listFiles((_, n) => n.startsWith("online-sim") && n.endsWith(".log")))
+                        .map(_.toList).getOrElse(Nil)
+                        .sortBy(-_.lastModified())
+                    // Tab-separated: name, size, mtimeMs
+                    val rows = files.map(f => s"${f.getName}\t${f.length}\t${f.lastModified}").mkString("\n")
+                    complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, rows))
+                }
+            } ~
+            (get & path("admin" / Segment / "sim-run-log" / Segment)) { (token, name) =>
+                if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
+                // Path-traversal guard: name must match the sim-log naming convention.
+                else if (!name.matches("online-sim[A-Za-z0-9_.\\-]*\\.log")) complete(StatusCodes.BadRequest -> "bad log name")
+                else parameter("lines".as[Int].?) { linesOpt =>
+                    val n = linesOpt.getOrElse(200).max(1).min(5000)
+                    val f = new java.io.File("/tmp", name)
+                    if (!f.exists) complete(StatusCodes.NotFound -> "log not found")
+                    else {
+                        import scala.sys.process._
+                        val out = new StringBuilder
+                        Process(Seq("tail", "-n", n.toString, f.getAbsolutePath))
+                            .!(ProcessLogger(line => out.append(line + "\n")))
+                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, out.toString))
+                    }
+                }
+            } ~
+            // [2026-05-23] Claude Terminal admin endpoints. POST appends a
+            // user-supplied prompt to /tmp/claude-prompts.log with timestamp.
+            // GET tails the file for the admin UI's log window. Claude (this
+            // session) reads /tmp/claude-prompts.log at the top of each ticker
+            // tick to pick up out-of-band prompts from the admin web page.
+            (post & path("admin" / Segment / "claude-prompt") & entity(as[String])) { (token, body) =>
+                if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
+                else {
+                    val text = body.trim
+                    if (text.isEmpty) complete(StatusCodes.BadRequest -> "empty prompt")
+                    else {
+                        val stamp = java.time.LocalDateTime.now.format(
+                            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                        val line = s"[$stamp] $text\n"
+                        val f = new java.io.File("/tmp/claude-prompts.log")
+                        val w = new java.io.FileWriter(f, true)
+                        try w.write(line) finally w.close()
+                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, "queued\n"))
+                    }
+                }
+            } ~
+            (get & path("admin" / Segment / "claude-prompts-log")) { token =>
+                if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
+                else parameter("lines".as[Int].?) { linesOpt =>
+                    val n = linesOpt.getOrElse(100).max(1).min(2000)
+                    val f = new java.io.File("/tmp/claude-prompts.log")
+                    if (!f.exists) complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, ""))
+                    else {
+                        import scala.sys.process._
+                        val out = new StringBuilder
+                        Process(Seq("tail", "-n", n.toString, f.getAbsolutePath))
+                            .!(ProcessLogger(line => out.append(line + "\n")))
+                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, out.toString))
+                    }
+                }
+            } ~
+            // [2026-05-23] Claude terminal log — the full history of prompts
+            // I've already picked up plus my output back for each. Distinct
+            // from /tmp/claude-prompts.log which is the inbound queue (drained
+            // every tick). /tmp/claude-output.log is append-only and reflects
+            // what's actually been processed.
+            (get & path("admin" / Segment / "claude-output-log")) { token =>
+                if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
+                else parameter("lines".as[Int].?) { linesOpt =>
+                    val n = linesOpt.getOrElse(500).max(1).min(5000)
+                    val f = new java.io.File("/tmp/claude-output.log")
+                    if (!f.exists) complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, ""))
+                    else {
+                        import scala.sys.process._
+                        val out = new StringBuilder
+                        Process(Seq("tail", "-n", n.toString, f.getAbsolutePath))
+                            .!(ProcessLogger(line => out.append(line + "\n")))
+                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, out.toString))
+                    }
+                }
+            } ~
+            (post & path("admin" / Segment / "sim-run")) { token =>
+                if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
+                else parameter(
+                    "build".?, "factions".?, "opts".?, "maps".?,
+                    "games".as[Int].?, "players".as[Int].?
+                ) { (build, factionsStr, optsStr, mapsStr, gamesOpt, playersOpt) =>
+                    // Whitelists. Anything outside these triggers a 400.
+                    val factionCodes = Set("GC","CC","BG","YS","SL","WW","OW","AN","TS","FB","DS")
+                    val optCodes = Set(
+                        "HighPriests","NeutralSpellbooks","IceAgeAffectsLethargy","Opener4P10Gates",
+                        "DemandTsathoggua","GateDiplomacy","AsyncActions",
+                        "UseGhast","UseGug","UseShantak","UseStarVampire","UseVoonith",
+                        "UseDimensionalShamblers","UseGnorri",
+                        "UseByatis","UseAbhoth","UseDaoloth","UseNyogtha","UseTulzscha","UseYgolonac"
+                    )
+                    val mapCodes = Set("Earth33","Earth35","Earth53","Earth55","Library33","Library35","Library53","Library55")
+                    val buildSel = build.getOrElse("library").toLowerCase
+                    val jar = buildSel match {
+                        case "library" => "/opt/cwo/server/online-sim.jar"
+                        case "mnu"     => "/opt/cwo/server/online-sim-mnu.jar"
+                        case _         => ""
+                    }
+                    val factions = factionsStr.getOrElse("").split(",").map(_.trim).filter(_.nonEmpty).toList
+                    val opts = optsStr.getOrElse("").split(",").map(_.trim).filter(_.nonEmpty).toList
+                    val maps = mapsStr.getOrElse("Earth35").split(",").map(_.trim).filter(_.nonEmpty).toList
+                    val games = gamesOpt.getOrElse(30).max(1).min(2000)
+                    val players = playersOpt.getOrElse(4).max(2).min(11)
+
+                    if (jar.isEmpty) complete(StatusCodes.BadRequest -> s"bad build (must be 'library' or 'mnu'); got $buildSel")
+                    else if (factions.exists(!factionCodes.contains(_))) complete(StatusCodes.BadRequest -> ("bad faction code: " + factions.filterNot(factionCodes).mkString(",")))
+                    else if (opts.exists(!optCodes.contains(_))) complete(StatusCodes.BadRequest -> ("bad opt: " + opts.filterNot(optCodes).mkString(",")))
+                    else if (maps.exists(!mapCodes.contains(_))) complete(StatusCodes.BadRequest -> ("bad map: " + maps.filterNot(mapCodes).mkString(",")))
+                    else {
+                        val stamp = java.time.LocalDateTime.now.format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+                        val logName = s"online-sim-${buildSel}-${stamp}.log"
+                        val logFile = new java.io.File("/tmp", logName)
+                        // Build the OnlineSimRunner arg vector.
+                        val args = scala.collection.mutable.ListBuffer[String](
+                            "java", "-cp", jar, "cws.OnlineSimRunner",
+                            "http://localhost:" + port, ownerToken,
+                            games.toString, maps.mkString(","),
+                            "--players", players.toString
+                        )
+                        if (factions.nonEmpty) { args += "--force"; args += factions.mkString(",") }
+                        if (opts.nonEmpty)     { args += "--opts";  args += opts.mkString(",") }
+                        // Use ProcessBuilder so the args go in as an array (no shell expansion).
+                        // Run detached so the HTTP request returns immediately.
+                        import scala.jdk.CollectionConverters._
+                        val pb = new java.lang.ProcessBuilder(args.asJava)
+                        pb.redirectOutput(logFile)
+                        pb.redirectErrorStream(true)
+                        val process = pb.start()
+                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`,
+                            s"$logName\tpid=${process.pid()}"))
+                    }
                 }
             }
         } }  // close encodeResponse + cors

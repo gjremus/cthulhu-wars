@@ -1871,7 +1871,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 f.log("got", f.power.power, "(" + $(fromHibernate, fromGates, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP).flatten.mkString(" + ") + ")")
 
                 if (greenDecayCultists > 0) {
-                    f.log("Green Decay:", greenDecayCultists, "captured " + "cultist".s(greenDecayCultists), "→", greenDecayCultists.es, "(not power)")
+                    f.log("Green Decay".styled("nt") + ":", greenDecayCultists, "captured " + "cultist".s(greenDecayCultists), "→", greenDecayCultists.es, "(not power)")
                     f.takeES(greenDecayCultists)
                 }
             }

@@ -1413,6 +1413,28 @@ object CthulhuWarsSolo {
                             }
                         }
                     }
+                    // [2026-05-23] Custodian + Librarian belong to LibraryFaction, which
+                    // isn't in `factions` (real players only). Without this they bypass
+                    // classShrink entirely and render full-size everywhere. Treat them
+                    // as a synthetic "library faction" iteration so they're eligible
+                    // for the same per-region shrink as other large units. The
+                    // uniformK in small regions already applied (it's region-based,
+                    // not faction-based); this is the missing classK path.
+                    $((TheCustodian, game.custodianRegion), (TheLibrarian, game.librarianRegion)).foreach { case (uc, regionOpt) =>
+                        regionOpt.foreach { r =>
+                            if (regionGeom.contains(r) && !regionUniformShrink.contains(r)) {
+                                val sample = DrawItem(r, LibraryFaction, uc, Alive, $, 0, 0)
+                                val protoR = sample.proto
+                                if (protoR != null) {
+                                    val maxDim = math.max(protoR.width, protoR.height)
+                                    if (maxDim > LargeUnitTriggerMaxDim) {
+                                        val set = classRegions.getOrElseUpdate(uc, scala.collection.mutable.Set.empty)
+                                        set += r
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     classRegions.foreach { case (uc, regs) =>
                         val sampleAny = DrawItem(regs.head, null, uc, Alive, $, 0, 0)
@@ -1890,6 +1912,21 @@ object CthulhuWarsSolo {
                         b <= bottomCap && t <= topCap && l <= leftCap && r <= rightCap
                     }
 
+                    // [2026-05-23] Library tomes that are still on the map (not held
+                    // by a faction) are visual fixtures the same way gates are. Without
+                    // adding them to the overlap calculation, units (faction or neutral
+                    // including iGOOs like Father Dagon) would happily place over the
+                    // tome image. Treat tome overlap with the same 25× weight + 500
+                    // flat-penalty cliff as gates so candidates that touch a tome are
+                    // strongly avoided.
+                    val onMapTomes : $[(Int, Int, Int, Int)] = if (board.isLibraryMap)
+                        TomePlacement.positions.collect {
+                            case (tome, tcx, tcy, tw, th)
+                                if tome.region == r && !game.tomeHolders.getOrElse(tome, None).isDefined =>
+                                (tcx - tw/2, tcy - th/2, tw, th)
+                        }
+                    else $
+
                     def overlapOf(dd : DrawItem) : Double = (draws ++ fixed ++ sticking).map { oo =>
                         val d = dd.rect
                         val o = oo.rect
@@ -1908,6 +1945,17 @@ object CthulhuWarsSolo {
                             // gate-overlapping set when no clear position exists.
                             val gateFlatPenalty = if (isGate && s > 0) 500.0 else 0.0
                             base * gateWeight + gateFlatPenalty
+                        }
+                    }.sum + onMapTomes.map { case (ox, oy, ow, oh) =>
+                        val d = dd.rect
+                        if (d == null) 0.0
+                        else {
+                            val w = min(ox + ow, d.x + d.width) - max(ox, d.x)
+                            val h = min(oy + oh, d.y + d.height) - max(oy, d.y)
+                            val s = (w > 0 && h > 0).?(w * h).|(0)
+                            val base = s * (1.0 / (ow * oh) + 1.0 / (d.width * d.height))
+                            val tomeFlatPenalty = if (s > 0) 500.0 else 0.0
+                            base * 25.0 + tomeFlatPenalty
                         }
                     }.sum
 
@@ -2178,9 +2226,13 @@ object CthulhuWarsSolo {
                 val totalTomes = game.cursedTomesOwned.get(f).|(Nil).num
                 val fStyle = f.style
                 val tomeImgSrc = Overlays.imageSource("ts-cursed-tome")
-                val tomeBadge = s"""<span style="position:absolute;top:-0.5em;right:-0.5em;font-size:65%;font-weight:bold;line-height:1;" class="ts">$totalTomes</span>"""
-                val tomeImgSpan = s"""<span style="position:relative;display:inline-block;vertical-align:middle;"><img src="$tomeImgSrc" style="height:1.2em;display:block;"/>$tomeBadge</span>"""
-                val tomeStr = (totalTomes > 0).?(" " + "- ".styled(TS) + s"""<span onclick='event.stopPropagation(); onExternalClick("cursed-tomes", "$fStyle")' onpointerover='event.stopPropagation(); onExternalOver("cursed-tomes", "$fStyle")' onpointerout='event.stopPropagation(); onExternalOut("cursed-tomes", "$fStyle")' style='cursor:pointer'>""" + faceDownTomes.toString.styled(TS) + " " + tomeImgSpan + "</span>").|("")
+                // [2026-05-23] Per user: face-down tome count is centered ON the
+                // tome image (was: count text to the LEFT of the image, with a
+                // small total-count badge in the top-right corner). Both old
+                // numbers are replaced by a single centered face-down count.
+                val tomeBadge = s"""<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:90%;font-weight:bold;line-height:1;text-shadow:0 0 3px black,0 0 3px black,0 0 3px black;" class="ts">$faceDownTomes</span>"""
+                val tomeImgSpan = s"""<span style="position:relative;display:inline-block;vertical-align:middle;"><img src="$tomeImgSrc" style="height:1.4em;display:block;"/>$tomeBadge</span>"""
+                val tomeStr = (totalTomes > 0).?(" " + "- ".styled(TS) + s"""<span onclick='event.stopPropagation(); onExternalClick("cursed-tomes", "$fStyle")' onpointerover='event.stopPropagation(); onExternalOver("cursed-tomes", "$fStyle")' onpointerout='event.stopPropagation(); onExternalOut("cursed-tomes", "$fStyle")' style='cursor:pointer'>""" + tomeImgSpan + "</span>").|("")
                 val tomeSStr = (totalTomes > 0).?(" " + "-".styled(TS) + faceDownTomes.toString.styled(TS) + "T".styled(TS)).|("")
                 // Tombstalker (TS): show next available tome from the stack (tsTomesOnCard = # already given away)
                 val tsNextTome = game.tsTomesOnCard + 1
@@ -2737,9 +2789,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 <span id="roa-cost-num"
                                       style="
                                           position: absolute;
-                                          bottom: 0;
+                                          top: 50%;
                                           left: 50%;
-                                          transform: translateX(-50%);
+                                          transform: translate(-50%, -50%);
                                           color: white;
                                           font-size: max(1.1em, 3vmin);
                                           font-weight: bold;
