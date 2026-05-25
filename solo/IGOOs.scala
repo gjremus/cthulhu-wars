@@ -939,11 +939,14 @@ object IGOOsExpansion extends Expansion {
             val targetFaction = target.faction
             val region = target.region
 
-            // Eliminate the replaced unit (exempt from battle forces first so it's
-            // removed cleanly without double-processing in EliminatePhase)
+            // Eliminate the replaced unit (use battle.eliminate so it's added to
+            // the `eliminated` list — that makes the unit available to Velvet Fan
+            // capture per "killed or eliminated enemy" card rule).
             val targetFigure = game.unit(target)
-            game.battle.foreach(_.exempt(targetFigure))
-            game.eliminate(targetFigure)
+            game.battle match {
+                case Some(b) => b.eliminate(targetFigure)
+                case None    => game.eliminate(targetFigure)
+            }
 
             // Place Y'Golonac in the target's region under the new owner
             val newYg = new UnitFigure(targetFaction, Ygolonac, 1, region)

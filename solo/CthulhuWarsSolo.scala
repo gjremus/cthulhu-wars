@@ -886,7 +886,7 @@ object CthulhuWarsSolo {
                 }
             }
 
-            case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0, splitTint : |[Processing] = None)
+            case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0, splitTint : |[Processing] = None, bandTints : $[Processing] = $, overlayCount : Int = 0)
 
             case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int) {
                 val defaultProcessing = Processing(None, None, None)
@@ -1242,6 +1242,16 @@ object CthulhuWarsSolo {
                     if (activeGlyphPlacer ne target) {
                         activeGlyphPlacer = target
                         glyphPosCache.clear()
+                        // Orientation change invalidates region geometry — bounds
+                        // and centroids were computed in the previous bitmap's
+                        // coord space. Without a reset, gate/unit positioning
+                        // pulls H-coords into V-renders (or vice versa) and
+                        // pieces appear in the wrong region.
+                        regionGeomComputed = false
+                        regionGeom.clear()
+                        regionArea.clear()
+                        regionCentroid.clear()
+                        regionUniformShrink.clear()
                     }
                 }
 
@@ -2103,7 +2113,24 @@ object CthulhuWarsSolo {
 
                 draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0))./(_.rect).foreach { d =>
                     g.globalAlpha = d.alpha
-                    if (d.splitTint.any) {
+                    if (d.bandTints.num > 1) {
+                        // [2026-05-24] Horizontal band split — render the sprite
+                        // N times, each clipped to its own horizontal band.
+                        // Used by Velvet Fan multi-faction cultist representation.
+                        val n = d.bandTints.num
+                        val bandH = d.height.toDouble / n
+                        d.bandTints.zipWithIndex.foreach { case (t, i) =>
+                            val img = getTintedAsset(d.key, t)
+                            val by = (d.y + i * bandH).toInt
+                            val nextY = (d.y + (i + 1) * bandH).toInt
+                            g.save()
+                            g.beginPath()
+                            g.rect(d.x, by, d.width, nextY - by)
+                            g.clip()
+                            g.drawImage(img, d.x, d.y, d.width, d.height)
+                            g.restore()
+                        }
+                    } else if (d.splitTint.any) {
                         val leftImg = d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key))
                         val rightImg = getTintedAsset(d.key, d.splitTint.get)
                         val halfW = d.width / 2
@@ -2513,7 +2540,23 @@ object CthulhuWarsSolo {
                 g.clearRect(0, 0, bitmap.width, bitmap.height)
 
                 def dd(d : DrawRect) = {
-                    if (d.splitTint.any) {
+                    if (d.bandTints.num > 1) {
+                        // [2026-05-24] Horizontal band split — N tints stacked
+                        // top→bottom. Used by Velvet Fan multi-faction cultist.
+                        val n = d.bandTints.num
+                        val bandH = d.height.toDouble / n
+                        d.bandTints.zipWithIndex.foreach { case (t, i) =>
+                            val img = getTintedAsset(d.key, t)
+                            val by = (d.y + i * bandH).toInt
+                            val nextY = (d.y + (i + 1) * bandH).toInt
+                            g.save()
+                            g.beginPath()
+                            g.rect(d.x, by, d.width, nextY - by)
+                            g.clip()
+                            g.drawImage(img, d.x, d.y, d.width, d.height)
+                            g.restore()
+                        }
+                    } else if (d.splitTint.any) {
                         // Split color: left half = tint, right half = splitTint
                         val leftImg = d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key))
                         val rightImg = getTintedAsset(d.key, d.splitTint.get)
@@ -2533,6 +2576,16 @@ object CthulhuWarsSolo {
                     } else {
                         val img = d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key))
                         g.drawImage(img, d.x, d.y, d.width, d.height)
+                    }
+                    // Overlay count number on top (red, bold) — for Velvet Fan
+                    if (d.overlayCount > 1) {
+                        g.font = "bold 22px \"Bohemian Typewriter\", monospace"
+                        g.textAlign = "center"
+                        g.textBaseline = "middle"
+                        g.fillStyle = "#000000"
+                        g.fillText(d.overlayCount.toString, d.x + d.width / 2 + 1, d.y + d.height / 2 + 1)
+                        g.fillStyle = "#ff2222"
+                        g.fillText(d.overlayCount.toString, d.x + d.width / 2, d.y + d.height / 2)
                     }
                 }
 
@@ -2872,13 +2925,40 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         dd(DrawItem(null, f, DimensionalShamblerUnit, Alive, $, x + 35, y + 75).rect)
                 }
 
-                // Bloated Woman Velvet Fan: render captured units on BW owner's faction card
+                // Bloated Woman Velvet Fan: render captured units on BW owner's faction card.
+                // [2026-05-24] Redesign per user spec:
+                //   - Position: bottom-right corner, below the spellbook text
+                //     (just above the loyalty-card icon row).
+                //   - Size: silhouette-sized (~26x40 instead of full 39x60).
+                //   - 1 unit: render that unit's faction-tinted sprite.
+                //   - 2+ units from any factions: render fb-acolyte sprite with
+                //     horizontal band tints — one band per distinct faction
+                //     (top→bottom). Mirrors the multi-color pattern used by
+                //     Insects from Shaggai's MindParasiteCultist split.
+                //   - 2+ units: red count number overlaid on the silhouette
+                //     showing total units on the fan.
                 val velvetFanUnits = game.setup./~(e => e.at(VelvetFanHold(f)))
-                velvetFanUnits.reverse.zipWithIndex.foreach { case (u, i) =>
-                    val shamblerCount = f.at(ShamblerHold(f)).num
-                    val x = w - iconsWidth - 40 - (shamblerCount + i) * 40
-                    val y = h - 85 - 12
-                    dd(DrawItem(null, u.faction, u.uclass, Alive, $, x + 35, y + 75).rect)
+                if (velvetFanUnits.any) {
+                    val totalCount = velvetFanUnits.num
+                    val distinctFactions = velvetFanUnits./(_.faction).distinct
+                    // Position: bottom-right corner. LC icons span the bottom-
+                    // right strip with iconsWidth = f.loyaltyCards.num * 30 + 60.
+                    // Place silhouette to the LEFT of LC icons, at same baseline.
+                    val silW = 26
+                    val silH = 40
+                    val vfX = w - iconsWidth - 40 - silW
+                    val vfY = h - silH - 18
+                    if (totalCount == 1) {
+                        // Single unit — render its actual sprite, faction-tinted, silhouette-sized
+                        val u = velvetFanUnits.head
+                        val tint = DrawItem(null, u.faction, Acolyte, Alive, $, 0, 0).tint
+                        dd(DrawRect("fb-acolyte", |(tint), vfX, vfY, silW, silH))
+                    } else {
+                        // 2+ units — fb-acolyte sprite, horizontal bands by faction.
+                        val bandTints = distinctFactions./(fc => DrawItem(null, fc, Acolyte, Alive, $, 0, 0).tint)
+                        dd(DrawRect("fb-acolyte", None, vfX, vfY, silW, silH,
+                            bandTints = bandTints, overlayCount = totalCount))
+                    }
                 }
             }
 
