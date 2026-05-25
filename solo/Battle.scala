@@ -299,7 +299,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // Albino Penguins: track original owner for post-battle return
     var penguinOriginalOwner : Map[UnitRef, Faction] = Map()
     // Quachil Uttaus: track units already processed by Dust to Dust (ES chosen)
-    var dustToDustProcessed : $[UnitRef] = $
+    // [2026-05-24] Now tracks Factions that have already had their Dust to
+    // Dust opportunity this battle (per-battle, not per-unit, per user spec).
+    var dustToDustProcessed : $[Faction] = $
     // Elder Shoggoth: track sides that already used Prime Cause this battle (1 replacement max)
     var primeCauseUsed : $[Faction] = $
     // Cthugha: track sides that already saw the Fire Vampires prompt this battle
@@ -363,15 +365,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log("ERROR: Kill assigned to Hound of Tindalos — Angles of Time should prevent this")
             return
         }
-        // Azathoth IGOO: Daemon Sultan — roll 1d6, lower glyph position instead of Kill
-        // Elder Thing suppresses Daemon Sultan — Azathoth "can be killed with one kill result"
+        // Azathoth IGOO: Daemon Sultan spellbook — roll 1d6, lower glyph position instead of Kill.
+        // Logs prefix the spellbook name with "Azathoth" so it never collides with the
+        // DS faction name (also "Daemon Sultan") in stats parsing or game-log search.
+        // Elder Thing suppresses the spellbook — Azathoth "can be killed with one kill result"
         if (unit.uclass == AzathothIGOO && ElderThingMindControl.suppresses(unit)) {
-            log("Daemon Sultan".styled("nt"), "blocked by", "Elder Thing".styled("nt"), "—", "Azathoth".styled(unit.faction), "can be killed normally")
+            log("Azathoth Daemon Sultan".styled("nt"), "blocked by", "Elder Thing".styled("nt"), "—", "Azathoth".styled(unit.faction), "can be killed normally")
         }
         if (unit.uclass == AzathothIGOO && !ElderThingMindControl.suppresses(unit)) {
             val roll = (1::2::3::4::5::6).shuffle.first
             game.azathothGlyphPosition -= roll
-            log("Daemon Sultan".styled("nt") + ":", "Azathoth".styled(unit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+            log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(unit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
             if (game.azathothGlyphPosition <= 0) {
                 game.azathothGlyphPosition = 0
                 log("Azathoth".styled(unit.faction), "glyph reached 0 — eliminated!")
@@ -529,6 +533,24 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 s.str = math.max(0, expected)
                 log(s, "Servitor of the Outer Gods".styled("nt") + ": strength adjusted to", s.str.str, "(", servitorCount, "Servitor".s(servitorCount), "-1 each)")
             }
+        }
+
+        // Father Dagon (FD): log per-unit combat contribution (6 ocean / 2 land)
+        // so stats can split land vs sea fires.
+        val fdUnits = s.forces.%(u => u.uclass == FatherDagon && !u.tag(Zeroed))
+        if (fdUnits.any) {
+            val ocean = arena.glyph == Ocean
+            val per = if (ocean) 6 else 2
+            log(s, "Father Dagon".styled("nt") + ": +" + (per * fdUnits.num) + " combat (" + (ocean.?("Ocean").|("Land")) + ", " + per + " per unit × " + fdUnits.num + ")")
+        }
+
+        // Ghatanothoa IGOO: combat = enemy cultists on map (per unit). Logged
+        // per-side so the stat counter can find it (and the value is visible
+        // in the game log).
+        val ghatoUnits = s.forces.%(u => u.uclass == GhatanotoaIGOO && !u.tag(Zeroed))
+        if (ghatoUnits.any) {
+            val enemyCultists = s.opponent.allInPlay.%(_.uclass.utype == Cultist).num
+            log(s, "Ghatanothoa".styled("nt") + ": +" + (enemyCultists * ghatoUnits.num) + " combat (" + enemyCultists + " enemy cultists × " + ghatoUnits.num + " Ghatanothoa)")
         }
 
         // Elder Thing Mind Control: suppress GOO special abilities
@@ -1186,17 +1208,27 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(QuachilDustToDustPhase)
 
             case QuachilDustToDustPhase =>
-                // Quachil Uttaus: for each killed enemy unit, victim chooses permanent removal or QU owner gets 1 ES
+                // Quachil Uttaus: ONE ask per battle (not per killed unit, per user
+                // 2026-05-24). If any enemy unit was killed in this battle and the
+                // side has QU, the victim picks ONE killed unit to permanently
+                // remove from the game OR gives QU owner 1 ES instead.
                 sides.foreach { s =>
-                    if (s.forces.exists(_.uclass == QuachilUttaus)) {
+                    if (s.forces.exists(_.uclass == QuachilUttaus) && !dustToDustProcessed.has(s)) {
                         val quOwner = s
-                        val killedEnemies = s.opponent.forces.%(u => u.health == Killed && !dustToDustProcessed.has(u.ref))
+                        val killedEnemies = s.opponent.forces.%(u => u.health == Killed)
                         if (killedEnemies.any) {
                             val victim = s.opponent
-                            val u = killedEnemies.head
-                            return Ask(victim)
-                                .add(QuachilDustToDustRemoveAction(victim, u.ref, quOwner))
-                                .add(QuachilDustToDustESAction(victim, u.ref, quOwner))
+                            // Mark this side as processed so we don't re-enter
+                            dustToDustProcessed :+= s
+                            // One Ask offering: for each killed unit, "permanently
+                            // remove this one" + a single "no, give QU owner 1 ES"
+                            // action. Use first killed enemy in the ES action since
+                            // we just need a unit ref for the log message.
+                            var ask = Ask(victim)
+                            killedEnemies.foreach { u =>
+                                ask = ask.add(QuachilDustToDustRemoveAction(victim, u.ref, quOwner))
+                            }
+                            return ask.add(QuachilDustToDustESAction(victim, killedEnemies.head.ref, quOwner))
                         }
                     }
                 }
@@ -1701,22 +1733,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case QuachilDustToDustRemoveAction(self, uRef, quOwner) =>
             val u = game.unit(uRef)
-            // Remove from battle forces first
+            // [2026-05-24] Count the kill for the QU owner's BATTLE-KILL SBRs
+            // BEFORE removing the unit. Without this, Dust-to-Dust-removed
+            // units don't count toward GC's "kill 2 enemy units in battle" SBR
+            // because checkKillSpellbooks runs in EliminatePhase (after Dust to
+            // Dust) and by then the unit is gone from forces.
+            checkKillSpellbooks(attacker)
+            checkKillSpellbooks(defender)
+            // Remove from battle forces
             exempt(u)
-            // Permanently remove from game
+            // Permanently remove from game (the Dust to Dust effect — unit
+            // never returns to pool)
             self.units = self.units.%(_.ref != uRef)
             log(self.full, "permanently removed", u.uclass.styled(self), "from the game via", "Dust to Dust".styled("nt"))
-            dustToDustProcessed :+= uRef
             proceed()
 
         case QuachilDustToDustESAction(self, uRef, quOwner) =>
             val u = game.unit(uRef)
             quOwner.takeES(1)
-            log(quOwner.full, "gained", 1.es, "from", "Dust to Dust".styled("nt"), "(", u.uclass.styled(self), "killed)")
-            // Unit is still killed — exempt from forces and eliminate normally
-            exempt(u)
-            eliminate(u)
-            dustToDustProcessed :+= uRef
+            log(quOwner.full, "gained", 1.es, "from", "Dust to Dust".styled("nt"))
+            // Per-battle, not per-unit (user 2026-05-24): the ES choice means
+            // "don't remove any unit permanently"; all killed units stay in
+            // their normal killed state and will be eliminated by
+            // EliminatePhase (which also triggers checkKillSpellbooks).
             proceed()
 
         case DholePlanetaryDestructionDoomAction(self, owner) =>
@@ -1746,8 +1785,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case LaughingstockMoveAction(self, uRef) =>
             val u = game.unit(uRef)
             u.region = arena
-            log(self.full, "Laughingstock".styled("nt") + ": moved", AlbinoPenguins.styled(self), "to battle area")
-            if (sides.has(self)) {
+            // Tag the move with own-battle vs other-battle so stats can split.
+            val ownBattle = sides.has(self)
+            val tag = if (ownBattle) "own battle" else "other battle"
+            log(self.full, "Laughingstock".styled("nt") + ": moved", AlbinoPenguins.styled(self), "to battle area (" + tag + ")")
+            if (ownBattle) {
                 // Owner IS in battle — penguin stays with owner, loop back for more
                 jump(LaughingstockPhase)
             } else {
@@ -1811,7 +1853,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             if (rolls.num > sv.num)
                 log(f, "rolled", rolls.drop(sv.num).mkString(" "))
 
-            0.until(sv.num).foreach { i =>
+            // 2026-05-25 FIX: cap the Star Vampire Sapping loop at rolls.num so
+            // it never indexes past the rolls array. The faction can have more
+            // Star Vampires than dice rolled (negative effective strength due to
+            // Penguin Laughingstock / Servitor penalties → 0 dice rolled, but
+            // sv.num > 0). Previously: rolls(i) threw IndexOutOfBoundsException
+            // with message "0" — surfaced as `error=0` in GAME_ERROR lines.
+            0.until(sv.num.min(rolls.num)).foreach { i =>
                 log(StarVampire.styled(f), "rolled", rolls(i))
 
                 if (f.opponent.real)
@@ -1992,7 +2040,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val mySide = if (self == attacker) attackers else defenders
             mySide.str += combat
             mySide.cthughaCombatBonus = combat
-            log(self, "Cthugha".styled("nt") + ": combat =", combat, "(matching", goo.styled(enemy) + ")")
+            // Tag as "(chose)" so stats can distinguish choice-fired matches
+            // from auto-matches (single enemy GOO).
+            log(self, "Cthugha".styled("nt") + ": combat =", combat, "(matching", goo.styled(enemy) + ", chose)")
             jump(PreRoll)
 
         // DIRECTED ENERGY (DS alternate post-battle)
