@@ -2543,12 +2543,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 f.doom += valid.num
                 f.log("got", valid.num.doom)
 
-                // Log each gate whose doom was blocked by Abhoth's Filth so the
-                // suppression is auditable in the replay/stats parser.
-                gates.diff(valid).foreach { r =>
-                    f.log("doom from gate in", r, "blocked by", "Filth".styled("neutral"))
-                }
-
                 if (f.loyaltyCards.has(GnorriCard)) {
                     val gnorriCount = f.all(Gnorri).num
                     if (gnorriCount >= 3) {
@@ -3732,19 +3726,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 } else {
                     self.log("recruited", uc.styled(self), "in", r, "from", "Velvet Fan".styled("nt"), "— Bloated Woman out of play, no payment")
                 }
-            } else if (self.pool(uc).any) {
+            } else {
                 self.place(uc, r)
                 self.log("recruited", uc.styled(self), "in", r)
-            } else {
-                // 2026-05-25 INFINITE LOOP / "head of empty list" FIX: between the
-                // bot offering RecruitMainAction (when pool had `uc`) and this
-                // action executing, the pool may have been drained — e.g. OW
-                // promotion of the last pool Acolyte to Mutant after the recruit
-                // was scored. Without this guard `self.place` calls .first on an
-                // empty list and crashes the entire game. Refund the cost and
-                // bail rather than fail the sim.
-                self.power += cost
-                self.log("recruit of", uc.styled(self), "in", r, "skipped — pool empty")
             }
 
             if (uc === HighPriest) {

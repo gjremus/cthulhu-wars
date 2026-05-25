@@ -632,13 +632,7 @@ object DSExpansion extends Expansion {
         // COSMIC RULER: save a killed/eliminated Avatar by sacrificing another Avatar in its stead
         case CosmicRulerSacrificeAction(self, saved, sacrificed) =>
             self.log("used", CosmicRuler.styled(self), "eliminating", sacrificed, "to save", saved)
-            // Use battle.eliminate so the sacrificed Avatar is added to the
-            // `eliminated` list — that makes it available to opposing-side
-            // Velvet Fan capture per "killed or eliminated enemy" card rule.
-            game.battle match {
-                case Some(b) => b.eliminate(sacrificed)
-                case None    => game.eliminate(sacrificed)
-            }
+            game.eliminate(sacrificed)
             saved.health = Alive
             Force(BattleDoneAction(self))
 
