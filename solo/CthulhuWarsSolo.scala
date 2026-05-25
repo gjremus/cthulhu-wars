@@ -1187,6 +1187,16 @@ object CthulhuWarsSolo {
                     if (activeGlyphPlacer ne target) {
                         activeGlyphPlacer = target
                         glyphPosCache.clear()
+                        // Orientation change invalidates region geometry — bounds
+                        // and centroids were computed in the previous bitmap's
+                        // coord space. Without a reset, gate/unit positioning
+                        // pulls H-coords into V-renders (or vice versa) and
+                        // pieces appear in the wrong region.
+                        regionGeomComputed = false
+                        regionGeom.clear()
+                        regionArea.clear()
+                        regionCentroid.clear()
+                        regionUniformShrink.clear()
                     }
                 }
 

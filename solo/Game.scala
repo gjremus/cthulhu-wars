@@ -1995,6 +1995,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 f.doom += valid.num
                 f.log("got", valid.num.doom)
 
+                // Log each gate whose doom was blocked by Abhoth's Filth so the
+                // suppression is auditable in the replay/stats parser.
+                gates.diff(valid).foreach { r =>
+                    f.log("doom from gate in", r, "blocked by", "Filth".styled("neutral"))
+                }
+
                 if (f.loyaltyCards.has(GnorriCard)) {
                     val gnorriCount = f.all(Gnorri).num
                     if (gnorriCount >= 3) {
@@ -3010,10 +3016,21 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Ask(self).each(a ++ b)(r => RecruitAction(self, uc, r)).cancel
 
         case RecruitAction(self, uc, r) =>
-            self.power -= self.recruitCost(uc, r)
+            val cost = self.recruitCost(uc, r)
+            self.power -= cost
             self.payTax(r)
-            self.place(uc, r)
-            self.log("recruited", uc.styled(self), "in", r)
+            if (self.pool(uc).any) {
+                self.place(uc, r)
+                self.log("recruited", uc.styled(self), "in", r)
+            } else {
+                // 2026-05-25 "head of empty list" FIX (mirrored from MNU): between
+                // RecruitMainAction being offered (pool had `uc`) and this action
+                // firing, the pool may have been drained — e.g. OW promotion of the
+                // last pool Acolyte to Mutant after the recruit was scored. Refund
+                // the cost and skip rather than crash on `pool(uc).first`.
+                self.power += cost
+                self.log("recruit of", uc.styled(self), "in", r, "skipped — pool empty")
+            }
 
             if (uc === HighPriest) {
                 self.plans ++= $(
