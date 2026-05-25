@@ -1148,12 +1148,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             if (rolls.num > sv.num)
                 log(f, "rolled", rolls.drop(sv.num).mkString(" "))
 
-            // 2026-05-25 FIX (mirrored from MNU): cap the Star Vampire Sapping
-            // loop at rolls.num so it never indexes past the rolls array. The
-            // faction can have more Star Vampires than dice rolled (negative
-            // effective strength → 0 dice). Without this, rolls(i) threw
-            // IndexOutOfBoundsException ("0") and crashed the sim.
-            0.until(sv.num.min(rolls.num)).foreach { i =>
+            0.until(sv.num).foreach { i =>
                 log(StarVampire.styled(f), "rolled", rolls(i))
 
                 if (f.opponent.real)

@@ -596,13 +596,7 @@ object DSExpansion extends Expansion {
             // via Orifices), IGOOs.eliminate removes the UnitFigure from f.units, which
             // would make the post-eliminate `desc(sacrificed)` lookup fail with None.get.
             self.log("used", CosmicRuler.styled(self), "eliminating", sacrificed, "to save", saved)
-            // Use battle.eliminate so sacrificed Avatars are added to the
-            // `eliminated` list (consistent with MNU's Velvet Fan capture rule;
-            // benign in Library where BW does not exist).
-            game.battle match {
-                case Some(b) => b.eliminate(sacrificed)
-                case None    => game.eliminate(sacrificed)
-            }
+            game.eliminate(sacrificed)
             saved.health = Alive
             Force(BattleDoneAction(self))
 
