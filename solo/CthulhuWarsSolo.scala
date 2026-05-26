@@ -925,6 +925,7 @@ object CthulhuWarsSolo {
                         case AN => DrawRect("an-acolyte", None, x - 17, y - 54, 39, 60)
                         // Tombstalker (TS): acolyte unit sprite
                         case TS => DrawRect("ts-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        case TT => DrawRect("tt-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Firstborn (FB): acolyte unit sprite
                         case FB => DrawRect("fb-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Daemon Sultan (DS): acolyte unit sprite
@@ -956,6 +957,7 @@ object CthulhuWarsSolo {
                         case DS => DrawRect("ds-high-priest", None, x - 35, y - 60, 70, 66)
                         // Tombstalker (TS): high priest unit sprite
                         case TS => DrawRect("ts-high-priest", |(tint), x - 35, y - 60, 70, 66)
+                        case TT => DrawRect("tt-high-priest", |(tint), x - 35, y - 60, 70, 66)
                         case _ => DrawRect("gc-high-priest", |(tint), x - 35, y - 60, 70, 66)
                     }
 
@@ -976,6 +978,8 @@ object CthulhuWarsSolo {
                         case FB => DrawRect("fb-glyph", None, x - 50, y - 50, 100, 100)
                         // Daemon Sultan (DS): faction glyph sprite
                         case DS => DrawRect("ds-glyph", None, x - 50, y - 50, 100, 100)
+                        // Tcho-Tcho (TT): faction glyph sprite (placeholder: n-star-vampire)
+                        case TT => DrawRect("tt-glyph", |(tint), x - 50, y - 50, 100, 100)
                         case _ => null
                     }
 
@@ -1037,6 +1041,10 @@ object CthulhuWarsSolo {
                     case AvatarThesis     => DrawRect("ds-avatar-thesis", None, x - 67, y - 74, 133, 87)
                     case AvatarAntithesis => DrawRect("ds-avatar-antithesis", None, x - 70, y - 89, 139, 104)
                     case AvatarSynthesis  => DrawRect("ds-avatar-synthesis", None, x - 70, y - 170, 141, 187, rotation = 10.0)
+
+                    // Tcho-Tcho (TT): unit sprites (placeholder: n-star-vampire for all)
+                    case ProtoShoggoth   => DrawRect("tt-proto-shoggoth", |(tint), x - 30, y - 75, 60, 85)
+                    case UbboSathla      => DrawRect("tt-ubbo-sathla",    |(tint), x - 48, y - 160, 96, 176)
 
                     case DesecrationToken => DrawRect("ys-desecration", None, x - 20, y - 20, 41, 40)
                     case WebToken         => DrawRect("web-token", |(tint), x - 31, y - 30, 62, 60)
@@ -1142,6 +1150,7 @@ object CthulhuWarsSolo {
                     case StartingGlyph if faction == TS => DrawRect("ts-glyph", None, x - 33, y - 33, 66, 66)
                     case StartingGlyph if faction == AN => DrawRect("an-glyph", None, x - 33, y - 33, 66, 66)
                     case StartingGlyph if faction == OW => DrawRect("ow-glyph", None, x - 33, y - 33, 66, 66, alpha = 0.55)
+                    case StartingGlyph if faction == TT => DrawRect("tt-glyph", None, x - 33, y - 33, 66, 66)
 
                     // Library map units — larger than monsters, smaller than GOOs
                     case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 52, y - 104, 104, 104)
@@ -2279,8 +2288,11 @@ object CthulhuWarsSolo {
                 // renders when discount > 0 (i.e. during an active IP session).
                 val fbIPDiscStr = (f == FB && game.fbInfernalPactDiscount > 0).?(" | " + (game.fbInfernalPactDiscount.toString + " IP Disc").styled(FB)).|("")
                 val fbIPDiscSStr = (f == FB && game.fbInfernalPactDiscount > 0).?(" " + (game.fbInfernalPactDiscount.toString + "IP").styled(FB)).|("")
-                val power = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr)
-                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr)
+                // Tcho-Tcho (TT): append Growth counter to faction status panel
+                val ttGrowthStr  = (f == TT).?(" | " + ("Growth " + game.ubboGrowth.toString).styled(TT)).|("")
+                val ttGrowthSStr = (f == TT).?(" " + ("G" + game.ubboGrowth.toString).styled(TT)).|("")
+                val power = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr)
+                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr)
                 // Firstborn (FB): read Infernal Pact discount and stored Augury kills for the faction panel display
                 val fbIPDiscount = if (f == FB) game.fbInfernalPactDiscount else 0
                 val fbAugury = if (f == FB) game.fbAuguryKills else 0
@@ -4196,7 +4208,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         }
 
         // Tombstalker (TS), Firstborn (FB), and Daemon Sultan (DS): included in the master faction list for game setup and replay parsing
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS)
+        // Tombstalker (TS), Firstborn (FB), Daemon Sultan (DS), Tcho-Tcho (TT): included in the master faction list
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT)
 
         // [2026-05-23] MNU alt faction picker. Replaces the combinations dropdown
         // for users who want to: (a) lock specific factions onto specific player

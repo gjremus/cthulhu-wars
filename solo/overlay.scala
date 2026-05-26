@@ -799,6 +799,46 @@ object Overlays {
         case $("FB", CallOfTheFaithful.name) => spellbook("Call of the Faithful", "Unlimited Action: Cost 0", "Place an Acolyte from your Pool in an Area with Ghatanothoa and/or a Revenant. You may not use this ability in an Area containing one of your Acolytes.")
 
 
+        // Tcho-Tcho (TT): faction info card
+        case $("TT") => faction(TT, "info:tt-background", Sycophancy, "Ongoing",
+            "When another faction performs a Ritual of Annihilation OR reaches 15 Doom, TT gains a free spellbook. Choose your Tribe secretly at setup (Leng, Sarkomand, or Tsang) to unlock 3 exclusive spellbooks.",
+            $(), $(
+            (Acolyte,       6, "1", "0",  s""""""),
+            (HighPriest,    0, "3", "0",  s"""<div class=p>Sacrifice to gain 2 Power (Unspeakable Oath) at any time.</div>"""),
+            (ProtoShoggoth, 3, "3", "3",  s"""<div class=p>Terror unit. Modifies battle via Terror ability.</div>"""),
+            (UbboSathla,    1, "8", "?",  s"""<div class=p>Combat equals the Growth counter value. Growth starts at 1 and increases via Hell's Banquet (Doom Phase d6 roll: 4+ = +1 Growth).</div>""")
+        ))
+
+        // Tcho-Tcho (TT): spellbook requirement info card overlays
+        case $("TT", TTSycophancyTrigger.text)    => requirement("Another faction performs a Ritual of Annihilation OR reaches 15 Doom.")
+        case $("TT", TTEarnElderSign.text)         => requirement("Earn an Elder Sign.")
+        case $("TT", TTThreeElderSigns.text)       => requirement("Own 3 or more Elder Signs.")
+        case $("TT", TTRemoveControlledGate.text)  => requirement("Remove a Gate you control in your Start Area.")
+        case $("TT", TTGOOKilledInBattle.text)     => requirement("Any GOO is Killed in Battle.")
+        case $("TT", TTAwakenUbboSathla.text)      => requirement("Awaken Ubbo-Sathla.")
+
+        // Tcho-Tcho (TT): faction ability and shared spellbook info overlays
+        case $("TT", Sycophancy.name) => spellbook(Sycophancy.name, "Ongoing (Faction Ability)", "Whenever another faction performs a Ritual of Annihilation OR reaches 15 Doom, TT immediately earns a free spellbook requirement check.")
+        case $("TT", Hierophants.name) => spellbook(Hierophants.name, "Ongoing", "Your High Priests count as 2 Cultists for purposes of Gate control and combat support.")
+        case $("TT", Soulless.name) => spellbook(Soulless.name, "Ongoing", "Your Acolytes cannot be targeted by enemy abilities that specifically target Cultists.")
+        case $("TT", TerrorSB.name) => spellbook(TerrorSB.name, "Post-Battle", "After any Battle you were in, any enemy units Pained must retreat to your choice of adjacent area.")
+
+        // Tcho-Tcho (TT): Tsang exclusive spellbooks
+        case $("TT", Idolatry.name) => spellbook(Idolatry.name, "Unlimited Action: Cost 0", "Place one Acolyte from your Pool at any Gate you control.")
+        case $("TT", Martyrdom.name) => spellbook(Martyrdom.name, "Action: Cost 0", "Sacrifice one of your Cultists on the map. Ubbo-Sathla's Growth counter increases by 1.")
+        case $("TT", TabletsOfTheGods.name) => spellbook(TabletsOfTheGods.name, "Doom Phase", "Gain 1 Doom for every 2 Gates you control.")
+
+        // Tcho-Tcho (TT): Leng exclusive spellbooks
+        case $("TT", DarkRituals.name) => spellbook(DarkRituals.name, "Action: Cost 0", "Gain 2 Power. This spellbook flips face-down after use and flips face-up again at the start of each Doom Phase.")
+        case $("TT", Fulmination.name) => spellbook(Fulmination.name, "Ongoing", "After any Battle you were in, gain 1 Doom for each enemy unit Killed in that Battle.")
+        case $("TT", SurpriseSB.name) => spellbook(SurpriseSB.name, "Action: Cost 0", "Move one of your units to an adjacent area before declaring a Battle in that area.")
+
+        // Tcho-Tcho (TT): Sarkomand exclusive spellbooks
+        case $("TT", Doomsday.name) => spellbook(Doomsday.name, "Action: Cost 0", "Gain 1 Power for each faction you lead in Doom.")
+        case $("TT", Inerrant.name) => spellbook(Inerrant.name, "Post-Battle", "After Pains and Kills are resolved in a Battle you were in, you may reroll all your blank dice once.")
+        case $("TT", OtherworldAlliances.name) => spellbook(OtherworldAlliances.name, "Action", "Recruit one Neutral Monster at a cost of 1 Power less than its normal cost (minimum 1).")
+
+
         // Tombstalker (TS): Cursed Tomes overlay for TS's own card — shows all 11 tomes (white=remaining, grey=given away)
         case $("cursed-tomes", fStyle) if fStyle.toString == "ts" =>
             val givenAway = TSCursedTomesOverlay.tomesOnCard

@@ -1294,6 +1294,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case FB => $(FBExpansion)
             // Daemon Sultan (DS): register DS expansion handler
             case DS => $(DSExpansion)
+            // Tcho-Tcho (TT): register TT expansion handler
+            case TT => $(TTExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any).$(NeutralMonstersExpansion) ++
@@ -1343,6 +1345,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     // Solution for keeping track of use cases for dematerialization, for the AN bot.
     var demCaseMap : Map[Region, Int] = areas.map(r => r -> 0).toMap
+
+    // Tcho-Tcho (TT) state: tribe selection and Ubbo-Sathla Growth counter
+    var ttTribe : TTTribe = TribeLeng  // default; overwritten by TTChooseTribeAction
+    var ubboGrowth : Int = 1           // Ubbo-Sathla's combat value; starts at 1, grows via Hell's Banquet
+    var ttHellsBanquetDone : Boolean = false  // sentinel: prevents Hell's Banquet re-firing when DoomAction re-entered after roll
+    var ttTribeChosen : Boolean = false        // sentinel: tribe selection asked once on first DoomAction
 
     // Tombstalker (TS) state: Death's Head counter, Cursed Tome stack index, and per-faction tome ownership
     var deathsHead : Int = 0
