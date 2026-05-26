@@ -4207,8 +4207,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             askTop()
         }
 
-        // Tombstalker (TS), Firstborn (FB), and Daemon Sultan (DS): included in the master faction list for game setup and replay parsing
-        // Tombstalker (TS), Firstborn (FB), Daemon Sultan (DS), Tcho-Tcho (TT): included in the master faction list
+        // Master faction list — drives allFactions picker, replay parsing, and expansion dispatch order.
+        // Canonical order: GC, CC, BG, YS, SL, WW, OW, AN (core) → TS, FB, DS (expansions) → TT (Tcho-Tcho, last).
+        // TT goes after DS. Do not reorder — expansion dispatch iterates this list and first-match wins.
         val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT)
 
         // [2026-05-23] MNU alt faction picker. Replaces the combinations dropdown
