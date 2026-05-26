@@ -906,6 +906,8 @@ object CthulhuWarsSolo {
                     case FB => Processing(|("#CB307E"), |("#333333"), None)
                     // Daemon Sultan (DS): faction color
                     case DS => Processing(|("#3A2825"), None, |("#120E0C"))
+                    // Tcho-Tcho (TT): dominant pink from faction glyph
+                    case TT => Processing(|("#fc9ca0"), |("#333333"), None)
                     // Library map units: no tint (use original icon images)
                     case LibraryFaction => defaultProcessing
                     case _  => defaultProcessing
