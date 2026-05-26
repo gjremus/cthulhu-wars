@@ -75,7 +75,7 @@ object Host {
 
     def main(args : Array[String]) {
         // Tombstalker (TS), Firstborn (FB), and Daemon Sultan (DS): included in the master faction list for headless simulation runs
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB)
 
         val numberOfPlayers = 4
 

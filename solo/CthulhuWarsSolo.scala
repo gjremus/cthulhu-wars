@@ -4207,10 +4207,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             askTop()
         }
 
-        // Master faction list — drives allFactions picker, replay parsing, and expansion dispatch order.
-        // Canonical order: GC, CC, BG, YS, SL, WW, OW, AN (core) → TS, FB, DS (expansions) → TT (Tcho-Tcho, last).
-        // TT goes after DS. Do not reorder — expansion dispatch iterates this list and first-match wins.
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT)
+        // Master faction list — drives existing faction picker, replay parsing, and expansion dispatch order.
+        // Order: GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB)
+
+        // Alt picker display order (may differ from allFactions).
+        // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB (not yet built), TS, FB
+        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, TS, FB)
 
         // [2026-05-23] MNU alt faction picker. Replaces the combinations dropdown
         // for users who want to: (a) lock specific factions onto specific player
@@ -4237,7 +4240,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             val playerNames = scala.collection.mutable.ArrayBuffer.fill(pn)("")
             for (i <- 0 until pn) playerNames(i) = "Player " + (i + 1)
             val enabledFactions = scala.collection.mutable.ArrayBuffer.fill(pn)(scala.collection.mutable.Set[Faction]())
-            for (i <- 0 until pn) allFactions.foreach(f => enabledFactions(i) += f)
+            for (i <- 0 until pn) altPickerFactions.foreach(f => enabledFactions(i) += f)
             var randomizeOrder = false
 
             // [2026-05-23] Per user: HIDE the other screen sections (map halves,
@@ -4408,7 +4411,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     allLbl.style.cssText = "display:inline-flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5pt;color:#8c95a0;"
                     val allCb = dom.document.createElement("input").asInstanceOf[html.Input]
                     allCb.`type` = "checkbox"
-                    val unlockableForThisPlayer = allFactions.filter(f => !lockedFactions.contains(f) || locked(f) == i)
+                    val unlockableForThisPlayer = altPickerFactions.filter(f => !lockedFactions.contains(f) || locked(f) == i)
                     allCb.checked = unlockableForThisPlayer.forall(enabledFactions(i).contains)
                     allCb.style.cssText = "margin:0;cursor:pointer;"
                     allLbl.appendChild(newDiv("", "All"))
@@ -4416,7 +4419,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     cbWrap.appendChild(allLbl)
 
                     val factionCbs = scala.collection.mutable.ArrayBuffer[(Faction, html.Input)]()
-                    allFactions.foreach { f =>
+                    altPickerFactions.foreach { f =>
                         val lockedElsewhere = lockedFactions.contains(f) && locked(f) != i
                         val lbl = dom.document.createElement("label").asInstanceOf[html.Label]
                         lbl.style.cssText =
@@ -4446,7 +4449,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     }
                     allCb.onchange = (_) => {
                         // [2026-05-23] All-toggle has clean semantics now:
-                        //   ON  → enabledFactions(i) = allFactions minus those
+                        //   ON  → enabledFactions(i) = altPickerFactions minus those
                         //         locked to OTHER players (their lock wins).
                         //   OFF → enabledFactions(i) = empty.
                         // Never touches any other player's set. The locked-
@@ -4454,7 +4457,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         // B cannot dislodge player A's single-faction lock.
                         enabledFactions(i).clear()
                         if (allCb.checked) {
-                            allFactions.foreach { f =>
+                            altPickerFactions.foreach { f =>
                                 if (!lockedFactions.contains(f) || locked(f) == i)
                                     enabledFactions(i) += f
                             }
