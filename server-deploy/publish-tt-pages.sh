@@ -11,7 +11,7 @@
 set -euo pipefail
 
 TT_ROOT="/Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth"
-PAT_FILE="${HOME}/.config/cwo/github-pat"
+PAT_FILE="/Users/gremus/Google Drive/My Drive/Personal/Games/Cthulhu Wars/github-pat"
 FORK_URL="https://$(cat "$PAT_FILE")@github.com/gjremus/cthulhu-wars.git"
 TMP_DIR="/tmp/cw-tt-pages-publish"
 CACHE_TAG="$(date +%Y%m%d-%H%M%S)"
