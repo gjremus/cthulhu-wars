@@ -225,7 +225,7 @@ object CthulhuWarsSolo {
             case _ =>
                 val path = dom.window.location.pathname
 
-                if (path.startsWith("/play/quick") || path.startsWith("/mnu/play/quick"))
+                if (path.startsWith("/play/quick") || path.startsWith("/mnu/play/quick") || path.startsWith("/TchoTcho/play/quick"))
                     ("", true)
                 else
                 if (path.startsWith("/play/"))
@@ -233,6 +233,9 @@ object CthulhuWarsSolo {
                 else
                 if (path.startsWith("/mnu/play/"))
                     (path.drop("/mnu/play/".length), false)
+                else
+                if (path.startsWith("/TchoTcho/play/"))
+                    (path.drop("/TchoTcho/play/".length), false)
                 else
                     ("", false)
         }
