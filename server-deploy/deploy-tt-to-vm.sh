@@ -53,8 +53,10 @@ echo "==> [stage] cache tag = $CACHE_TAG"
 
 TMP_INDEX="$(mktemp -t tt-index.XXXXXX).html"
 cp "$TT_ROOT/solo/index.html" "$TMP_INDEX"
+# data-server points to root so API calls go to the existing akka-http root routes.
+# data-online stays "true" so online play is enabled on the VM build.
 sed -i '' \
-    -e 's|###SERVER-URL###|https://cwo.freeddns.org/TchoTcho/|g' \
+    -e 's|###SERVER-URL###|https://cwo.freeddns.org/|g' \
     -e "s|main\\.js?v=[A-Za-z0-9-]*|main.js?v=$CACHE_TAG|g" \
     "$TMP_INDEX"
 
