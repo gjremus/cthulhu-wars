@@ -169,7 +169,7 @@ class Serialize(val game : Game) {
 }
 
 object Serialize {
-    val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS) ++ $(NeutralAbhoth, LibraryFaction)
+    val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT) ++ $(NeutralAbhoth, LibraryFaction)
 
     val loyaltyCards = $(GhastCard, GugCard, ShantakCard, StarVampireCard, VoonithCard, DimensionalShamblerCard, HighPriestCard, ByatisCard, AbhothCard, DaolothCard, NyogthaCard, TulzschaCard, GnorriCard, YgolonacCard)
 

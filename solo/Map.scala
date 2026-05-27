@@ -76,8 +76,8 @@ object EarthMap3 extends Board {
         case FB => regions
         // Daemon Sultan (DS): no starting area restrictions
         case DS => $()
-        // Tcho-Tcho (TT): can start in any non-ocean area (flexible, tribe-independent)
-        case TT => regions.%(_.glyph != Ocean)
+        // Tcho-Tcho (TT): can start in any unoccupied area containing a core faction glyph (BG/CC/GC/YS/SL/WW areas)
+        case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -180,8 +180,8 @@ object EarthMap4v35 extends Board {
         case FB => regions
         // Daemon Sultan (DS): no starting area restrictions
         case DS => $()
-        // Tcho-Tcho (TT): any non-ocean region
-        case TT => regions.%(_.glyph != Ocean)
+        // Tcho-Tcho (TT): can start in any unoccupied area containing a core faction glyph (BG/CC/GC/YS/SL/WW areas)
+        case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -288,8 +288,8 @@ object EarthMap4v53 extends Board {
         case FB => regions
         // Daemon Sultan (DS): no starting area restrictions
         case DS => $()
-        // Tcho-Tcho (TT): any non-ocean region
-        case TT => regions.%(_.glyph != Ocean)
+        // Tcho-Tcho (TT): can start in any unoccupied area containing a core faction glyph (BG/CC/GC/YS/SL/WW areas)
+        case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -404,8 +404,8 @@ object EarthMap5 extends Board {
         case FB => regions
         // Daemon Sultan (DS): no starting area restrictions
         case DS => $()
-        // Tcho-Tcho (TT): any non-ocean region
-        case TT => regions.%(_.glyph != Ocean)
+        // Tcho-Tcho (TT): can start in any unoccupied area containing a core faction glyph (BG/CC/GC/YS/SL/WW areas)
+        case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -530,8 +530,8 @@ object EarthMap6 extends Board {
         case FB => regions
         // Daemon Sultan (DS): no starting area restrictions
         case DS => $()
-        // Tcho-Tcho (TT): any non-ocean region
-        case TT => regions.%(_.glyph != Ocean)
+        // Tcho-Tcho (TT): can start in any unoccupied area containing a core faction glyph (BG/CC/GC/YS/SL/WW areas)
+        case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -778,8 +778,8 @@ object LibraryCelaeno55 extends Board {
         case TS => nonFactionRegions.%(_.glyph == Ocean)
         case FB => regions.diff(tomeRegions)
         case DS => $()
-        // Tcho-Tcho (TT): any non-ocean region
-        case TT => regions.%(_.glyph != Ocean)
+        // Tcho-Tcho (TT): can start in any unoccupied area containing a core faction glyph (BG/CC/GC/YS/SL/WW areas)
+        case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -887,7 +887,7 @@ object LibraryCelaeno33 extends Board {
         case GC => $(Hyperquarium); case CC => $(BlueHall); case BG => $(Fountain); case YS => $(FloatingTower)
         case SL => $(ChamberOfSngac); case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case TT => regions.%(_.glyph != Ocean)
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
         case _ => regions
     }
 
@@ -964,7 +964,7 @@ object LibraryCelaeno53 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case TT => regions.%(_.glyph != Ocean)
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
         case _ => regions
     }
 
@@ -1062,7 +1062,7 @@ object LibraryCelaeno35 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case TT => regions.%(_.glyph != Ocean)
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
         case _ => regions
     }
 

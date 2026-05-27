@@ -174,7 +174,7 @@ case class BattleProceedAction(next : BattlePhase) extends ForcedAction
 
 case class BattleRollAction(f : Faction, rolls : $[BattleRoll], next : BattlePhase) extends ForcedAction
 
-case class AssignKillAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Kill" + (count > 1).??("s")).styled("kill"), ur.full)
+case class AssignKillAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Kill" + (count > 1).??("s")).styled("kill"), implicit g => g.unit(ur).full + (ur.faction == TT && ur.uclass == HighPriest && TT.can(Martyrdom)).??(" — all other kills to Pains with " + Martyrdom.styled(TT)))
 case class AssignPainAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Pain" + (count > 1).??("s")).styled("pain"), ur.full)
 
 case class RetreatOrderAction(self : Faction, a : Faction, b : Faction) extends BaseFactionAction("Retreat order", "" + a + " then " + b)
@@ -496,6 +496,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s.forces(RhanTegoth).any && s.forces(RhanTegoth).exists(u => ElderThingMindControl.suppresses(u)))
             log(s, "Eternal".styled("nt"), "blocked by", "Elder Thing".styled("nt"))
 
+        // TT Terror: if TT has Proto-Shoggoths in battle and has Terror spellbook, offer pre-battle choice
+        if (s == TT && s.can(TerrorSB) && !s.tag(TTReduceEnemyCombat) && !s.tag(TTBoostOwnCombat) && s.forces(ProtoShoggoth).any)
+            options :+= TTTerrorPreBattleAction(TT)
+
         Ask(s).list(options).add(PreBattleDoneAction(s, next))
     }
 
@@ -563,6 +567,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         if (s.can(UnholyGround))
             s.add(UnholyGround)
+
+        // TT Terror: apply Proto-Shoggoth combat modifier
+        val ttSide = if (attacker == TT) attackers else if (defender == TT) defenders else null
+        val ttOppSide = if (attacker == TT) defenders else if (defender == TT) attackers else null
+        if (ttSide != null) {
+            val n = ttSide.forces(ProtoShoggoth).not(Zeroed).num
+            if (ttSide.tag(TTBoostOwnCombat) && s == TT)
+                s.str = s.str + n
+            if (ttSide.tag(TTReduceEnemyCombat) && s != TT && ttOppSide != null)
+                s.str = math.max(0, s.str - n)
+        }
     }
 
     def postroll(s : Faction) {
@@ -1507,6 +1522,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // TT Fulmination: if Ubbo was killed this battle and TT has Fulmination, offer permanent removal
+                // Fire here (after all kills/pains assigned) so totalKills is the final count
+                if (TTExpansion.ttFulminationPending) {
+                    TTExpansion.ttFulminationPending = false
+                    val totalKills = sides./~(_.forces).count(_.health == Killed)
+                    return DelayedContinue(50, Ask(TT)
+                        .add(TTFulminationTakeAction(TT, totalKills))
+                        .add(TTFulminationDeclineAction(TT)))
+                }
+
                 jump(BattleEnd)
 
             case BattleEnd =>
@@ -1836,6 +1861,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // ASSIGN
         case AssignKillAction(_, _, _, u) =>
             assignKill(u)
+            // TT Martyrdom: if TT's High Priest is killed, convert all kills on TT's other units to pains
+            if (u.faction == TT && u.uclass == HighPriest && (u : UnitFigure).health == Killed && TT.can(Martyrdom)) {
+                val ttSide = if (attacker == TT) attackers else defenders
+                ttSide.forces.%(u2 => u2.ref != u && u2.health == Killed).foreach { u2 =>
+                    u2.health = Pained
+                    log(Martyrdom.styled(TT) + ": kill on", u2.uclass.styled(TT), "converted to Pain")
+                }
+            }
+            // TT Fulmination: if Ubbo-Sathla is killed, set pending flag — prompt fires at PostBattlePhase
+            // so totalKills includes all kills assigned this battle, not just those assigned before Ubbo
+            if (u.faction == TT && u.uclass == UbboSathla && (u : UnitFigure).health == Killed && TT.can(Fulmination) && !TTExpansion.ttUbboFulminated) {
+                TTExpansion.ttFulminationPending = true
+            }
             proceed()
 
         case AssignPainAction(_, _, _, u) =>
@@ -2264,6 +2302,42 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // handles the actual chain (FBCyclopeanGazePhaseAction etc.); we just resume battle
         // flow when the marker FBCyclopeanGazeBattleDoneAction fires at the end of the chain.
         case FBCyclopeanGazeBattleDoneAction(self) =>
+            proceed()
+
+        // TT TERROR: pre-battle choice — reduce enemy OR boost own combat (1 per Proto-Shoggoth)
+        case TTTerrorPreBattleAction(self) =>
+            val n = (self : Side).forces(ProtoShoggoth).not(Zeroed).num
+            Ask(self)
+                .add(TTTerrorReduceEnemyAction(self, n))
+                .add(TTTerrorBoostOwnAction(self, n))
+
+        case TTTerrorReduceEnemyAction(self, n) =>
+            (self : Side).add(TTReduceEnemyCombat)
+            self.log(TerrorSB.styled(TT), ": will reduce enemy combat by", n)
+            proceed()
+
+        case TTTerrorBoostOwnAction(self, n) =>
+            (self : Side).add(TTBoostOwnCombat)
+            self.log(TerrorSB.styled(TT), ": will boost own combat by", n)
+            proceed()
+
+        // TT FULMINATION: offer when Ubbo-Sathla is assigned a Kill in battle
+        case TTFulminationOfferAction(self, totalKills) =>
+            Ask(self)
+                .add(TTFulminationTakeAction(self, totalKills))
+                .add(TTFulminationDeclineAction(self))
+
+        case TTFulminationTakeAction(self, totalKills) =>
+            TTExpansion.ttUbboFulminated = true
+            game.factions.%(f => f == self).foreach { f =>
+                f.units = f.units.%(u => u.uclass != UbboSathla)
+            }
+            self.takeES(totalKills)
+            self.log(Fulmination.styled(TT), ": removed", UbboSathla.styled(TT), "permanently for", totalKills.es)
+            proceed()
+
+        case TTFulminationDeclineAction(self) =>
+            self.log(Fulmination.styled(TT), ": declined")
             proceed()
 
     }

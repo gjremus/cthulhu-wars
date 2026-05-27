@@ -1211,8 +1211,19 @@ case class AbandonGateAction(self : Faction, r : Region, then : ForcedAction) ex
 case class RitualAction(self : Faction, cost : Int, k : Int) extends OptionFactionAction(implicit g => {
     val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, cost) else 0
     val effectiveCost = cost - ipDiscount
-    "Perform " + "Ritual of Annihilation".styled("doom") + " for " + effectiveCost.power +
+    val base = "Perform " + "Ritual of Annihilation".styled("doom") + " for " + effectiveCost.power +
         (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")")
+    // TT Tablets of the Gods: show bonus ES count and HP elimination warning
+    val tabletsExtra = (self == TT && self.can(TabletsOfTheGods)).??{
+        val bonus = self.gates.count(r => self.at(r, HighPriest).any)
+        " — " + TabletsOfTheGods.styled(TT) + ": +" + bonus.es + ", eliminate all " + HighPriest.styled(TT)
+    }
+    // TT Inerrant: show bonus ES count
+    val inerrantExtra = (self == TT && self.can(Inerrant)).??{
+        val bonus = g.board.regions.count(r => self.at(r).goos.any && g.factions.but(TT).exists(e => e.gates.has(r)))
+        " — " + Inerrant.styled(TT) + ": +" + bonus.es
+    }
+    base + tabletsExtra + inerrantExtra
 }) with DoomQuestion
 
 case class RevealESMainAction(self : Faction, then : ForcedAction) extends BaseFactionAction("", "View " + "Elder Signs".styled("es")) with Soft with PowerNeutral
@@ -1348,7 +1359,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     // Tcho-Tcho (TT) state: tribe selection and Ubbo-Sathla Growth counter
     var ttTribe : TTTribe = TribeLeng  // default; overwritten by TTChooseTribeAction
-    var ubboGrowth : Int = 1           // Ubbo-Sathla's combat value; starts at 1, grows via Hell's Banquet
+    var ubboGrowth : Int = 0           // Ubbo-Sathla's combat value; starts at 0, grows via Hell's Banquet
     var ttHellsBanquetDone : Boolean = false  // sentinel: prevents Hell's Banquet re-firing when DoomAction re-entered after roll
     var ttTribeChosen : Boolean = false        // sentinel: tribe selection asked once on first DoomAction
 
@@ -2207,7 +2218,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 setup.foreach { f =>
                     f.loyaltyCards = f.loyaltyCards :+ HighPriestCard
 
-                    f.units :+= new UnitFigure(f, HighPriest, 1, f.reserve)
+                    // TT: pool is always 3 HPs regardless of expansion — HP already in allUnits
+                    if (f != TT)
+                        f.units :+= new UnitFigure(f, HighPriest, 1, f.reserve)
                 }
             }
 
@@ -2240,7 +2253,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case StartingRegionAction(f, r) =>
             starting += f -> r
 
-            1.to(6).foreach(_ => f.place(Acolyte, r))
+            // TT with HP expansion: 5 Acolytes + 1 High Priest. All others: 6 Acolytes.
+            if (f == TT && options.has(HighPriests)) {
+                1.to(5).foreach(_ => f.place(Acolyte, r))
+                f.place(HighPriest, r)
+            } else {
+                1.to(6).foreach(_ => f.place(Acolyte, r))
+            }
             f.at(r).one(Acolyte).onGate = true
 
             // Temp starting setup (for debug)
@@ -2322,7 +2341,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val glaakiIGOOGreenDecayCultists = if (f.can(GlaakiGreenDecay) && f.has(GlaakiIGOO))
                     factions./~(w => w.at(f.prison)).%(_.cultist).num
                 else 0
-                val captured = allCaptured - greenDecayCultists - glaakiIGOOGreenDecayCultists
+                // TT Soulless: TT's captured cultists provide 0 Power to their captors
+                val soullessCultists = if (factions.has(TT) && TT.can(Soulless))
+                    factions./~(w => w.at(f.prison)).%(u => u.faction == TT && u.cultist).num
+                else 0
+                val captured = allCaptured - greenDecayCultists - glaakiIGOOGreenDecayCultists - soullessCultists
                 // Disaster Looms (Bloated Woman spellbook): Gates earn 1 ES instead of 2 Power
                 val disasterLooms = f.can(DisasterLooms)
                 val yogGateSuppressed = f.unitGate.any && f.unitGate.exists(u => ElderThingMindControl.suppresses(u))
@@ -2736,6 +2759,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     case _ => sb
                 }}
                 var bs = (effectiveLibrary.%!(f.has) ++ neutralSpellbooks).diff(f.ignorePerInstant)
+                // TT tribe spellbook filtering: only offer the 6 active library books (3 shared + 3 tribal)
+                if (f == TT && TTExpansion.ttActiveLibrary.any)
+                    bs = bs.%(b => TTExpansion.ttActiveLibrary.has(b) || neutralSpellbooks.has(b))
                 Ask(f).each(bs)(b => SpellbookAction(f, b, next))
             }
             else
@@ -2767,6 +2793,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 factions.foreach(_.satisfy(AnotherFactionAllSpellbooks, "Another faction has all spellbooks"))
 
             f.ignorePerInstant = $
+
+            // TT Hierophants: when TT earns a Faction Spellbook, place HP at gate or grow counter
+            if (f == TT && f.has(Hierophants) && sb.isInstanceOf[FactionSpellbook]) {
+                val sbNext = CheckSpellbooksAction(next)
+                // If Hierophants was just earned and HP expansion active, also prompt all other factions first
+                if (sb == Hierophants && options.has(HighPriests)) {
+                    val others = factions.but(TT).%(_.pool(HighPriest).any)
+                    if (others.any)
+                        return Force(TTHierophantsOtherFactionsAction(f, others, sbNext))
+                }
+                return Force(TTHierophantsPlaceHPAction(f, f.gates, sbNext))
+            }
 
             CheckSpellbooksAction(next)
 
@@ -2913,12 +2951,44 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             val es = f.goos.factionGOOs.num + f.can(Consecration).??($(0, 1, 1, 1, 2)(cathedrals.num))
 
+            // TT Sycophancy: when an ENEMY performs a ritual, pause before doom resolves and prompt the ritualer
+            if (factions.has(TT) && f != TT && TT.has(Sycophancy)) {
+                // power already deducted above; doom/es not yet applied — pass them to the prompt continuation
+                return Force(TTSycophancyPromptAction(f, doom, es))
+            }
+
+            Force(TTSycophancyResumeRitualAction(f, doom, es))
+
+        // TT Sycophancy resume point — shared by normal ritual and Sycophancy-adjusted doom values
+        case TTSycophancyResumeRitualAction(f, doom, es) =>
             f.doom += doom
 
             log(CthulhuWarsSolo.DottedLine)
-            f.log("performed the ritual", "for", cost.power, "and gained", doom.doom, (es > 0).??("and " + es.es))
+            f.log("performed the ritual and gained", doom.doom, (es > 0).??("and " + es.es))
 
             f.takeES(es)
+
+            // TT Tablets of the Gods: when TT rituals, gain bonus ES (1 per gate with any HP), then eliminate all HPs
+            if (factions.has(TT) && f == TT && f.can(TabletsOfTheGods)) {
+                val tabletsBonus = f.gates.count(r => f.at(r, HighPriest).any)
+                if (tabletsBonus > 0) {
+                    f.takeES(tabletsBonus)
+                    f.log(TabletsOfTheGods.styled(TT), ": gained", tabletsBonus.es, "bonus (HP at gates)")
+                }
+                f.all(HighPriest).onMap.foreach(eliminate)
+                f.log(TabletsOfTheGods.styled(TT), ": eliminated all High Priests")
+            }
+
+            // TT Inerrant: when TT rituals, gain bonus ES (1 per enemy-controlled gate where TT has a GOO)
+            if (factions.has(TT) && f == TT && f.can(Inerrant)) {
+                val inerrantBonus = areas.count(r =>
+                    f.enemies.exists(e => e.gates.has(r)) && f.at(r).goos.any
+                )
+                if (inerrantBonus > 0) {
+                    f.takeES(inerrantBonus)
+                    f.log(Inerrant.styled(TT), ": gained", inerrantBonus.es, "bonus (GOOs at enemy gates)")
+                }
+            }
 
             f.acted = true
 
@@ -2934,7 +3004,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             f.satisfy(PerformRitual, "Perform Ritual of Annihilation")
 
-            // Tombstalker (TS) Cursed Tomes: faction may remove one face-down tome after performing a ritual (TS exempt)
             val faceDownTomes = if (f == TS) Nil else cursedTomesOwned.get(f).|(Nil).filter { case (_, fd) => fd }
             if (faceDownTomes.any) {
                 implicit val asking = Asking(f)

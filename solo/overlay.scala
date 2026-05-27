@@ -801,12 +801,18 @@ object Overlays {
 
         // Tcho-Tcho (TT): faction info card
         case $("TT") => faction(TT, "info:tt-background", Sycophancy, "Ongoing",
-            "When another faction performs a Ritual of Annihilation OR reaches 15 Doom, TT gains a free spellbook. Choose your Tribe secretly at setup (Leng, Sarkomand, or Tsang) to unlock 3 exclusive spellbooks.",
+            "When an enemy player does a Ritual of Annihilation, either you gain 1 Doom, or he gains 1 fewer Doom, his choice.",
             $(), $(
-            (Acolyte,       6, "1", "0",  s""""""),
-            (HighPriest,    0, "3", "0",  s"""<div class=p>Sacrifice to gain 2 Power (Unspeakable Oath) at any time.</div>"""),
-            (ProtoShoggoth, 3, "3", "3",  s"""<div class=p>Terror unit. Modifies battle via Terror ability.</div>"""),
-            (UbboSathla,    1, "8", "?",  s"""<div class=p>Combat equals the Growth counter value. Growth starts at 1 and increases via Hell's Banquet (Doom Phase d6 roll: 4+ = +1 Growth).</div>""")
+            (Acolyte,       6, "1", "0",  s"""<div class=p>Spellbook: ${reference(TT, Soulless)}</div>"""),
+            (HighPriest,    3, "3", "0",  s"""<div class=p><span class=ability-color>Unspeakable Oath</span> ${cost("(Ongoing):")} At the end of any player's Action (even if it is not your turn), Sacrifice your High Priest (return him to your Pool) and gain 2 Power. This may also be done during the Gather Power and Doom phase.</div><div class=p>Spellbooks: ${reference(TT, Martyrdom)}, ${reference(TT, Hierophants)}, ${reference(TT, TabletsOfTheGods)}</div>"""),
+            (ProtoShoggoth, 6, "2", "1",  s"""<div class=p>Spellbook: ${reference(TT, TerrorSB)}</div>"""),
+            (UbboSathla,    1, "6/0", "?",  s"""
+                <div class=p>${cost("How to Awaken Ubbo-Sathla:")}</div>
+                <div class=p>${cost("1)")} You must have a Controlled Gate and a High Priest in play (he need not be with the Gate) during the Doom Phase or the Action Phase.</div>
+                <div class=p>${cost("2)")} If it is the Doom Phase, pay 0 Power; if it is the Action Phase, pay <span class=cost-color>6 Power</span>.</div>
+                <div class=p>${cost("3)")} Eliminate the High Priest, then place Ubbo-Sathla at your Controlled Gate.</div>
+                <div class=p>${combat} Equals the Growth counter value on the Doom track.</div>
+                <div class=p><span class=ability-color>Hell's Banquet</span> ${cost("(Doom Phase):")} Once Ubbo-Sathla has been Awakened, each Doom Phase (whether or not Ubbo-Sathla is still in play), roll 1d6 and increase the Growth counter by the die roll.</div>""")
         ))
 
         // Tcho-Tcho (TT): spellbook requirement info card overlays
@@ -818,25 +824,48 @@ object Overlays {
         case $("TT", TTAwakenUbboSathla.text)      => requirement("Awaken Ubbo-Sathla.")
 
         // Tcho-Tcho (TT): faction ability and shared spellbook info overlays
-        case $("TT", Sycophancy.name) => spellbook(Sycophancy.name, "Ongoing (Faction Ability)", "Whenever another faction performs a Ritual of Annihilation OR reaches 15 Doom, TT immediately earns a free spellbook requirement check.")
-        case $("TT", Hierophants.name) => spellbook(Hierophants.name, "Ongoing", "Your High Priests count as 2 Cultists for purposes of Gate control and combat support.")
-        case $("TT", Soulless.name) => spellbook(Soulless.name, "Ongoing", "Your Acolytes cannot be targeted by enemy abilities that specifically target Cultists.")
-        case $("TT", TerrorSB.name) => spellbook(TerrorSB.name, "Post-Battle", "After any Battle you were in, any enemy units Pained must retreat to your choice of adjacent area.")
+        case $("TT", Sycophancy.name) => spellbook(Sycophancy.name, "Doom Phase (Faction Ability)", "When an enemy player does a Ritual of Annihilation, either you gain 1 Doom, or he gains 1 fewer Doom, his choice.")
+        case $("TT", Hierophants.name) => spellbook(Hierophants.name, "Ongoing (All Tribes)", "When you earn a Faction Spellbook (including this one), place a High Priest at one of your Gates. If there are no High Priests in your Pool, instead advance Ubbo-Sathla's Growth counter by 1. When this Spellbook is first taken, if you are using the High Priests expansion, then all Factions place a High Priest at one of their Gates.")
+        case $("TT", Soulless.name) => spellbook(Soulless.name, "Ongoing (All Tribes)", "When Captured and Sacrificed, your Cultists provide 0 Power (instead of the normal 1 Power).")
+        case $("TT", TerrorSB.name) => spellbook(TerrorSB.name, "Battle (All Tribes)", "Choose one: Your enemy's Combat total is reduced by 1 per Proto-Shoggoth in the Battle. OR Your Combat total is increased by 1 per Proto-Shoggoth in the Battle.")
 
         // Tcho-Tcho (TT): Tsang exclusive spellbooks
-        case $("TT", Idolatry.name) => spellbook(Idolatry.name, "Unlimited Action: Cost 0", "Place one Acolyte from your Pool at any Gate you control.")
-        case $("TT", Martyrdom.name) => spellbook(Martyrdom.name, "Action: Cost 0", "Sacrifice one of your Cultists on the map. Ubbo-Sathla's Growth counter increases by 1.")
-        case $("TT", TabletsOfTheGods.name) => spellbook(TabletsOfTheGods.name, "Doom Phase", "Gain 1 Doom for every 2 Gates you control.")
+        case $("TT", Idolatry.name) => spellbook(Idolatry.name, "Action: Cost 1 (Tsang Tribe)", "Select an Area containing another Faction's starting Glyph (even if that Faction is not in play). Move any or all of your Units in adjacent Areas into the selected Area.")
+        case $("TT", Martyrdom.name) => spellbook(Martyrdom.name, "Post-Battle (Tsang Tribe)", "If your High Priest is Killed, all Kills assigned to your other Units become Pains instead.")
+        case $("TT", TabletsOfTheGods.name) => spellbook(TabletsOfTheGods.name, "Doom Phase (Tsang Tribe)", "When you perform a Ritual of Annihilation, you also receive 1 additional Elder Sign for each Gate at which you have any High Priests. Then, Eliminate all your High Priests. This is not optional.")
 
         // Tcho-Tcho (TT): Leng exclusive spellbooks
-        case $("TT", DarkRituals.name) => spellbook(DarkRituals.name, "Action: Cost 0", "Gain 2 Power. This spellbook flips face-down after use and flips face-up again at the start of each Doom Phase.")
-        case $("TT", Fulmination.name) => spellbook(Fulmination.name, "Ongoing", "After any Battle you were in, gain 1 Doom for each enemy unit Killed in that Battle.")
-        case $("TT", SurpriseSB.name) => spellbook(SurpriseSB.name, "Action: Cost 0", "Move one of your units to an adjacent area before declaring a Battle in that area.")
+        case $("TT", DarkRituals.name) => spellbook(DarkRituals.name, "Action: Cost 0 (Leng Tribe)", "Flip this spellbook face down. All Factions with your High Priest(s) in their Start Areas must pay you 2 Power or 2 Doom (their choice). A Faction with less than 2 Power or Doom is immune. Flip this Spellbook face up again at the Doom Phase.")
+        case $("TT", Fulmination.name) => spellbook(Fulmination.name, "Post-Battle (Leng Tribe)", "If Ubbo-Sathla is Killed in a Battle, you may remove it from the game permanently, and gain 1 Elder Sign for each Unit Killed (by either side) in that Battle.")
+        case $("TT", SurpriseSB.name) => spellbook(SurpriseSB.name, "Action: Cost 2 (Leng Tribe)", "Choose an enemy Faction. That player selects and Eliminates one of their Acolytes; Replace it with a Proto-Shoggoth from your Pool.")
 
         // Tcho-Tcho (TT): Sarkomand exclusive spellbooks
-        case $("TT", Doomsday.name) => spellbook(Doomsday.name, "Action: Cost 0", "Gain 1 Power for each faction you lead in Doom.")
-        case $("TT", Inerrant.name) => spellbook(Inerrant.name, "Post-Battle", "After Pains and Kills are resolved in a Battle you were in, you may reroll all your blank dice once.")
-        case $("TT", OtherworldAlliances.name) => spellbook(OtherworldAlliances.name, "Action", "Recruit one Neutral Monster at a cost of 1 Power less than its normal cost (minimum 1).")
+        case $("TT", Doomsday.name) => spellbook(Doomsday.name, "Once Only (Sarkomand Tribe)", "If you have a Controlled Gate, flip this card face down, then immediately take from the Pool one Independent Great Old One with a cost of exactly 2 or 4 and place it at that Gate. Take its Loyalty Card.")
+        case $("TT", Inerrant.name) => spellbook(Inerrant.name, "Doom Phase (Sarkomand Tribe)", "When you perform a Ritual of Annihilation, gain 1 additional Elder Sign for each enemy-Controlled Gate at which you have any Great Old Ones.")
+        case $("TT", OtherworldAlliances.name) => spellbook(OtherworldAlliances.name, "Ongoing (Sarkomand Tribe)", "Your Neutral Monsters and Terrors have +1 Combat.")
+
+        // Tcho-Tcho (TT): tribe selection overlays — all 3 spellbooks in a single table via multiSpellbook
+        case $("TT-TribeLeng") =>
+            multiSpellbook("",
+                (DarkRituals.name, "Action: Cost 0", "Flip this spellbook face down. All Factions with your High Priest(s) in their Start Areas must pay you 2 Power or 2 Doom (their choice). A Faction with less than 2 Power or Doom is immune. Flip this Spellbook face up again at the Doom Phase."),
+                (Fulmination.name, "Post-Battle", "If Ubbo-Sathla is Killed in a Battle, you may remove it from the game permanently, and gain 1 Elder Sign for each Unit Killed (by either side) in that Battle."),
+                (SurpriseSB.name, "Action: Cost 2", "Choose an enemy Faction. That player selects and Eliminates one of their Acolytes; Replace it with a Proto-Shoggoth from your Pool."))
+        case $("TT-TribeSarkomand", hasIGOOs : Boolean) =>
+            val warning = hasIGOOs.not.??("<tr><td></td><td><div style='color:#ff4444;font-weight:bold;text-transform:uppercase;padding:4px 0 8px 0;'>Warning — Doomsday will not function without 2/4 power iGOOs.</div></td><td></td></tr>")
+            multiSpellbook(warning,
+                (Doomsday.name, "Once Only", "If you have a Controlled Gate, flip this card face down, then immediately take from the Pool one Independent Great Old One with a cost of exactly 2 or 4 and place it at that Gate. Take its Loyalty Card."),
+                (Inerrant.name, "Doom Phase", "When you perform a Ritual of Annihilation, gain 1 additional Elder Sign for each enemy-Controlled Gate at which you have any Great Old Ones."),
+                (OtherworldAlliances.name, "Ongoing", "Your Neutral Monsters and Terrors have +1 Combat."))
+        case $("TT-TribeSarkomand") =>
+            multiSpellbook("",
+                (Doomsday.name, "Once Only", "If you have a Controlled Gate, flip this card face down, then immediately take from the Pool one Independent Great Old One with a cost of exactly 2 or 4 and place it at that Gate. Take its Loyalty Card."),
+                (Inerrant.name, "Doom Phase", "When you perform a Ritual of Annihilation, gain 1 additional Elder Sign for each enemy-Controlled Gate at which you have any Great Old Ones."),
+                (OtherworldAlliances.name, "Ongoing", "Your Neutral Monsters and Terrors have +1 Combat."))
+        case $("TT-TribeTsang") =>
+            multiSpellbook("",
+                (Idolatry.name, "Action: Cost 1", "Select an Area containing another Faction's starting Glyph (even if that Faction is not in play). Move any or all of your Units in adjacent Areas into the selected Area."),
+                (Martyrdom.name, "Post-Battle", "If your High Priest is Killed, all Kills assigned to your other Units become Pains instead."),
+                (TabletsOfTheGods.name, "Doom Phase", "When you perform a Ritual of Annihilation, you also receive 1 additional Elder Sign for each Gate at which you have any High Priests. Then, Eliminate all your High Priests. This is not optional."))
 
 
         // Tombstalker (TS): Cursed Tomes overlay for TS's own card — shows all 11 tomes (white=remaining, grey=given away)
@@ -1240,6 +1269,34 @@ object Overlays {
                     <td></td>
                 </tr>
                 <tr><td></td><td></td><td></td></tr>
+            </tbody>
+        </table>"""
+
+    def spellbookRows(name : String, phase : String, text : String) = s"""
+                <tr>
+                    <td></td>
+                    <td>
+                        <div class="h1 black-border" style="margin-right: -3ex; margin-left: -3ex; "><span class="ability-color inline-block">${name}</span> <span class="cost-color inline-block">(${phase})</span></div>
+                        <div class="white-border">
+                            ${text}
+                        </div>
+                    </td>
+                    <td></td>
+                </tr>
+                <tr><td></td><td></td><td></td></tr>"""
+
+    def multiSpellbook(prefix : String, entries : (String, String, String)*) = s"""
+        <table class="spellbook-table" style="">
+            <thead>
+                <tr>
+                    <th style=width:20%></th>
+                    <th style=width:60%></th>
+                    <th style=width:20%></th>
+                </tr>
+            </thead>
+            <tbody>
+                ${prefix}
+                ${entries./{ case (n, p, t) => spellbookRows(n, p, t) }.mkString("")}
             </tbody>
         </table>"""
 

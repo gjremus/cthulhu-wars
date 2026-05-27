@@ -139,7 +139,12 @@ object CthulhuWarsSolo {
         p.className = cl
         p.innerHTML = content
         if (click != null)
-            p.onclick = (e) => click()
+            p.onclick = (e) => {
+                val t = e.target
+                val tClass = if (t != null) t.asInstanceOf[html.Element].className else ""
+                if (tClass == null || !tClass.contains("explain"))
+                    click()
+            }
         p
     }
 
@@ -927,7 +932,7 @@ object CthulhuWarsSolo {
                         case AN => DrawRect("an-acolyte", None, x - 17, y - 54, 39, 60)
                         // Tombstalker (TS): acolyte unit sprite
                         case TS => DrawRect("ts-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                        case TT => DrawRect("tt-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        case TT => DrawRect("tt-acolyte", |(tint), x - 18, y - 54, 36, 60)
                         // Firstborn (FB): acolyte unit sprite
                         case FB => DrawRect("fb-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Daemon Sultan (DS): acolyte unit sprite
@@ -1045,8 +1050,8 @@ object CthulhuWarsSolo {
                     case AvatarSynthesis  => DrawRect("ds-avatar-synthesis", None, x - 70, y - 170, 141, 187, rotation = 10.0)
 
                     // Tcho-Tcho (TT): unit sprites (placeholder: n-star-vampire for all)
-                    case ProtoShoggoth   => DrawRect("tt-proto-shoggoth", |(tint), x - 30, y - 75, 60, 85)
-                    case UbboSathla      => DrawRect("tt-ubbo-sathla",    |(tint), x - 48, y - 160, 96, 176)
+                    case ProtoShoggoth   => DrawRect("tt-proto-shoggoth", |(tint), x - 42, y - 85, 85, 85)
+                    case UbboSathla      => DrawRect("tt-ubbo-sathla",    |(tint), x - 48, y - 107, 96, 107)
 
                     case DesecrationToken => DrawRect("ys-desecration", None, x - 20, y - 20, 41, 40)
                     case WebToken         => DrawRect("web-token", |(tint), x - 31, y - 30, 62, 60)
@@ -3422,6 +3427,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     case _ if l.has(OutOfTurnDone) => false
                                     case _ : DragonAscendingOutOfTurnAction if l.of[DragonAscendingPromptAction].any => false
                                     case _ : SacrificeHighPriestOutOfTurnMainAction if l.of[SacrificeHighPriestPromptAction].any => false
+                                    case _ : SacrificeHighPriestOutOfTurnMainAction if l.of[SacrificeHighPriestMainAction].any => false
                                     case _ => true
                                 })
 

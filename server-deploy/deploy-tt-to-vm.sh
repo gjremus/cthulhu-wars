@@ -1,0 +1,83 @@
+#!/bin/bash
+# Deploy TchoTcho build to the live VM at cwo.freeddns.org/TchoTcho/.
+#
+# Mirrors the MNU deploy pattern (deploy-mnu-to-vm.sh).
+# VM tree: /opt/cwo/tt/  (index.html, webp/, fonts/, target/)
+#
+# Usage:
+#   ./deploy-tt-to-vm.sh               # main.js + index.html only (fast)
+#   ./deploy-tt-to-vm.sh --assets      # also resync webp + fonts (slow, ~50MB)
+#   ./deploy-tt-to-vm.sh --build       # force `sbt fullLinkJS` before deploying
+#
+# The shared akka-http server JAR must be rebuilt + redeployed after adding the
+# /TchoTcho/ route. Use the Library server-deploy script for that step.
+# This script only pushes static assets.
+
+set -euo pipefail
+
+TT_ROOT="/Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth"
+SSH_KEY="/Users/gremus/Google Drive/My Drive/Personal/Games/Cthulhu Wars/Library at Celaeno/Server Deployment/oracle_cw_ed25519"
+HOST="oracle-cw-server@35.255.125.91"
+REMOTE_ROOT="/opt/cwo/tt"
+
+DO_BUILD=false
+DO_ASSETS=false
+for arg in "$@"; do
+    case "$arg" in
+        --build)  DO_BUILD=true ;;
+        --assets) DO_ASSETS=true ;;
+        -h|--help) sed -n '1,40p' "$0"; exit 0 ;;
+        *) echo "unknown arg: $arg"; exit 2 ;;
+    esac
+done
+
+if [ ! -f "$SSH_KEY" ]; then
+    echo "ERROR: ssh key not found at: $SSH_KEY"
+    exit 1
+fi
+
+MAIN_JS="$TT_ROOT/solo/target/scala-2.13/cthulhu-wars-solo-hrf-opt/main.js"
+if $DO_BUILD || [ ! -f "$MAIN_JS" ]; then
+    echo "==> [build] sbt fullLinkJS (TchoTcho) ..."
+    JAVA_HOME=/tmp/zulu-jdk/zulu21.50.19-ca-jdk21.0.11-macosx_aarch64/Contents/Home
+    export JAVA_HOME
+    (cd "$TT_ROOT/solo" && java -jar /tmp/sbt/bin/sbt-launch.jar fullOptJS 2>&1 | tail -5)
+fi
+if [ ! -f "$MAIN_JS" ]; then
+    echo "ERROR: $MAIN_JS still missing after build."
+    exit 1
+fi
+
+CACHE_TAG="$(date +%Y%m%d-%H%M%S)"
+echo "==> [stage] cache tag = $CACHE_TAG"
+
+TMP_INDEX="$(mktemp -t tt-index.XXXXXX).html"
+cp "$TT_ROOT/solo/index.html" "$TMP_INDEX"
+sed -i '' \
+    -e 's|###SERVER-URL###|https://cwo.freeddns.org/TchoTcho/|g' \
+    -e "s|main\\.js?v=[A-Za-z0-9-]*|main.js?v=$CACHE_TAG|g" \
+    "$TMP_INDEX"
+
+echo "==> [remote] ensure /opt/cwo/tt/target tree exists ..."
+ssh -i "$SSH_KEY" "$HOST" "mkdir -p $REMOTE_ROOT/target/scala-2.13/cthulhu-wars-solo-hrf-opt"
+
+echo "==> [upload] main.js → $REMOTE_ROOT/target/scala-2.13/.../main.js"
+scp -i "$SSH_KEY" -C "$MAIN_JS" \
+    "$HOST:$REMOTE_ROOT/target/scala-2.13/cthulhu-wars-solo-hrf-opt/main.js"
+
+echo "==> [upload] index.html → $REMOTE_ROOT/index.html"
+scp -i "$SSH_KEY" -C "$TMP_INDEX" "$HOST:$REMOTE_ROOT/index.html"
+rm -f "$TMP_INDEX"
+
+if $DO_ASSETS; then
+    echo "==> [upload] webp + fonts (tar pipe) ..."
+    (cd "$TT_ROOT/solo" && tar -czf - webp fonts \
+        | ssh -i "$SSH_KEY" -C "$HOST" "cd $REMOTE_ROOT && tar -xzf -")
+fi
+
+echo "==> [verify] HEAD /TchoTcho/"
+curl -s -o /dev/null -w "  HTTP %{http_code}  size_bytes=%{size_download}\n" "https://cwo.freeddns.org/TchoTcho/" || true
+
+echo
+echo "Done.  Live: https://cwo.freeddns.org/TchoTcho/   (cache tag $CACHE_TAG)"
+echo "Allow ~1 min for browsers with warm caches to refetch main.js."

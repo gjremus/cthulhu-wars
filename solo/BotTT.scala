@@ -60,7 +60,7 @@ class GameEvaluationTT(implicit game : Game) extends GameEvaluation(TT)(game) {
                 result +:= Evaluation(15, "#TT oath-sacrifice")
 
             // AWAKEN UBBO-SATHLA: high priority when we can afford it and have a gate
-            case TTAwakenUbboSathlaAction(_, r) =>
+            case TTAwakenUbboSathlaAction(_, r, _) =>
                 (needsUbbo && numGates >= 2)    |=> 60  -> "#TT awaken-ubbo"
                 (needsUbbo && numGates >= 1)    |=> 40  -> "#TT awaken-ubbo-1gate"
                 (!needsUbbo)                    |=> 30  -> "#TT awaken-ubbo-again"
@@ -73,18 +73,16 @@ class GameEvaluationTT(implicit game : Game) extends GameEvaluation(TT)(game) {
             case TTIdolatryMainAction(_) =>
                 (self.pool(Acolyte).any && self.gates.any) |=> 25 -> "#TT idolatry"
 
-            case TTIdolatryAction(_, r) =>
-                // Prefer gates with enemies nearby (defence)
+            case TTIdolatryTargetAreaAction(_, r) =>
                 val hasEnemy = game.factions.but(self).exists(_.at(r).any)
                 (hasEnemy) |=> 10 -> "#TT idolatry-defend"
                 result +:= Evaluation(5, "#TT idolatry-place")
 
-            // MARTYRDOM (Tsang): only sacrifice if growth is low and Ubbo is up
-            case TTMartyrdomMainAction(_) =>
-                (ubboUp && growth < 4) |=> 20 -> "#TT martyrdom-grow"
+            case TTIdolatryMoveUnitAction(_, _, _, _) =>
+                result +:= Evaluation(10, "#TT idolatry-move-unit")
 
-            case TTMartyrdomAction(_, _) =>
-                result +:= Evaluation(10, "#TT martyrdom-sacrifice")
+            case TTIdolatrySkipUnitAction(_, _, _, _) =>
+                result +:= Evaluation(0, "#TT idolatry-skip-unit")
 
             // DOOMSDAY (Sarkomand): fire when leading
             case TTDoomsdayMainAction(_) =>

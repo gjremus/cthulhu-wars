@@ -10,8 +10,8 @@ import html._
 // Proto-Shoggoth (monster, Terror — modifies battle), Ubbo-Sathla (GOO,
 // combat = Growth counter value set by Hell's Banquet)
 // ============================================================================
-case object ProtoShoggoth extends FactionUnitClass(TT, "Proto-Shoggoth", Terror, 3)
-case object UbboSathla extends FactionUnitClass(TT, "Ubbo-Sathla", GOO, 8)
+case object ProtoShoggoth extends FactionUnitClass(TT, "Proto-Shoggoth", Monster, 2)
+case object UbboSathla extends FactionUnitClass(TT, "Ubbo-Sathla", GOO, 6)
 
 
 // ============================================================================
@@ -75,28 +75,33 @@ case object TT extends Faction { f =>
     def style = "tt"
 
     override def abilities = $(Sycophancy)
-    override def library = $(Hierophants, Soulless, TerrorSB, Idolatry, Martyrdom, TabletsOfTheGods,
-                              DarkRituals, Fulmination, SurpriseSB, Doomsday, Inerrant, OtherworldAlliances)
+    override def library = if (TTExpansion.ttActiveLibrary.any) TTExpansion.ttActiveLibrary else
+        $(Hierophants, Soulless, TerrorSB, Idolatry, Martyrdom, TabletsOfTheGods,
+          DarkRituals, Fulmination, SurpriseSB, Doomsday, Inerrant, OtherworldAlliances)
     override def requirements(options : $[GameOption]) = $(TTSycophancyTrigger, TTEarnElderSign, TTThreeElderSigns, TTRemoveControlledGate, TTGOOKilledInBattle, TTAwakenUbboSathla)
 
     val allUnits =
         1.times(UbboSathla) ++
-        3.times(ProtoShoggoth) ++
+        6.times(ProtoShoggoth) ++
+        3.times(HighPriest) ++
         6.times(Acolyte)
 
     override def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = u match {
-        case UbboSathla => f.gates.has(r).?(8)
+        case UbboSathla => (f.gates.has(r) && f.all(HighPriest).onMap.any).?(6)
         case _ => None
     }
 
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
         val protoShoggothCount = units(ProtoShoggoth).not(Zeroed).num
         val ubboCount          = units(UbboSathla).not(Zeroed).num
-        // Proto-Shoggoth: Terror type, adds combat as a terror unit
-        // Ubbo-Sathla: combat = current Growth counter value
-        protoShoggothCount * 3 +
+        val neutralBase = neutralStrength(units, opponent)
+        // Otherworld Alliances: TT's Neutral Monsters and Terrors get +1 Combat
+        val owa = f.can(OtherworldAlliances).??(
+            units.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror).not(Zeroed).num
+        )
+        protoShoggothCount * 1 +
         ubboCount * game.ubboGrowth +
-        neutralStrength(units, opponent)
+        neutralBase + owa
     }
 }
 
@@ -105,13 +110,23 @@ case object TT extends Faction { f =>
 // Tcho-Tcho (TT) ACTION CLASSES
 // ============================================================================
 
-// TRIBE SELECTION (first Doom Phase)
+// TRIBE SELECTION (before placement)
 case class TTChooseTribeAction(self : Faction, tribe : TTTribe) extends BaseFactionAction(
-    "Choose Tribe (secret until tribal spellbook revealed)",
-    tribe match {
-        case TribeLeng      => "Tribe of Leng".styled(TT)
-        case TribeSarkomand => "Tribe of Sarkomand".styled(TT)
-        case TribeTsang     => "Tribe of Tsang".styled(TT)
+    "Choose Tribe".styled(TT) + " (secret until " + "tribal spellbook".styled(TT) + " revealed)",
+    implicit g => {
+        val qm = Overlays.imageSource("question-mark")
+        tribe match {
+            case TribeLeng      =>
+                val p = "&quot;TT-TribeLeng&quot;"
+                "<div class=sbdiv>" + "Tribe of Leng".styled(TT) + s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" /></div>"""
+            case TribeSarkomand =>
+                val hasIGOOs = g.loyaltyCards.exists(c => c.isInstanceOf[IGOOLoyaltyCard] && (c.asInstanceOf[IGOOLoyaltyCard].power == 2 || c.asInstanceOf[IGOOLoyaltyCard].power == 4))
+                val p = "&quot;TT-TribeSarkomand&quot;, " + hasIGOOs
+                "<div class=sbdiv>" + "Tribe of Sarkomand".styled(TT) + " (requires Independent GOOs + Neutral Monsters)" + s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" /></div>"""
+            case TribeTsang     =>
+                val p = "&quot;TT-TribeTsang&quot;"
+                "<div class=sbdiv>" + "Tribe of Tsang".styled(TT) + " (OG " + "TT".styled(TT) + " Spellbooks)" + s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" /></div>"""
+        }
     }
 )
 
@@ -135,46 +150,127 @@ case class TTRemoveGateAction(self : Faction, r : Region) extends BaseFactionAct
     "Remove Controlled Gate from", r
 )
 
-// DARK RITUALS (Leng exclusive: flip face-down, use toward ritual, resets each doom phase)
+// DARK RITUALS (Leng exclusive: all enemy factions with TT HP in start area pay 2P or 2D)
 case class TTDarkRitualsMainAction(self : Faction) extends OptionFactionAction(
-    DarkRituals.styled(TT) + ": gain " + 2.power + " (flips face-down until next Doom Phase)"
+    DarkRituals.styled(TT) + ": enemies with your High Priests in their Start Area pay 2 Power or 2 Doom"
 ) with MainQuestion with Soft
+case class TTDarkRitualsPayAction(self : Faction, target : Faction) extends ForcedAction
+case class TTDarkRitualsPayPowerAction(self : Faction, payer : Faction) extends BaseFactionAction("Pay 2 Power", payer.toString)
+case class TTDarkRitualsPay2DoomAction(self : Faction, payer : Faction) extends BaseFactionAction("Pay 2 Doom", payer.toString)
+case class TTDarkRitualsDoneAction(self : Faction) extends ForcedAction
 
-// FULMINATION (Leng exclusive: gain doom from casualties — modeled as post-battle trigger)
-// Handled via triggers() in TTExpansion
-
-// SURPRISE! (Leng exclusive: move unit before battle)
-case class TTSurpriseMainAction(self : Faction, l : $[Region]) extends OptionFactionAction(SurpriseSB) with MainQuestion with Soft
-case class TTSurpriseAction(self : Faction, u : UnitRef, r : Region) extends BaseFactionAction(
-    implicit g => "Move " + g.unit(u).full + " to",
-    r
+// FULMINATION (Leng exclusive: if Ubbo killed in battle, optionally remove permanently for X ES)
+case class TTFulminationOfferAction(self : Faction, totalKills : Int) extends ForcedAction
+case class TTFulminationTakeAction(self : Faction, totalKills : Int) extends BaseFactionAction(
+    Fulmination.styled(TT), implicit g => "Remove " + UbboSathla.styled(TT) + " permanently for " + totalKills.es
+)
+case class TTFulminationDeclineAction(self : Faction) extends BaseFactionAction(
+    "Decline", implicit g => UbboSathla.styled(TT) + " is killed normally"
 )
 
-// IDOLATRY (Tsang exclusive: place acolyte at gate — unlimited action)
-case class TTIdolatryMainAction(self : Faction) extends OptionFactionAction(Idolatry.styled(TT) + " (place Acolyte at Gate for free)") with MainQuestion with Soft
-case class TTIdolatryAction(self : Faction, r : Region) extends BaseFactionAction("Place Acolyte at", r)
+// SURPRISE! (Leng exclusive: cost 2, enemy faction eliminates one Acolyte, replaced by Proto-Shoggoth)
+case class TTSurpriseMainAction(self : Faction) extends OptionFactionAction(
+    SurpriseSB.styled(TT) + " (cost " + 2.power + ": enemy eliminates Acolyte, replaced by " + ProtoShoggoth.styled(TT) + ")"
+) with MainQuestion with Soft
+case class TTSurpriseChooseFactionAction(self : Faction, enemies : $[Faction]) extends ForcedAction
+case class TTSurpriseTargetFactionAction(self : Faction, target : Faction) extends BaseFactionAction(
+    "Choose enemy faction", target.toString
+)
+case class TTSurpriseEliminateAcolyteAction(self : Faction, target : Faction) extends ForcedAction
+case class TTSurpriseAcolyteChoiceAction(self : Faction, target : Faction, u : UnitRef) extends BaseFactionAction(
+    "Eliminate " + Acolyte.styled(TT), implicit g => g.unit(u).full
+)
 
-// MARTYRDOM (Tsang exclusive: sacrifice cultist to heal Ubbo-Sathla)
-case class TTMartyrdomMainAction(self : Faction) extends OptionFactionAction(Martyrdom.styled(TT) + ": sacrifice Cultist to restore " + UbboSathla.styled(TT)) with MainQuestion with Soft
-case class TTMartyrdomAction(self : Faction, u : UnitRef) extends BaseFactionAction("Sacrifice", implicit g => g.unit(u).full + " for " + UbboSathla.styled(TT))
+// IDOLATRY (Tsang exclusive: cost 1, select faction-glyph area, move any or all TT units from adjacent areas)
+case class TTIdolatryMainAction(self : Faction) extends OptionFactionAction(
+    Idolatry.styled(TT) + " (cost " + 1.power + ": select Faction Glyph area, move TT units from adjacent areas)"
+) with MainQuestion with Soft
+case class TTIdolatryChooseAreaAction(self : Faction, areas : $[Region]) extends ForcedAction
+case class TTIdolatryTargetAreaAction(self : Faction, r : Region) extends BaseFactionAction("Move units to", r)
+// Per-unit move prompt: remaining = units still eligible to move
+case class TTIdolatryMoveUnitsAction(self : Faction, r : Region, remaining : $[UnitRef]) extends ForcedAction
+case class TTIdolatryMoveUnitAction(self : Faction, u : UnitRef, r : Region, remaining : $[UnitRef]) extends BaseFactionAction(
+    "Move", implicit g => g.unit(u).full + " to " + r
+)
+case class TTIdolatrySkipUnitAction(self : Faction, u : UnitRef, r : Region, remaining : $[UnitRef]) extends BaseFactionAction(
+    "Leave", implicit g => g.unit(u).full + " in place"
+)
+case class TTIdolatryDoneAction(self : Faction) extends ForcedAction
 
-// TABLETS OF THE GODS (Tsang exclusive: doom phase — gain 1 doom per 2 gates)
-// Handled in doom phase dispatch
+// TERROR (all tribes: pre-battle choice — reduce enemy or boost own)
+case class TTTerrorPreBattleAction(self : Faction) extends OptionFactionAction(TerrorSB) with PreBattleQuestion
+case class TTTerrorReduceEnemyAction(self : Faction, n : Int) extends BaseFactionAction(
+    "Reduce enemy combat by " + n + " (" + TerrorSB.styled(TT) + ")", implicit g => n + " Proto-Shoggoth".s(n) + " in battle"
+)
+case class TTTerrorBoostOwnAction(self : Faction, n : Int) extends BaseFactionAction(
+    "Increase own combat by " + n + " (" + TerrorSB.styled(TT) + ")", implicit g => n + " Proto-Shoggoth".s(n) + " in battle"
+)
+case object TTReduceEnemyCombat extends FactionSpellbook(TT, "TT Terror Reduce") with BattleSpellbook
+case object TTBoostOwnCombat extends FactionSpellbook(TT, "TT Terror Boost") with BattleSpellbook
 
-// DOOMSDAY (Sarkomand exclusive: if leading in doom, gain power)
-case class TTDoomsdayMainAction(self : Faction) extends OptionFactionAction(Doomsday.styled(TT) + ": gain " + 1.power + " per faction you lead in Doom") with MainQuestion with Soft
+// MARTYRDOM (Tsang exclusive: post-battle passive — if HP killed, all other kills become pains)
+// Handled via assignKill hook in Battle.scala — no action class needed
 
-// INERRANT (Sarkomand exclusive: battle spellbook — reroll all misses once)
-// Handled as BattleSpellbook trigger
+// TABLETS OF THE GODS (Tsang exclusive: doom phase — handled in TTExpansion DoomAction)
 
-// OTHERWORLD ALLIANCES (Sarkomand exclusive: recruit neutral monster at reduced cost)
-case class TTOtherworldAlliancesMainAction(self : Faction) extends OptionFactionAction(OtherworldAlliances.styled(TT)) with MainQuestion with Soft
+// DOOMSDAY (Sarkomand exclusive: once-only, place cost-2 or cost-4 iGOO at gate, take loyalty card)
+case class TTDoomsdayMainAction(self : Faction) extends OptionFactionAction(
+    Doomsday.styled(TT) + " (once only: place cost-2 or cost-4 iGOO at your Gate)"
+) with MainQuestion with Soft
+case class TTDoomsdayChooseIGOOAction(self : Faction, cards : $[LoyaltyCard]) extends ForcedAction
+case class TTDoomsdaySelectIGOOAction(self : Faction, card : LoyaltyCard) extends BaseFactionAction(
+    "Place iGOO for free", card.toString
+)
+case class TTDoomsdayChooseGateAction(self : Faction, card : LoyaltyCard, gates : $[Region]) extends ForcedAction
+case class TTDoomsdayPlaceAction(self : Faction, card : LoyaltyCard, r : Region) extends BaseFactionAction(
+    "Place at", r
+)
 
-// AWAKEN UBBO-SATHLA
-case class TTAwakenUbboSathlaAction(self : Faction, r : Region) extends BaseFactionAction(
+// INERRANT (Sarkomand exclusive: doom phase ritual bonus ES — handled in Game.scala RitualAction)
+// OTHERWORLD ALLIANCES (Sarkomand exclusive: +1 combat to neutral monsters/terrors — handled in neutralStrength in Game.scala)
+
+// SYCOPHANCY (faction ability: enemy chooses when ritualing — injected in Game.scala RitualAction)
+// TTSycophancyResumeRitualAction is the shared continuation used by both normal and Sycophancy-adjusted ritual resolution
+case class TTSycophancyResumeRitualAction(ritualer : Faction, doom : Int, es : Int) extends ForcedAction
+case class TTSycophancyPromptAction(ritualer : Faction, doom : Int, es : Int) extends ForcedAction
+case class TTSycophancyLoseDoomAction(self : Faction, doom : Int, es : Int) extends BaseFactionAction(
+    "Gain 1 fewer Doom (Sycophancy)", implicit g => "Gain " + (doom - 1) + " Doom instead of " + doom
+)
+case class TTSycophancyGiveDoomAction(self : Faction, doom : Int, es : Int) extends BaseFactionAction(
+    "Give 1 Doom to " + TT.toString + " (Sycophancy)", TT.toString + " gains 1 Doom"
+)
+
+// HIEROPHANTS (all tribes: on spellbook earn, place HP at gate or grow counter)
+case class TTHierophantsPlaceHPAction(self : Faction, gates : $[Region], next : ForcedAction) extends ForcedAction
+case class TTHierophantsChooseGateAction(self : Faction, r : Region, next : ForcedAction) extends BaseFactionAction(
+    "Place " + HighPriest.styled(TT) + " at", r
+)
+// HP expansion: prompt each other faction to place HP at gate
+case class TTHierophantsOtherFactionsAction(self : Faction, remaining : $[Faction], next : ForcedAction) extends ForcedAction
+case class TTHierophantsOtherFactionPlaceAction(f : Faction, self : Faction, gates : $[Region], next : ForcedAction) extends ForcedAction
+case class TTHierophantsOtherFactionGateAction(f : Faction, self : Faction, r : Region, next : ForcedAction) extends BaseFactionAction(
+    "Place " + HighPriest.styled(f) + " at", r
+)
+
+// AWAKEN UBBO-SATHLA — step 1: choose which High Priest to eliminate
+case class TTAwakenUbboSathlaChooseHPAction(self : Faction, r : Region, cost : Int) extends BaseFactionAction(
     "Awaken " + UbboSathla.styled(TT) + " in",
     implicit g => r + self.iced(r)
 )
+case class TTAwakenUbboSathlaEliminateHPAction(self : Faction, u : UnitRef, r : Region, cost : Int) extends BaseFactionAction(
+    "Eliminate " + HighPriest.styled(TT) + " to awaken " + UbboSathla.styled(TT),
+    implicit g => g.unit(u).full + " in " + g.unit(u).region
+)
+// AWAKEN UBBO-SATHLA — step 2: place Ubbo-Sathla at chosen gate
+case class TTAwakenUbboSathlaAction(self : Faction, r : Region, cost : Int) extends BaseFactionAction(
+    "Awaken " + UbboSathla.styled(TT) + " in",
+    implicit g => r + self.iced(r)
+)
+
+// DOOM-PHASE AWAKEN: cost-0 awaken
+case class TTAwakenUbboDoomMainAction(self : Faction) extends OptionFactionAction(
+    "Awaken " + UbboSathla.styled(TT) + " (free this Doom phase)"
+) with DoomQuestion with Soft
 
 
 // ============================================================================
@@ -185,12 +281,24 @@ object TTExpansion extends Expansion {
     // Track whether Dark Rituals (Leng) has been flipped this turn
     var darkRitualsFlipped : Boolean = false
 
+    // Track whether Ubbo-Sathla has ever been awakened (Hell's Banquet fires once true, even if Ubbo is off map)
+    var ttUbboEverAwakened : Boolean = false
+
+    // Active 6-book library populated at tribe selection; empty = show all 12 (pre-selection fallback)
+    var ttActiveLibrary : $[Spellbook] = $()
+
+    // Track whether Fulmination has permanently removed Ubbo-Sathla from the game
+    var ttUbboFulminated : Boolean = false
+
+    // Set when Ubbo is killed in battle; cleared and resolved at PostBattlePhase for correct kill count
+    var ttFulminationPending : Boolean = false
+
     override def triggers()(implicit game : Game) {
-        if (game.factions.has(TT)) {
+        if (game.setup.has(TT)) {
             // TTSycophancyTrigger: another faction does a ritual OR reaches 15 doom
             TT.satisfyIf(TTSycophancyTrigger, "Another faction ritualed or reached 15 Doom",
-                game.ritualHistory.has(TT).not && game.ritualHistory.any ||
-                game.factions.but(TT).exists(f => f.doom >= 15))
+                game.ritualHistory.but(TT).any ||
+                game.setup.but(TT).exists(f => f.doom >= 15))
 
             // TTThreeElderSigns: own 3 or more elder signs (cumulative check)
             TT.satisfyIf(TTThreeElderSigns, "Own 3+ Elder Signs",
@@ -203,62 +311,56 @@ object TTExpansion extends Expansion {
     }
 
     override def eliminate(u : UnitFigure)(implicit game : Game) {
-        if (!game.factions.has(TT)) return
+        if (!game.setup.has(TT)) return
 
         // TTGOOKilledInBattle: any GOO killed in battle
         if (u.uclass.utype == GOO && game.battle.any && game.battle.get.eliminated.contains(u))
             TT.satisfy(TTGOOKilledInBattle, "GOO killed in battle")
 
-        // FULMINATION (Leng): gain 1 doom for each enemy unit killed in battle
-        if (TT.can(Fulmination) && u.faction != TT &&
-            game.battle.any && game.battle.get.eliminated.contains(u)) {
-            TT.doom += 1
-            TT.log(Fulmination.styled(TT), ": gained", 1.doom, "for eliminating", u.uclass.styled(u.faction))
-        }
+        // Fulmination fires in Battle.scala's AssignKillAction when Ubbo is killed — no action needed here
     }
 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
 
-        // TRIBE SELECTION — bot picks at DoomAction entry (first doom phase); human picks at start
+        // TRIBE SELECTION — intercept SetupFactionsAction to prompt TT before any faction places
+        case SetupFactionsAction if game.setup.has(TT) && !game.ttTribeChosen =>
+            game.ttTribeChosen = true
+            Ask(TT,
+                $(TTChooseTribeAction(TT, TribeTsang),
+                  TTChooseTribeAction(TT, TribeLeng),
+                  TTChooseTribeAction(TT, TribeSarkomand))
+            )
+
+        // TRIBE SELECTION — populates the 6-book active library for the chosen tribe
         case TTChooseTribeAction(self, tribe) =>
             game.ttTribe = tribe
-            val tribeName = tribe match {
-                case TribeLeng      => "Leng"
-                case TribeSarkomand => "Sarkomand"
-                case TribeTsang     => "Tsang"
+            val tribalBooks : $[Spellbook] = tribe match {
+                case TribeLeng      => $(DarkRituals, Fulmination, SurpriseSB)
+                case TribeSarkomand => $(Doomsday, Inerrant, OtherworldAlliances)
+                case TribeTsang     => $(Idolatry, Martyrdom, TabletsOfTheGods)
             }
-            self.log("chose Tribe", tribeName.styled(TT))
-            CheckSpellbooksAction(DoomAction(self))
+            ttActiveLibrary = $(Hierophants, Soulless, TerrorSB) ++ tribalBooks
+            self.log("secretly chose their Tribe")
+            SetupFactionsAction
 
         // DOOM PHASE DISPATCH
         case DoomAction(f) if f == TT =>
-            // TRIBE SELECTION: on first DoomAction (ttTribeChosen = false), ask TT to pick a tribe
-            if (!game.ttTribeChosen) {
-                game.ttTribeChosen = true
-                return Ask(f,
-                    $(TTChooseTribeAction(f, TribeLeng),
-                      TTChooseTribeAction(f, TribeSarkomand),
-                      TTChooseTribeAction(f, TribeTsang))
-                )
-            }
 
-            // Hell's Banquet: mandatory d6 roll when Ubbo-Sathla is in play (fires before asking)
+            // Hell's Banquet: mandatory d6 roll once Ubbo-Sathla has ever been awakened (fires before asking)
             // Guard prevents infinite loop when re-entering DoomAction after the roll
-            if (f.onMap(UbboSathla).any && !game.ttHellsBanquetDone)
+            if (ttUbboEverAwakened && !game.ttHellsBanquetDone)
                 return Force(TTHellsBanquetRollAction(f))
-
-            // Tablets of the Gods (Tsang): gain 1 doom per 2 controlled gates during doom phase
-            if (f.can(TabletsOfTheGods) && f.gates.any) {
-                val tabletsDoom = f.gates.num / 2
-                f.doom += tabletsDoom
-                f.log(TabletsOfTheGods.styled(TT), ": gained", tabletsDoom.doom, "from", f.gates.num, "Gates")
-            }
 
             implicit val asking = Asking(f)
             game.rituals(f)
             game.reveals(f)
             game.highPriests(f)
             game.hires(f)
+
+            // Doom-phase awaken: if TT has gate + HP in play and Ubbo not yet awakened, offer 0-cost awaken
+            if (f.pool(UbboSathla).any && f.gates.any && f.all(HighPriest).onMap.any)
+                + TTAwakenUbboDoomMainAction(f)
+
             + DoomDoneAction(f)
             asking
 
@@ -266,12 +368,8 @@ object TTExpansion extends Expansion {
             RollD6("Hell's Banquet: roll for Ubbo-Sathla growth", roll => TTHellsBanquetApplyAction(f, roll))
 
         case TTHellsBanquetApplyAction(f, roll) =>
-            if (roll >= 4) {
-                game.ubboGrowth += 1
-                f.log("Hell's Banquet: rolled", roll.toString.styled("kill"), "— Ubbo-Sathla Growth counter now", game.ubboGrowth.toString.styled(TT))
-            } else {
-                f.log("Hell's Banquet: rolled", roll.toString, "— no growth (need 4+)")
-            }
+            game.ubboGrowth += roll
+            f.log("Hell's Banquet: rolled", roll.toString.styled("kill"), "— added", roll.toString.styled(TT), "to Growth counter (now", game.ubboGrowth.toString.styled(TT) + ")")
             // Mark Hell's Banquet done so DoomAction doesn't loop
             game.ttHellsBanquetDone = true
             // Re-enter DoomAction to handle Tablets + rituals + DoomDone
@@ -297,36 +395,52 @@ object TTExpansion extends Expansion {
             game.awakens(f)
             game.independents(f)
 
-            // UNSPEAKABLE OATH: sacrifice High Priest for 2 power (available any time HP is on map)
-            if (f.all(HighPriest).onMap.any)
-                + TTUnspeakableOathMainAction(f)
-
             // REMOVE GATE (SBR #4): remove controlled gate in start area
             val startArea = game.starting.get(f)
-            if (f.needs(TTRemoveControlledGate) && startArea.exists(r => f.gates.has(r)))
+            // On library maps (Primeval/Shaggai), any controlled gate qualifies; otherwise start area only
+            val removeGateEligible = if (game.board.isLibraryMap) f.gates.any else startArea.exists(r => f.gates.has(r))
+            if (f.needs(TTRemoveControlledGate) && removeGateEligible)
                 + TTRemoveGateMainAction(f)
 
             // TRIBE-SPECIFIC ACTIONS
 
-            // LENG: Dark Rituals (flip face-down for 2 power)
-            if (f.can(DarkRituals) && !darkRitualsFlipped)
+            // LENG: Dark Rituals (enemies with TT HPs in start areas pay 2P or 2D)
+            val darkRitualsEligible = game.factions.but(f).%(e =>
+                game.starting.get(e).exists(r => f.at(r, HighPriest).any) &&
+                (e.power >= 2 || e.doom >= 2)
+            )
+            if (f.can(DarkRituals) && !darkRitualsFlipped && darkRitualsEligible.any)
                 + TTDarkRitualsMainAction(f)
 
-            // LENG: Surprise! (move a unit before battle)
-            val surpriseTargets = areas.%(r => f.at(r).any)
-            if (f.can(SurpriseSB) && surpriseTargets.any)
-                + TTSurpriseMainAction(f, surpriseTargets)
+            // LENG: Surprise! (enemy eliminates Acolyte, replaced by Proto-Shoggoth)
+            val surpriseEnemiesWithAcolytes = game.factions.but(f).%(e => e.allInPlay.%(_.uclass == Acolyte).any)
+            if (f.can(SurpriseSB) && f.power >= 2 && surpriseEnemiesWithAcolytes.any && f.pool(ProtoShoggoth).any)
+                + TTSurpriseMainAction(f)
 
-            // TSANG: Idolatry (place acolyte at gate for free)
-            if (f.can(Idolatry) && f.pool(Acolyte).any && f.gates.any)
+            // TSANG: Idolatry (cost 1: select faction-glyph area, move any TT units from adjacent areas)
+            // Valid targets: areas where ANY other faction placed a starting glyph (including factions not in
+            // this game). For factions in this game: their actual chosen starting area. For factions not in
+            // this game: the board's printed glyph areas. DS starting glyph = where DS placed its first unit.
+            val factionGlyphAreas = {
+                val inGame = game.starting.values.$
+                val allBoardGlyph = $(GC, CC, BG, YS, SL, WW, OW, TS, FB)
+                    .%!(fx => game.setup.has(fx))
+                    ./~(fx => game.board.starting(fx)).distinct
+                (inGame ++ allBoardGlyph).distinct
+            }
+            val idolatryTargets = areas.%(r =>
+                factionGlyphAreas.has(r) &&
+                game.board.connected(r).%(adj => f.at(adj).any).any
+            )
+            if (f.can(Idolatry) && f.power >= 1 && idolatryTargets.any)
                 + TTIdolatryMainAction(f)
 
-            // TSANG: Martyrdom (sacrifice cultist to interact with Ubbo-Sathla)
-            if (f.can(Martyrdom) && f.onMap(UbboSathla).any && f.cultists.onMap.any)
-                + TTMartyrdomMainAction(f)
-
-            // SARKOMAND: Doomsday (gain power if leading)
-            if (f.can(Doomsday) && game.factions.but(f).exists(e => f.doom > e.doom))
+            // SARKOMAND: Doomsday (once-only: place cost-2 or cost-4 iGOO at gate)
+            val doomsdayCards = game.loyaltyCards.%(c => c.isInstanceOf[IGOOLoyaltyCard] &&
+                (c.asInstanceOf[IGOOLoyaltyCard].power == 2 || c.asInstanceOf[IGOOLoyaltyCard].power == 4) &&
+                !game.factions.exists(_.loyaltyCards.has(c))
+            )
+            if (f.can(Doomsday) && !f.oncePerGame.has(Doomsday) && f.gates.any && doomsdayCards.any)
                 + TTDoomsdayMainAction(f)
 
             game.neutralSpellbooks(f)
@@ -337,17 +451,35 @@ object TTExpansion extends Expansion {
 
             asking
 
-        // AWAKEN UBBO-SATHLA
-        case AwakenMainAction(self, UbboSathla, locations) if self == TT =>
-            Ask(self).each(locations)(r => TTAwakenUbboSathlaAction(self, r)).cancel
+        // DOOM-PHASE AWAKEN (cost 0)
+        case TTAwakenUbboDoomMainAction(self) =>
+            Ask(self).each(self.gates)(r => TTAwakenUbboSathlaChooseHPAction(self, r, 0)).cancel
 
-        case TTAwakenUbboSathlaAction(self, r) =>
-            self.power -= 8
+        // ACTION-PHASE AWAKEN (cost 6)
+        case AwakenMainAction(self, UbboSathla, locations) if self == TT =>
+            Ask(self).each(locations)(r => TTAwakenUbboSathlaChooseHPAction(self, r, 6)).cancel
+
+        case TTAwakenUbboSathlaChooseHPAction(self, r, cost) =>
+            val hps = self.all(HighPriest).onMap
+            if (hps.num == 1)
+                Force(TTAwakenUbboSathlaEliminateHPAction(self, hps.head.ref, r, cost))
+            else
+                Ask(self).each(hps)(u => TTAwakenUbboSathlaEliminateHPAction(self, u.ref, r, cost))
+
+        case TTAwakenUbboSathlaEliminateHPAction(self, uref, r, cost) =>
+            val u = game.unit(uref)
+            game.eliminate(u)
+            self.log("eliminated", HighPriest.styled(TT), "to awaken", UbboSathla.styled(TT))
+            Force(TTAwakenUbboSathlaAction(self, r, cost))
+
+        case TTAwakenUbboSathlaAction(self, r, cost) =>
+            self.power -= cost
             self.payTax(r)
             self.place(UbboSathla, r)
-            self.log("awakened", UbboSathla.styled(TT), "in", r, "for", 8.power)
+            self.log("awakened", UbboSathla.styled(TT), "in", r, (cost > 0).??("for " + cost.power))
             self.satisfy(TTAwakenUbboSathla, "Awaken Ubbo-Sathla")
-            EndAction(self)
+            ttUbboEverAwakened = true
+            if (cost == 0) Force(DoomAction(self)) else EndAction(self)
 
         // UNSPEAKABLE OATH
         case TTUnspeakableOathMainAction(self) =>
@@ -361,7 +493,7 @@ object TTExpansion extends Expansion {
 
         // REMOVE GATE (SBR #4)
         case TTRemoveGateMainAction(self) =>
-            val eligible = game.starting.get(self).toList.%(r => self.gates.has(r))
+            val eligible = if (game.board.isLibraryMap) self.gates else game.starting.get(self).toList.%(r => self.gates.has(r))
             Ask(self).each(eligible)(r => TTRemoveGateAction(self, r)).cancel
 
         case TTRemoveGateAction(self, r) =>
@@ -372,63 +504,237 @@ object TTExpansion extends Expansion {
             self.satisfy(TTRemoveControlledGate, "Removed controlled Gate in Start Area")
             EndAction(self)
 
-        // DARK RITUALS (Leng)
+        // DARK RITUALS (Leng) — prompt each qualifying enemy in turn order
         case TTDarkRitualsMainAction(self) =>
             darkRitualsFlipped = true
+            self.oncePerRound :+= DarkRituals
+            self.log(DarkRituals.styled(TT), ": activated (flipped face-down until Doom Phase)")
+            val qualifiers = game.factions.but(self).%(e =>
+                game.starting.get(e).exists(r => self.at(r, HighPriest).any) &&
+                (e.power >= 2 || e.doom >= 2)
+            )
+            Force(TTDarkRitualsPayAction(self, qualifiers.head))
+
+        case TTDarkRitualsPayAction(self, target) =>
+            val qualifiers = game.factions.but(self).%(e =>
+                game.starting.get(e).exists(r => self.at(r, HighPriest).any) &&
+                (e.power >= 2 || e.doom >= 2)
+            )
+            val remaining = qualifiers.dropWhile(_ != target)
+            if (remaining.none)
+                Force(TTDarkRitualsDoneAction(self))
+            else {
+                val payer = remaining.head
+                implicit val asking = Asking(payer)
+                if (payer.power >= 2)
+                    + TTDarkRitualsPayPowerAction(self, payer)
+                if (payer.doom >= 2)
+                    + TTDarkRitualsPay2DoomAction(self, payer)
+                asking
+            }
+
+        case TTDarkRitualsPayPowerAction(self, payer) =>
+            payer.power -= 2
             self.power += 2
-            self.log(DarkRituals.styled(TT), ": gained", 2.power, "(flipped face-down until Doom Phase)")
+            payer.log(DarkRituals.styled(TT), ": paid", 2.power, "to", self)
+            val qualifiers = game.factions.but(self).%(e =>
+                game.starting.get(e).exists(r => self.at(r, HighPriest).any) &&
+                (e.power >= 2 || e.doom >= 2)
+            )
+            val next = qualifiers.dropWhile(_ != payer).drop(1)
+            if (next.none) Force(TTDarkRitualsDoneAction(self)) else Force(TTDarkRitualsPayAction(self, next.head))
+
+        case TTDarkRitualsPay2DoomAction(self, payer) =>
+            payer.doom -= 2
+            self.doom += 2
+            payer.log(DarkRituals.styled(TT), ": paid", 2.doom, "to", self)
+            val qualifiers = game.factions.but(self).%(e =>
+                game.starting.get(e).exists(r => self.at(r, HighPriest).any) &&
+                (e.power >= 2 || e.doom >= 2)
+            )
+            val next = qualifiers.dropWhile(_ != payer).drop(1)
+            if (next.none) Force(TTDarkRitualsDoneAction(self)) else Force(TTDarkRitualsPayAction(self, next.head))
+
+        case TTDarkRitualsDoneAction(self) =>
             EndAction(self)
 
-        // SURPRISE! (Leng) — move a unit to an adjacent area (free, before battle)
-        case TTSurpriseMainAction(self, _) =>
-            // Generate all (unit, destination) pairs for the player to choose from
-            val pairs = areas./~{ r =>
-                self.at(r).%(_.canMove)./~{ u =>
-                    game.board.connected(r).%(d => d.glyph.onMap)./(d => TTSurpriseAction(self, u.ref, d))
-                }
-            }
-            Ask(self).list(pairs).cancel
+        // SURPRISE! (Leng) — cost 2, enemy eliminates Acolyte, replaced by Proto-Shoggoth
+        case TTSurpriseMainAction(self) =>
+            self.power -= 2
+            val enemies = game.factions.but(self).%(e => e.allInPlay.%(_.uclass == Acolyte).any)
+            Force(TTSurpriseChooseFactionAction(self, enemies))
 
-        case TTSurpriseAction(self, uref, r) =>
+        case TTSurpriseChooseFactionAction(self, enemies) =>
+            Ask(self).each(enemies)(e => TTSurpriseTargetFactionAction(self, e)).cancel
+
+        case TTSurpriseTargetFactionAction(self, target) =>
+            Force(TTSurpriseEliminateAcolyteAction(self, target))
+
+        case TTSurpriseEliminateAcolyteAction(self, target) =>
+            val acolytes = target.allInPlay.%(_.uclass == Acolyte)
+            if (acolytes.num == 1)
+                Force(TTSurpriseAcolyteChoiceAction(self, target, acolytes.head.ref))
+            else
+                Ask(target).each(acolytes)(u => TTSurpriseAcolyteChoiceAction(self, target, u.ref))
+
+        case TTSurpriseAcolyteChoiceAction(self, target, uref) =>
+            val u = game.unit(uref)
+            val r = u.region
+            game.eliminate(u)
+            if (self.pool(ProtoShoggoth).any)
+                self.place(ProtoShoggoth, r)
+            self.log(SurpriseSB.styled(TT), ": eliminated", Acolyte.styled(target), "in", r, ", placed", ProtoShoggoth.styled(TT))
+            EndAction(self)
+
+        // IDOLATRY (Tsang) — cost 1: select faction-glyph area, move any or all TT units from adjacent areas
+        case TTIdolatryMainAction(self) =>
+            self.power -= 1
+            val factionGlyphAreas = {
+                val inGame = game.starting.values.$
+                val allBoardGlyph = $(GC, CC, BG, YS, SL, WW, OW, TS, FB)
+                    .%!(fx => game.setup.has(fx))
+                    ./~(fx => game.board.starting(fx)).distinct
+                (inGame ++ allBoardGlyph).distinct
+            }
+            val targets = areas.%(r =>
+                factionGlyphAreas.has(r) &&
+                game.board.connected(r).%(adj => self.at(adj).any).any
+            )
+            Force(TTIdolatryChooseAreaAction(self, targets))
+
+        case TTIdolatryChooseAreaAction(self, targets) =>
+            Ask(self).each(targets)(r => TTIdolatryTargetAreaAction(self, r)).cancel
+
+        case TTIdolatryTargetAreaAction(self, r) =>
+            val eligible = game.board.connected(r)./~(adj => self.at(adj))./(_.ref)
+            Force(TTIdolatryMoveUnitsAction(self, r, eligible))
+
+        case TTIdolatryMoveUnitsAction(self, r, remaining) =>
+            if (remaining.none)
+                Force(TTIdolatryDoneAction(self))
+            else {
+                val u = remaining.head
+                val rest = remaining.tail
+                Ask(self)
+                    .add(TTIdolatryMoveUnitAction(self, u, r, rest))
+                    .add(TTIdolatrySkipUnitAction(self, u, r, rest))
+            }
+
+        case TTIdolatryMoveUnitAction(self, uref, r, remaining) =>
             val u = game.unit(uref)
             val from = u.region
             u.region = r
             u.add(Moved)
-            u.add(MovedForFree)
-            self.log(SurpriseSB.styled(TT), ": moved", u.uclass.styled(TT), "from", from, "to", r)
+            self.log(Idolatry.styled(TT), ": moved", u.uclass.styled(TT), "from", from, "to", r)
+            Force(TTIdolatryMoveUnitsAction(self, r, remaining))
+
+        case TTIdolatrySkipUnitAction(self, uref, r, remaining) =>
+            Force(TTIdolatryMoveUnitsAction(self, r, remaining))
+
+        case TTIdolatryDoneAction(self) =>
             EndAction(self)
 
-        // IDOLATRY (Tsang) — place acolyte at gate
-        case TTIdolatryMainAction(self) =>
-            Ask(self).each(self.gates)(r => TTIdolatryAction(self, r)).cancel
-
-        case TTIdolatryAction(self, r) =>
-            self.place(Acolyte, r)
-            self.log(Idolatry.styled(TT), ": placed free", Acolyte.styled(TT), "in", r)
-            EndAction(self)
-
-        // MARTYRDOM (Tsang) — sacrifice cultist to do something with Ubbo-Sathla
-        case TTMartyrdomMainAction(self) =>
-            Ask(self).each(self.cultists.onMap)(u => TTMartyrdomAction(self, u.ref)).cancel
-
-        case TTMartyrdomAction(self, uref) =>
-            val u = game.unit(uref)
-            game.eliminate(u)
-            // Martyrdom: sacrifice cultist — Ubbo-Sathla grows
-            game.ubboGrowth += 1
-            self.log(Martyrdom.styled(TT), ": sacrificed", u.uclass.styled(TT), "—", UbboSathla.styled(TT), "Growth now", game.ubboGrowth.toString.styled(TT))
-            EndAction(self)
-
-        // DOOMSDAY (Sarkomand) — gain power for each faction you lead in doom
+        // DOOMSDAY (Sarkomand) — once-only: place cost-2 or cost-4 iGOO at gate, take loyalty card
         case TTDoomsdayMainAction(self) =>
-            val leading = game.factions.but(self).count(e => self.doom > e.doom)
-            self.power += leading
-            self.log(Doomsday.styled(TT), ": gained", leading.power, "for leading", leading, "factions in Doom")
-            EndAction(self)
+            val cards = game.loyaltyCards.%(c => c.isInstanceOf[IGOOLoyaltyCard] &&
+                (c.asInstanceOf[IGOOLoyaltyCard].power == 2 || c.asInstanceOf[IGOOLoyaltyCard].power == 4) &&
+                !game.factions.exists(_.loyaltyCards.has(c))
+            )
+            Force(TTDoomsdayChooseIGOOAction(self, cards))
+
+        case TTDoomsdayChooseIGOOAction(self, cards) =>
+            Ask(self).each(cards)(c => TTDoomsdaySelectIGOOAction(self, c)).cancel
+
+        case TTDoomsdaySelectIGOOAction(self, card) =>
+            Force(TTDoomsdayChooseGateAction(self, card, self.gates))
+
+        case TTDoomsdayChooseGateAction(self, card, gates) =>
+            if (gates.num == 1)
+                Force(TTDoomsdayPlaceAction(self, card, gates.head))
+            else
+                Ask(self).each(gates)(r => TTDoomsdayPlaceAction(self, card, r)).cancel
+
+        case TTDoomsdayPlaceAction(self, card, r) =>
+            self.oncePerGame :+= Doomsday
+            self.log(Doomsday.styled(TT), ": placing", card.asInstanceOf[IGOOLoyaltyCard].unit.styled(self), "at", r, "for free (took Loyalty Card)")
+            // Route through the standard iGOO placement engine at cost 0
+            Force(IndependentGOOAction(self, card.asInstanceOf[IGOOLoyaltyCard], r, 0))
+
+        // SYCOPHANCY: prompt the ritualING faction — they choose, then ritual completes via TTSycophancyRitualAction
+        case TTSycophancyPromptAction(ritualer, doom, es) =>
+            Ask(ritualer)
+                .add(TTSycophancyLoseDoomAction(ritualer, doom, es))
+                .add(TTSycophancyGiveDoomAction(ritualer, doom, es))
+
+        case TTSycophancyLoseDoomAction(ritualer, doom, es) =>
+            ritualer.log("Sycophancy".styled(TT) + ": chooses to gain " + (doom - 1).doom + " (1 fewer)")
+            Force(TTSycophancyResumeRitualAction(ritualer, doom - 1, es))
+
+        case TTSycophancyGiveDoomAction(ritualer, doom, es) =>
+            TT.doom += 1
+            ritualer.log("Sycophancy".styled(TT) + ": gave 1", 1.doom, "to", TT)
+            Force(TTSycophancyResumeRitualAction(ritualer, doom, es))
+
+        // HIEROPHANTS: on any TT spellbook earn, place HP at gate or grow counter
+        case TTHierophantsPlaceHPAction(self, gates, next) =>
+            if (self.pool(HighPriest).any) {
+                if (gates.num == 1)
+                    Force(TTHierophantsChooseGateAction(self, gates.head, next))
+                else if (gates.any)
+                    Ask(self).each(gates)(r => TTHierophantsChooseGateAction(self, r, next))
+                else {
+                    // No gates: place where TT has units, or anywhere
+                    val withUnits = areas.%(r => self.at(r).any)
+                    val dest = if (withUnits.any) withUnits else areas
+                    if (dest.num == 1)
+                        Force(TTHierophantsChooseGateAction(self, dest.head, next))
+                    else
+                        Ask(self).each(dest)(r => TTHierophantsChooseGateAction(self, r, next))
+                }
+            } else {
+                game.ubboGrowth += 1
+                self.log(Hierophants.styled(TT), ": no HP in pool — Growth counter +1 (now", game.ubboGrowth.toString.styled(TT) + ")")
+                Force(next)
+            }
+
+        case TTHierophantsChooseGateAction(self, r, next) =>
+            self.place(HighPriest, r)
+            self.log(Hierophants.styled(TT), ": placed", HighPriest.styled(TT), "at", r)
+            Force(next)
+
+        case TTHierophantsOtherFactionsAction(self, remaining, next) =>
+            if (remaining.none)
+                Force(TTHierophantsPlaceHPAction(self, self.gates, next))
+            else {
+                val f = remaining.head
+                val gates = f.gates
+                if (gates.any)
+                    Force(TTHierophantsOtherFactionPlaceAction(f, self, gates, next))
+                else {
+                    val withUnits = areas.%(r => f.at(r).any)
+                    val dest = if (withUnits.any) withUnits else areas
+                    Force(TTHierophantsOtherFactionPlaceAction(f, self, dest, next))
+                }
+            }
+
+        case TTHierophantsOtherFactionPlaceAction(f, self, gates, next) =>
+            if (gates.num == 1)
+                Force(TTHierophantsOtherFactionGateAction(f, self, gates.head, next))
+            else
+                Ask(f).each(gates)(r => TTHierophantsOtherFactionGateAction(f, self, r, next))
+
+        case TTHierophantsOtherFactionGateAction(f, self, r, next) =>
+            if (f.pool(HighPriest).any) {
+                f.place(HighPriest, r)
+                f.log(Hierophants.styled(TT), ": placed", HighPriest.styled(f), "at", r)
+            }
+            val remaining = game.factions.but(TT).%(_.pool(HighPriest).any).dropWhile(_ != f).drop(1)
+            Force(TTHierophantsOtherFactionsAction(self, remaining, next))
 
         // DOOM PHASE END: reset Dark Rituals face-up and Hell's Banquet sentinel
         case DoomDoneAction(f) if f == TT =>
             darkRitualsFlipped = false
+            f.oncePerRound :-= DarkRituals
             game.ttHellsBanquetDone = false
             UnknownContinue
 
