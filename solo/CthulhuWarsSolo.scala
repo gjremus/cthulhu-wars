@@ -935,7 +935,7 @@ object CthulhuWarsSolo {
                         case AN => DrawRect("an-acolyte", None, x - 17, y - 54, 39, 60)
                         // Tombstalker (TS): acolyte unit sprite
                         case TS => DrawRect("ts-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                        case TT => DrawRect("tt-acolyte", |(tint), x - 18, y - 54, 36, 60)
+                        case TT => DrawRect("tt-acolyte", |(tint), x - 19, y - 54, 39, 58)
                         // Firstborn (FB): acolyte unit sprite
                         case FB => DrawRect("fb-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Daemon Sultan (DS): acolyte unit sprite
@@ -967,7 +967,7 @@ object CthulhuWarsSolo {
                         case DS => DrawRect("ds-high-priest", None, x - 35, y - 60, 70, 66)
                         // Tombstalker (TS): high priest unit sprite
                         case TS => DrawRect("ts-high-priest", |(tint), x - 35, y - 60, 70, 66)
-                        case TT => DrawRect("tt-high-priest", |(tint), x - 35, y - 60, 70, 66)
+                        case TT => DrawRect("tt-high-priest", |(tint), x - 28, y - 54, 56, 54)
                         case _ => DrawRect("gc-high-priest", |(tint), x - 35, y - 60, 70, 66)
                     }
 
@@ -1053,7 +1053,7 @@ object CthulhuWarsSolo {
                     case AvatarSynthesis  => DrawRect("ds-avatar-synthesis", None, x - 70, y - 170, 141, 187, rotation = 10.0)
 
                     // Tcho-Tcho (TT): unit sprites (placeholder: n-star-vampire for all)
-                    case ProtoShoggoth   => DrawRect("tt-proto-shoggoth", |(tint), x - 42, y - 85, 85, 85)
+                    case ProtoShoggoth   => DrawRect("tt-proto-shoggoth", |(tint), x - 23, y - 83, 46, 83)
                     case UbboSathla      => DrawRect("tt-ubbo-sathla",    |(tint), x - 48, y - 107, 96, 107)
 
                     case DesecrationToken => DrawRect("ys-desecration", None, x - 20, y - 20, 41, 40)
