@@ -1455,7 +1455,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Azathoth IGOO: glyph position on doom track (= combat value)
     var azathothGlyphPosition : Int = 0
     // Azathoth IGOO: awakening state (enemy choices accumulated + gate region)
-    var azathothAwakenChoices : Map[Faction, Int] = Map()
+    var azathothAwakenChoices : $[Offer] = $
     var azathothAwakenGateRegion : |[Region] = None
     // Messenger of Yig: track which enemies have been asked this Doom Phase
     var messengerOfYigAsked : $[Faction] = $
@@ -2256,6 +2256,38 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (f == TT && options.has(HighPriests)) {
                 1.to(5).foreach(_ => f.place(Acolyte, r))
                 f.place(HighPriest, r)
+
+                // Initialize HP plans/commands that normally fire on RecruitHighPriestAction.
+                // TT's starting HP bypasses that action, so we do it here.
+                f.plans ++= $(
+                    UnspeakableOathPrompt,
+                    UnspeakableOathSkip,
+                    UnspeakableOathThreatOfHPCapture,
+                    UnspeakableOathThreatOfAttackOnHighPriest,
+                    UnspeakableOathThreatOfAcolyteCapture,
+                    UnspeakableOathOpportunityEndOfPhase,
+                    UnspeakableOathOpportunityFirstPlayer,
+                ) ++
+                (f == WW).$(UnspeakableOathThreatOfDryEternal) ++
+                (f == OW).$(UnspeakableOathOpportunityOfDreadCurse) ++
+                setup.has(CC).$(UnspeakableOathThreatOfThousandForms) ++
+                setup.has(BG).$(UnspeakableOathThreatOfGhroth) ++
+                (f != AN).$(UnspeakableOathThreatOfAttackOnGOO) ++
+                $(UnspeakableOathThreatOfAttackOnGate)
+
+                if (f.commands.of[UnspeakableOathPlan].none)
+                    f.commands :+= UnspeakableOathPrompt
+
+                f.plans ++= $(
+                    HighPriestGatesPrompt,
+                    HighPriestGatesSkip,
+                )
+
+                if (f.commands.of[HighPriestGatesPlan].none)
+                    if (options.has(QuickGame))
+                        f.commands :+= HighPriestGatesSkip
+                    else
+                        f.commands :+= HighPriestGatesPrompt
             } else {
                 1.to(6).foreach(_ => f.place(Acolyte, r))
             }
@@ -3948,6 +3980,40 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // COMMANDS
         case CommandsMainAction(f) =>
+            // If a faction has an HP on the map but HP plans were never initialized
+            // (e.g. TT starting HP, or HP placed by Hierophants), add them now.
+            if (options.has(HighPriests) && f.onMap(HighPriest).any && f.plans.of[UnspeakableOathPlan].none) {
+                f.plans ++= $(
+                    UnspeakableOathPrompt,
+                    UnspeakableOathSkip,
+                    UnspeakableOathThreatOfHPCapture,
+                    UnspeakableOathThreatOfAttackOnHighPriest,
+                    UnspeakableOathThreatOfAcolyteCapture,
+                    UnspeakableOathOpportunityEndOfPhase,
+                    UnspeakableOathOpportunityFirstPlayer,
+                ) ++
+                (f == WW).$(UnspeakableOathThreatOfDryEternal) ++
+                (f == OW).$(UnspeakableOathOpportunityOfDreadCurse) ++
+                f.enemies.has(CC).$(UnspeakableOathThreatOfThousandForms) ++
+                f.enemies.has(BG).$(UnspeakableOathThreatOfGhroth) ++
+                (f != AN).$(UnspeakableOathThreatOfAttackOnGOO) ++
+                $(UnspeakableOathThreatOfAttackOnGate)
+
+                if (f.commands.of[UnspeakableOathPlan].none)
+                    f.commands :+= UnspeakableOathPrompt
+
+                f.plans ++= $(
+                    HighPriestGatesPrompt,
+                    HighPriestGatesSkip,
+                )
+
+                if (f.commands.of[HighPriestGatesPlan].none)
+                    if (options.has(QuickGame))
+                        f.commands :+= HighPriestGatesSkip
+                    else
+                        f.commands :+= HighPriestGatesPrompt
+            }
+
             val visiblePlans = f.plans.%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
             Ask(f)
                 .each(visiblePlans) { p =>

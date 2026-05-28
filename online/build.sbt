@@ -40,3 +40,8 @@ Global / cancelable := true
 
 trapExit := false
 
+assembly / assemblyMergeStrategy := {
+    case x if x.endsWith("module-info.class") => MergeStrategy.discard
+    case x => (assembly / assemblyMergeStrategy).value(x)
+}
+

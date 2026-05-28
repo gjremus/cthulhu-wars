@@ -253,14 +253,14 @@ case class GhatanotoaSBRPayAction(self : Faction) extends OptionFactionAction(im
 
 // Azathoth IGOO: Nuclear Chaos spellbook action
 case class NuclearChaosMainAction(self : Faction) extends OptionFactionAction(implicit g => "Nuclear Chaos".styled("nt") + " (Cost 0)") with MainQuestion
-case class NuclearChaosRollAction(self : Faction, rolls : Map[Faction, Int]) extends ForcedAction
-case class NuclearChaosAdjustAction(self : Faction, rolls : Map[Faction, Int], adjust : Int) extends BaseFactionAction(implicit g => "Nuclear Chaos".styled("nt"), implicit g => {
-    val myRoll = rolls.getOrElse(self, 0) + adjust
+case class NuclearChaosRollAction(self : Faction, rolls : $[Offer]) extends ForcedAction
+case class NuclearChaosAdjustAction(self : Faction, rolls : $[Offer], adjust : Int) extends BaseFactionAction(implicit g => "Nuclear Chaos".styled("nt"), implicit g => {
+    val myRoll = rolls.%(_.f == self).head.n + adjust
     s"Adjust to $myRoll (" + (if (adjust > 0) "+1" else "-1") + ")"
 }) {
     override def question(implicit game : Game) = self.full + " — " + "Nuclear Chaos".styled("nt") + " — adjust your roll?"
 }
-case class NuclearChaosKeepAction(self : Faction, rolls : Map[Faction, Int]) extends BaseFactionAction(implicit g => "Nuclear Chaos".styled("nt"), implicit g => "Keep roll as-is") {
+case class NuclearChaosKeepAction(self : Faction, rolls : $[Offer]) extends BaseFactionAction(implicit g => "Nuclear Chaos".styled("nt"), implicit g => "Keep roll as-is") {
     override def question(implicit game : Game) = self.full + " — " + "Nuclear Chaos".styled("nt") + " — adjust your roll?"
 }
 
@@ -290,7 +290,7 @@ case class AzathothAwakenMainAction(self : Faction) extends OptionFactionAction(
     "</div>"
 }) with MainQuestion with Soft
 case class AzathothAwakenCommitAction(self : Faction, powerCost : Int, gateRegion : Region) extends ForcedAction
-case class AzathothEnemyChoiceAction(self : Faction, face : Int, remaining : $[Faction], choices : Map[Faction, Int]) extends ForcedAction
+case class AzathothEnemyChoiceAction(self : Faction, face : Int, remaining : $[Faction], choices : $[Offer]) extends ForcedAction
 case class AzathothEnemyChooseAction(self : Faction, face : Int, chooser : Faction) extends BaseFactionAction(implicit g => "Azathoth".styled("nt") + " Awakening", implicit g => {
     val qm = Overlays.imageSource("question-mark")
     val p = s""""Azathoth", false""".replace('"'.toString, "&quot;")
@@ -301,7 +301,7 @@ case class AzathothEnemyChooseAction(self : Faction, face : Int, chooser : Facti
 }) {
     override def question(implicit game : Game) = chooser.full + " — " + "Azathoth".styled("nt") + " Awakening — choose die face"
 }
-case class AzathothResolveAction(self : Faction, choices : Map[Faction, Int], gateRegion : Region) extends ForcedAction
+case class AzathothResolveAction(self : Faction, choices : $[Offer], gateRegion : Region) extends ForcedAction
 
 // Ghatanothoa IGOO: Mummify action
 case class GhatanotoaMummifyAction(self : Faction) extends OptionFactionAction(implicit g => "Mummify".styled("nt") + " " + "(" + "1 Power".styled("power") + ")") with MainQuestion
@@ -1194,11 +1194,11 @@ object IGOOsExpansion extends Expansion {
 
         // ── NUCLEAR CHAOS (Azathoth spellbook) ──
         case NuclearChaosMainAction(self) =>
-            // All players roll 1d6
-            val rolls = factions.map(f => f -> (1::2::3::4::5::6).shuffle.first).toMap
-            factions.foreach { f => f.log("rolled a " + rolls(f) + " for", "Nuclear Chaos".styled("nt")) }
+            // All players roll 1d6 — stored as $[Offer] so it serializes cleanly
+            val rolls : $[Offer] = factions./(f => Offer(f, (1::2::3::4::5::6).shuffle.first))
+            factions.foreach { f => f.log("rolled a " + rolls.%(_.f == f).head.n + " for", "Nuclear Chaos".styled("nt")) }
             // Owner may adjust their roll +/-1
-            val myRoll = rolls(self)
+            val myRoll = rolls.%(_.f == self).head.n
             val canPlus = myRoll < 6
             val canMinus = myRoll > 1
             var ask = Ask(self)
@@ -1208,8 +1208,8 @@ object IGOOsExpansion extends Expansion {
             ask
 
         case NuclearChaosAdjustAction(self, rolls, adjust) =>
-            val adjusted = rolls + (self -> (rolls(self) + adjust))
-            self.log("Nuclear Chaos".styled("nt") + ": adjusted roll to", adjusted(self))
+            val adjusted = rolls.%(_.f != self) :+ Offer(self, rolls.%(_.f == self).head.n + adjust)
+            self.log("Nuclear Chaos".styled("nt") + ": adjusted roll to", adjusted.%(_.f == self).head.n)
             Force(NuclearChaosRollAction(self, adjusted))
 
         case NuclearChaosKeepAction(self, rolls) =>
@@ -1219,20 +1219,20 @@ object IGOOsExpansion extends Expansion {
             // Flip facedown now (after adjust/keep choice resolved)
             if (!self.oncePerGame.has(NuclearChaos))
                 self.oncePerGame :+= NuclearChaos
-            val maxRoll = rolls.values.max
-            val minRoll = rolls.values.min
+            val maxRoll = rolls./(_.n).max
+            val minRoll = rolls./(_.n).min
             // Highest roller(s) gain Power equal to their roll
-            rolls.foreach { case (f, roll) =>
-                if (roll == maxRoll) {
-                    f.power += roll
-                    f.log("Nuclear Chaos".styled("nt") + s": highest roll ($roll), gained", roll.power)
+            rolls.foreach { o =>
+                if (o.n == maxRoll) {
+                    o.f.power += o.n
+                    o.f.log("Nuclear Chaos".styled("nt") + s": highest roll (${o.n}), gained", o.n.power)
                 }
             }
             // Lowest roller(s) gain that many Elder Signs
-            rolls.foreach { case (f, roll) =>
-                if (roll == minRoll && roll != maxRoll) {
-                    f.takeES(roll)
-                    f.log("Nuclear Chaos".styled("nt") + s": lowest roll ($roll), gained", roll.es)
+            rolls.foreach { o =>
+                if (o.n == minRoll && o.n != maxRoll) {
+                    o.f.takeES(o.n)
+                    o.f.log("Nuclear Chaos".styled("nt") + s": lowest roll (${o.n}), gained", o.n.es)
                 }
             }
             EndAction(self)
@@ -1246,7 +1246,7 @@ object IGOOsExpansion extends Expansion {
         case AzathothAwakenCommitAction(self, _, gateRegion) =>
             // Store gate region for later resolve
             game.azathothAwakenGateRegion = |(gateRegion)
-            game.azathothAwakenChoices = Map()
+            game.azathothAwakenChoices = $
             // Roll 1d6+2 for Power cost
             RollD6("Azathoth Awakening — roll for Power cost", roll => {
                 val powerCost = roll + 2
@@ -1254,7 +1254,7 @@ object IGOOsExpansion extends Expansion {
                 self.log("rolled", roll, "+ 2 =", powerCost.power, "to awaken", "Azathoth".styled("nt"))
                 // Start enemy choice loop
                 val enemies = factions.but(self)
-                AzathothEnemyChoiceAction(self, 0, enemies, Map())
+                AzathothEnemyChoiceAction(self, 0, enemies, $)
             })
 
         case AzathothEnemyChoiceAction(self, _, remaining, choices) =>
@@ -1269,30 +1269,30 @@ object IGOOsExpansion extends Expansion {
         case AzathothEnemyChooseAction(self, face, chooser) =>
             // Hidden choice — don't reveal the number yet
             chooser.log("has chosen their dice face")
-            // Accumulate choice in game var
-            game.azathothAwakenChoices += (chooser -> face)
+            // Accumulate choice in game var as $[Offer] so it serializes cleanly
+            game.azathothAwakenChoices = game.azathothAwakenChoices.%(_.f != chooser) :+ Offer(chooser, face)
             // Continue with remaining enemies
             val enemies = factions.but(self)
-            val remaining = enemies.%(f => !game.azathothAwakenChoices.contains(f))
+            val remaining = enemies.%(f => game.azathothAwakenChoices.%(_.f == f).none)
             AzathothEnemyChoiceAction(self, 0, remaining, game.azathothAwakenChoices)
 
         case AzathothResolveAction(self, choices, gateRegion) =>
             // Reveal all choices at once
-            choices.foreach { case (f, face) =>
-                f.log("chose the", face, "dice face")
-                f.power += face
-                f.log("gained", face.power)
+            choices.foreach { o =>
+                o.f.log("chose the", o.n, "dice face")
+                o.f.power += o.n
+                o.f.log("gained", o.n.power)
             }
             // Find lowest roller(s) — they lose 2 Doom
-            val minFace = choices.values.min
-            choices.foreach { case (f, face) =>
-                if (face == minFace) {
-                    f.doom = math.max(0, f.doom - 2)
-                    f.log("had lowest Azathoth vote (" + face + "), lost", 2.doom)
+            val minFace = choices./(_.n).min
+            choices.foreach { o =>
+                if (o.n == minFace) {
+                    o.f.doom = math.max(0, o.f.doom - 2)
+                    o.f.log("had lowest Azathoth vote (" + o.n + "), lost", 2.doom)
                 }
             }
             // Sum all faces = glyph position = combat value
-            val total = choices.values.sum
+            val total = choices./(_.n).sum
             game.azathothGlyphPosition = total
             log("Azathoth".styled("nt"), "glyph placed at", total, "on the Doom track")
 

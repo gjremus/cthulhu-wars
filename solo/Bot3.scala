@@ -1598,14 +1598,14 @@ case class Bot3(faction : Faction) {
 
                     case NuclearChaosAdjustAction(_, rolls, adjust) =>
                         // Owner adjusts own roll +/- 1; prefer adjusting up
-                        val myRoll = rolls(self)
+                        val myRoll = rolls.%(_.f == self).head.n
                         (adjust == 1 && myRoll <= 5) |=> 500 -> "nuclear chaos: bump roll up"
                         (adjust == -1 && myRoll == 6) |=> 300 -> "nuclear chaos: bump 6→5"
                         true |=> 0 -> "nuclear chaos adjust"
 
                     case NuclearChaosKeepAction(_, rolls) =>
                         // Keep if my roll is already 5+
-                        val myRoll = rolls(self)
+                        val myRoll = rolls.%(_.f == self).head.n
                         myRoll >= 5 |=> 400 -> "nuclear chaos: keep high roll"
                         myRoll <= 2 |=> -200 -> "nuclear chaos: dont keep low roll"
                         true |=> 100 -> "nuclear chaos keep"

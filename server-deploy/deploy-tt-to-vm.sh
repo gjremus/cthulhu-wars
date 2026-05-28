@@ -38,10 +38,10 @@ fi
 
 MAIN_JS="$TT_ROOT/solo/target/scala-2.13/cthulhu-wars-solo-hrf-opt/main.js"
 if $DO_BUILD || [ ! -f "$MAIN_JS" ]; then
-    echo "==> [build] sbt fullLinkJS (TchoTcho) ..."
-    JAVA_HOME=/tmp/zulu-jdk/zulu21.50.19-ca-jdk21.0.11-macosx_aarch64/Contents/Home
-    export JAVA_HOME
-    (cd "$TT_ROOT/solo" && java -jar /tmp/sbt/bin/sbt-launch.jar fullOptJS 2>&1 | tail -5)
+    echo "==> [build] sbt fullOptJS (TchoTcho) ..."
+    export JAVA_HOME=/tmp/zulu-jdk/zulu21.50.19-ca-jdk21.0.11-macosx_aarch64/Contents/Home
+    export PATH="$JAVA_HOME/bin:$HOME/.local/bin:$PATH"
+    (cd "$TT_ROOT/solo" && sbt fullOptJS 2>&1 | tail -5)
 fi
 if [ ! -f "$MAIN_JS" ]; then
     echo "ERROR: $MAIN_JS still missing after build."
