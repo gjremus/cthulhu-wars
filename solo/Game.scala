@@ -2433,6 +2433,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     f.takeES(glaakiIGOOGreenDecayCultists)
                 }
 
+                // TT Soulless: log blocked power from TT's captured cultists
+                if (soullessCultists > 0)
+                    f.log("power from" , soullessCultists, "captured " + "cultist".s(soullessCultists) + " blocked by", Soulless.styled(TT))
+
                 // Disaster Looms: gates earn ES instead of Power
                 if (disasterLoomsGates > 0) {
                     f.takeES(disasterLoomsGates)
@@ -2481,7 +2485,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 if (captured.any) {
                     captured.foreach(eliminate)
 
-                    f.log("released", captured.mkString(", "))
+                    // Log release — split Soulless-blocked TT cultists out for clarity
+                    val soullessReleased = (factions.has(TT) && TT.can(Soulless)).??(captured.%(u => u.faction == TT && u.cultist))
+                    val otherReleased = captured.diff(soullessReleased)
+                    if (soullessReleased.any)
+                        f.log("released", soullessReleased.mkString(", "), "(Soulless: provided no power)")
+                    if (otherReleased.any)
+                        f.log("released", otherReleased.mkString(", "))
                 }
             }
             } // end of `if (!shepherdDoneThisGather)` — closes the initial-entry guard
