@@ -190,6 +190,9 @@ class GameEvaluationYS(implicit game : Game) extends GameEvaluation(YS)(game) {
                 // Daemon Sultan (DS): opponent combat evaluation
                 case DS =>
                     0 -> "todo"
+
+                case TT =>
+                    true |=> 0 -> "tt"
             }
         }
 
