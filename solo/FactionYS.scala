@@ -94,13 +94,20 @@ case class ZingayaAction(self : YS, r : Region, f : Faction) extends BaseFaction
 
 
 object YSExpansion extends Expansion {
+    // 2026-05-28 fix: use `.has(Passion)` not `.can(Passion)` in BOTH places.
+    // `.can(sb)` is `.has(sb) && !used(sb)`, and `used(sb)` returns true when
+    // `sb` is in `oncePerAction`. That is EXACTLY the state we put YS into on
+    // the eliminate side (`oncePerAction :+= Passion`), so the afterAction
+    // filter was eating every faction that should receive the power. Library's
+    // YSExpansion has used `.has` since forever; this was an MNU-fork-only
+    // regression from the initial 2026-05-20 commit.
     override def eliminate(u : UnitFigure)(implicit game : Game) {
-        if (u.uclass.utype == Cultist && u.faction.can(Passion) && u.region.glyph.onMap && !MindParasite.isParasitized(u))
+        if (u.uclass.utype == Cultist && u.faction.has(Passion) && u.region.glyph.onMap && !MindParasite.isParasitized(u))
             u.faction.oncePerAction :+= Passion
     }
 
     override def afterAction()(implicit game : Game) {
-        factions.%(_.can(Passion)).%(_.oncePerAction.has(Passion)).foreach { f =>
+        factions.%(_.has(Passion)).%(_.oncePerAction.has(Passion)).foreach { f =>
             f.power += 1
 
             f.log("got", 1.power, "from", Passion)

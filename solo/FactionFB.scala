@@ -856,16 +856,13 @@ object FBExpansion extends Expansion {
         // Infernal Pact discount is gated by game.fbInfernalPactDiscount, which is 0
         // for non-FB. All three cases are safe — no special non-FB handling needed.
         case FBWritheMainAction(self) =>
-            // Round 8 Bug 75: Writhe dice count is based on REAL power BEFORE spending.
-            // Previously, flipping spellbooks added fake power to `self.power`, so the
-            // "power before spending" figure included the fake discount. Now discount
-            // is a separate pool: capture `self.power` first (real power, untouched by
-            // discount), then pay from discount + power, then roll dice based on the
-            // captured real-power-before-spending figure.
+            // 2026-05-27 rule change: dice rolled = power AFTER paying the writhe
+            // cost. 0 IP discount → cost 2 → power-2 dice; 1 IP discount → cost 1 →
+            // power-1 dice; 2+ IP discount → cost 0 → all current power as dice.
             val writheCost = 2
-            val numDice = self.power  // capture REAL power before spending
             val discountUsed = consumeDiscount(writheCost)
             self.power -= (writheCost - discountUsed)
+            val numDice = self.power  // post-payment power
             game.fbWritheRerolled = false
             game.fbWritheUsedUnits = $
             game.fbWritheKillLog = $

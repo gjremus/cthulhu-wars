@@ -212,7 +212,7 @@ object DSExpansion extends Expansion {
 
             game.independents(f)
 
-            if (f.can(ChaosGateSB) && DS.chaosGateRegions.num < 3 && areas.nex.%(r => game.gates.has(r).not && DS.at(r).%(_.canControlGate).any && f.affords(1)(r)).any)
+            if (f.can(ChaosGateSB) && DS.chaosGateRegions.num < 3 && areas.nex.%(r => game.gates.has(r).not && /* DS.at(r).%(_.canControlGate).any && */ f.affords(1)(r)).any)
                 + ChaosGateSBAction(f)
 
             if (f.can(AnimateMatter) && DS.chaosGateRegions.any) {
@@ -478,7 +478,7 @@ object DSExpansion extends Expansion {
 
         // CHAOS GATE SPELLBOOK
         case ChaosGateSBAction(self) =>
-            val valid = areas.nex.%(r => game.gates.has(r).not && DS.at(r).%(_.canControlGate).any && self.affords(1)(r))
+            val valid = areas.nex.%(r => game.gates.has(r).not && /* DS.at(r).%(_.canControlGate).any && */ self.affords(1)(r))
             Ask(self).list(valid./(r => ChaosGateSBPlaceAction(self, r))).cancel
 
         case ChaosGateSBPlaceAction(self, r) =>
@@ -632,7 +632,13 @@ object DSExpansion extends Expansion {
         // COSMIC RULER: save a killed/eliminated Avatar by sacrificing another Avatar in its stead
         case CosmicRulerSacrificeAction(self, saved, sacrificed) =>
             self.log("used", CosmicRuler.styled(self), "eliminating", sacrificed, "to save", saved)
-            game.eliminate(sacrificed)
+            // Use battle.eliminate so the sacrificed Avatar is added to the
+            // `eliminated` list — that makes it available to opposing-side
+            // Velvet Fan capture per "killed or eliminated enemy" card rule.
+            game.battle match {
+                case Some(b) => b.eliminate(sacrificed)
+                case None    => game.eliminate(sacrificed)
+            }
             saved.health = Alive
             Force(BattleDoneAction(self))
 

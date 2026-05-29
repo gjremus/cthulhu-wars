@@ -656,7 +656,7 @@ object CthulhuWarsOnline {
             } ~
             (get & path("admin" / Segment / "claude-prompts-log")) { token =>
                 if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
-                else parameter("lines".as[Int].?) { linesOpt =>
+                else parameter("lines".as[Int].?, "all".as[Boolean].?(false)) { (linesOpt, all) =>
                     val n = linesOpt.getOrElse(100).max(1).min(2000)
                     val f = new java.io.File("/tmp/claude-prompts.log")
                     if (!f.exists) complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, ""))
@@ -665,8 +665,35 @@ object CthulhuWarsOnline {
                         val out = new StringBuilder
                         Process(Seq("tail", "-n", n.toString, f.getAbsolutePath))
                             .!(ProcessLogger(line => out.append(line + "\n")))
-                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, out.toString))
+                        val raw = out.toString
+                        if (all) complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, raw))
+                        else {
+                            val ackFile = new java.io.File("/tmp/claude-prompts.ack")
+                            val ack = if (ackFile.exists)
+                                scala.io.Source.fromFile(ackFile).getLines().toList.headOption.getOrElse("").trim
+                            else ""
+                            val tsPattern = """\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]""".r
+                            val entries = raw.split("(?=\\[\\d{4}-)")
+                            val filtered = entries.filter { entry =>
+                                tsPattern.findFirstMatchIn(entry) match {
+                                    case Some(m) => m.group(1) > ack
+                                    case None    => false
+                                }
+                            }
+                            complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, filtered.mkString))
+                        }
                     }
+                }
+            } ~
+            (post & path("admin" / Segment / "claude-prompt-ack") & entity(as[String])) { (token, ts) =>
+                if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
+                else {
+                    val cleaned = ts.trim.take(64)
+                    java.nio.file.Files.write(
+                        java.nio.file.Paths.get("/tmp/claude-prompts.ack"),
+                        cleaned.getBytes("UTF-8")
+                    )
+                    complete(StatusCodes.Accepted)
                 }
             } ~
             // [2026-05-23] Claude terminal log — full history of prompts I've
@@ -684,8 +711,67 @@ object CthulhuWarsOnline {
                         val out = new StringBuilder
                         Process(Seq("tail", "-n", n.toString, f.getAbsolutePath))
                             .!(ProcessLogger(line => out.append(line + "\n")))
-                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, out.toString))
+                        // [2026-05-27] Filter to last 36 hours per user direction. Each entry
+                        // starts with [PROMPT @YYYY-MM-DD HH:MM:SS] or [RESPONSE @YYYY-MM-DD HH:MM:SS];
+                        // entries may span multiple lines so we split on the bracket marker.
+                        val raw = out.toString
+                        val cutoffMs = System.currentTimeMillis - 36L * 60 * 60 * 1000
+                        val fmt = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                        val tsPattern = """\[(?:PROMPT|RESPONSE) @(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]""".r
+                        val entries = raw.split("(?=\\[(?:PROMPT|RESPONSE) @\\d{4}-)")
+                        val filtered = entries.filter { entry =>
+                            tsPattern.findFirstMatchIn(entry) match {
+                                case Some(m) => try { fmt.parse(m.group(1)).getTime >= cutoffMs } catch { case _ : Throwable => true }
+                                case None    => false
+                            }
+                        }
+                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, filtered.mkString))
                     }
+                }
+            } ~
+            // [2026-05-26] Server stats — host RAM, JVM heap, CPU load, uptime,
+            // game count, DB size. Used by admin Server Stats page.
+            (get & path("admin" / Segment / "server-stats")) { token =>
+                if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
+                else {
+                    import scala.sys.process._
+                    def runCmd(cmd : String) : String = try {
+                        val out = new StringBuilder
+                        Process(Seq("/bin/sh", "-c", cmd))
+                            .!(ProcessLogger(line => out.append(line + "\n")))
+                        out.toString.trim
+                    } catch { case _ : Throwable => "" }
+                    val rt = Runtime.getRuntime
+                    val heapMax  = rt.maxMemory
+                    val heapUsed = rt.totalMemory - rt.freeMemory
+                    val heapFree = heapMax - heapUsed
+                    val nproc = rt.availableProcessors
+                    val memInfo = runCmd("free -b | awk '/^Mem:/ {print $2,$3,$4,$6,$7}'")
+                    val memParts = memInfo.split("\\s+")
+                    val memTotal = if (memParts.length >= 1) memParts(0).toLong else 0L
+                    val memUsed  = if (memParts.length >= 2) memParts(1).toLong else 0L
+                    val memFree  = if (memParts.length >= 3) memParts(2).toLong else 0L
+                    val memAvail = if (memParts.length >= 5) memParts(4).toLong else 0L
+                    val loadAvg = runCmd("cat /proc/loadavg | awk '{print $1,\" \",$2,\" \",$3}'")
+                    val uptime  = runCmd("uptime -p")
+                    val dbSize  = runCmd("du -sb /opt/cwo/data 2>/dev/null | awk '{print $1}'").toLongOption.getOrElse(0L)
+                    val gameCount = try q(games.length.result) catch { case _ : Throwable => -1 }
+                    val activeGames = try q(meta.filter(_.lastWriteMs > (System.currentTimeMillis - 7L*24*60*60*1000)).length.result) catch { case _ : Throwable => -1 }
+                    txt(
+                        "host_mem_total="    + memTotal +
+                        "\nhost_mem_used="   + memUsed +
+                        "\nhost_mem_free="   + memFree +
+                        "\nhost_mem_avail="  + memAvail +
+                        "\njvm_heap_max="    + heapMax +
+                        "\njvm_heap_used="   + heapUsed +
+                        "\njvm_heap_free="   + heapFree +
+                        "\nload_avg="        + loadAvg +
+                        "\nuptime="          + uptime +
+                        "\nnproc="           + nproc +
+                        "\ndb_size_bytes="   + dbSize +
+                        "\ngame_count="      + gameCount +
+                        "\nactive_games_7d=" + activeGames
+                    )
                 }
             } ~
             (post & path("admin" / Segment / "sim-run")) { token =>

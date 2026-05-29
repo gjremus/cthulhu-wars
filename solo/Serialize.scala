@@ -171,7 +171,19 @@ class Serialize(val game : Game) {
 object Serialize {
     val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS) ++ $(NeutralAbhoth, LibraryFaction)
 
-    val loyaltyCards = $(GhastCard, GugCard, ShantakCard, StarVampireCard, VoonithCard, DimensionalShamblerCard, HighPriestCard, ByatisCard, AbhothCard, DaolothCard, NyogthaCard, TulzschaCard, GnorriCard, YgolonacCard)
+    val loyaltyCards = $(
+        // Base neutral monsters
+        GhastCard, GugCard, ShantakCard, StarVampireCard, VoonithCard, DimensionalShamblerCard,
+        HighPriestCard,
+        // Base IGOOs
+        ByatisCard, AbhothCard, DaolothCard, NyogthaCard, TulzschaCard, GnorriCard, YgolonacCard,
+        // MNU neutral monsters
+        MoonbeastCard, AlbinoPenguinsCard, ElderThingCard, LengSpiderCard, SatyrCard, ServitorCard, InsectsFromShaggaiCard,
+        // MNU neutral terrors
+        DholeCard, GreatRaceOfYithCard, QuachilUttausCard, ShadowPharaohCard, HoundOfTindalosCard, BrownJenkinCard, ElderShoggothCard,
+        // MNU IGOOs
+        AzathothIGOOCard, CthughaCard, MotherHydraCard, YigCard, FatherDagonCard, GhatanotoaIGOOCard, BloatedWomanCard, AtlachNachaCard, BokrugCard, GlaakiIGOOCard
+    )
 
     def parseFaction(s : String) : |[Faction] = factions.%(_.short == s).single
 

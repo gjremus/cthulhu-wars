@@ -70,6 +70,26 @@ case object HoundOfTindalos extends UnitClass("Hound of Tindalos", Terror, 4) wi
     override def canMove(u : UnitFigure)(implicit game : Game) = false
 }
 
+// MNU v2.1 (2026-05-29): "gate region" predicate for the Hound of Tindalos.
+//   - Cronophage teleports require BOTH source and target to be a gate region.
+//   - Angles of Time eliminates the Hound at end-of-turn if its region is not a gate region.
+// Yog Sothoth's Key-and-the-Gate ability makes Yog count as a gate, but only when:
+//   (a) Yog is on the map, and
+//   (b) Yog is not in an Area with an Elder Thing (Mind Control suppresses
+//       his unique ability, which IS the gate-equivalence).
+// Cursed Slumber relocates a real gate to `SL.slumber`, which has `glyph.onMap = false`,
+// so the `.onMap` filter naturally excludes it.
+object HoundOfTindalosGates {
+    def regions(implicit game : Game) : $[Region] = {
+        val realGates = game.gates.%(_.onMap)
+        val yogGates = factions./~(_.unitGate)
+            .%(yog => yog.region.onMap && !ElderThingMindControl.suppresses(yog))
+            ./(_.region)
+        (realGates ++ yogGates).distinct
+    }
+    def has(r : Region)(implicit game : Game) : Boolean = regions.contains(r)
+}
+
 case object BrownJenkinCard extends NeutralTerrorLoyaltyCard(BrownJenkinIcon, BrownJenkin, cost = 2, powerCost = 2, quantity = 1, combat = 0)
 case object BrownJenkinIcon extends UnitClass(BrownJenkin.name + " Icon", Token, 0)
 case object BrownJenkin extends UnitClass("Brown Jenkin", Terror, 2) with NeutralMonster
@@ -330,10 +350,12 @@ object NeutralMonstersExpansion extends Expansion {
         // Card: "teleports directly from an Area with a Gate to another Area with a Gate"
         // Hound must be in a Gate area to teleport; can go to any other Gate area (no ownership required)
         // Exclude Shantak (has own MovedAction handler below) to avoid blocking carry-cultist
+        // MNU v2.1 (2026-05-29): use HoundOfTindalosGates so Yog Sothoth's Area counts (when on map and
+        // not Elder-Thing-suppressed), and so Cursed Slumber's off-map gate is excluded.
         case MovedAction(self, u, o, r) if u.uclass != HoundOfTindalos && u.uclass != Shantak && self.loyaltyCards.has(HoundOfTindalosCard) && self.allInPlay.%(_.uclass == HoundOfTindalos).any =>
             val hound = self.allInPlay.%(_.uclass == HoundOfTindalos).head
-            if (game.gates.has(hound.region)) {
-                val gates = game.gates.%(g => g != hound.region)
+            if (HoundOfTindalosGates.has(hound.region)) {
+                val gates = HoundOfTindalosGates.regions.%(g => g != hound.region)
                 if (gates.any)
                     Ask(self)
                         .each(gates)(g => CronophageTeleportAction(self, hound.ref, g).as("Teleport to", g)("Cronophage".styled("nt") + " — teleport " + HoundOfTindalos.styled(self)))
@@ -567,9 +589,12 @@ object NeutralMonstersExpansion extends Expansion {
         }
 
         // Hound of Tindalos Angles of Time: eliminate if in gateless area
+        // MNU v2.1 (2026-05-29): use HoundOfTindalosGates — Yog Sothoth's Area keeps the Hound alive
+        // (gate via Key and the Gate), unless Elder Thing has entered and suppressed Yog. Cursed Slumber
+        // gates are off the map and so don't keep the Hound alive either.
         factions.foreach { f =>
             f.allInPlay.%(_.uclass == HoundOfTindalos).foreach { h =>
-                if (!game.gates.has(h.region)) {
+                if (!HoundOfTindalosGates.has(h.region)) {
                     game.eliminate(h)
                     f.log("Angles of Time".styled("nt") + ":", HoundOfTindalos.styled(f), "eliminated (no Gate in", h.region + ")")
                 }
