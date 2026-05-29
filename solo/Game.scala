@@ -2260,7 +2260,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             SetupFactionsAction
 
-        case PowerGatherAction(last) if factions.%!(_.hibernating).%(_.power > 0).any =>
+        // 2026-05-29 fix: guard the action-phase-resumption shortcut with
+        // !TSExpansion.shepherdDoneThisGather. Without this, the Shepherd's
+        // Force(PowerGatherAction(pgrLastFaction)) re-entry takes this branch
+        // (TS now has power > 0 from Shepherd), routes to PreMainAction(last),
+        // and skips raise-to-half + AfterPowerGatherAction + FirstPlayer/PlayDir
+        // + DoomPhaseAction entirely. shepherdDoneThisGather is true on exactly
+        // those re-entries and false on every normal first entry.
+        case PowerGatherAction(last) if factions.%!(_.hibernating).%(_.power > 0).any && !TSExpansion.shepherdDoneThisGather =>
             factions.foreach { f =>
                 f.active = f.power > 0 && f.hibernating.not
             }
