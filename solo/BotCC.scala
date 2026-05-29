@@ -536,6 +536,12 @@ class GameEvaluationCC(implicit game : Game) extends GameEvaluation(CC)(game) {
                     // Daemon Sultan (DS): opponent combat evaluation
                     case DS =>
                         0 -> "todo"
+
+                    case TT =>
+                        true |=> 0 -> "tt"
+
+                    case _ =>
+                        true |=> 0 -> "unknown faction"
                 }
 
                 f.has(Abhoth) && enemyStr == 0 && ownStr >= foes(Filth).num * 2 |=> 200 -> "get rid of filth"

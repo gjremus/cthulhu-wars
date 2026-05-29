@@ -699,6 +699,8 @@ object CthulhuWarsSolo {
                                         case FB => BotFB   .ask(actions, 0.0)(game)
                                         // Daemon Sultan (DS): AI bot decision-making at Easy difficulty
                                         case DS => BotDS   .ask(actions, 0.3)(game)
+                                        // Tcho-Tcho (TT): AI bot decision-making at Easy difficulty
+                                        case TT => BotTT   .ask(actions, 0.2)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -716,6 +718,8 @@ object CthulhuWarsSolo {
                                         case FB => BotFB   .ask(actions, 0.03)(game)
                                         // Daemon Sultan (DS): AI bot decision-making at Normal difficulty
                                         case DS => BotDS   .ask(actions, 0.03)(game)
+                                        // Tcho-Tcho (TT): AI bot decision-making at Normal difficulty
+                                        case TT => BotTT   .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -736,6 +740,8 @@ object CthulhuWarsSolo {
                                         case FB => BotFB   .ask(as, 0.03)(game)
                                         // Daemon Sultan (DS): AI bot decision-making at AllVsHuman difficulty
                                         case DS => BotDS   .ask(as, 0.03)(game)
+                                        // Tcho-Tcho (TT): AI bot decision-making at AllVsHuman difficulty
+                                        case TT => BotTT   .ask(as, 0.03)(game)
                                     })
 
 

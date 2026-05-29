@@ -206,6 +206,12 @@ class GameEvaluationWW(implicit game : Game) extends GameEvaluation(WW)(game) {
                 // Daemon Sultan (DS): opponent combat evaluation
                 case DS =>
                     0 -> "todo"
+
+                case TT =>
+                    true |=> 0 -> "tt"
+
+                case _ =>
+                    true |=> 0 -> "unknown faction"
             }
         }
 

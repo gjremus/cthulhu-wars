@@ -193,6 +193,9 @@ class GameEvaluationYS(implicit game : Game) extends GameEvaluation(YS)(game) {
 
                 case TT =>
                     true |=> 0 -> "tt"
+
+                case _ =>
+                    true |=> 0 -> "unknown faction"
             }
         }
 

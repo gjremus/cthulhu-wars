@@ -226,6 +226,12 @@ class GameEvaluationYSOld(implicit game : Game) extends GameEvaluation(YS)(game)
 
                     case TS =>
                         0 -> "todo"
+
+                    case TT =>
+                        true |=> 0 -> "tt"
+
+                    case _ =>
+                        true |=> 0 -> "unknown faction"
                 }
 
             case CaptureAction(_, r, f, _) =>

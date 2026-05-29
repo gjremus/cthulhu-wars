@@ -158,6 +158,11 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
                 case DS =>
                     0 -> "todo"
 
+                case TT =>
+                    true |=> 0 -> "tt"
+
+                case _ =>
+                    true |=> 0 -> "unknown faction"
             }
         }
 
