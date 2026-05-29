@@ -2156,6 +2156,38 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 + SacrificeHighPriestMainAction(f)
     }
 
+    def initHighPriestPlans(f : Faction) {
+        f.plans ++= $(
+            UnspeakableOathPrompt,
+            UnspeakableOathSkip,
+            UnspeakableOathThreatOfHPCapture,
+            UnspeakableOathThreatOfAttackOnHighPriest,
+            UnspeakableOathThreatOfAcolyteCapture,
+            UnspeakableOathOpportunityEndOfPhase,
+            UnspeakableOathOpportunityFirstPlayer,
+        ) ++
+        (f == WW).$(UnspeakableOathThreatOfDryEternal) ++
+        (f == OW).$(UnspeakableOathOpportunityOfDreadCurse) ++
+        f.enemies.has(CC).$(UnspeakableOathThreatOfThousandForms) ++
+        f.enemies.has(BG).$(UnspeakableOathThreatOfGhroth) ++
+        (f != AN).$(UnspeakableOathThreatOfAttackOnGOO) ++
+        $(UnspeakableOathThreatOfAttackOnGate)
+
+        if (f.commands.of[UnspeakableOathPlan].none)
+            f.commands :+= UnspeakableOathPrompt
+
+        f.plans ++= $(
+            HighPriestGatesPrompt,
+            HighPriestGatesSkip,
+        )
+
+        if (f.commands.of[HighPriestGatesPlan].none)
+            if (options.has(QuickGame))
+                f.commands :+= HighPriestGatesSkip
+            else
+                f.commands :+= HighPriestGatesPrompt
+    }
+
     def reveals(f : Faction)(implicit w : AskWrapper) {
         if (f.es.exists(_.value > 0) && (doomPhase || f.doom + f.es./(_.value).sum >= 30))
             + RevealESMainAction(f, doomPhase.?(DoomAction(f)).|(PreMainAction(f)))
@@ -2256,38 +2288,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (f == TT && options.has(HighPriests)) {
                 1.to(5).foreach(_ => f.place(Acolyte, r))
                 f.place(HighPriest, r)
-
-                // Initialize HP plans/commands that normally fire on RecruitHighPriestAction.
-                // TT's starting HP bypasses that action, so we do it here.
-                f.plans ++= $(
-                    UnspeakableOathPrompt,
-                    UnspeakableOathSkip,
-                    UnspeakableOathThreatOfHPCapture,
-                    UnspeakableOathThreatOfAttackOnHighPriest,
-                    UnspeakableOathThreatOfAcolyteCapture,
-                    UnspeakableOathOpportunityEndOfPhase,
-                    UnspeakableOathOpportunityFirstPlayer,
-                ) ++
-                (f == WW).$(UnspeakableOathThreatOfDryEternal) ++
-                (f == OW).$(UnspeakableOathOpportunityOfDreadCurse) ++
-                setup.has(CC).$(UnspeakableOathThreatOfThousandForms) ++
-                setup.has(BG).$(UnspeakableOathThreatOfGhroth) ++
-                (f != AN).$(UnspeakableOathThreatOfAttackOnGOO) ++
-                $(UnspeakableOathThreatOfAttackOnGate)
-
-                if (f.commands.of[UnspeakableOathPlan].none)
-                    f.commands :+= UnspeakableOathPrompt
-
-                f.plans ++= $(
-                    HighPriestGatesPrompt,
-                    HighPriestGatesSkip,
-                )
-
-                if (f.commands.of[HighPriestGatesPlan].none)
-                    if (options.has(QuickGame))
-                        f.commands :+= HighPriestGatesSkip
-                    else
-                        f.commands :+= HighPriestGatesPrompt
+                f.log(f.full, "automatically starts with a", HighPriest.styled(f), "(High Priests expansion)")
+                initHighPriestPlans(f)
             } else {
                 1.to(6).foreach(_ => f.place(Acolyte, r))
             }
@@ -3839,38 +3841,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 self.log("recruited", uc.styled(self), "in", r)
             }
 
-            if (uc === HighPriest) {
-                self.plans ++= $(
-                    // UnspeakableOathImmediately,
-                    UnspeakableOathPrompt,
-                    UnspeakableOathSkip,
-                    UnspeakableOathThreatOfHPCapture,
-                    UnspeakableOathThreatOfAttackOnHighPriest,
-                    UnspeakableOathThreatOfAcolyteCapture,
-                    UnspeakableOathOpportunityEndOfPhase,
-                    UnspeakableOathOpportunityFirstPlayer,
-                ) ++
-                (self == WW).$(UnspeakableOathThreatOfDryEternal) ++
-                (self == OW).$(UnspeakableOathOpportunityOfDreadCurse) ++
-                self.enemies.has(CC).$(UnspeakableOathThreatOfThousandForms) ++
-                self.enemies.has(BG).$(UnspeakableOathThreatOfGhroth) ++
-                (self != AN).$(UnspeakableOathThreatOfAttackOnGOO) ++
-                $(UnspeakableOathThreatOfAttackOnGate)
-
-                if (self.commands.of[UnspeakableOathPlan].none)
-                    self.commands :+= UnspeakableOathPrompt
-
-                self.plans ++= $(
-                    HighPriestGatesPrompt,
-                    HighPriestGatesSkip,
-                )
-
-                if (self.commands.of[HighPriestGatesPlan].none)
-                    if (options.has(QuickGame))
-                        self.commands :+= HighPriestGatesSkip
-                    else
-                        self.commands :+= HighPriestGatesPrompt
-            }
+            if (uc === HighPriest)
+                initHighPriestPlans(self)
 
             EndAction(self)
 
@@ -3980,39 +3952,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // COMMANDS
         case CommandsMainAction(f) =>
-            // If a faction has an HP on the map but HP plans were never initialized
-            // (e.g. TT starting HP, or HP placed by Hierophants), add them now.
-            if (options.has(HighPriests) && f.onMap(HighPriest).any && f.plans.of[UnspeakableOathPlan].none) {
-                f.plans ++= $(
-                    UnspeakableOathPrompt,
-                    UnspeakableOathSkip,
-                    UnspeakableOathThreatOfHPCapture,
-                    UnspeakableOathThreatOfAttackOnHighPriest,
-                    UnspeakableOathThreatOfAcolyteCapture,
-                    UnspeakableOathOpportunityEndOfPhase,
-                    UnspeakableOathOpportunityFirstPlayer,
-                ) ++
-                (f == WW).$(UnspeakableOathThreatOfDryEternal) ++
-                (f == OW).$(UnspeakableOathOpportunityOfDreadCurse) ++
-                f.enemies.has(CC).$(UnspeakableOathThreatOfThousandForms) ++
-                f.enemies.has(BG).$(UnspeakableOathThreatOfGhroth) ++
-                (f != AN).$(UnspeakableOathThreatOfAttackOnGOO) ++
-                $(UnspeakableOathThreatOfAttackOnGate)
-
-                if (f.commands.of[UnspeakableOathPlan].none)
-                    f.commands :+= UnspeakableOathPrompt
-
-                f.plans ++= $(
-                    HighPriestGatesPrompt,
-                    HighPriestGatesSkip,
-                )
-
-                if (f.commands.of[HighPriestGatesPlan].none)
-                    if (options.has(QuickGame))
-                        f.commands :+= HighPriestGatesSkip
-                    else
-                        f.commands :+= HighPriestGatesPrompt
-            }
+            // Safety catch for games saved before HP plans were initialized (any faction).
+            // Guard on commands, not plans — plans may be partially populated while commands are wrong.
+            if (options.has(HighPriests) && f.onMap(HighPriest).any && f.commands.of[UnspeakableOathPlan].none)
+                initHighPriestPlans(f)
 
             val visiblePlans = f.plans.%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
             Ask(f)

@@ -700,40 +700,8 @@ object TTExpansion extends Expansion {
         case TTHierophantsChooseGateAction(self, r, next) =>
             self.place(HighPriest, r)
             self.log(Hierophants.styled(TT), ": placed", HighPriest.styled(TT), "at", r)
-
-            // Initialize HP plans/commands if not already done (mirrors RecruitHighPriestAction).
-            if (game.options.has(HighPriests) && self.plans.of[UnspeakableOathPlan].none) {
-                self.plans ++= $(
-                    UnspeakableOathPrompt,
-                    UnspeakableOathSkip,
-                    UnspeakableOathThreatOfHPCapture,
-                    UnspeakableOathThreatOfAttackOnHighPriest,
-                    UnspeakableOathThreatOfAcolyteCapture,
-                    UnspeakableOathOpportunityEndOfPhase,
-                    UnspeakableOathOpportunityFirstPlayer,
-                ) ++
-                (self == WW).$(UnspeakableOathThreatOfDryEternal) ++
-                (self == OW).$(UnspeakableOathOpportunityOfDreadCurse) ++
-                self.enemies.has(CC).$(UnspeakableOathThreatOfThousandForms) ++
-                self.enemies.has(BG).$(UnspeakableOathThreatOfGhroth) ++
-                (self != AN).$(UnspeakableOathThreatOfAttackOnGOO) ++
-                $(UnspeakableOathThreatOfAttackOnGate)
-
-                if (self.commands.of[UnspeakableOathPlan].none)
-                    self.commands :+= UnspeakableOathPrompt
-
-                self.plans ++= $(
-                    HighPriestGatesPrompt,
-                    HighPriestGatesSkip,
-                )
-
-                if (self.commands.of[HighPriestGatesPlan].none)
-                    if (game.options.has(QuickGame))
-                        self.commands :+= HighPriestGatesSkip
-                    else
-                        self.commands :+= HighPriestGatesPrompt
-            }
-
+            if (self.commands.of[UnspeakableOathPlan].none)
+                game.initHighPriestPlans(self)
             Force(next)
 
         case TTHierophantsOtherFactionsAction(self, remaining, next) =>
