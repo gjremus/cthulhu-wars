@@ -2228,6 +2228,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
         // INIT
         case StartAction =>
+            log("Cthulhu Wars TchoTcho tcho-tcho-v2.1")
             log("Options", options./(_.toString.hh).mkString(" "))
 
             if (options.has(GateDiplomacy)) {
