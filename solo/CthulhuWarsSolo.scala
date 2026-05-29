@@ -220,8 +220,11 @@ object CthulhuWarsSolo {
             case _ =>
                 val path = dom.window.location.pathname
 
-                if (path.startsWith("/play/quick"))
+                if (path.startsWith("/play/quick") || path.startsWith("/mnu/play/quick"))
                     ("", true)
+                else
+                if (path.startsWith("/mnu/play/"))
+                    (path.drop("/mnu/play/".length), false)
                 else
                 if (path.startsWith("/play/"))
                     (path.drop("/play/".length), false)
@@ -958,7 +961,13 @@ object CthulhuWarsSolo {
                         case FB => DrawRect("fb-high-priest", |(tint), x - 35, y - 60, 70, 66)
                         // Daemon Sultan (DS): high priest unit sprite
                         case DS => DrawRect("ds-high-priest", None, x - 35, y - 60, 70, 66)
-                        case _ => null
+                        // 2026-05-29: missing TS case caused null DrawRect → Mia render NPE on TS HP recruit.
+                        // Tombstalker (TS): high priest unit sprite (tinted; mirrors MNU's TS HP entry).
+                        case TS => DrawRect("ts-high-priest", |(tint), x - 35, y - 60, 70, 66)
+                        // Defensive fallback: never return null from this match. A missing webp asset
+                        // is recoverable (the image just doesn't draw); a null DrawRect crashes the
+                        // render layer entirely. Use GC's HP shape as the generic fallback.
+                        case _ => DrawRect("gc-high-priest", |(tint), x - 35, y - 60, 70, 66)
                     }
 
                     case FactionGlyph => faction match {
@@ -1187,6 +1196,16 @@ object CthulhuWarsSolo {
                     if (activeGlyphPlacer ne target) {
                         activeGlyphPlacer = target
                         glyphPosCache.clear()
+                        // Orientation change invalidates region geometry — bounds
+                        // and centroids were computed in the previous bitmap's
+                        // coord space. Without a reset, gate/unit positioning
+                        // pulls H-coords into V-renders (or vice versa) and
+                        // pieces appear in the wrong region.
+                        regionGeomComputed = false
+                        regionGeom.clear()
+                        regionArea.clear()
+                        regionCentroid.clear()
+                        regionUniformShrink.clear()
                     }
                 }
 

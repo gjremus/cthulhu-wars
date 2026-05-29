@@ -177,7 +177,7 @@ object DSExpansion extends Expansion {
 
             game.independents(f)
 
-            if (f.can(ChaosGateSB) && DS.chaosGateRegions.num < 3 && areas.nex.%(r => game.gates.has(r).not && DS.at(r).%(_.canControlGate).any && f.affords(1)(r)).any)
+            if (f.can(ChaosGateSB) && DS.chaosGateRegions.num < 3 && areas.nex.%(r => game.gates.has(r).not && /* DS.at(r).%(_.canControlGate).any && */ f.affords(1)(r)).any)
                 + ChaosGateSBAction(f)
 
             if (f.can(AnimateMatter) && DS.chaosGateRegions.any) {
@@ -439,7 +439,7 @@ object DSExpansion extends Expansion {
 
         // CHAOS GATE SPELLBOOK
         case ChaosGateSBAction(self) =>
-            val valid = areas.nex.%(r => game.gates.has(r).not && DS.at(r).%(_.canControlGate).any && self.affords(1)(r))
+            val valid = areas.nex.%(r => game.gates.has(r).not && /* DS.at(r).%(_.canControlGate).any && */ self.affords(1)(r))
             Ask(self).list(valid./(r => ChaosGateSBPlaceAction(self, r))).cancel
 
         case ChaosGateSBPlaceAction(self, r) =>

@@ -800,27 +800,42 @@ case class Bot3(faction : Faction) {
                     result = evalA(SummonAction(self, uc, r))
 
                 case ControlGateAction(_, r, u, _) =>
-                    r.allies.%(_.onGate).foreach { c =>
-                        c.uclass == u.uclass |=> -1000000 -> "remain calm"
-                        // Prefer acolyte on gate over other cultist types
-                        (c.uclass == HighPriest && u.uclass == Acolyte) |=> 500 -> "acolyte preferred on gate"
-                        c.uclass == Acolyte && u.uclass == DarkYoung |=> 1000 -> "dark young on gate"
-                        u.uclass == Acolyte && c.uclass == DarkYoung |=> -1000 -> "dark young on gate"
-                        c.uclass == HighPriest && u.uclass == Acolyte |=> 1000 -> "high priest not on gate"
-                        u.uclass == HighPriest && c.uclass == Acolyte |=> -1000 -> "high priest not on gate"
+                    // 2026-05-25 INFINITE LOOP FIX: prior scoring allowed cycles like
+                    // Acolyte → DarkYoung (+1000) → HighPriest (0) → Acolyte (+500) → …
+                    // because the relative-comparison rules left positive scores in
+                    // every direction. Replace with an ABSOLUTE preference rank so
+                    // the bot converges to a single keeper and stops switching.
+                    //
+                    // Preference (highest first):
+                    //   1. Empty gate → take ANY keeper (huge positive).
+                    //   2. Same keeper as currently on gate → "remain calm" (huge
+                    //      negative; this is a no-op switch).
+                    //   3. Among non-empty, the bot's preferred keeper rank is
+                    //      Acolyte > HighPriest > DarkYoung. (Acolyte is the cheap
+                    //      replaceable starting keeper — switching off Acolyte is
+                    //      almost always a waste of an action.)
+                    // Score is rank value MINUS 2×current-rank so once you reach
+                    // your top choice no remaining switch is positive — the framework
+                    // "Done" (score 0) wins and the action exits.
+                    val currentOnGate = r.allies.%(_.onGate)
+                    val (sameKeeper, noKeeper) = (
+                        currentOnGate.exists(_.uclass == u.uclass),
+                        currentOnGate.none
+                    )
+                    def rank(uc : UnitClass) = uc match {
+                        case Acolyte    => 30
+                        case HighPriest => 20
+                        case DarkYoung  => 10
+                        case _          => 5
                     }
+                    val newRank = rank(u.uclass)
+                    val curRank = currentOnGate.headOption./(c => rank(c.uclass)).|(0)
+                    noKeeper                       |=> (1000000 + newRank) -> "take empty gate"
+                    sameKeeper                     |=> -1000000             -> "remain calm"
+                    (!noKeeper && !sameKeeper)     |=> (newRank - curRank * 2) -> ("switch to " + u.uclass.name + " (rank " + newRank + ")")
 
                 case AbandonGateAction(_, _, _) =>
                     true |=> -1000000 -> "never"
-
-                case ControlGateAction(_, r, u, _) =>
-                    // Prefer taking control when no unit is on gate yet
-                    val currentOnGate = r.allies.%(_.onGate)
-                    (currentOnGate.none) |=> 1000000 -> "take control (no unit on gate)"
-                    // If acolyte already on gate, don't switch — prefer Done
-                    (currentOnGate.exists(_.uclass == Acolyte)) |=> -500 -> "acolyte already on gate, prefer done"
-                    // If non-acolyte on gate and we're an acolyte, switch
-                    (currentOnGate.any && !currentOnGate.exists(_.uclass == Acolyte) && u.uclass == Acolyte) |=> 500 -> "switch to acolyte on gate"
 
                 // ────────────────────────────────────────────────────────────
                 // Round 8 (FB): score the three FB-prompted choices that get

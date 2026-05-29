@@ -62,8 +62,13 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
         val foeStr = tf.strength(tf.at(r), self)
         r.glyph != Ocean && foeStr <= 6
     }
+    // 2026-05-27 rule: writhe dice = power AFTER paying the writhe cost.
+    // Cost paid = max(0, 2 - min(IP, 2)). All writhe-entry gates that test
+    // "is this writhe strong enough?" use writheDice, not raw power.
+    val writheDice : Int = power - max(0, 2 - min(game.fbInfernalPactDiscount, 2))
+
     val canHuntLeaderGoo : Boolean = leaderGooRegion.isDefined && leaderHuntCombatViable &&
-        self.onMap(Ghatanothoa).any && self.gates.num >= 1 && power >= 4 &&
+        self.onMap(Ghatanothoa).any && self.gates.num >= 1 && writheDice >= 4 &&
         self.gates.exists(g => self.at(g).num >= 2)
 
     // ── Projected-doom hunt vals (v5.8) ──
@@ -90,7 +95,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
         r.glyph != Ocean && foeStr <= 6
     }
     val canHuntProjThreatGoo : Boolean = huntTargetGooRegion.isDefined && projHuntCombatViable &&
-        self.onMap(Ghatanothoa).any && self.gates.num >= 1 && power >= 4 &&
+        self.onMap(Ghatanothoa).any && self.gates.num >= 1 && writheDice >= 4 &&
         self.gates.exists(g => self.at(g).num >= 2)
 
     // ── Eye Opens opportunistic setup (v5.8) ──
@@ -327,10 +332,10 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // BLOCK: never writhe with < 2 units on map (nothing to pain)
                 val fbUnitsOnMap = self.allInPlay.%(_.region.onMap).num
                 (fbUnitsOnMap < 2) |=> -15000 -> "BLOCK: < 2 units on map, nothing to writhe"
-                // v5.13 (2026-05-14): BLOCK writhe at < 3 power. Writhe at 1-2 power
-                // produces too-small rolls + scatters the last cultists with no
-                // follow-up. User: "block writhing at <3 power".
-                (power < 3) |=> -15000 -> "BLOCK: < 3 power, writhe too weak"
+                // v5.13 (2026-05-14): BLOCK writhe at < 3 dice. Writhe rolling 1-2
+                // dice produces too-small rolls + scatters the last cultists with
+                // no follow-up. Under 2026-05-27 rule, dice = power - max(0, 2-IP).
+                (writheDice < 3) |=> -15000 -> "BLOCK: < 3 writhe dice, too weak"
                 // v5.4 (2026-05-13): Writhe behavior when Ghato is at the top
                 // gateVulnerability target.
                 //  - Default: BLOCK Writhe (-15000) — CaptureAction or AttackAction
@@ -389,14 +394,14 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // target exists — Writhe to relocate Ghato off the water gate.
                 val ghWG = self.gates.find(g => g.glyph == Ocean && self.at(g, Ghatanothoa).any)
                 (self.gates.num > 2 && self.gates.%(_.glyph == Ocean).num > 1 && ghWG.nonEmpty &&
-                    power > 5 &&
+                    writheDice > 5 &&
                     areas.%(_.glyph != Ocean).map(gateVulnerability(_)).maxOption.getOrElse(0) >
                         ghWG.map(gateVulnerability(_)).getOrElse(0)) |=> 9000 -> "Writhe: Ghato leaves water gate for land"
                 // AP1 first-turn opener (user strategy: 2 Writhes in AP1)
-                (firstAP && power >= 7 && desiccatedOnMap == 0) |=> 8000 -> "AP1 first Writhe (power 7+, no desc)"
+                (firstAP && writheDice >= 7 && desiccatedOnMap == 0) |=> 8000 -> "AP1 first Writhe (dice 7+, no desc)"
                 // AP1 SECOND Writhe: user's replay shows second Writhe with remaining
-                // power after 1st. Allow if we still have 4+ power and 1-2 desiccated.
-                (firstAP && power >= 4 && desiccatedOnMap >= 1 && desiccatedOnMap <= 4) |=> 7000 -> "AP1 second Writhe (power 4+, desc 1-4)"
+                // power after 1st. Allow if we still have 4+ dice and 1-2 desiccated.
+                (firstAP && writheDice >= 4 && desiccatedOnMap >= 1 && desiccatedOnMap <= 4) |=> 7000 -> "AP1 second Writhe (dice 4+, desc 1-4)"
                 // Re-awaken Writhe: power must cover Writhe cost (2) + awaken cost (minus IP discount).
                 val nextAwakenCostMain = math.max(1, 11 - game.ritualCost)
                 val effectiveAwakenCost = math.max(1, nextAwakenCostMain - infernalDiscount)
@@ -423,20 +428,20 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 (ap2WritheForGhatoKillID && !ap2WritheForGhatoKill) |=> 9300 -> "Writhe for Ghato kill (instant death imminent)"
                 // Writhe to steal vulnerable enemy gate — must have an actually vulnerable gate
                 val hasVulnGate = areas.%(r => gateVulnerability(r) > 0).any
-                val ap2WritheForEnemyGate = laterAP && gooOnMap > 0 && power >= 4 && self.gates.num >= 1 && hasVulnGate
+                val ap2WritheForEnemyGate = laterAP && gooOnMap > 0 && writheDice >= 4 && self.gates.num >= 1 && hasVulnGate
                 // Post-awaken at < 3 gates with 2+ gates: writhe-capture beats defensive moves
                 val urgentCapture = gooOnMap > 0 && self.gates.num == 2 && game.fbGhatnothoaAwakenings >= 1
                 (urgentCapture && ap2WritheForEnemyGate) |=> 9300 -> "Writhe to recapture 3rd gate (2g post-awaken)"
-                // RECOVERY: 1 gate + Ghato awakened + power > 3 — writhe for 2nd gate
-                val recoveryWrithe = gooOnMap > 0 && self.gates.num == 1 && game.fbGhatnothoaAwakenings >= 1 && power > 3
+                // RECOVERY: 1 gate + Ghato awakened + writhe dice > 3 — writhe for 2nd gate
+                val recoveryWrithe = gooOnMap > 0 && self.gates.num == 1 && game.fbGhatnothoaAwakenings >= 1 && writheDice > 3
                 (recoveryWrithe && ap2WritheForEnemyGate) |=> 8000 -> "RECOVERY: Writhe capture for 2nd gate (1g + Ghato)"
                 (!urgentCapture && !recoveryWrithe && ap2WritheForEnemyGate) |=> 6000 -> "AP2+ Writhe to steal vulnerable enemy gate"
                 // WRITHE-BUILD FALLBACK: no vulnerable enemy gates exist, need a gate
                 // Writhe to move Ghato+cultist to empty land (preferably adjacent to own gate), then build
-                val noVulnerableGates = laterAP && gooOnMap > 0 && self.gates.num < 3 && power >= 4 && !ap2WritheForEnemyGate
+                val noVulnerableGates = laterAP && gooOnMap > 0 && self.gates.num < 3 && writheDice >= 4 && !ap2WritheForEnemyGate
                 noVulnerableGates |=> 5000 -> "Writhe-build: no vulnerable gates, writhe to empty land for gate"
                 // Writhe to claim unclaimed gate with FB defender (rev/ghato there, need cultist)
-                val hasUnclaimedGateWithDefender = laterAP && self.gates.num < 3 && power >= 2 &&
+                val hasUnclaimedGateWithDefender = laterAP && self.gates.num < 3 && writheDice >= 2 &&
                     game.gates.exists(gr => !self.gates.has(gr) &&
                         others.%(_.gates.has(gr)).none &&
                         (self.at(gr, Ghatanothoa).any || self.at(gr, RevenantOfKnaa).any) &&
@@ -450,16 +455,16 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // already has 2+ gates — keep producing pipeline over building
                 // additional gates that don't multiply doom much.
                 // Restore baseline writhe scoring (confirmed at 2.3%)
-                val ap2PlusGenericWrithe = laterAP && self.gates.num >= 1 && power >= 4 && desiccatedOnMap < 6
-                ap2PlusGenericWrithe |=> 5500 -> "AP2+ generic Writhe (gates + power 4+)"
-                val ap2PlusWrithe2Gates = laterAP && self.gates.num >= 2 && power >= 4 && desiccatedOnMap < 6
+                val ap2PlusGenericWrithe = laterAP && self.gates.num >= 1 && writheDice >= 4 && desiccatedOnMap < 6
+                ap2PlusGenericWrithe |=> 5500 -> "AP2+ generic Writhe (gates + dice 4+)"
+                val ap2PlusWrithe2Gates = laterAP && self.gates.num >= 2 && writheDice >= 4 && desiccatedOnMap < 6
                 ap2PlusWrithe2Gates |=> 7000 -> "AP2+ Writhe with 2+ gates (desc production)"
                 val gatesWithDefender = self.gates.%(r =>
                     self.at(r, Ghatanothoa).any || self.at(r, RevenantOfKnaa).any).num
                 val needsRedistribute = self.gates.num >= 3 && gatesWithDefender < self.gates.num.min(3)
-                val writheFirstHighPower = laterAP && power >= 7 && desiccatedOnMap < 6 &&
+                val writheFirstHighPower = laterAP && writheDice >= 7 && desiccatedOnMap < 6 &&
                     (self.gates.num < 3 || needsRedistribute)
-                writheFirstHighPower |=> 8500 -> "Writhe FIRST at power 7+ (expand or redistribute)"
+                writheFirstHighPower |=> 8500 -> "Writhe FIRST at dice 7+ (expand or redistribute)"
                 // Tactic 03: writhe to balance at 3 gates (controlled + free with FB units)
                 val freeGatesWithFB = game.gates.%(r => !self.gates.has(r) && !others.exists(_.gates.has(r)) && self.at(r).any)
                 val allFBGateRegions = self.gates ++ freeGatesWithFB
@@ -470,16 +475,16 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // Only writhe balance for SEVERE imbalance (> 2 unit difference), not composition
                 // Rev summon (T04) handles undefended gates, not writhe
                 val effectiveGateCount = self.gates.num + freeGatesWithFB.num
-                val writheForBalance = laterAP && effectiveGateCount >= 3 && power >= 6 && countImbalanced
+                val writheForBalance = laterAP && effectiveGateCount >= 3 && writheDice >= 6 && countImbalanced
                 writheForBalance |=> 8800 -> "T03: Writhe to BALANCE units across 3 gates (disparity > 2)"
-                val ap3WritheFor3rdGate = thirdAP && self.gates.num == 2 && power >= 6 && desiccatedOnMap < 4
-                ap3WritheFor3rdGate |=> 7500 -> "AP3 Writhe push for 3rd gate (2 gates, power 6+)"
+                val ap3WritheFor3rdGate = thirdAP && self.gates.num == 2 && writheDice >= 6 && desiccatedOnMap < 4
+                ap3WritheFor3rdGate |=> 7500 -> "AP3 Writhe push for 3rd gate (2 gates, dice 6+)"
                 // Block Writhe when FB has no gate AND no Ghato (nothing to do).
                 // But ALLOW Writhe at 0 gates when Ghato on map — Writhe-pain Ghato
                 // to enemy gate for capture is the recovery path.
                 val zeroGatesNoGhato = laterAP && self.gates.num == 0 && gooOnMap == 0
                 zeroGatesNoGhato |=> -3000 -> "don't Writhe without gate or Ghato"
-                val zeroGatesWithGhato = laterAP && self.gates.num == 0 && gooOnMap > 0 && power >= 4
+                val zeroGatesWithGhato = laterAP && self.gates.num == 0 && gooOnMap > 0 && writheDice >= 4
                 zeroGatesWithGhato |=> 7000 -> "URGENT: Writhe at 0 gates with Ghato (pain to steal)"
                 // Block third+ Writhe in AP1 when desc already high (diminishing returns)
                 (firstAP && desiccatedOnMap >= 3) |=> -5000 -> "AP1 third+ Writhe: already 3+ desiccated"
@@ -509,11 +514,11 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                     (power >= 2 || (power >= 1 && hasFlippableForWrithe && infernalDiscount < 1))
                 defenseWrithe |=> 8700 -> "writhe defense: redistribute CG defenders across gates"
                 // B4: Enemy GOO arrived at Ghato's region → writhe Ghato AWAY to next best gate
-                val ghatoThreatenedByGOO = laterAP && gooOnMap > 0 && power >= 4 &&
+                val ghatoThreatenedByGOO = laterAP && gooOnMap > 0 && writheDice >= 4 &&
                     self.all(Ghatanothoa).exists(u => others./~(_.at(u.region)).%(_.uclass.utype == GOO).any)
                 ghatoThreatenedByGOO |=> 9300 -> "B4: URGENT writhe — enemy GOO at Ghato's region"
                 // Cathedral vacating: Ghato at cathedral with AN combat > 0, and Ghato cost >= 4
-                val ghatoAtDangerousCathedral = laterAP && gooOnMap > 0 && power >= 4 &&
+                val ghatoAtDangerousCathedral = laterAP && gooOnMap > 0 && writheDice >= 4 &&
                     self.all(Ghatanothoa).exists { u =>
                         game.cathedrals.has(u.region) &&
                         AN.exists && AN.at(u.region).%(a => a.uclass.utype == Monster || a.uclass.utype == Terror).any &&
@@ -2554,7 +2559,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // beat Writhe-first (8500) when Writhe is available. Writhe can
                 // pain Ghato to the gate for free. Score below Writhe-first
                 // unless Writhe is unavailable (power < 4 or desc >= 6).
-                val writheAvailable = power >= 4 && desiccatedOnMap < 6
+                val writheAvailable = writheDice >= 4 && desiccatedOnMap < 6
                 // Strategy: after awaken with low power, DON'T move Ghato — save for next AP writhe.
                 // Only move Ghato to own gate if writhe not available AND gates >= 3 (defensive).
                 val saveForNextAPWrithe = isGhato && !writheAvailable && self.gates.num < 3 && power < 4
@@ -2644,7 +2649,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val cultistsOnMapMove = self.all(Acolyte).num + self.all(HighPriest).num
                 (power == 1 && cultistsOnMapMove < 6) |=> -8000 -> "T06: BLOCK move at 1P — recruit cultist instead"
                 // Block acolyte moves when writhe is available — writhe pains are free
-                val writheAffordable = power >= 4 && desiccatedOnMap < 6 && self.gates.num >= 1
+                val writheAffordable = writheDice >= 4 && desiccatedOnMap < 6 && self.gates.num >= 1
                 (u.cultist && writheAffordable) |=> -6000 -> "BLOCK: acolyte move when writhe available (use free writhe-pain)"
                 (u.uclass == Desiccated && writheAffordable) |=> -4000 -> "BLOCK: desc move when writhe available"
                 // T07: at power 1, 6 cultists, imbalance > 2, adjacent — allow move for balance

@@ -222,11 +222,28 @@ object CthulhuWarsOnline {
                 pathPrefix("webp")   { getFromDirectory("../solo/webp") } ~
                 pathPrefix("fonts")  { getFromDirectory("../solo/fonts") } ~
                 pathPrefix("target") { getFromDirectory("../solo/target") } ~
-                pathPrefix(Segment) { _ =>
+                // [2026-05-24] Cross-variant redirect: if the game was created
+                // by the MNU build, its first log line is
+                // "Cthulhu Wars HRF more-neutral-units-v2". Serve that variant's
+                // index.html (NOT a 302) so the role secret stays in the URL
+                // path for the variant's setupUI() URL parser to pick up.
+                // Library doesn't know MNU units → without this, the user gets
+                // Library's main.js and crashes on the first MNU action.
+                pathPrefix(Segment) { role =>
                     pathPrefix("webp")   { getFromDirectory("../solo/webp") } ~
                     pathPrefix("fonts")  { getFromDirectory("../solo/fonts") } ~
                     pathPrefix("target") { getFromDirectory("../solo/target") } ~
-                    pathEnd { htm(full) }
+                    pathEnd {
+                        val ver = try {
+                            q(roles.filter(_.secret === role).map(_.gameId).result.head.flatMap { id =>
+                                logs.filter(_.gameId === id).filter(_.index === 0).map(_.value).result.headOption
+                            })
+                        } catch { case _ : Throwable => None }
+                        if (ver.exists(_.contains("more-neutral-units")))
+                            redirect("/mnu/play/" + role, StatusCodes.TemporaryRedirect)
+                        else
+                            htm(full)
+                    }
                 } ~
                 pathEnd { htm(full) }
             } ~
@@ -312,11 +329,7 @@ object CthulhuWarsOnline {
             // Serve the admin UI as a static file at /admin.html. Reads from
             // ../solo/admin.html on the VM (which we upload separately).
             // [2026-05-23] No-cache headers so the admin UI is never served
-            // from the browser's stale cache — every page load fetches the
-            // current /opt/cwo/solo/admin.html. Without this, users running
-            // the admin tool across deploys see the OLD JS and report
-            // "polling/refresh isn't working" when the new endpoints aren't
-            // even being called from their cached page.
+            // from the browser's stale cache.
             (get & path("admin.html")) {
                 respondWithHeaders(
                     `Cache-Control`(CacheDirectives.`no-cache`, CacheDirectives.`no-store`, CacheDirectives.`must-revalidate`),
@@ -327,7 +340,95 @@ object CthulhuWarsOnline {
                 }
             } ~
             // Serve the MNU beta build under /mnu/. Assets in ../mnu/ on the VM.
+            // [2026-05-24] API endpoints must also be reachable under /mnu/ because the
+            // MNU index.html's data-server is set to https://cwo.freeddns.org/mnu/.
+            // Game lifecycle calls (create, roles, role, read, write, rollback-v2) go
+            // to /mnu/<endpoint>; we delegate to the same handlers as the root routes.
+            // Without these, POST /mnu/create returns 404 and the alt faction picker
+            // crashes on Start Game.
             pathPrefix("mnu") {
+                (post & path("create")) {
+                    parameter("bot".as[Boolean].?(false)) { botFlag =>
+                        decodeRequest {
+                            entity(as[String]) { body =>
+                                val ss = body.split("\n").toList.map(_.ascii)
+                                val rls = List("$", "#") ++ ss(0).split(" ").toList
+                                val name = ss(2)
+                                val lgs = ss.drop(1)
+                                val srs = rls.map(r => r -> secret).toMap
+                                q((gamesId += Game(name)).flatMap(id => seq(
+                                    roles ++= rls.map(r => Role(id, r, srs(r))),
+                                    logs ++= lgs.zipWithIndex.map { case (l, n) => Log(id, n, "", l) }
+                                )))
+                                val newGameId = q(roles.filter(_.secret === srs("$")).map(_.gameId).result.head)
+                                touchMeta(newGameId)
+                                if (botFlag)
+                                    try { q(botGames += BotGame(newGameId)) }
+                                    catch { case _ : Throwable => () }
+                                txt(srs("$"))
+                            }
+                        }
+                    }
+                } ~
+                (get & path("roles" / Segment)) { role =>
+                    val list = q(roles.filter(_.secret === role).filter(_.name === "$").map(_.gameId).result.head.flatMap { id =>
+                        roles.filter(_.gameId === id).result
+                    })
+                    txt(list.map(r => r.name + " " + r.secret).mkString("\n"))
+                } ~
+                (get & path("role" / Segment)) { role =>
+                    val name = q(roles.filter(_.secret === role).map(_.name).result.head)
+                    txt(name)
+                } ~
+                (get & path("read" / Segment / IntNumber)) { (role, from) =>
+                    val log = q(roles.filter(_.secret === role).map(_.gameId).result.head.flatMap { id =>
+                            logs.filter(_.gameId === id).filter(_.index >= from).map(_.value).result
+                    })
+                    txt(log.mkString("\n"))
+                } ~
+                (post & path("write" / Segment / IntNumber)) { (role, index) =>
+                    decodeRequest {
+                        entity(as[String]) { body =>
+                            val ss = body.split("\n").toList.map(_.ascii)
+                            try {
+                                q(roles.filter(_.secret === role).filter(_.name =!= "#").map(r => (r.name, r.gameId)).result.head.flatMap { case (name, id) =>
+                                    logs ++= 0.until(ss.size).map(n => Log(id, index + n, name, ss(n)))
+                                })
+                                try { touchMeta(q(roles.filter(_.secret === role).filter(_.name =!= "#").map(_.gameId).result.head)) }
+                                catch { case _ : Throwable => () }
+                                complete(StatusCodes.Accepted)
+                            }
+                            catch {
+                                case e : java.sql.SQLIntegrityConstraintViolationException => complete(StatusCodes.Conflict)
+                            }
+                        }
+                    }
+                } ~
+                (post & path("rollback-v2" / Segment / IntNumber)) { (role, index) =>
+                    q(roles.filter(_.secret === role).map(_.gameId).result.head.flatMap { id =>
+                        logs.filter(_.gameId === id).filter(_.index >= index).delete
+                    })
+                    try { touchMeta(q(roles.filter(_.secret === role).map(_.gameId).result.head)) }
+                    catch { case _ : Throwable => () }
+                    complete(StatusCodes.Accepted)
+                } ~
+                // /mnu/play/<role-secret> — game-join URL. Serve MNU's index.html so
+                // the SPA can pick up the role from window.location and start the
+                // online game. Same shape as the root /play handler but pointing at
+                // ../mnu/ assets. Assets that resolve relative to /play/<id> end up
+                // at /play/<asset>/..., handled by the inner Segment block.
+                pathPrefix("play") {
+                    pathPrefix("webp")   { getFromDirectory("../mnu/webp") } ~
+                    pathPrefix("fonts")  { getFromDirectory("../mnu/fonts") } ~
+                    pathPrefix("target") { getFromDirectory("../mnu/target") } ~
+                    pathPrefix(Segment) { _ =>
+                        pathPrefix("webp")   { getFromDirectory("../mnu/webp") } ~
+                        pathPrefix("fonts")  { getFromDirectory("../mnu/fonts") } ~
+                        pathPrefix("target") { getFromDirectory("../mnu/target") } ~
+                        pathEnd { getFromFile("../mnu/index.html") }
+                    } ~
+                    pathEnd { getFromFile("../mnu/index.html") }
+                } ~
                 pathPrefix("webp")   { getFromDirectory("../mnu/webp") } ~
                 pathPrefix("fonts")  { getFromDirectory("../mnu/fonts") } ~
                 pathPrefix("target") { getFromDirectory("../mnu/target") } ~
@@ -512,14 +613,12 @@ object CthulhuWarsOnline {
                     val files = Option(dir.listFiles((_, n) => n.startsWith("online-sim") && n.endsWith(".log")))
                         .map(_.toList).getOrElse(Nil)
                         .sortBy(-_.lastModified())
-                    // Tab-separated: name, size, mtimeMs
                     val rows = files.map(f => s"${f.getName}\t${f.length}\t${f.lastModified}").mkString("\n")
                     complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, rows))
                 }
             } ~
             (get & path("admin" / Segment / "sim-run-log" / Segment)) { (token, name) =>
                 if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
-                // Path-traversal guard: name must match the sim-log naming convention.
                 else if (!name.matches("online-sim[A-Za-z0-9_.\\-]*\\.log")) complete(StatusCodes.BadRequest -> "bad log name")
                 else parameter("lines".as[Int].?) { linesOpt =>
                     val n = linesOpt.getOrElse(200).max(1).min(5000)
@@ -557,7 +656,7 @@ object CthulhuWarsOnline {
             } ~
             (get & path("admin" / Segment / "claude-prompts-log")) { token =>
                 if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
-                else parameter("lines".as[Int].?) { linesOpt =>
+                else parameter("lines".as[Int].?, "all".as[Boolean].?(false)) { (linesOpt, all) =>
                     val n = linesOpt.getOrElse(100).max(1).min(2000)
                     val f = new java.io.File("/tmp/claude-prompts.log")
                     if (!f.exists) complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, ""))
@@ -566,15 +665,41 @@ object CthulhuWarsOnline {
                         val out = new StringBuilder
                         Process(Seq("tail", "-n", n.toString, f.getAbsolutePath))
                             .!(ProcessLogger(line => out.append(line + "\n")))
-                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, out.toString))
+                        val raw = out.toString
+                        if (all) complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, raw))
+                        else {
+                            val ackFile = new java.io.File("/tmp/claude-prompts.ack")
+                            val ack = if (ackFile.exists)
+                                scala.io.Source.fromFile(ackFile).getLines().toList.headOption.getOrElse("").trim
+                            else ""
+                            val tsPattern = """\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]""".r
+                            val entries = raw.split("(?=\\[\\d{4}-)")
+                            val filtered = entries.filter { entry =>
+                                tsPattern.findFirstMatchIn(entry) match {
+                                    case Some(m) => m.group(1) > ack
+                                    case None    => false
+                                }
+                            }
+                            complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, filtered.mkString))
+                        }
                     }
                 }
             } ~
-            // [2026-05-23] Claude terminal log — the full history of prompts
-            // I've already picked up plus my output back for each. Distinct
-            // from /tmp/claude-prompts.log which is the inbound queue (drained
-            // every tick). /tmp/claude-output.log is append-only and reflects
-            // what's actually been processed.
+            (post & path("admin" / Segment / "claude-prompt-ack") & entity(as[String])) { (token, ts) =>
+                if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
+                else {
+                    val cleaned = ts.trim.take(64)
+                    java.nio.file.Files.write(
+                        java.nio.file.Paths.get("/tmp/claude-prompts.ack"),
+                        cleaned.getBytes("UTF-8")
+                    )
+                    complete(StatusCodes.Accepted)
+                }
+            } ~
+            // [2026-05-23] Claude terminal log — full history of prompts I've
+            // picked up + my output back. /tmp/claude-prompts.log is the
+            // inbound queue (drained every tick); /tmp/claude-output.log is
+            // append-only and reflects what's actually been processed.
             (get & path("admin" / Segment / "claude-output-log")) { token =>
                 if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
                 else parameter("lines".as[Int].?) { linesOpt =>
@@ -586,8 +711,67 @@ object CthulhuWarsOnline {
                         val out = new StringBuilder
                         Process(Seq("tail", "-n", n.toString, f.getAbsolutePath))
                             .!(ProcessLogger(line => out.append(line + "\n")))
-                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, out.toString))
+                        // [2026-05-27] Filter to last 36 hours per user direction. Each entry
+                        // starts with [PROMPT @YYYY-MM-DD HH:MM:SS] or [RESPONSE @YYYY-MM-DD HH:MM:SS];
+                        // entries may span multiple lines so we split on the bracket marker.
+                        val raw = out.toString
+                        val cutoffMs = System.currentTimeMillis - 36L * 60 * 60 * 1000
+                        val fmt = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                        val tsPattern = """\[(?:PROMPT|RESPONSE) @(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]""".r
+                        val entries = raw.split("(?=\\[(?:PROMPT|RESPONSE) @\\d{4}-)")
+                        val filtered = entries.filter { entry =>
+                            tsPattern.findFirstMatchIn(entry) match {
+                                case Some(m) => try { fmt.parse(m.group(1)).getTime >= cutoffMs } catch { case _ : Throwable => true }
+                                case None    => false
+                            }
+                        }
+                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, filtered.mkString))
                     }
+                }
+            } ~
+            // [2026-05-26] Server stats — host RAM, JVM heap, CPU load, uptime,
+            // game count, DB size. Used by admin Server Stats page.
+            (get & path("admin" / Segment / "server-stats")) { token =>
+                if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
+                else {
+                    import scala.sys.process._
+                    def runCmd(cmd : String) : String = try {
+                        val out = new StringBuilder
+                        Process(Seq("/bin/sh", "-c", cmd))
+                            .!(ProcessLogger(line => out.append(line + "\n")))
+                        out.toString.trim
+                    } catch { case _ : Throwable => "" }
+                    val rt = Runtime.getRuntime
+                    val heapMax  = rt.maxMemory
+                    val heapUsed = rt.totalMemory - rt.freeMemory
+                    val heapFree = heapMax - heapUsed
+                    val nproc = rt.availableProcessors
+                    val memInfo = runCmd("free -b | awk '/^Mem:/ {print $2,$3,$4,$6,$7}'")
+                    val memParts = memInfo.split("\\s+")
+                    val memTotal = if (memParts.length >= 1) memParts(0).toLong else 0L
+                    val memUsed  = if (memParts.length >= 2) memParts(1).toLong else 0L
+                    val memFree  = if (memParts.length >= 3) memParts(2).toLong else 0L
+                    val memAvail = if (memParts.length >= 5) memParts(4).toLong else 0L
+                    val loadAvg = runCmd("cat /proc/loadavg | awk '{print $1,\" \",$2,\" \",$3}'")
+                    val uptime  = runCmd("uptime -p")
+                    val dbSize  = runCmd("du -sb /opt/cwo/data 2>/dev/null | awk '{print $1}'").toLongOption.getOrElse(0L)
+                    val gameCount = try q(games.length.result) catch { case _ : Throwable => -1 }
+                    val activeGames = try q(meta.filter(_.lastWriteMs > (System.currentTimeMillis - 7L*24*60*60*1000)).length.result) catch { case _ : Throwable => -1 }
+                    txt(
+                        "host_mem_total="    + memTotal +
+                        "\nhost_mem_used="   + memUsed +
+                        "\nhost_mem_free="   + memFree +
+                        "\nhost_mem_avail="  + memAvail +
+                        "\njvm_heap_max="    + heapMax +
+                        "\njvm_heap_used="   + heapUsed +
+                        "\njvm_heap_free="   + heapFree +
+                        "\nload_avg="        + loadAvg +
+                        "\nuptime="          + uptime +
+                        "\nnproc="           + nproc +
+                        "\ndb_size_bytes="   + dbSize +
+                        "\ngame_count="      + gameCount +
+                        "\nactive_games_7d=" + activeGames
+                    )
                 }
             } ~
             (post & path("admin" / Segment / "sim-run")) { token =>
@@ -596,7 +780,6 @@ object CthulhuWarsOnline {
                     "build".?, "factions".?, "opts".?, "maps".?,
                     "games".as[Int].?, "players".as[Int].?
                 ) { (build, factionsStr, optsStr, mapsStr, gamesOpt, playersOpt) =>
-                    // Whitelists. Anything outside these triggers a 400.
                     val factionCodes = Set("GC","CC","BG","YS","SL","WW","OW","AN","TS","FB","DS")
                     val optCodes = Set(
                         "HighPriests","NeutralSpellbooks","IceAgeAffectsLethargy","Opener4P10Gates",
@@ -626,7 +809,6 @@ object CthulhuWarsOnline {
                         val stamp = java.time.LocalDateTime.now.format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
                         val logName = s"online-sim-${buildSel}-${stamp}.log"
                         val logFile = new java.io.File("/tmp", logName)
-                        // Build the OnlineSimRunner arg vector.
                         val args = scala.collection.mutable.ListBuffer[String](
                             "java", "-cp", jar, "cws.OnlineSimRunner",
                             "http://localhost:" + port, ownerToken,
@@ -635,8 +817,6 @@ object CthulhuWarsOnline {
                         )
                         if (factions.nonEmpty) { args += "--force"; args += factions.mkString(",") }
                         if (opts.nonEmpty)     { args += "--opts";  args += opts.mkString(",") }
-                        // Use ProcessBuilder so the args go in as an array (no shell expansion).
-                        // Run detached so the HTTP request returns immediately.
                         import scala.jdk.CollectionConverters._
                         val pb = new java.lang.ProcessBuilder(args.asJava)
                         pb.redirectOutput(logFile)
