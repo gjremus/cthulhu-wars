@@ -58,10 +58,10 @@ case object TribeTsang extends TTTribe
 // ============================================================================
 // Tcho-Tcho (TT) SPELLBOOK REQUIREMENTS: conditions for the 6 SB slots
 // ============================================================================
-case object TTSycophancyTrigger    extends Requirement("Another Faction Rituals or Reaches 15 Doom")
+case object TTSycophancyTrigger    extends Requirement("Enemy RoA / 15D")
 case object TTEarnElderSign        extends Requirement("Earn an Elder Sign")
 case object TTThreeElderSigns      extends Requirement("Own 3+ Elder Signs")
-case object TTRemoveControlledGate extends Requirement("Remove Controlled Gate in Start Area")
+case object TTRemoveControlledGate extends Requirement("Remove Start Gate")
 case object TTGOOKilledInBattle    extends Requirement("Any GOO Killed in Battle")
 case object TTAwakenUbboSathla     extends Requirement("Awaken Ubbo-Sathla")
 
@@ -144,7 +144,7 @@ case class TTUnspeakableOathAction(self : Faction, u : UnitRef) extends BaseFact
 
 // REMOVE GATE (SBR: remove controlled gate in start area)
 case class TTRemoveGateMainAction(self : Faction) extends OptionFactionAction(
-    "Remove Controlled Gate in Start Area (Spellbook)"
+    "Remove Start Gate (Spellbook)"
 ) with MainQuestion with Soft
 case class TTRemoveGateAction(self : Faction, r : Region) extends BaseFactionAction(
     "Remove Controlled Gate from", r

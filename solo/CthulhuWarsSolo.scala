@@ -2306,8 +2306,10 @@ object CthulhuWarsSolo {
                 val fbIPDiscSStr = (f == FB && game.fbInfernalPactDiscount > 0).?(" " + (game.fbInfernalPactDiscount.toString + "IP").styled(FB)).|("")
                 // Tcho-Tcho (TT): append Growth counter to faction status panel
                 val ttGrowthStr  = (f == TT).?(" | " + ("Growth " + game.ubboGrowth.toString).styled(TT)).|("")
+                val ttGrowthMStr = (f == TT).?(" | " + ("G" + game.ubboGrowth.toString).styled(TT)).|("")
                 val ttGrowthSStr = (f == TT).?(" " + ("G" + game.ubboGrowth.toString).styled(TT)).|("")
-                val power = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr)
+                val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr)
+                val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr)
                 val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr)
                 // Firstborn (FB): read Infernal Pact discount and stored Augury kills for the faction panel display
                 val fbIPDiscount = if (f == FB) game.fbInfernalPactDiscount else 0
@@ -2511,7 +2513,7 @@ object CthulhuWarsSolo {
                     name + power + doomL
                 else
                 if (w > 420)
-                    name + power + doom
+                    name + powerM + doom
                 else
                 if (w > 300)
                     nameS + powerS + doomS
