@@ -348,8 +348,17 @@ object TTExpansion extends Expansion {
 
             // Hell's Banquet: mandatory d6 roll once Ubbo-Sathla has ever been awakened (fires before asking)
             // Guard prevents infinite loop when re-entering DoomAction after the roll
-            if (ttUbboEverAwakened && !game.ttHellsBanquetDone)
-                return Force(TTHellsBanquetRollAction(f))
+            // Suppressed by Elder Thing Mind Control only when Ubbo is on the map and an enemy Elder Thing
+            // shares its region. If Ubbo is off-map (killed/fulminated) there is no figure to suppress.
+            val ubboOnMap = f.onMap(UbboSathla)
+            val hellsBanquetSuppressed = ubboOnMap.any && ElderThingMindControl.suppresses(ubboOnMap.head)(game)
+            if (ttUbboEverAwakened && !game.ttHellsBanquetDone) {
+                if (hellsBanquetSuppressed) {
+                    f.log("Hell's Banquet: blocked by", "Elder Thing".styled("nt"))
+                    game.ttHellsBanquetDone = true
+                } else
+                    return Force(TTHellsBanquetRollAction(f))
+            }
 
             implicit val asking = Asking(f)
             game.rituals(f)
