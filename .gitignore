@@ -9,7 +9,16 @@ solo/target/*
 solo/images/*
 solo/info/*
 solo/fonts/*
-solo/webp/*
+# 2026-05-29 user direction: track MNU's webp image assets in the repo
+# (the directory used to be gitignored entirely). Only the dev artifacts
+# inside webp/ stay excluded:
+#   - solo/webp/main.js + main.js.map — stray copies of the compiled bundle.
+#   - solo/webp/browser-test.html — local dev harness page.
+#   - **/*.orig — sed/edit backups.
+solo/webp/main.js
+solo/webp/main.js.map
+solo/webp/browser-test.html
+solo/webp/**/*.orig
 solo/web.config
 
 # User direction 2026-05-22: sim/ tooling is NOT part of the live build and
