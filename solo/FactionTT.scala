@@ -709,7 +709,7 @@ object TTExpansion extends Expansion {
         case TTHierophantsChooseGateAction(self, r, next) =>
             self.place(HighPriest, r)
             self.log(Hierophants.styled(TT), ": placed", HighPriest.styled(TT), "at", r)
-            if (self.commands.of[UnspeakableOathPlan].none)
+            if (self.commands.of[UnspeakableOathPlan].none || self.plans.of[UnspeakableOathPlan].none)
                 game.initHighPriestPlans(self)
             Force(next)
 

@@ -3964,8 +3964,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // COMMANDS
         case CommandsMainAction(f) =>
             // Safety catch for games saved before HP plans were initialized (any faction).
-            // Guard on commands, not plans — plans may be partially populated while commands are wrong.
-            if (options.has(HighPriests) && f.onMap(HighPriest).any && f.commands.of[UnspeakableOathPlan].none)
+            // Also re-init plans if they were cleared when last HP was eliminated but commands were not (HP re-acquired via Hierophants).
+            if (options.has(HighPriests) && f.onMap(HighPriest).any && (f.commands.of[UnspeakableOathPlan].none || f.plans.of[UnspeakableOathPlan].none))
                 initHighPriestPlans(f)
 
             val visiblePlans = f.plans.%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
