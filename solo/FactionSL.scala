@@ -152,9 +152,17 @@ object SLExpansion extends Expansion {
         case MainAction(f : SL) =>
             implicit val asking = Asking(f)
 
-            if (f.has(Lethargy) && f.has(Tsathoggua) && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
+            // 2026-05-30 fix: gate on `f.onMap(Tsathoggua).any`, not `f.has(Tsathoggua)`.
+            // `f.has(uclass)` returns true for ANY Tsathoggua unit owned by SL — including the
+            // pre-awaken instance in `f.reserve`. That made `f.goo(Tsathoggua)` resolve to the
+            // reserve unit (region = f.reserve), so the ET-suppression check silently looked for
+            // Elder Thing in f.reserve (never present) and returned false. Net effect: Lethargy
+            // was offered while Tsathoggua sat off-map, AND once Tsathoggua awakened the
+            // suppression check could still mis-target if `f.goo` ever returned the wrong instance.
+            // On-map check restores the intended rule: Lethargy requires Tsathoggua in play.
+            if (f.has(Lethargy) && f.onMap(Tsathoggua).any && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
                 + GroupAction("Lethargy".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
-            else if (f.has(Lethargy) && f.has(Tsathoggua) && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && !ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
+            else if (f.has(Lethargy) && f.onMap(Tsathoggua).any && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && !ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
                 if (game.options.has(IceAgeAffectsLethargy).not || f.affords(0)(f.goo(Tsathoggua).region))
                     + LethargyMainAction(f)
 
