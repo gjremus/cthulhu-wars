@@ -3980,8 +3980,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         val logs = read.split("\n").toList
 
                         val oldVersion = logs(0)
+                        // 2026-05-30: this is purely informational — the game's recorded
+                        // build version doesn't match the current build because we shipped a
+                        // new version while the game was in flight. NOT an error. The
+                        // `oldVersion @@ {...}` block below handles retro-version migration.
                         if (oldVersion != version)
-                            log("Incorrect game version: " + oldVersion.hl)
+                            log("Game version updated mid-game (was " + oldVersion.hl + ")")
 
                         oldVersion @@ {
                             case "Cthulhu Wars Solo HRF 1.8"
