@@ -1084,6 +1084,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var round = 1
     var doomPhase = false
     var gatherPowerPhase = false
+    // 2026-05-30 gate-diplomacy lock: true while EndPhasePromptsAction is in flight
+    // (between the last action-phase turn and PowerGatherAction's
+    // `gatherPowerPhase = true`). Cleared at the next PreMainAction. Used by
+    // `inActionPhase` so the user-driven gate-on/off menu is frozen the moment
+    // the action phase ends.
+    var endActionPhasePrompts = false
+    def inActionPhase : Boolean = !doomPhase && !gatherPowerPhase && !endActionPhasePrompts
     var factions : $[Faction] = $
     var first : Faction = setup.first
     var gates : $[Region] = $
@@ -2038,6 +2045,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 return GameOverPhaseAction
 
             doomPhase = false
+            endActionPhasePrompts = false
             fbGhatoLastMoveOrigin = None
 
             log(CthulhuWarsSolo.DoubleLine)
@@ -2638,6 +2646,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Then(PowerGatherAction(next))
 
         case EndPhasePromptsAction(next, l) =>
+            // 2026-05-30 gate-diplomacy lock: from here until ActionPhaseAction next round,
+            // the user-driven gate-on/off menu is frozen via `inActionPhase`. EndPhasePromptsAction
+            // is the leading edge of that window (both doomPhase and gatherPowerPhase are still
+            // false here). The flag is cleared at ActionPhaseAction.
+            endActionPhasePrompts = true
             val asks = l./~{ f =>
                 implicit val asking = Asking(f)
 
@@ -2671,6 +2684,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             EndAction(self)
 
         // CONTROL
+        case AdjustGateControlAction(f, changed, then) if !inActionPhase =>
+            // 2026-05-30 gate-diplomacy lock: outside the action phase (EndPhasePromptsAction
+            // through PowerGather → BeforeFirstPlayer → FirstPlayerDetermination → PlayDirection
+            // → DoomPhase) the user-driven gate-on/off menu is frozen. If `changed` is true the
+            // player already committed mutations during their action-phase turn — advance to
+            // `then`. Otherwise short-circuit silently.
+            if (changed) Force(then) else UnknownContinue
+
         case AdjustGateControlAction(f, changed, then) =>
             // Library at Celaeno: custodian/librarian block control of uncontrolled gates
             val libraryBlockedRegions : $[Region] = if (board.isLibraryMap) $(custodianRegion, librarianRegion).flatten else $()
@@ -2707,13 +2728,20 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     controlOptions ++
                     (f.gates.has(r) && f.clings.not && f.commands.has(GateDiplomacySkipAbandon).not).$(AbandonGateAction(f, r, then).as(abandonLabel)(""))
                 }
-                .add(OutOfTurnRefresh(AdjustGateControlAction(f, changed, then)))
+                .useIf(_ => inActionPhase)(_.add(OutOfTurnRefresh(AdjustGateControlAction(f, changed, then))))
                 .group(" ")
                 .doneIf(changed)(then)
                 .cancelIf(changed.not)
 
         case ControlGateAction(f, r, u, then) if u.onGate =>
             Force(AdjustGateControlAction(f, true, then))
+
+        // 2026-05-30 gate-diplomacy lock: defensive guard on the mutation handler. The
+        // user-driven menu cannot reach here outside the action phase (the
+        // AdjustGateControlAction handler short-circuits first), but if any future code path
+        // calls ControlGateAction directly out of phase, freeze it.
+        case ControlGateAction(f, r, u, then) if !inActionPhase =>
+            Force(then)
 
         case ControlGateAction(f, r, u, then) =>
             f.at(r).foreach(_.onGate = false)
@@ -2735,6 +2763,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Gate occupy/abandon are unlimited free actions (place/remove
             // cultist on gate). They do NOT trigger CG — no unit movement occurs.
             Force(AdjustGateControlAction(f, true, then))
+
+        // 2026-05-30 gate-diplomacy lock: defensive guard. See ControlGateAction note above.
+        case AbandonGateAction(f, r, then) if !inActionPhase =>
+            Force(then)
 
         case AbandonGateAction(f, r, then) =>
             f.at(r).foreach(_.onGate = false)
