@@ -186,10 +186,29 @@ object CthulhuWarsOnline {
         implicit val system = ActorSystem()
         implicit val executionContext = system.dispatcher
 
-        def htm(s : String) = complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s))
+        // 2026-05-30: no-cache directive for index.html responses. Without this, browsers
+        // heuristic-cache index.html and keep using a stale `main.js?v=<old-tag>` URL after
+        // deploys. Symptom: user reported `Unknown symbol: InsectsFromShaggaiCard` from a
+        // browser loading main.js?v=20260528-170147 (pre-v2.1) while the live deploy at
+        // 20260530-172607 already shipped the registry fix. The index.html had no
+        // Cache-Control header, so the browser never refetched it. Same pattern as the
+        // admin.html no-cache wrapper below.
+        val noCache = respondWithHeaders(
+            `Cache-Control`(CacheDirectives.`no-cache`, CacheDirectives.`no-store`, CacheDirectives.`must-revalidate`),
+            RawHeader("Pragma", "no-cache"),
+            RawHeader("Expires", "0"),
+        )
+
+        def htm(s : String) = noCache { complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s)) }
         def jsx(s : String) = complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s))
         def txt(s : String) = complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, s))
         def rdr(s : String) = redirect(s, StatusCodes.TemporaryRedirect)
+
+        // 2026-05-30: wrapper for the MNU index.html static-file routes so they also send
+        // no-cache. Same Cache-Control as `htm`. The akka-http `getFromFile` directive
+        // doesn't set Cache-Control on its own; without this, the MNU index.html caches
+        // heuristically the same way the root index.html did before today.
+        def mnuIndex = noCache { getFromFile("../mnu/index.html") }
 
         // encodeResponse wraps every response in gzip / deflate / brotli where the
         // client's Accept-Encoding allows. Static assets like main.js (now ~2.9 MB
@@ -425,20 +444,20 @@ object CthulhuWarsOnline {
                         pathPrefix("webp")   { getFromDirectory("../mnu/webp") } ~
                         pathPrefix("fonts")  { getFromDirectory("../mnu/fonts") } ~
                         pathPrefix("target") { getFromDirectory("../mnu/target") } ~
-                        pathEnd { getFromFile("../mnu/index.html") }
+                        pathEnd { mnuIndex }
                     } ~
-                    pathEnd { getFromFile("../mnu/index.html") }
+                    pathEnd { mnuIndex }
                 } ~
                 pathPrefix("webp")   { getFromDirectory("../mnu/webp") } ~
                 pathPrefix("fonts")  { getFromDirectory("../mnu/fonts") } ~
                 pathPrefix("target") { getFromDirectory("../mnu/target") } ~
-                pathEnd { getFromFile("../mnu/index.html") } ~
-                path("") { getFromFile("../mnu/index.html") } ~
+                pathEnd { mnuIndex } ~
+                path("") { mnuIndex } ~
                 pathPrefix(Segment) { _ =>
                     pathPrefix("webp")   { getFromDirectory("../mnu/webp") } ~
                     pathPrefix("fonts")  { getFromDirectory("../mnu/fonts") } ~
                     pathPrefix("target") { getFromDirectory("../mnu/target") } ~
-                    pathEnd { getFromFile("../mnu/index.html") }
+                    pathEnd { mnuIndex }
                 }
             } ~
             (get & path("admin" / Segment / "games")) { token =>
