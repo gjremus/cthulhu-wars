@@ -1463,7 +1463,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         f.es.exists(_.value > 0).$((outOfTurn && options.has(AsyncActions).not).?(InfoESOutOfTurnAction(f)).|(RevealESOutOfTurnAction(f))) ++
         (options.has(AsyncActions) || outOfTurn.not).??(
             (highPriests && f.all(HighPriest).any).$(SacrificeHighPriestOutOfTurnMainAction(f)) ++
-            { val vp = f.plans.%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+            { val vp = f.plans
+                .%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+                // 2026-05-30 gate-diplomacy lock (v5.2 follow-up): outside the action phase,
+                // hide GateDiplomacyPlan and HighPriestGatesPlan from BOTH the persistent
+                // current-selection display AND the Commands menu. UnspeakableOathPlan is
+                // intentionally NOT filtered — Unspeakable Oath applies in every phase.
+                .%(p => inActionPhase || (p.is[GateDiplomacyPlan].not && p.is[HighPriestGatesPlan].not))
             vp.%(f.commands.has)./(p => Info(p.info)(p.group)) ++
             vp.any.$(CommandsMainAction(f)) }
         )
@@ -3164,7 +3170,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // COMMANDS
         case CommandsMainAction(f) =>
-            val visiblePlans = f.plans.%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+            // 2026-05-30 gate-diplomacy lock (v5.2 follow-up): mirror the same filter applied
+            // in extraActions so the Commands menu itself can't surface GateDiplomacyPlan or
+            // HighPriestGatesPlan entries outside the action phase. UnspeakableOathPlan stays.
+            val visiblePlans = f.plans
+                .%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+                .%(p => inActionPhase || (p.is[GateDiplomacyPlan].not && p.is[HighPriestGatesPlan].not))
             Ask(f)
                 .each(visiblePlans) { p =>
                     if (f.commands.has(p))
