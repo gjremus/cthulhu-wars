@@ -691,7 +691,10 @@ object FBExpansion extends Expansion {
             // pre-main IP session's flips are now committed (via EndAction
             // commit hook), so any cancel here only reverses post-main flips.
             if (f.hasAllSB && hasAnyIPEligibleFaceUp && game.fbInfernalPactDiscount == game.fbInfernalPactCommittedDiscount && !game.fbInfernalPactCancelledThisTurn) {
-                if (f.has(Ghatanothoa) && f.all(Ghatanothoa).any && ElderThingMindControl.suppresses(f.goo(Ghatanothoa)))
+                // 2026-05-30 fix: gate on `f.onMap(Ghatanothoa).any`, not `f.has(...) && f.all(...).any`
+                // (which are both "anywhere" — see Lethargy-class anti-pattern note in Library rollback
+                // Section 51). Matches the pattern already used on line 731.
+                if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && ElderThingMindControl.suppresses(f.goo(Ghatanothoa)))
                     + GroupAction("Infernal Pact".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
                 else
                     + FBInfernalPactMainAction(f)

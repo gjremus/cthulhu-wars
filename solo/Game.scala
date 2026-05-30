@@ -1370,8 +1370,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var fbCraters : $[Region] = $
     var fbInfernalPactDiscount : Int = 0
     // Elder Thing Mind Control: effective discount is 0 if Ghatanothoa suppressed
+    // 2026-05-30 fix: gate on `FB.onMap(Ghatanothoa).any`, not `FB.has(...) && FB.all(...).any`.
+    // Both `has` and `all` are owned-anywhere checks; pre-awaken Ghatanothoa in pool would
+    // make `FB.goo(Ghatanothoa)` resolve to the pool unit, ET-suppression returns false, and
+    // the IP discount stays nonzero when it should be suppressed. Same anti-pattern as the
+    // Lethargy fix shipped in Library v5.4 / MNU v2.4 (see Library rollback Section 51).
     def fbEffectiveIPDiscount : Int =
-        if (factions.has(FB) && FB.has(Ghatanothoa) && FB.all(Ghatanothoa).any && ElderThingMindControl.suppresses(FB.goo(Ghatanothoa))(this)) 0
+        if (factions.has(FB) && FB.onMap(Ghatanothoa).any && ElderThingMindControl.suppresses(FB.goo(Ghatanothoa))(this)) 0
         else fbInfernalPactDiscount
     // Round 8 Bug 75: removed fbInfernalPactPowerAdded — discount is no longer
     // added to self.power on flip. It's a separate pool that only becomes

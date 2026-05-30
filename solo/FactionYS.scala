@@ -143,9 +143,13 @@ object YSExpansion extends Expansion {
 
             game.independents(f)
 
-            if (f.has(Desecrate) && f.has(KingInYellow) && game.desecrated.num <= 12 && ElderThingMindControl.suppresses(f.goo(KingInYellow)))
+            // 2026-05-30 fix: gate on `f.onMap(KingInYellow).any`, not `f.has(KingInYellow)`.
+            // Same Lethargy-class anti-pattern — pre-awaken Hastur (KingInYellow) in pool would
+            // make `f.goo(KingInYellow)` resolve to the pool unit; ET-suppression check then
+            // silently mistargets pool and Desecrate is offered when it shouldn't be.
+            if (f.has(Desecrate) && f.onMap(KingInYellow).any && game.desecrated.num <= 12 && ElderThingMindControl.suppresses(f.goo(KingInYellow)))
                 + GroupAction("Desecrate".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
-            else if (f.has(Desecrate) && f.has(KingInYellow) && game.desecrated.num <= 12) {
+            else if (f.has(Desecrate) && f.onMap(KingInYellow).any && game.desecrated.num <= 12) {
                 val r = f.goo(KingInYellow).region
                 if (game.desecrated.has(r).not) {
                     val te = f.has(Hastur) && f.can(ThirdEye)

@@ -176,9 +176,14 @@ object BGExpansion extends Expansion {
 
             game.independents(f)
 
-            if (f.has(Avatar) && f.has(ShubNiggurath) && ElderThingMindControl.suppresses(f.goo(ShubNiggurath)))
+            // 2026-05-30 fix: gate on `f.onMap(ShubNiggurath).any`, not `f.has(ShubNiggurath)`.
+            // Same Lethargy-class anti-pattern (see Section 51 in Library rollback guide):
+            // `f.has(uclass)` returns true while ShubNiggurath sits in `f.reserve` pre-awaken,
+            // so `f.goo(ShubNiggurath)` resolves to the reserve unit and the ET-suppression check
+            // silently targets `f.reserve` and returns false. Avatar requires ShubNiggurath in play.
+            if (f.has(Avatar) && f.onMap(ShubNiggurath).any && ElderThingMindControl.suppresses(f.goo(ShubNiggurath)))
                 + GroupAction("Avatar".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
-            else if (f.has(Avatar) && f.has(ShubNiggurath)) {
+            else if (f.has(Avatar) && f.onMap(ShubNiggurath).any) {
                 val r = f.goo(ShubNiggurath).region
                 val t = f.taxIn(r)
                 areas.but(r).%(f.affords(1 + t)).%(r => factionlike.exists(_.at(r).vulnerable.any)).some.foreach { l =>
