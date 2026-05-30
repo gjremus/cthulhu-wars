@@ -135,7 +135,14 @@ object SLExpansion extends Expansion {
         case MainAction(f : SL) =>
             implicit val asking = Asking(f)
 
-            if (f.has(Lethargy) && f.has(Tsathoggua) && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any)
+            // 2026-05-30 fix: gate Lethargy on `f.onMap(Tsathoggua).any`, not `f.has(Tsathoggua)`.
+            // `f.has(uclass)` returns true when ANY Tsathoggua unit exists for SL, including
+            // the one sitting in `f.reserve` pre-awaken. That meant Lethargy was offered before
+            // Tsathoggua was awakened, even though Lethargy's rule requires Tsathoggua in play.
+            // `f.goo(Tsathoggua)` in the inner ice-age check then resolved to the reserve unit
+            // (region = f.reserve), so `f.affords(0)(f.goo(Tsathoggua).region)` and any ET-suppression
+            // check (MNU) silently mis-targeted f.reserve. Replace with on-map presence check.
+            if (f.has(Lethargy) && f.onMap(Tsathoggua).any && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any)
                 if (game.options.has(IceAgeAffectsLethargy).not || f.affords(0)(f.goo(Tsathoggua).region))
                     + LethargyMainAction(f)
 
