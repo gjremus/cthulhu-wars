@@ -217,10 +217,16 @@ case object TTBoostOwnCombat extends FactionSpellbook(TT, "TT Terror Boost") wit
 case class TTDoomsdayMainAction(self : Faction) extends OptionFactionAction(
     Doomsday.styled(TT) + " (once only: place cost-2 or cost-4 iGOO at your Gate)"
 ) with MainQuestion with Soft
-case class TTDoomsdayChooseIGOOAction(self : Faction, cards : $[LoyaltyCard]) extends ForcedAction
-case class TTDoomsdaySelectIGOOAction(self : Faction, card : LoyaltyCard) extends BaseFactionAction(
-    "Place iGOO for free", card.toString
-)
+case class TTDoomsdayChooseIGOOAction(self : Faction, cards : $[IGOOLoyaltyCard]) extends ForcedAction
+case class TTDoomsdaySelectIGOOAction(self : Faction, card : IGOOLoyaltyCard) extends BaseFactionAction(
+    Doomsday.styled(TT) + ": place iGOO for free", {
+    val qm = Overlays.imageSource("question-mark")
+    val p = s""""${card.name.replace("\\", "\\\\")}"""".replace("\"", "&quot;") + ", false"
+    "<div class=sbdiv>" +
+        card.name.styled("nt") +
+    s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" />""" +
+    "</div>"
+})
 case class TTDoomsdayChooseGateAction(self : Faction, card : LoyaltyCard, gates : $[Region]) extends ForcedAction
 case class TTDoomsdayPlaceAction(self : Faction, card : LoyaltyCard, r : Region) extends BaseFactionAction(
     "Place at", r
@@ -645,8 +651,8 @@ object TTExpansion extends Expansion {
 
         // DOOMSDAY (Sarkomand) — once-only: place cost-2 or cost-4 iGOO at gate, take loyalty card
         case TTDoomsdayMainAction(self) =>
-            val cards = game.loyaltyCards.%(c => c.isInstanceOf[IGOOLoyaltyCard] &&
-                (c.asInstanceOf[IGOOLoyaltyCard].power == 2 || c.asInstanceOf[IGOOLoyaltyCard].power == 4) &&
+            val cards = game.loyaltyCards.of[IGOOLoyaltyCard].%(c =>
+                (c.power == 2 || c.power == 4) &&
                 !game.factions.exists(_.loyaltyCards.has(c))
             )
             Force(TTDoomsdayChooseIGOOAction(self, cards))
@@ -665,9 +671,9 @@ object TTExpansion extends Expansion {
 
         case TTDoomsdayPlaceAction(self, card, r) =>
             self.oncePerGame :+= Doomsday
-            self.log(Doomsday.styled(TT), ": placing", card.asInstanceOf[IGOOLoyaltyCard].unit.styled(self), "at", r, "for free (took Loyalty Card)")
+            self.log(Doomsday.styled(TT), ": placing", card.unit.styled(self), "at", r, "for free (took Loyalty Card)")
             // Route through the standard iGOO placement engine at cost 0
-            Force(IndependentGOOAction(self, card.asInstanceOf[IGOOLoyaltyCard], r, 0))
+            Force(IndependentGOOAction(self, card, r, 0))
 
         // SYCOPHANCY: prompt the ritualING faction — they choose, then ritual completes via TTSycophancyRitualAction
         case TTSycophancyPromptAction(ritualer, doom, es) =>
