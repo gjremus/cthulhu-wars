@@ -1323,6 +1323,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var round = 1
     var doomPhase = false
     var gatherPowerPhase = false
+    // 2026-05-30 gate-diplomacy lock (mirrored from Library v5.2): true while
+    // EndPhasePromptsAction is in flight (between the last action-phase turn and
+    // PowerGatherAction's `gatherPowerPhase = true`). Cleared at the next
+    // ActionPhaseAction. Used by `inActionPhase` so the user-driven gate-on/off
+    // menu is frozen the moment the action phase ends.
+    var endActionPhasePrompts = false
+    def inActionPhase : Boolean = !doomPhase && !gatherPowerPhase && !endActionPhasePrompts
     var factions : $[Faction] = $
     var first : Faction = setup.first
     var gates : $[Region] = $
@@ -1755,7 +1762,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         (f.loyaltyCards.has(BokrugCard) && f.upgrades.has(DoomThatCameToSarnath).not).$(GiveBokrugMainAction(f)) ++
         (options.has(AsyncActions) || outOfTurn.not).??(
             (highPriests && f.all(HighPriest).any).$(SacrificeHighPriestOutOfTurnMainAction(f)) ++
-            { val vp = f.plans.%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+            { val vp = f.plans
+                .%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+                // 2026-05-30 gate-diplomacy lock (mirrored from Library v5.3): outside the action
+                // phase, hide GateDiplomacyPlan and HighPriestGatesPlan from both the current-
+                // selection display AND the Commands menu. UnspeakableOathPlan intentionally NOT
+                // filtered — Unspeakable Oath applies in every phase.
+                .%(p => inActionPhase || (p.is[GateDiplomacyPlan].not && p.is[HighPriestGatesPlan].not))
             vp.%(f.commands.has)./(p => Info(p.info)(p.group)) ++
             vp.any.$(CommandsMainAction(f)) }
         )
@@ -2609,6 +2622,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 return GameOverPhaseAction
 
             doomPhase = false
+            endActionPhasePrompts = false
             fbGhatoLastMoveOrigin = None
 
             // Nuclear Chaos (Azathoth spellbook): flip back face-up at start of Action Phase
@@ -3274,6 +3288,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Then(PowerGatherAction(next))
 
         case EndPhasePromptsAction(next, l) =>
+            // 2026-05-30 gate-diplomacy lock (mirrored from Library v5.2): leading edge of
+            // the freeze window. Cleared at ActionPhaseAction. Both doomPhase and
+            // gatherPowerPhase are still false here.
+            endActionPhasePrompts = true
             val asks = l./~{ f =>
                 implicit val asking = Asking(f)
 
@@ -3307,6 +3325,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             EndAction(self)
 
         // CONTROL
+        case AdjustGateControlAction(f, changed, then) if !inActionPhase =>
+            // 2026-05-30 gate-diplomacy lock (mirrored from Library v5.2): outside the action
+            // phase the user-driven gate-on/off menu is frozen. If `changed` is true the player
+            // already committed mutations during their action-phase turn — advance to `then`.
+            // Otherwise short-circuit silently.
+            if (changed) Force(then) else UnknownContinue
+
         case AdjustGateControlAction(f, changed, then) =>
             // Library at Celaeno: custodian/librarian block control of uncontrolled gates
             val libraryBlockedRegions : $[Region] = if (board.isLibraryMap) $(custodianRegion, librarianRegion).flatten else $()
@@ -3343,13 +3368,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     controlOptions ++
                     (f.gates.has(r) && f.clings.not && f.commands.has(GateDiplomacySkipAbandon).not).$(AbandonGateAction(f, r, then).as(abandonLabel)(""))
                 }
-                .add(OutOfTurnRefresh(AdjustGateControlAction(f, changed, then)))
+                .useIf(_ => inActionPhase)(_.add(OutOfTurnRefresh(AdjustGateControlAction(f, changed, then))))
                 .group(" ")
                 .doneIf(changed)(then)
                 .cancelIf(changed.not)
 
         case ControlGateAction(f, r, u, then) if u.onGate =>
             Force(AdjustGateControlAction(f, true, then))
+
+        // 2026-05-30 gate-diplomacy lock (mirrored from Library v5.2): defensive guard.
+        case ControlGateAction(f, r, u, then) if !inActionPhase =>
+            Force(then)
 
         case ControlGateAction(f, r, u, then) =>
             f.at(r).foreach(_.onGate = false)
@@ -3371,6 +3400,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Gate occupy/abandon are unlimited free actions (place/remove
             // cultist on gate). They do NOT trigger CG — no unit movement occurs.
             Force(AdjustGateControlAction(f, true, then))
+
+        // 2026-05-30 gate-diplomacy lock (mirrored from Library v5.2): defensive guard.
+        case AbandonGateAction(f, r, then) if !inActionPhase =>
+            Force(then)
 
         case AbandonGateAction(f, r, then) =>
             f.at(r).foreach(_.onGate = false)
@@ -3901,7 +3934,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // COMMANDS
         case CommandsMainAction(f) =>
-            val visiblePlans = f.plans.%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+            // 2026-05-30 gate-diplomacy lock (mirrored from Library v5.3): mirror the same filter
+            // applied in extraActions so the Commands menu itself cannot surface GateDiplomacyPlan
+            // or HighPriestGatesPlan entries outside the action phase. UnspeakableOathPlan stays.
+            val visiblePlans = f.plans
+                .%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+                .%(p => inActionPhase || (p.is[GateDiplomacyPlan].not && p.is[HighPriestGatesPlan].not))
             Ask(f)
                 .each(visiblePlans) { p =>
                     if (f.commands.has(p))
