@@ -2174,7 +2174,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         $(UnspeakableOathThreatOfAttackOnGate)
 
         if (f.commands.of[UnspeakableOathPlan].none)
-            f.commands :+= UnspeakableOathPrompt
+            f.commands ++= $(UnspeakableOathSkip, UnspeakableOathThreatOfHPCapture, UnspeakableOathThreatOfAcolyteCapture, UnspeakableOathThreatOfAttackOnHighPriest, UnspeakableOathOpportunityEndOfPhase)
 
         f.plans ++= $(
             HighPriestGatesPrompt,

@@ -433,15 +433,16 @@ object TTExpansion extends Expansion {
                 + TTSurpriseMainAction(f)
 
             // TSANG: Idolatry (cost 1: select faction-glyph area, move any TT units from adjacent areas)
-            // Valid targets: areas where ANY other faction placed a starting glyph (including factions not in
-            // this game). For factions in this game: their actual chosen starting area. For factions not in
-            // this game: the board's printed glyph areas. DS starting glyph = where DS placed its first unit.
+            // Valid targets: areas where ANY core faction placed a starting glyph.
+            // For core factions in this game: their actual chosen starting area (game.starting).
+            // For core factions NOT in this game: the board's printed glyph area.
+            // OW/TS/FB/DS/TT are excluded — they have no fixed faction glyph area.
+            val coreFactions = $(GC, CC, BG, YS, SL, WW)
             val factionGlyphAreas = {
-                val inGame = game.starting.values.$
-                val allBoardGlyph = $(GC, CC, BG, YS, SL, WW, OW, TS, FB)
-                    .%!(fx => game.setup.has(fx))
+                val inGame = game.starting.view.filterKeys(coreFactions.contains).values.toList
+                val offBoard = coreFactions.%!(fx => game.setup.has(fx))
                     ./~(fx => game.board.starting(fx)).distinct
-                (inGame ++ allBoardGlyph).distinct
+                (inGame ++ offBoard).distinct
             }
             val idolatryTargets = areas.%(r =>
                 factionGlyphAreas.has(r) &&
@@ -460,7 +461,8 @@ object TTExpansion extends Expansion {
 
             game.neutralSpellbooks(f)
             game.libraryActions(f)
-            game.highPriests(f)
+            if (game.options.has(HighPriests) && f.all(HighPriest).onMap.any)
+                + TTUnspeakableOathMainAction(f)
             game.reveals(f)
             game.endTurn(f)(f.battled.any)
 
@@ -501,10 +503,7 @@ object TTExpansion extends Expansion {
             Ask(self).each(self.all(HighPriest).onMap)(u => TTUnspeakableOathAction(self, u.ref)).cancel
 
         case TTUnspeakableOathAction(self, uref) =>
-            game.eliminate(game.unit(uref))
-            self.power += 2
-            self.log("Unspeakable Oath: sacrificed", HighPriest.styled(TT), "for", 2.power)
-            EndAction(self)
+            Force(SacrificeHighPriestAction(self, game.unit(uref).region, PreMainAction(self)))
 
         // REMOVE GATE (SBR #4)
         case TTRemoveGateMainAction(self) =>
@@ -604,12 +603,12 @@ object TTExpansion extends Expansion {
         // IDOLATRY (Tsang) — cost 1: select faction-glyph area, move any or all TT units from adjacent areas
         case TTIdolatryMainAction(self) =>
             self.power -= 1
+            val coreFactions = $(GC, CC, BG, YS, SL, WW)
             val factionGlyphAreas = {
-                val inGame = game.starting.values.$
-                val allBoardGlyph = $(GC, CC, BG, YS, SL, WW, OW, TS, FB)
-                    .%!(fx => game.setup.has(fx))
+                val inGame = game.starting.view.filterKeys(coreFactions.contains).values.toList
+                val offBoard = coreFactions.%!(fx => game.setup.has(fx))
                     ./~(fx => game.board.starting(fx)).distinct
-                (inGame ++ allBoardGlyph).distinct
+                (inGame ++ offBoard).distinct
             }
             val targets = areas.%(r =>
                 factionGlyphAreas.has(r) &&
