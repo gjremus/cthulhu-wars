@@ -433,13 +433,13 @@ object TTExpansion extends Expansion {
                 + TTSurpriseMainAction(f)
 
             // TSANG: Idolatry (cost 1: select faction-glyph area, move any TT units from adjacent areas)
-            // Valid targets: areas where ANY core faction placed a starting glyph.
-            // For core factions in this game: their actual chosen starting area (game.starting).
-            // For core factions NOT in this game: the board's printed glyph area.
-            // OW/TS/FB/DS/TT are excluded — they have no fixed faction glyph area.
+            // Valid targets: any region where a faction placed their glyph.
+            // For ALL factions in this game: game.starting records their chosen start region where their glyph is placed.
+            // For core factions (GC/CC/BG/YS/SL/WW) NOT in this game: use board-printed starting area.
+            // OW/TS/FB/AN/DS not in game are excluded — their board.starting() is not a fixed glyph area.
             val coreFactions = $(GC, CC, BG, YS, SL, WW)
             val factionGlyphAreas = {
-                val inGame = game.starting.view.filterKeys(coreFactions.contains).values.toList
+                val inGame = game.starting.values.$
                 val offBoard = coreFactions.%!(fx => game.setup.has(fx))
                     ./~(fx => game.board.starting(fx)).distinct
                 (inGame ++ offBoard).distinct
@@ -605,7 +605,7 @@ object TTExpansion extends Expansion {
             self.power -= 1
             val coreFactions = $(GC, CC, BG, YS, SL, WW)
             val factionGlyphAreas = {
-                val inGame = game.starting.view.filterKeys(coreFactions.contains).values.toList
+                val inGame = game.starting.values.$
                 val offBoard = coreFactions.%!(fx => game.setup.has(fx))
                     ./~(fx => game.board.starting(fx)).distinct
                 (inGame ++ offBoard).distinct
