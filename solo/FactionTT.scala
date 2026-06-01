@@ -181,21 +181,33 @@ case class TTSurpriseAcolyteChoiceAction(self : Faction, target : Faction, u : U
     "Eliminate " + Acolyte.styled(TT), implicit g => g.unit(u).full
 )
 
-// IDOLATRY (Tsang exclusive: cost 1, select faction-glyph area, move any or all TT units from adjacent areas)
+// IDOLATRY (Tsang exclusive: cost 1, select Faction Glyph area, move TT units from adjacent areas)
+// Flow: 1) choose destination (faction glyph region), 2) choose source region + build unit pool, 3) execute
 case class TTIdolatryMainAction(self : Faction) extends OptionFactionAction(
     Idolatry.styled(TT) + " (cost " + 1.power + ": select Faction Glyph area, move TT units from adjacent areas)"
 ) with MainQuestion with Soft
-case class TTIdolatryChooseAreaAction(self : Faction, areas : $[Region]) extends ForcedAction
-case class TTIdolatryTargetAreaAction(self : Faction, r : Region) extends BaseFactionAction("Move units to", r)
-// Per-unit move prompt: remaining = units still eligible to move
-case class TTIdolatryMoveUnitsAction(self : Faction, r : Region, remaining : $[UnitRef]) extends ForcedAction
-case class TTIdolatryMoveUnitAction(self : Faction, u : UnitRef, r : Region, remaining : $[UnitRef]) extends BaseFactionAction(
-    "Move", implicit g => g.unit(u).full + " to " + r
+// Step 1: choose destination region; pool always starts empty
+case class TTIdolatryChooseDestAction(self : Faction, targets : $[Region], pool : $[UnitRef]) extends ForcedAction
+// Cancel at destination — refund power, return to action menu
+case class TTIdolatryCancelAction(self : Faction) extends ForcedAction
+// Step 2: choose source region (or Done/CancelAll); pool accumulates selected units
+case class TTIdolatryChooseSourceAction(self : Faction, dest : Region, pool : $[UnitRef]) extends ForcedAction
+// Execute: move all pooled units, log each
+case class TTIdolatryDoneAction(self : Faction, dest : Region, pool : $[UnitRef]) extends ForcedAction
+// Step 3: choose a unit from source to add to pool
+case class TTIdolatryChooseUnitAction(self : Faction, dest : Region, src : Region, pool : $[UnitRef]) extends ForcedAction
+// Add one unit from src to pool
+case class TTIdolatryAddUnitAction(self : Faction, dest : Region, src : Region, u : UnitRef, pool : $[UnitRef]) extends BaseFactionAction(
+    "Add to move", implicit g => g.unit(u).full + " from " + src + " → " + dest
 )
-case class TTIdolatrySkipUnitAction(self : Faction, u : UnitRef, r : Region, remaining : $[UnitRef]) extends BaseFactionAction(
-    "Leave", implicit g => g.unit(u).full + " in place"
+// Undo last unit added from src (removes last pool entry whose origin is src)
+case class TTIdolatryUndoLastAction(self : Faction, dest : Region, src : Region, pool : $[UnitRef]) extends BaseFactionAction(
+    "Undo last", implicit g => "remove last unit from " + src + " from move pool"
 )
-case class TTIdolatryDoneAction(self : Faction) extends ForcedAction
+// Cancel all units from src — remove from pool, return to source picker
+case class TTIdolatryCancelSourceAction(self : Faction, dest : Region, src : Region, pool : $[UnitRef]) extends BaseFactionAction(
+    "Cancel", implicit g => "remove all " + src + " units from move pool"
+)
 
 // TERROR (all tribes: pre-battle choice — reduce enemy or boost own)
 case class TTTerrorPreBattleAction(self : Faction) extends OptionFactionAction(TerrorSB) with PreBattleQuestion
@@ -614,38 +626,65 @@ object TTExpansion extends Expansion {
                 factionGlyphAreas.has(r) &&
                 game.board.connected(r).%(adj => self.at(adj).any).any
             )
-            Force(TTIdolatryChooseAreaAction(self, targets))
+            Force(TTIdolatryChooseDestAction(self, targets, $()))
 
-        case TTIdolatryChooseAreaAction(self, targets) =>
-            Ask(self).each(targets)(r => TTIdolatryTargetAreaAction(self, r)).cancel
+        case TTIdolatryChooseDestAction(self, targets, pool) =>
+            Ask(self).each(targets)(r => TTIdolatryChooseSourceAction(self, r, pool))
+                .add(TTIdolatryCancelAction(self))
 
-        case TTIdolatryTargetAreaAction(self, r) =>
-            val eligible = game.board.connected(r)./~(adj => self.at(adj))./(_.ref)
-            Force(TTIdolatryMoveUnitsAction(self, r, eligible))
+        case TTIdolatryCancelAction(self) =>
+            self.power += 1
+            PreMainAction(self)
 
-        case TTIdolatryMoveUnitsAction(self, r, remaining) =>
-            if (remaining.none)
-                Force(TTIdolatryDoneAction(self))
-            else {
-                val u = remaining.head
-                val rest = remaining.tail
-                Ask(self)
-                    .add(TTIdolatryMoveUnitAction(self, u, r, rest))
-                    .add(TTIdolatrySkipUnitAction(self, u, r, rest))
+        case TTIdolatryChooseSourceAction(self, dest, pool) =>
+            val sources = game.board.connected(dest).%(r => self.at(r).any)
+            implicit val asking = Asking(self)
+            if (pool.any)
+                + TTIdolatryDoneAction(self, dest, pool).as(Idolatry.styled(TT))("Done — move " + pool.num + " unit".s(pool.num))
+            sources.foreach { src =>
+                + TTIdolatryChooseUnitAction(self, dest, src, pool).as("Choose units from")(src)
             }
+            + TTIdolatryCancelAction(self).as("Cancel all")(Idolatry.styled(TT) + " — refund " + 1.power)
+            asking
 
-        case TTIdolatryMoveUnitAction(self, uref, r, remaining) =>
-            val u = game.unit(uref)
-            val from = u.region
-            u.region = r
-            u.add(Moved)
-            self.log(Idolatry.styled(TT), ": moved", u.uclass.styled(TT), "from", from, "to", r)
-            Force(TTIdolatryMoveUnitsAction(self, r, remaining))
+        case TTIdolatryChooseUnitAction(self, dest, src, pool) =>
+            val alreadyPooled = pool./(game.unit).%(_.region == src)./(_.ref)
+            val available = self.at(src)./(_.ref).diff(alreadyPooled)
+            implicit val asking = Asking(self)
+            available.foreach { uref =>
+                + TTIdolatryAddUnitAction(self, dest, src, uref, pool)
+            }
+            val fromSrc = pool./(game.unit).%(_.region == src)./(_.ref)
+            if (fromSrc.any)
+                + TTIdolatryUndoLastAction(self, dest, src, pool)
+            if (fromSrc.any)
+                + TTIdolatryCancelSourceAction(self, dest, src, pool)
+            if (pool.any)
+                + TTIdolatryDoneAction(self, dest, pool).as(Idolatry.styled(TT))("Done — move " + pool.num + " unit".s(pool.num))
+            + TTIdolatryChooseSourceAction(self, dest, pool).as("Back")(Idolatry.styled(TT) + " — choose another source region")
+            asking
 
-        case TTIdolatrySkipUnitAction(self, uref, r, remaining) =>
-            Force(TTIdolatryMoveUnitsAction(self, r, remaining))
+        case TTIdolatryAddUnitAction(self, dest, src, uref, pool) =>
+            Force(TTIdolatryChooseUnitAction(self, dest, src, pool :+ uref))
 
-        case TTIdolatryDoneAction(self) =>
+        case TTIdolatryUndoLastAction(self, dest, src, pool) =>
+            val fromSrc = pool./(game.unit).%(_.region == src)./(_.ref)
+            val newPool = pool.diff($(fromSrc.last))
+            Force(TTIdolatryChooseUnitAction(self, dest, src, newPool))
+
+        case TTIdolatryCancelSourceAction(self, dest, src, pool) =>
+            val fromSrc = pool./(game.unit).%(_.region == src)./(_.ref)
+            val newPool = pool.diff(fromSrc)
+            Force(TTIdolatryChooseSourceAction(self, dest, newPool))
+
+        case TTIdolatryDoneAction(self, dest, pool) =>
+            pool.foreach { uref =>
+                val u = game.unit(uref)
+                val from = u.region
+                u.region = dest
+                u.add(Moved)
+                self.log(Idolatry.styled(TT), ": moved", u.uclass.styled(TT), "from", from, "to", dest)
+            }
             EndAction(self)
 
         // DOOMSDAY (Sarkomand) — once-only: place cost-2 or cost-4 iGOO at gate, take loyalty card

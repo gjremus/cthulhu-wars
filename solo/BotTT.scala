@@ -242,17 +242,34 @@ class GameEvaluationTT(implicit game : Game) extends GameEvaluation(TT)(game) {
             case TTIdolatryMainAction(_) =>
                 (self.pool(Acolyte).any && self.gates.any) |=> 25 -> "#TT idolatry"
 
-            case TTIdolatryTargetAreaAction(_, r) =>
-                val hasEnemy = game.factions.but(self).exists(_.at(r).any)
-                hasEnemy |=> 10 -> "#TT idolatry-defend"
-                r.ownGate |=> 15 -> "#TT idolatry-own-gate"
-                true |=> 5 -> "#TT idolatry-place"
+            case TTIdolatryChooseDestAction(_, targets, _) =>
+                targets.foreach { r =>
+                    val hasEnemy = game.factions.but(self).exists(_.at(r).any)
+                    hasEnemy |=> 10 -> "#TT idolatry-defend"
+                    r.ownGate |=> 15 -> "#TT idolatry-own-gate"
+                    true |=> 5 -> "#TT idolatry-place"
+                }
 
-            case TTIdolatryMoveUnitAction(_, _, _, _) =>
-                result +:= Evaluation(10, "#TT idolatry-move-unit")
+            case TTIdolatryChooseSourceAction(_, dest, pool) =>
+                true |=> 5 -> "#TT idolatry-source"
 
-            case TTIdolatrySkipUnitAction(_, _, _, _) =>
-                result +:= Evaluation(0, "#TT idolatry-skip-unit")
+            case TTIdolatryChooseUnitAction(_, dest, src, pool) =>
+                true |=> 10 -> "#TT idolatry-add-unit"
+
+            case TTIdolatryAddUnitAction(_, _, _, _, _) =>
+                result +:= Evaluation(10, "#TT idolatry-add-unit")
+
+            case TTIdolatryDoneAction(_, _, pool) =>
+                result +:= Evaluation(if (pool.any) 10 else 0, "#TT idolatry-done")
+
+            case TTIdolatryCancelAction(_) =>
+                result +:= Evaluation(0, "#TT idolatry-cancel")
+
+            case TTIdolatryUndoLastAction(_, _, _, _) =>
+                result +:= Evaluation(0, "#TT idolatry-undo")
+
+            case TTIdolatryCancelSourceAction(_, _, _, _) =>
+                result +:= Evaluation(0, "#TT idolatry-cancel-src")
 
             // ── DOOMSDAY (Sarkomand) ──────────────────────────────────────────
             case TTDoomsdayMainAction(_) =>
