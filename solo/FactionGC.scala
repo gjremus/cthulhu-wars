@@ -140,7 +140,7 @@ object GCExpansion extends Expansion {
             game.independents(f)
 
             if (f.can(Dreams) && f.pool(Acolyte).any)
-                areas.%(f.affords(2)).%(r => f.enemies.%(_.at(r, Acolyte).any).any).some.foreach { l =>
+                areas.%(f.affords(2)).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
                     + DreamsMainAction(f, l)
                 }
 
@@ -228,7 +228,7 @@ object GCExpansion extends Expansion {
         // DREAMS
         case DreamsMainAction(f, l) =>
             Ask(f)
-                .some(l)(r => f.enemies./~(_.at(r, Acolyte).take(1))./(c => DreamsAction(f, c.region, c.faction)))
+                .some(l)(r => f.enemies./~(e => e.at(r).%(_.targetableAsCultistByEnemy).take(1))./(c => DreamsAction(f, c.region, c.faction)))
                 .cancel
 
         case DreamsAction(f, r, e) =>
@@ -236,7 +236,7 @@ object GCExpansion extends Expansion {
             f.payTax(r)
             f.log("sent dreams to", e, "in", r)
 
-            val l = e.at(r)(Acolyte).preferablyNotOnGate
+            val l = e.at(r).%(_.targetableAsCultistByEnemy).preferablyNotOnGate
 
             Ask(e).each(l)(u => DreamsTargetAction(e, f, r, u).as(u.ref.full)(f, "sent", Dreams, "to", r))
 

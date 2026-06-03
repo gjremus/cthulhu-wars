@@ -423,6 +423,12 @@ class GameEvaluationWW(implicit game : Game) extends GameEvaluation(WW)(game) {
 
             case MoveAction(_, u, o, d, cost) if u.uclass == Acolyte =>
                 u.onGate |=> -10 -> "on gate"
+                // WW: never move the sole gate keeper unless under direct threat
+                u.gateKeeper && (!u.capturable || u.enemies.goos.active.none) |=> -500 -> "dont move gatekeeper"
+                // WW: heavily penalise gate-to-gate shuffle (pointless gate-control switching)
+                o.ownGate && d.ownGate |=> -800 -> "no gate-to-gate shuffle"
+                // WW: do not move to a gate where control is blocked (shadow pharaoh / custodian / librarian)
+                d.gate && gateControlBlocked(d) |=> -1000000 -> "gate control blocked at dest"
 
                 // Adjusted to stop moving cultist if they will be captured at opposite pole
                 need(OppositeGate) && opposite.capturers.%(_.active).none && self.cultists.num == 6 && game.board.distance(d, opposite) < game.board.distance(o, opposite) && game.board.distance(d, opposite) == 0 |=> 900 -> "go build opposite gate"

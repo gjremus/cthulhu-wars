@@ -126,6 +126,9 @@ case class PrimeCauseChooseReplacementAction(self : Faction, oldRef : UnitRef, n
 case class PrimeCauseSkipAction(self : Faction) extends BaseFactionAction("Prime Cause".styled("nt"), "Skip") {
     override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt")
 }
+case class PrimeCauseCancelReplacementAction(self : Faction) extends BaseFactionAction("Prime Cause".styled("nt"), "Cancel") {
+    override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt") + " — choose Unit to replace"
+}
 
 // Quachil Uttaus: Dust to Dust choices
 case class QuachilDustToDustRemoveAction(self : Faction, uRef : UnitRef, quOwner : Faction) extends BaseFactionAction(
@@ -156,6 +159,10 @@ case object BattleEnd extends BattlePhase
 
 trait PreBattleQuestion extends FactionAction {
     def question(implicit game : Game) = (game.battle./(_.attacker).has(self)).?("Attacker").|("Defender") + " pre-battle"
+}
+
+trait PostBattleQuestion extends FactionAction {
+    def question(implicit game : Game) = (game.battle./(_.attacker).has(self)).?("Attacker").|("Defender") + " post-battle"
 }
 
 case class BattleDoneAction(self : Faction) extends ForcedAction
@@ -500,6 +507,22 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s == TT && s.can(TerrorSB) && !s.tag(TTReduceEnemyCombat) && !s.tag(TTBoostOwnCombat) && s.forces(ProtoShoggoth).any)
             options :+= TTTerrorPreBattleAction(TT)
 
+        // Bubastis (BB): Zagazig — auto-apply (Fix 27, user directive 2026-06-02:
+        // "Zagazig - I don't believe this is optional. For now, comment out the menu
+        // items for this, and have it auto apply.") Zagazig is not optional per rules;
+        // the swap is now applied automatically post-roll (see ChannelPowerPhase block).
+        // The Use/Skip menu items are commented out for now.
+        // if (s == BB && s.can(Zagazig) && !s.tag(Zagazig) && s.forces.%(_.uclass.utype == Monster).any) {
+        //     options :+= ZagazigUseAction(s)
+        //     options :+= ZagazigSkipAction(s)
+        // }
+
+        // Bubastis (BB): Savagery — pre-battle pay 1 Power for +4 strength per CatFromSaturn (task 3.10.3/3.14.3)
+        if (s == BB && s.can(Savagery) && !s.tag(Savagery) && s.forces.%(_.uclass == CatFromSaturn).any && s.power >= 1) {
+            options :+= SavageryUseAction(s)
+            options :+= SavagerySkipAction(s)
+        }
+
         Ask(s).list(options).add(PreBattleDoneAction(s, next))
     }
 
@@ -660,7 +683,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (refugees.none)
             return proceed()
 
-        val destinations = arena.connectedForRetreat.%(r => s.opponent.at(r).none)
+        val moonDest = (s == BB).??($(BB.moon))
+        val destinations = (arena.connectedForRetreat.%(r => s.opponent.at(r).none) ++ moonDest).distinct
 
         val chooser : Faction = retreater(s)
 
@@ -717,8 +741,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
         // Cthugha Firestorm: "Kill an enemy GOO in Battle"
+        // HIGH-2 revised: ElderGod (Bastet) counts as GOO for this trigger per spec §1.3.
         if (s.has(Cthugha) && s.upgrades.has(Firestorm).not) {
-            val killedGOOs = s.opponent.forces.%(u => u.uclass.utype == GOO && u.health == Killed)
+            val killedGOOs = s.opponent.forces.%(u => u.uclass.isGOO && u.health == Killed)
             if (killedGOOs.any) {
                 s.upgrades :+= Firestorm
                 s.log("gained", Firestorm.styled(s), "for killing enemy GOO with", Cthugha.styled(s))
@@ -936,6 +961,28 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // Bubastis (BB): Zagazig — swap Kills<->Pains for BOTH sides FIRST in the post-roll
+                // resolution chain, BEFORE Leng Spider Bloodthirst and BEFORE Demand Sacrifice's
+                // Kills->Pains conversion (rulebook FAQ #3 and FAQ #17).
+                // Fix 27 (user directive 2026-06-02): Zagazig is NOT optional — auto-apply
+                // whenever BB is participating in the battle and has Zagazig researched.
+                // Per-faction roll-change line emitted to game log so the new totals are visible.
+                if (sides.has(BB) && BB.can(Zagazig)) {
+                    sides.%(f => f == BB).foreach { bbSide =>
+                        def swapRolls(side : Side) {
+                            side.rolls = side.rolls./(r => if (r == Kill) Pain else if (r == Pain) Kill else r)
+                        }
+                        swapRolls(bbSide)
+                        swapRolls(bbSide.opponent)
+                        log(Zagazig.styled(BB) + ": swapped Kills and Pains for both sides")
+                        // One line per faction in the battle showing post-swap roll tokens.
+                        sides.foreach { f =>
+                            val side = if (f == attacker) attackers else defenders
+                            log(f.full, "rolls changed to", side.rolls.mkString(" "), "due to", Zagazig.styled(BB))
+                        }
+                    }
+                }
+
                 jump(LengSpiderBloodthirstPhase)
 
             case LengSpiderBloodthirstPhase =>
@@ -986,7 +1033,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             ts.satisfy(TSRollKill, "Rolled a Kill in battle")
         if (ts.rolls.count(_ == Pain) >= 3)
             ts.satisfy(TSRoll3Pains, "Rolled 3 Pains in battle")
-        if (ts.forces.%(_.uclass == Glaaki).any && ts.opponent.forces.%(_.uclass.utype == GOO).any)
+        // HIGH-2 revised: ElderGod (Bastet) counts as GOO per spec §1.3.
+        if (ts.forces.%(_.uclass == Glaaki).any && ts.opponent.forces.%(_.uclass.isGOO).any)
             ts.satisfy(TSGlaakiBattlesGOO, "Gla'aki battled enemy GOO")
     }
 
@@ -1008,6 +1056,21 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             }
             + FBAuguryBattleCancelAction(FB)
             return asking
+        }
+    }
+
+    // Bastet (BB ElderGod): +1 Kill to BB, -1 Kill from enemy (both fire even when Bastet alone).
+    // The enemy-Kill reduction is unconditional per spec; `diff` is a no-op when no Kill is present
+    // (Kills cannot go below zero), so the unconditional form matches the spec literally.
+    sides.%(f => f == BB).foreach { bbSide =>
+        if (bbSide.forces.%(_.uclass == Bastet).not(Zeroed).any) {
+            bbSide.rolls :+= Kill
+            log(Bastet.styled(BB) + ": " + BB.full + " gains 1", "Kill".styled("kill"))
+            val enemyHadKill = bbSide.opponent.rolls.has(Kill)
+            bbSide.opponent.rolls = bbSide.opponent.rolls.diff($(Kill))
+            if (enemyHadKill) {
+                log(Bastet.styled(BB) + ": " + bbSide.opponent.full + " loses 1", "Kill".styled("kill"))
+            }
         }
     }
 
@@ -1487,6 +1550,38 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // Bubastis (BB) Predator: if CatFromUranus fought and enemy lost ≥1 unit, BB picks
+                // a lost unit class; enemy must Eliminate one of that class from anywhere on the map.
+                // CRIT-3: Predator is OPTIONAL ("may select") — present a Use/Skip pair so BB can decline.
+                // Mirrors the Zagazig/Savagery pre-battle Use/Skip pattern (Battle.scala:506-512).
+                if (factions.has(BB) && BB.can(Predator) && sides.has(BB) && !BB.oncePerAction.has(Predator)) {
+                    val bbSide = if (attacker == BB) attackers else defenders
+                    val bbHadUranus = bbSide.forces.%(_.uclass == CatFromUranus).any
+                    if (bbHadUranus) {
+                        val enemy = if (attacker == BB) defender else attacker
+                        val lostTypes = eliminated.%(_.faction == enemy)./(_.uclass).distinct
+                        if (lostTypes.any) {
+                            BB.oncePerAction :+= Predator
+                            return Ask(BB).add(PredatorUseAction(BB)).add(PredatorSkipAction(BB))
+                        }
+                    }
+                }
+
+                // Bubastis (BB) Carnivore (alt spellbook): BB gains 1 Doom for each enemy Monster
+                // killed or eliminated in this battle.
+                // Log-ordering convention (BB Implementation Guide §3.18.16): emit the log line
+                // before applying the doom mutation so the player sees the announcement in the
+                // expected order relative to the doom delta in the UI.
+                if (factions.has(BB) && BB.can(Carnivore) && sides.has(BB) && !BB.oncePerAction.has(Carnivore)) {
+                    val enemy = if (attacker == BB) defender else attacker
+                    val monstersKilled = eliminated.%(u => u.faction == enemy && u.uclass.utype == Monster).num
+                    if (monstersKilled > 0) {
+                        BB.oncePerAction :+= Carnivore
+                        log(Carnivore.styled(BB) + ": gained", monstersKilled.doom, "for", monstersKilled, "enemy Monster".s(monstersKilled), "killed")
+                        BB.doom += monstersKilled
+                    }
+                }
+
                 // Bug fix Round 4 (Bug 1): Cyclopean Gaze must also fire when an enemy battles FB
                 // in a region containing FB's Revenants/Ghatanothoa. The action that triggered the
                 // battle "ends" in the arena, so any enemy units still present in the arena after
@@ -1668,7 +1763,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 u.uclass.isInstanceOf[FactionUnitClass] && self.awakenCost(u.uclass, battleRegion).nonEmpty
             )./(_.uclass).distinct
             val poolUnits = (poolNonGoo ++ poolGooKnown).distinct
-            Ask(self).each(poolUnits)(uc => PrimeCauseChooseReplacementAction(self, uRef, uc)).cancel
+            Ask(self).each(poolUnits)(uc => PrimeCauseChooseReplacementAction(self, uRef, uc)).add(PrimeCauseCancelReplacementAction(self))
 
         case PrimeCauseChooseReplacementAction(self, oldRef, newUC) =>
             primeCauseUsed :+= self
@@ -1723,6 +1818,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case PrimeCauseSkipAction(self) =>
             proceed()
+
+        case PrimeCauseCancelReplacementAction(self) =>
+            val units = self.forces.%(_.health != Killed)./(_.ref)
+            Ask(self)
+                .each(units)(u => PrimeCauseChooseUnitAction(self, u))
+                .add(PrimeCauseSkipAction(self))
 
         case QuachilDustToDustRemoveAction(self, uRef, quOwner) =>
             val u = game.unit(uRef)
@@ -2143,7 +2244,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case NecrophagyAction(self, u, r) =>
             self.oncePerAction :+= Necrophagy
 
+            // Parallel-guide Fix 38: Necrophagy is a Pain-driven forced move; it must NOT trigger
+            // FB Cyclopean Gaze.
+            game.fbSuppressCGForPlacement = true
             u.region = arena
+            game.fbSuppressCGForPlacement = false
             exempt(u)
             sides.foreach(_.rolls :+= Pain)
             log(u, "came from", "" + r + ",", "causing additonal", Pain, "to both sides")
@@ -2338,6 +2443,47 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case TTFulminationDeclineAction(self) =>
             self.log(Fulmination.styled(TT), ": declined")
+            proceed()
+
+        // BUBASTIS (BB): ZAGAZIG — pre-battle declare (task 3.10.2 / 3.14.2)
+        case ZagazigUseAction(self) =>
+            (self : Side).add(Zagazig)
+            self.log(Zagazig.styled(BB) + ": will swap Kills and Pains after roll")
+            proceed()
+
+        case ZagazigSkipAction(self) =>
+            self.log(Zagazig.styled(BB) + ": skipped")
+            proceed()
+
+        // BUBASTIS (BB): SAVAGERY — pre-battle pay 1 Power for +4 per CatFromSaturn (task 3.10.3 / 3.14.3)
+        case SavageryUseAction(self) =>
+            val saturnCount = (self : Side).forces.%(_.uclass == CatFromSaturn).num
+            val bonus = saturnCount * 4
+            self.power -= 1
+            (self : Side).add(Savagery)
+            (self : Side).str += bonus
+            self.log(Savagery.styled(BB) + ": paid", 1.power, "for +" + bonus.str, "strength (" + saturnCount + " Cat".s(saturnCount) + " from Saturn)")
+            proceed()
+
+        case SavagerySkipAction(self) =>
+            self.log(Savagery.styled(BB) + ": skipped")
+            proceed()
+
+        // BUBASTIS (BB): PREDATOR — post-battle chain. BBExpansion handles the Ask/eliminate
+        // logic and returns UnknownContinue; these cases resume battle flow by calling proceed().
+        case PredatorUseAction(self) =>
+            proceed()
+
+        case PredatorSkipAction(self) =>
+            proceed()
+
+        case PredatorPickEnemyTypeAction(self, _) =>
+            proceed()
+
+        case PredatorTypeChoiceAction(self, _) =>
+            proceed()
+
+        case PredatorEnemyEliminateAction(self, _, _) =>
             proceed()
 
     }

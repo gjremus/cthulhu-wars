@@ -51,18 +51,23 @@ object Host {
 
             case Ask(faction, actions) =>
                 faction match {
-                    case GC => TestBotGC.ask(actions, 0.03)(g)
-                    case CC => TestBotCC.ask(actions, 0.03)(g)
+                    // The previous TestBotGC/CC/SL/OW/DS references were stale
+                    // names that never resolved; the actual faction-specific bots
+                    // are BotGC/BotCC/BotSL/BotOW/BotDS (each defined in
+                    // Bot{XX}.scala with its own GameEvaluation).
+                    case GC => BotGC.ask(actions, 0.03)(g)
+                    case CC => BotCC.ask(actions, 0.03)(g)
                     case BG => Bot3(BG).ask(actions, 0.03)(g)
                     case YS => BotYS.ask(actions, 0.03)(g)
-                    case SL => TestBotSL.ask(actions, 0.03)(g)
+                    case SL => BotSL.ask(actions, 0.03)(g)
                     case WW => BotWW.ask(actions, 0.03)(g)
-                    case OW => TestBotOW.ask(actions, 0.03)(g)
+                    case OW => BotOW.ask(actions, 0.03)(g)
                     case AN => BotAN.ask(actions, 0.03)(g)
                     case TS => BotTS.ask(actions, 0.03)(g)
                     case FB => BotFB.ask(actions, 0.03)(g)
-                    case DS => TestBotDS.ask(actions, 0.03)(g)
+                    case DS => BotDS.ask(actions, 0.03)(g)
                     case TT => BotTT.ask(actions, 0.03)(g)
+                    case BB => BotBB.ask(actions, 0.03)(g)
                     // [2026-05-24] Neutral / Library factions (NeutralAbhoth,
                     // LibraryFaction, etc.) don't have a strategic bot — when
                     // asked, just pick the first action. This is a no-op for
@@ -75,7 +80,7 @@ object Host {
 
     def main(args : Array[String]) {
         // Tombstalker (TS), Firstborn (FB), and Daemon Sultan (DS): included in the master faction list for headless simulation runs
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB)
 
         val numberOfPlayers = 4
 

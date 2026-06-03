@@ -152,9 +152,9 @@ object SLExpansion extends Expansion {
         case MainAction(f : SL) =>
             implicit val asking = Asking(f)
 
-            if (f.has(Lethargy) && f.has(Tsathoggua) && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
+            if (f.has(Lethargy) && f.onMap(Tsathoggua).any && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
                 + GroupAction("Lethargy".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
-            else if (f.has(Lethargy) && f.has(Tsathoggua) && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && !ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
+            else if (f.has(Lethargy) && f.onMap(Tsathoggua).any && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && !ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
                 if (game.options.has(IceAgeAffectsLethargy).not || f.affords(0)(f.goo(Tsathoggua).region))
                     + LethargyMainAction(f)
 
@@ -170,7 +170,7 @@ object SLExpansion extends Expansion {
 
             game.captures(f)
 
-            if (f.can(CaptureMonster) && areas.nex.%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).goos.none && e.at(r).monsters.any))).any)
+            if (f.can(CaptureMonster) && areas.nex.%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).goos.none && e.at(r).monsters.%(_.uclass != EarthCat).any))).any)
                 + CaptureMonsterMainAction(f)
 
             game.recruits(f)
@@ -328,12 +328,13 @@ object SLExpansion extends Expansion {
         // CAPTURE MONSTER
         case CaptureMonsterMainAction(self) =>
             val r = self.goo(Tsathoggua).region
-            Ask(self).each(factionlike.but(self).%(_.at(r).use(l => l.monsters.any && l.goos.none)))(e => CaptureMonsterAction(self, r, e)).cancel
+            Ask(self).each(factionlike.but(self).%(_.at(r).use(l => l.monsters.%(_.uclass != EarthCat).any && l.goos.none)))(e => CaptureMonsterAction(self, r, e)).cancel
 
         case CaptureMonsterAction(self, r, f) =>
             self.power -= 1
 
-            Ask(f).each(f.at(r).monsters.sortBy(_.uclass.cost))(u => CaptureMonsterUnitAction(self, r, u.faction, u.uclass))
+            // Earth Cats (BB) cannot be captured (task 3.6.2)
+            Ask(f).each(f.at(r).monsters.%(_.uclass != EarthCat).sortBy(_.uclass.cost))(u => CaptureMonsterUnitAction(self, r, u.faction, u.uclass))
 
         case CaptureMonsterUnitAction(self, r, f, uc) =>
             val m = f.at(r).one(uc)
@@ -352,7 +353,7 @@ object SLExpansion extends Expansion {
 
         // ANCIENT SORCERY
         case AncientSorceryMainAction(self) =>
-            Ask(self).each(self.enemies./(_.abilities.first).diff(self.borrowed))(a => AncientSorceryAction(self, a)).cancel
+            Ask(self).each(self.enemies./~(_.abilities.headOption).diff(self.borrowed))(a => AncientSorceryAction(self, a)).cancel
 
         case AncientSorceryAction(self, a) =>
             Ask(self).each(self.onMap(SerpentMan).nex)(u => AncientSorceryUnitAction(self, a, u.region, u.uclass)).cancel
@@ -394,7 +395,7 @@ object SLExpansion extends Expansion {
         case CursedSlumberLoadMainAction(self, l) =>
             Ask(self).each(l)(r => CursedSlumberLoadAction(self, r)).cancel
 
-        case CursedSlumberLoadAction(self, r) =>
+        case CursedSlumberLoadAction(self, r) if r != BB.moon =>
             self.power -= 1
             self.payTax(r)
 

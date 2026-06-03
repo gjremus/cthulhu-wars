@@ -39,6 +39,12 @@ object EarthMap3 extends Board {
         case SouthAmerica => $(NorthAmerica, NorthAtlantic, SouthAtlantic, SouthPacific, NorthPacific)
         case Australia => $(SouthPacific, IndianOcean)
         case Antarctica => $(SouthPacific, SouthAtlantic, IndianOcean)
+        // BB: the Moon is not a normal map region — it has no map adjacency.
+        // BB-specific movement (`MoveSelectAction`) and retreat (`Battle.retreat`)
+        // override destinations explicitly when from/to is BB.moon, so returning
+        // the empty set here is safe for all callers (distance falls through to 4,
+        // gate-control / cathedral / faction logic skips the Moon naturally).
+        case _ : MoonHold => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -76,6 +82,8 @@ object EarthMap3 extends Board {
         case FB => regions
         // Daemon Sultan (DS): no starting area restrictions
         case DS => $()
+        // Bubastis (BB): no map starting area — Earth Cats start on the Moon (handled in BBExpansion)
+        case BB => $()
         // Tcho-Tcho (TT): can start in any unoccupied area containing a core faction glyph (BG/CC/GC/YS/SL/WW areas)
         case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
     }
@@ -143,6 +151,8 @@ object EarthMap4v35 extends Board {
         case SouthAmerica => $(NorthAmerica, NorthAtlantic, SouthAtlantic, SouthPacific, NorthPacific)
         case Australia => $(SouthPacific, IndianOcean)
         case Antarctica => $(SouthPacific, SouthAtlantic, IndianOcean)
+        // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
+        case _ : MoonHold => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -180,6 +190,8 @@ object EarthMap4v35 extends Board {
         case FB => regions
         // Daemon Sultan (DS): no starting area restrictions
         case DS => $()
+        // Bubastis (BB): no map starting area — Earth Cats start on the Moon (handled in BBExpansion)
+        case BB => $()
         // Tcho-Tcho (TT): can start in any unoccupied area containing a core faction glyph (BG/CC/GC/YS/SL/WW areas)
         case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
     }
@@ -251,6 +263,8 @@ object EarthMap4v53 extends Board {
         case Australia => $(IndianOcean, NewZealand)
         case NewZealand => $(IndianOcean, SouthPacific, Australia)
         case Antarctica => $(SouthPacific, SouthAtlantic, IndianOcean)
+        // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
+        case _ : MoonHold => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -288,6 +302,8 @@ object EarthMap4v53 extends Board {
         case FB => regions
         // Daemon Sultan (DS): no starting area restrictions
         case DS => $()
+        // Bubastis (BB): no map starting area — Earth Cats start on the Moon (handled in BBExpansion)
+        case BB => $()
         // Tcho-Tcho (TT): can start in any unoccupied area containing a core faction glyph (BG/CC/GC/YS/SL/WW areas)
         case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
     }
@@ -367,6 +383,8 @@ object EarthMap5 extends Board {
         case Australia => $(IndianOcean, NewZealand)
         case NewZealand => $(IndianOcean, SouthPacific, Australia)
         case Antarctica => $(SouthPacific, SouthAtlantic, IndianOcean)
+        // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
+        case _ : MoonHold => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -404,6 +422,8 @@ object EarthMap5 extends Board {
         case FB => regions
         // Daemon Sultan (DS): no starting area restrictions
         case DS => $()
+        // Bubastis (BB): no map starting area — Earth Cats start on the Moon (handled in BBExpansion)
+        case BB => $()
         // Tcho-Tcho (TT): can start in any unoccupied area containing a core faction glyph (BG/CC/GC/YS/SL/WW areas)
         case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
     }
@@ -493,6 +513,8 @@ object EarthMap6 extends Board {
         case NewZealand => $(IndianOcean, SouthPacific, Australia)
         case Antarctica => $(SouthPacific, SouthAtlantic, MountainsOfMadness)
         case MountainsOfMadness => $(Antarctica, SouthAtlantic, IndianOcean)
+        // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
+        case _ : MoonHold => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -530,6 +552,8 @@ object EarthMap6 extends Board {
         case FB => regions
         // Daemon Sultan (DS): no starting area restrictions
         case DS => $()
+        // Bubastis (BB): no map starting area — Earth Cats start on the Moon (handled in BBExpansion)
+        case BB => $()
         // Tcho-Tcho (TT): can start in any unoccupied area containing a core faction glyph (BG/CC/GC/YS/SL/WW areas)
         case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
     }
@@ -669,7 +693,7 @@ object LibraryCelaeno55 extends Board {
     val id = "library5"
     val name = "Library at Celaeno (5 players)"
     override val isLibraryMap = true
-    override def silenceTokenMax(f : Faction) : Int = 1
+    override def silenceTokenMax(f : Faction) : Int = if (f == BB) 2 else 1
     override val unitScale : Double = 2.0
 
     // ── UPPER FLOOR ──
@@ -748,6 +772,8 @@ object LibraryCelaeno55 extends Board {
         case Hyperquarium => $(ChamberOfApkallu, PorphyrHall, CharnelHall, LakeOfHaliOverlook)
         case CharnelHall => $(BlackHall, PorphyrHall, Hyperquarium, TheCrawlingOnes)
         case TheCrawlingOnes => $(CharnelHall, LarvaeOfOuterGods)
+        // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
+        case _ : MoonHold => $()
     }
 
     // Full adjacency including archway connections — used for movement
@@ -778,6 +804,8 @@ object LibraryCelaeno55 extends Board {
         case TS => nonFactionRegions.%(_.glyph == Ocean)
         case FB => regions.diff(tomeRegions)
         case DS => $()
+        // Bubastis (BB): no map starting area — Earth Cats start on the Moon (handled in BBExpansion)
+        case BB => $()
         // Tcho-Tcho (TT): can start in any unoccupied area containing a core faction glyph (BG/CC/GC/YS/SL/WW areas)
         case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
     }
@@ -829,7 +857,7 @@ object LibraryCelaeno33 extends Board {
     val id = "library3"
     val name = "Library at Celaeno (3 players)"
     override val isLibraryMap = true
-    override def silenceTokenMax(f : Faction) : Int = 1
+    override def silenceTokenMax(f : Faction) : Int = if (f == BB) 2 else 1
     override val unitScale : Double = 2.0
 
     import LibraryCelaeno55.{FloatingTower, Fountain, YrAndTheNhhngr, GuardianUnderLake,
@@ -869,6 +897,8 @@ object LibraryCelaeno33 extends Board {
         case ChamberOfApkallu => $(ChamberOfSngac, Oubliette, Hyperquarium, BarrierOfNaachTith)
         case Hyperquarium => $(ChamberOfApkallu, Oubliette, TheCrawlingOnes, LakeOfHaliOverlook)
         case TheCrawlingOnes => $(Hyperquarium, Oubliette, BlackHall, LarvaeOfOuterGods)
+        // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
+        case _ : MoonHold => $()
     }
 
     def connected(region : Region) = {
@@ -887,7 +917,7 @@ object LibraryCelaeno33 extends Board {
         case GC => $(Hyperquarium); case CC => $(BlueHall); case BG => $(Fountain); case YS => $(FloatingTower)
         case SL => $(ChamberOfSngac); case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
         case _ => regions
     }
 
@@ -900,7 +930,7 @@ object LibraryCelaeno53 extends Board {
     val id = "library53"
     val name = "Library at Celaeno (4 players, 5L3U)"
     override val isLibraryMap = true
-    override def silenceTokenMax(f : Faction) : Int = 1
+    override def silenceTokenMax(f : Faction) : Int = if (f == BB) 2 else 1
     override val unitScale : Double = 2.0
 
     import LibraryCelaeno55.{FloatingTower, Fountain, YrAndTheNhhngr, GuardianUnderLake,
@@ -945,6 +975,8 @@ object LibraryCelaeno53 extends Board {
         case Hyperquarium => $(ChamberOfApkallu, PorphyrHall, CharnelHall, LakeOfHaliOverlook)
         case CharnelHall => $(BlackHall, PorphyrHall, Hyperquarium, TheCrawlingOnes)
         case TheCrawlingOnes => $(CharnelHall, LarvaeOfOuterGods)
+        // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
+        case _ : MoonHold => $()
     }
 
     def connected(region : Region) = {
@@ -964,7 +996,7 @@ object LibraryCelaeno53 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
         case _ => regions
     }
 
@@ -996,7 +1028,7 @@ object LibraryCelaeno35 extends Board {
     val id = "library35"
     val name = "Library at Celaeno (4 players, 3L5U)"
     override val isLibraryMap = true
-    override def silenceTokenMax(f : Faction) : Int = 1
+    override def silenceTokenMax(f : Faction) : Int = if (f == BB) 2 else 1
     override val unitScale : Double = 2.0
 
     import LibraryCelaeno55.{FloatingTower, Byakhiary, Horrorium, Fountain, YrAndTheNhhngr,
@@ -1043,6 +1075,8 @@ object LibraryCelaeno35 extends Board {
         case ChamberOfApkallu => $(ChamberOfSngac, Oubliette, Hyperquarium, BarrierOfNaachTith)
         case Hyperquarium => $(ChamberOfApkallu, Oubliette, TheCrawlingOnes, LakeOfHaliOverlook)
         case TheCrawlingOnes => $(Hyperquarium, Oubliette, BlackHall, LarvaeOfOuterGods)
+        // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
+        case _ : MoonHold => $()
     }
 
     def connected(region : Region) = {
@@ -1062,7 +1096,7 @@ object LibraryCelaeno35 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
         case _ => regions
     }
 

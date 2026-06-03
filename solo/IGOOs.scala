@@ -457,12 +457,13 @@ object IGOOsExpansion extends Expansion {
 
         // Execration of Mu (Ghatanothoa IGOO spellbook): Mummify is instant/ongoing
         // Any enemy Cultist sharing Area with Ghatanothoa is immediately mummified
+        // Lunacy (BB): Earth Cats are targetable as Cultists by enemy spellbooks.
         factions.foreach { f =>
             if (f.has(ExecrationOfMu) && !f.oncePerGame.has(ExecrationOfMu) && f.has(GhatanotoaIGOO)) {
                 val ghat = f.allInPlay.%(_.uclass == GhatanotoaIGOO)
                 if (ghat.any && !ElderThingMindControl.suppresses(ghat.head)) {
                     val r = ghat.head.region
-                    f.enemies./~(_.at(r).%(_.uclass.utype == Cultist)).foreach { u =>
+                    f.enemies./~(_.at(r).%(_.targetableAsCultistByEnemy)).foreach { u =>
                         if (!game.mummifiedCultists.has(u.ref)) {
                             game.mummifiedCultists :+= u.ref
                             log("Execration of Mu".styled("nt") + ":", u.uclass.styled(u.faction), "auto-mummified in", r)
@@ -869,12 +870,16 @@ object IGOOsExpansion extends Expansion {
             self.power -= 1
             self.payTax(r)
 
+            // Parallel-guide Fix 40: forced enemy-cultist relocation must NOT trigger
+            // FB Cyclopean Gaze.
+            game.fbSuppressCGForPlacement = true
             self.enemies.foreach { f =>
                 f.at(r).cultists.foreach { u =>
                     u.region = d
                     u.onGate = false
                 }
             }
+            game.fbSuppressCGForPlacement = false
 
             log(Byatis.styled(self), "used", GodOfForgetfulness.name.styled("nt"), "to move all enemy cultist from", r, "to", d)
             EndAction(self)
@@ -1088,7 +1093,8 @@ object IGOOsExpansion extends Expansion {
             self.power -= 1
             val ghat = self.allInPlay.%(_.uclass == GhatanotoaIGOO).head
             val r = ghat.region
-            val targets = self.enemies./~(_.at(r).%(_.uclass.utype == Cultist).%(u => !game.mummifiedCultists.has(u.ref)))
+            // Lunacy (BB): Earth Cats are targetable as Cultists by enemy spellbooks.
+            val targets = self.enemies./~(_.at(r).%(_.targetableAsCultistByEnemy).%(u => !game.mummifiedCultists.has(u.ref)))
             targets.foreach { u =>
                 game.mummifiedCultists :+= u.ref
             }

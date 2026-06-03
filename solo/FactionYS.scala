@@ -95,12 +95,12 @@ case class ZingayaAction(self : YS, r : Region, f : Faction) extends BaseFaction
 
 object YSExpansion extends Expansion {
     override def eliminate(u : UnitFigure)(implicit game : Game) {
-        if (u.uclass.utype == Cultist && u.faction.can(Passion) && u.region.glyph.onMap && !MindParasite.isParasitized(u))
+        if (u.uclass.utype == Cultist && u.faction.has(Passion) && u.region.glyph.onMap && !MindParasite.isParasitized(u))
             u.faction.oncePerAction :+= Passion
     }
 
     override def afterAction()(implicit game : Game) {
-        factions.%(_.can(Passion)).%(_.oncePerAction.has(Passion)).foreach { f =>
+        factions.%(_.has(Passion)).%(_.oncePerAction.has(Passion)).foreach { f =>
             f.power += 1
 
             f.log("got", 1.power, "from", Passion)
@@ -136,9 +136,9 @@ object YSExpansion extends Expansion {
 
             game.independents(f)
 
-            if (f.has(Desecrate) && f.has(KingInYellow) && game.desecrated.num <= 12 && ElderThingMindControl.suppresses(f.goo(KingInYellow)))
+            if (f.has(Desecrate) && f.onMap(KingInYellow).any && game.desecrated.num <= 12 && ElderThingMindControl.suppresses(f.goo(KingInYellow)))
                 + GroupAction("Desecrate".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
-            else if (f.has(Desecrate) && f.has(KingInYellow) && game.desecrated.num <= 12) {
+            else if (f.has(Desecrate) && f.onMap(KingInYellow).any && game.desecrated.num <= 12) {
                 val r = f.goo(KingInYellow).region
                 if (game.desecrated.has(r).not) {
                     val te = f.has(Hastur) && f.can(ThirdEye)
@@ -149,7 +149,7 @@ object YSExpansion extends Expansion {
 
             if (f.can(HWINTBN) && f.used(ScreamingDead).not && f.has(Hastur)) {
                 val o = f.goo(Hastur).region
-                areas.%(f.affords(1)).but(o).%(r => factions.%(_.at(r, Cultist).any).any).some.foreach { l =>
+                areas.%(f.affords(1)).but(o).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
                     + HWINTBNMainAction(f, o, l)
                 }
             }
@@ -162,7 +162,7 @@ object YSExpansion extends Expansion {
             }
 
             if (f.can(Zingaya) && f.pool(Undead).any)
-                areas.%(f.affords(1)).%(r => f.at(r, Undead).any).%(r => f.enemies.exists(_.at(r, Acolyte).any)).some.foreach { l =>
+                areas.%(f.affords(1)).%(r => f.at(r, Undead).any).%(r => f.enemies.exists(e => e.at(r).%(_.targetableAsCultistByEnemy).any)).some.foreach { l =>
                     + ZingayaMainAction(f, l)
                 }
 
@@ -309,10 +309,10 @@ object YSExpansion extends Expansion {
 
         // ZINGAYA
         case ZingayaMainAction(self, l) =>
-            Ask(self).some(l)(r => self.enemies.%(f => f.at(r, Acolyte).any)./(e => ZingayaAction(self, r, e))).cancel
+            Ask(self).some(l)(r => self.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any)./(e => ZingayaAction(self, r, e))).cancel
 
         case ZingayaAction(self, r, f) =>
-            val c = f.at(r).one(Acolyte)
+            val c = f.at(r).%(_.targetableAsCultistByEnemy).sortBy(_.onGate).first
             self.power -= 1
             self.payTax(r)
             game.eliminate(c)

@@ -186,10 +186,18 @@ object CthulhuWarsOnline {
         implicit val system = ActorSystem()
         implicit val executionContext = system.dispatcher
 
-        def htm(s : String) = complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s))
+        val noCache = respondWithHeaders(
+            `Cache-Control`(CacheDirectives.`no-cache`, CacheDirectives.`no-store`, CacheDirectives.`must-revalidate`),
+            RawHeader("Pragma", "no-cache"),
+            RawHeader("Expires", "0"),
+        )
+        def htm(s : String) = noCache { complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s)) }
         def jsx(s : String) = complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s))
         def txt(s : String) = complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, s))
         def rdr(s : String) = redirect(s, StatusCodes.TemporaryRedirect)
+        def mnuIndex = noCache { getFromFile("../mnu/index.html") }
+        def ttIndex  = noCache { getFromFile("../tt/index.html") }
+        def bbIndex  = noCache { getFromFile("../bb/index.html") }
 
         // encodeResponse wraps every response in gzip / deflate / brotli where the
         // client's Accept-Encoding allows. Static assets like main.js (now ~2.9 MB
@@ -425,20 +433,20 @@ object CthulhuWarsOnline {
                         pathPrefix("webp")   { getFromDirectory("../mnu/webp") } ~
                         pathPrefix("fonts")  { getFromDirectory("../mnu/fonts") } ~
                         pathPrefix("target") { getFromDirectory("../mnu/target") } ~
-                        pathEnd { getFromFile("../mnu/index.html") }
+                        pathEnd { mnuIndex }
                     } ~
-                    pathEnd { getFromFile("../mnu/index.html") }
+                    pathEnd { mnuIndex }
                 } ~
                 pathPrefix("webp")   { getFromDirectory("../mnu/webp") } ~
                 pathPrefix("fonts")  { getFromDirectory("../mnu/fonts") } ~
                 pathPrefix("target") { getFromDirectory("../mnu/target") } ~
-                pathEnd { getFromFile("../mnu/index.html") } ~
-                path("") { getFromFile("../mnu/index.html") } ~
+                pathEnd { mnuIndex } ~
+                path("") { mnuIndex } ~
                 pathPrefix(Segment) { _ =>
                     pathPrefix("webp")   { getFromDirectory("../mnu/webp") } ~
                     pathPrefix("fonts")  { getFromDirectory("../mnu/fonts") } ~
                     pathPrefix("target") { getFromDirectory("../mnu/target") } ~
-                    pathEnd { getFromFile("../mnu/index.html") }
+                    pathEnd { mnuIndex }
                 }
             } ~
             // Serve the TchoTcho build under /TchoTcho/. Assets in ../tt/ on the VM.
@@ -517,20 +525,112 @@ object CthulhuWarsOnline {
                         pathPrefix("webp")   { getFromDirectory("../tt/webp") } ~
                         pathPrefix("fonts")  { getFromDirectory("../tt/fonts") } ~
                         pathPrefix("target") { getFromDirectory("../tt/target") } ~
-                        pathEnd { getFromFile("../tt/index.html") }
+                        pathEnd { ttIndex }
                     } ~
-                    pathEnd { getFromFile("../tt/index.html") }
+                    pathEnd { ttIndex }
                 } ~
                 pathPrefix("webp")   { getFromDirectory("../tt/webp") } ~
                 pathPrefix("fonts")  { getFromDirectory("../tt/fonts") } ~
                 pathPrefix("target") { getFromDirectory("../tt/target") } ~
-                pathEnd { getFromFile("../tt/index.html") } ~
-                path("") { getFromFile("../tt/index.html") } ~
+                pathEnd { ttIndex } ~
+                path("") { ttIndex } ~
                 pathPrefix(Segment) { _ =>
                     pathPrefix("webp")   { getFromDirectory("../tt/webp") } ~
                     pathPrefix("fonts")  { getFromDirectory("../tt/fonts") } ~
                     pathPrefix("target") { getFromDirectory("../tt/target") } ~
-                    pathEnd { getFromFile("../tt/index.html") }
+                    pathEnd { ttIndex }
+                }
+            } ~
+            // Serve the Bubastis build under /BB/. Assets in ../bb/ on the VM.
+            // API endpoints delegated to same handlers as root routes, same pattern as /TchoTcho/.
+            pathPrefix("BB") {
+                (post & path("create")) {
+                    parameter("bot".as[Boolean].?(false)) { botFlag =>
+                        decodeRequest {
+                            entity(as[String]) { body =>
+                                val ss = body.split("\n").toList.map(_.ascii)
+                                val rls = List("$", "#") ++ ss(0).split(" ").toList
+                                val name = ss(2)
+                                val lgs = ss.drop(1)
+                                val srs = rls.map(r => r -> secret).toMap
+                                q((gamesId += Game(name)).flatMap(id => seq(
+                                    roles ++= rls.map(r => Role(id, r, srs(r))),
+                                    logs ++= lgs.zipWithIndex.map { case (l, n) => Log(id, n, "", l) }
+                                )))
+                                val newGameId = q(roles.filter(_.secret === srs("$")).map(_.gameId).result.head)
+                                touchMeta(newGameId)
+                                if (botFlag)
+                                    try { q(botGames += BotGame(newGameId)) }
+                                    catch { case _ : Throwable => () }
+                                txt(srs("$"))
+                            }
+                        }
+                    }
+                } ~
+                (get & path("roles" / Segment)) { role =>
+                    val list = q(roles.filter(_.secret === role).filter(_.name === "$").map(_.gameId).result.head.flatMap { id =>
+                        roles.filter(_.gameId === id).result
+                    })
+                    txt(list.map(r => r.name + " " + r.secret).mkString("\n"))
+                } ~
+                (get & path("role" / Segment)) { role =>
+                    val name = q(roles.filter(_.secret === role).map(_.name).result.head)
+                    txt(name)
+                } ~
+                (get & path("read" / Segment / IntNumber)) { (role, from) =>
+                    val log = q(roles.filter(_.secret === role).map(_.gameId).result.head.flatMap { id =>
+                            logs.filter(_.gameId === id).filter(_.index >= from).map(_.value).result
+                    })
+                    txt(log.mkString("\n"))
+                } ~
+                (post & path("write" / Segment / IntNumber)) { (role, index) =>
+                    decodeRequest {
+                        entity(as[String]) { body =>
+                            val ss = body.split("\n").toList.map(_.ascii)
+                            try {
+                                q(roles.filter(_.secret === role).filter(_.name =!= "#").map(r => (r.name, r.gameId)).result.head.flatMap { case (name, id) =>
+                                    logs ++= 0.until(ss.size).map(n => Log(id, index + n, name, ss(n)))
+                                })
+                                try { touchMeta(q(roles.filter(_.secret === role).filter(_.name =!= "#").map(_.gameId).result.head)) }
+                                catch { case _ : Throwable => () }
+                                complete(StatusCodes.Accepted)
+                            }
+                            catch {
+                                case e : java.sql.SQLIntegrityConstraintViolationException => complete(StatusCodes.Conflict)
+                            }
+                        }
+                    }
+                } ~
+                (post & path("rollback-v2" / Segment / IntNumber)) { (role, index) =>
+                    q(roles.filter(_.secret === role).map(_.gameId).result.head.flatMap { id =>
+                        logs.filter(_.gameId === id).filter(_.index >= index).delete
+                    })
+                    try { touchMeta(q(roles.filter(_.secret === role).map(_.gameId).result.head)) }
+                    catch { case _ : Throwable => () }
+                    complete(StatusCodes.Accepted)
+                } ~
+                pathPrefix("play") {
+                    pathPrefix("webp")   { getFromDirectory("../bb/webp") } ~
+                    pathPrefix("fonts")  { getFromDirectory("../bb/fonts") } ~
+                    pathPrefix("target") { getFromDirectory("../bb/target") } ~
+                    pathPrefix(Segment) { _ =>
+                        pathPrefix("webp")   { getFromDirectory("../bb/webp") } ~
+                        pathPrefix("fonts")  { getFromDirectory("../bb/fonts") } ~
+                        pathPrefix("target") { getFromDirectory("../bb/target") } ~
+                        pathEnd { bbIndex }
+                    } ~
+                    pathEnd { bbIndex }
+                } ~
+                pathPrefix("webp")   { getFromDirectory("../bb/webp") } ~
+                pathPrefix("fonts")  { getFromDirectory("../bb/fonts") } ~
+                pathPrefix("target") { getFromDirectory("../bb/target") } ~
+                pathEnd { bbIndex } ~
+                path("") { bbIndex } ~
+                pathPrefix(Segment) { _ =>
+                    pathPrefix("webp")   { getFromDirectory("../bb/webp") } ~
+                    pathPrefix("fonts")  { getFromDirectory("../bb/fonts") } ~
+                    pathPrefix("target") { getFromDirectory("../bb/target") } ~
+                    pathEnd { bbIndex }
                 }
             } ~
             (get & path("admin" / Segment / "games")) { token =>
@@ -776,7 +876,20 @@ object CthulhuWarsOnline {
                         val out = new StringBuilder
                         Process(Seq("tail", "-n", n.toString, f.getAbsolutePath))
                             .!(ProcessLogger(line => out.append(line + "\n")))
-                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, out.toString))
+                        val raw = out.toString
+                        val cutoffMs = System.currentTimeMillis - 36L * 60 * 60 * 1000
+                        val fmt = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                        val tsPattern = """\[(?:PROMPT|RESPONSE) @(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]""".r
+                        val entries = tsPattern.split(raw).toList
+                        val filtered = if (entries.length <= 1) raw
+                        else {
+                            val matches = tsPattern.findAllMatchIn(raw).toList
+                            val chunks = matches.zip(entries.tail).filter { case (m, _) =>
+                                try { fmt.parse(m.group(1)).getTime >= cutoffMs } catch { case _ : Exception => true }
+                            }
+                            if (chunks.isEmpty) "" else chunks.map { case (m, body) => m.matched + body }.mkString
+                        }
+                        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, filtered))
                     }
                 }
             } ~

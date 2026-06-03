@@ -220,6 +220,145 @@ object TSCursedTomesOverlay {
     )
 }
 
+// [v2.4.10] Bubastis Moon placement bitmap.
+//
+// Per BB rule design and the in-game Moon overlay: when many Earth Cats sit on
+// the Moon, their sprites must scatter INSIDE the moon disc — not all over the
+// surrounding container. The previous polar-scatter math used 70% of the moon
+// image height as its scatter radius, which sent sprite centres beyond the
+// image edges and produced "cats spread across the whole screen" behaviour.
+//
+// Fix (2026-06-02): use a dedicated placement BITMAP — same approach as
+// earth*-place.webp / library*-place.webp. The bitmap is map-shaped (so the
+// circle's centre can be calibrated against the map for future re-use), with
+// a single solid-colour magenta (#FF00FF) circle covering 90% of the moon
+// disc's diameter. Magenta is verified distinct from every Earth and Library
+// region colour in EarthRegionPalette / RegionPalette.
+//
+// Two bitmaps:
+//   bb-moon-h-place.webp  — horizontal landscape (1791×894), circle at
+//                           (75%, 25%) of the map = top-right of map view.
+//   bb-moon-place.webp    — vertical portrait    (894×1791), circle at
+//                           (75%, 25%) of the rotated canvas.
+//
+// At runtime this object samples the chosen bitmap once, finds every magenta
+// pixel, normalises each pixel position to a fraction of the bitmap circle's
+// bounding box, and exposes those normalised points so the overlay layer can
+// map them onto the moon disc image. This guarantees every sprite lands
+// strictly inside the moon disc.
+object MoonPlacement {
+    private var pointsHorizontal : scala.Option[Array[(Double, Double)]] = scala.None
+    private var pointsVertical   : scala.Option[Array[(Double, Double)]] = scala.None
+
+    private def sample(assetId : String) : Array[(Double, Double)] = {
+        val img = dom.document.getElementById(assetId).asInstanceOf[html.Image]
+        if (img == null || img.width == 0 || img.height == 0) return Array.empty
+        val w = img.width
+        val h = img.height
+        val canvas = dom.document.createElement("canvas").asInstanceOf[html.Canvas]
+        canvas.width = w
+        canvas.height = h
+        val ctx = canvas.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D]
+        ctx.drawImage(img, 0, 0)
+        val data = ctx.getImageData(0, 0, w, h).data
+        // First pass: find bounding box of magenta circle.
+        var minX = w; var maxX = -1; var minY = h; var maxY = -1
+        var y = 0
+        while (y < h) {
+            var x = 0
+            while (x < w) {
+                val i = (y * w + x) * 4
+                val r = data(i)
+                val g = data(i + 1)
+                val b = data(i + 2)
+                if (r > 200 && g < 60 && b > 200) {
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+                x += 1
+            }
+            y += 1
+        }
+        if (maxX < 0 || maxY < 0) return Array.empty
+        val bw = (maxX - minX).max(1).toDouble
+        val bh = (maxY - minY).max(1).toDouble
+        // Second pass: every 6th pixel — plenty of candidates without O(W·H) cost
+        // each render. Stored as (xFrac, yFrac) in [0..1] of the circle's bbox.
+        val buf = scala.collection.mutable.ArrayBuffer.empty[(Double, Double)]
+        var py = minY
+        while (py <= maxY) {
+            var px = minX
+            while (px <= maxX) {
+                val i = (py * w + px) * 4
+                val r = data(i)
+                val g = data(i + 1)
+                val b = data(i + 2)
+                if (r > 200 && g < 60 && b > 200) {
+                    buf += (((px - minX) / bw, (py - minY) / bh))
+                }
+                px += 6
+            }
+            py += 6
+        }
+        buf.toArray
+    }
+
+    def horizontal : Array[(Double, Double)] = {
+        if (pointsHorizontal.isEmpty)
+            pointsHorizontal = scala.Some(sample("bb-moon-h-place"))
+        pointsHorizontal.get
+    }
+    def vertical : Array[(Double, Double)] = {
+        if (pointsVertical.isEmpty)
+            pointsVertical = scala.Some(sample("bb-moon-place"))
+        pointsVertical.get
+    }
+
+    // Pick `n` scatter positions for sprites. Returns (xFrac, yFrac) pairs in
+    // [0..1] of the magenta-circle bounding box. Caller maps these onto the
+    // rendered moon image rect (the moon disc fills almost the entire moon
+    // image). Greedy farthest-point sampling: each next point maximises the
+    // minimum distance to already-placed points — same UX intent as the prior
+    // polar scatter, no straight rows, minimal overlap, but every result is
+    // guaranteed inside the magenta circle (i.e. inside the disc).
+    def scatter(n : Int, useHorizontal : Boolean, seed : Int) : Array[(Double, Double)] = {
+        val pool = if (useHorizontal) horizontal else vertical
+        if (pool.isEmpty || n <= 0) return Array.empty
+        val rng = new scala.util.Random(seed)
+        val out = scala.collection.mutable.ArrayBuffer.empty[(Double, Double)]
+        out += pool(rng.nextInt(pool.length))
+        var i = 1
+        while (i < n) {
+            var best : (Double, Double) = pool(rng.nextInt(pool.length))
+            var bestMin = -1.0
+            var tries = 0
+            while (tries < 40) {
+                val cand = pool(rng.nextInt(pool.length))
+                var minD2 = Double.MaxValue
+                var k = 0
+                while (k < out.length) {
+                    val (ox, oy) = out(k)
+                    val dx = cand._1 - ox
+                    val dy = cand._2 - oy
+                    val d2 = dx * dx + dy * dy
+                    if (d2 < minD2) minD2 = d2
+                    k += 1
+                }
+                if (minD2 > bestMin) {
+                    bestMin = minD2
+                    best = cand
+                }
+                tries += 1
+            }
+            out += best
+            i += 1
+        }
+        out.toArray
+    }
+}
+
 object Overlays {
     val overlay = new InfoOverlay(dom.document.getElementById("overlay").asInstanceOf[html.Element])
     var temp = false
@@ -868,6 +1007,172 @@ object Overlays {
                 (TabletsOfTheGods.name, "Doom Phase", "When you perform a Ritual of Annihilation, you also receive 1 additional Elder Sign for each Gate at which you have any High Priests. Then, Eliminate all your High Priests. This is not optional."))
 
 
+        // Bubastis (BB): faction info card (standard and alt-spellbooks variant)
+        case $("BB")                     => bbFactionOverlay(false)
+        case $("BB", altSB : Boolean)    => bbFactionOverlay(altSB)
+
+        // Bubastis (BB): alternate spellbooks info overlay.
+        // Help text shows the FULL rulebook text of both replacement spellbooks
+        // (Syzygy and Carnivore), mirroring the DS Alternate Spellbooks help
+        // pattern at line ~534. Verbatim wording matches the spellbook overlays
+        // at lines 897-898 below.
+        case $("BBAlternateSpellbooks") => spellbook("Bubastis — Alternate Spellbooks", "",
+            s"<span class=ability-color>${Catabolism.name}</span> is replaced with <span class=ability-color>${Syzygy.name}</span>, and <span class=ability-color>${Ailurophobia.name}</span> is replaced with <span class=ability-color>${Carnivore.name}</span>:<br/><br/>" +
+            s"<span class=ability-color>${Syzygy.name}</span> <span class=cost-color>(Doom Phase)</span><br/>" +
+            "If you have no units on the Moon, gain an Elder Sign.<br/><br/>" +
+            s"<span class=ability-color>${Carnivore.name}</span> <span class=cost-color>(Post-Battle)</span><br/>" +
+            "Gain 1 Doom per enemy Monster Killed or Eliminated by You in Battle.")
+
+        // (bbFactionOverlay is defined as a helper method near the bottom of this file)
+
+        // Bubastis (BB): spellbook requirement info card overlays
+        case $("BB", Pay2ForBB.text)            => requirement("As your Action, pay 2 Power.")
+        case $("BB", NoEarthCatsOnMoon.text)    => requirement("None of your Earth Cats are on the Moon.")
+        case $("BB", CatInEveryEnemyStart.text) => requirement("One of your Cats is in every enemy faction's Start Area.")
+        case $("BB", MarsOrSaturnLost.text)     => requirement("A Cat from Mars or Saturn is Killed or Eliminated.")
+        case $("BB", UranusLost.text)           => requirement("A Cat from Uranus is Killed or Eliminated.")
+        case $("BB", AwakenBastet.text)         => requirement("Awaken Bastet.")
+
+        // Bubastis (BB): spellbook info card overlays
+        case $("BB", Catabolism.name)   => spellbook(Catabolism.name,   "Ongoing",         "Earth Cats can Recruit monsters, as if the monsters were cultists, instead of needing to Summon them.")
+        case $("BB", Zagazig.name)      => spellbook(Zagazig.name,      "Pre-Battle",      "If a Cat from Mars is in the Battle, all rolled Pains become Kills, and all rolled Kills become Pains.")
+        case $("BB", Savagery.name)     => spellbook(Savagery.name,     "Pre-Battle",      "Pay 1 Power to increase the Combat of all Cats from Saturn by 4 for this Battle.")
+        case $("BB", Predator.name)     => spellbook(Predator.name,     "Post-Battle",     "If a Cat from Uranus was in the Battle, you can select one Unit lost by the enemy. He must eliminate a second Unit of that type anywhere on the Map, if possible.")
+        case $("BB", Catnapping.name)   => spellbook(Catnapping.name,   "Action: Cost 1",  "Choose any or all enemy Factions in Bastet’s Area. Move all Units belonging to those Faction(s) from that Area to the Moon. When an enemy Unit on the Moon leaves, you gain the Power they spend on movement.")
+        case $("BB", Ailurophobia.name) => spellbook(Ailurophobia.name, "Doom Phase",      "Gain 1 Doom per Monster Cat Variety sharing any non-Moon Area with Unit(s) from enemy Factions.")
+
+        // Bubastis (BB): alternate spellbook info card overlays
+        case $("BB", Syzygy.name)    => spellbook(Syzygy.name,    "Doom Phase",  "If you have no units on the Moon, gain an Elder Sign.")
+        case $("BB", Carnivore.name) => spellbook(Carnivore.name, "Post-Battle", "Gain 1 Doom per enemy Monster Killed or Eliminated by You in Battle.")
+
+        // Bubastis (BB): Requires Attention info card (Bastet's per-GOO doom-phase ritual)
+        case $("BB", RequiresAttention.name) => spellbook(RequiresAttention.name, "Doom Phase", "If Bastet is in an Area containing an enemy Cultist, you may perform a Ritual of Annihilation. For you, this adds exactly 4 Doom plus: if Bastet's Area has an Enemy-Controlled Gate, gain 1 Elder Sign; if Bastet's Area has an Enemy Great Old One, gain 2 Elder Sign. These rewards are additive.")
+
+        // Bubastis (BB): Moon overlay — clicking the small Moon HUD button in the
+        // top-right of the map opens this LARGE-Moon view. The big Moon image
+        // auto-fits inside the map area (the overlay container is the map pane,
+        // sized 60vw × 60vh per index.html). The Moon disc must fit top-to-bottom
+        // INSIDE that pane, NOT spill out and NOT exceed the viewport.
+        //
+        // Background MUST be transparent — only the round Moon PNG should show
+        // through, floating against whatever is behind the overlay. No black
+        // square, no dark wash, no opaque table backdrop.
+        //
+        // Each unit currently on the Moon is rendered as the SAME map sprite
+        // image used elsewhere on the board (NOT a text list, NOT a silhouette).
+        // Sprites are SCATTERED across the moon disc — placed at varied (x, y)
+        // positions in a polar layout (rings of increasing radius) so the result
+        // looks like a region with units strewn across it, not a straight line
+        // or flex-wrapped grid. This is the closest HTML analog to drawMap's
+        // findAnother random-placement behavior for normal regions; we cannot
+        // re-use the canvas bitmap engine here because the overlay is HTML, but
+        // the visual outcome (scattered sprites inside the region) matches.
+        //
+        // Click anywhere on the overlay (handled by InfoOverlay's parent
+        // click-to-hide) to dismiss back to the small Moon HUD.
+        //
+        // Filter: only units whose region == BB.moon are passed in (see
+        // CthulhuWarsSolo.scala moonFigs = factions./~(ff => ff.at(BB.moon))).
+        // This overlay does NOT iterate all BB units or all cat varieties —
+        // it shows exactly the units who currently live in the Moon region,
+        // exactly like rendering any other region.
+        //
+        // Encoding: unitList is a `;`-separated list of `assetId|displayName`
+        // entries, packed in CthulhuWarsSolo.scala (see moonSpriteAssetId helper).
+        case $("BB", "Moon", count : Int, unitList : String) =>
+            val moonSrc = imageSource("bb-moon-high-res")
+            val rawEntries = if (unitList.toString.trim.nonEmpty)
+                unitList.toString.split(";").toList
+            else List.empty
+            // Each entry: "asset-id|Display Name (FAC)". Render the map sprite
+            // image. Defensive empty fallback on missing asset ids so the
+            // overlay never breaks if a future unit class slips through
+            // without a sprite mapping.
+            val parsed = rawEntries./(entry => {
+                val parts = entry.split("\\|", 2)
+                val assetId = if (parts.length > 0) parts(0).trim else ""
+                val display = if (parts.length > 1) parts(1).trim else assetId
+                val src     = if (assetId.nonEmpty)
+                    hrf.web.getElem(assetId).as[dom.html.Image]./(_.src).|("")
+                else ""
+                (src, display)
+            }).filter { case (src, _) => src.nonEmpty }
+            // [v2.4.10] Use the dedicated Moon placement bitmap (bb-moon-place /
+            // bb-moon-h-place) to scatter sprites strictly inside the moon disc.
+            // The bitmap drives placement just like earth*-place / library*-place
+            // bitmaps drive map region placement: a single solid magenta circle
+            // marks the valid zone. MoonPlacement samples that circle once and
+            // hands back farthest-point-spread (xFrac, yFrac) pairs in [0..1]
+            // of the circle's bounding box. We map those onto the moon image
+            // rect so every cat sprite lands inside the disc.
+            val n = parsed.length
+            // Sprite half-size in % of moon image height (sprite is 14% tall).
+            val spriteH = 14.0
+            val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
+            val seed = parsed.length * 31 + parsed./({ case (s, _) => s }).mkString.hashCode
+            val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
+            // Map each (xFrac, yFrac) of the circle bbox onto the moon image:
+            // the moon disc fills ~76% horizontally and ~89% vertically of
+            // bb-moon-high-res. Center each sprite around the disc's image
+            // center and scale by the disc's coverage fraction.
+            val discCx = 50.0
+            val discCy = 50.0
+            val discWPct = 76.0  // disc horizontal coverage of moon image
+            val discHPct = 89.0  // disc vertical   coverage of moon image
+            val positions : List[(Double, Double)] = rawScatter.toList./ { case (xf, yf) =>
+                val dx = (xf - 0.5) * discWPct
+                val dy = (yf - 0.5) * discHPct
+                (discCx + dx, discCy + dy)
+            }
+            val unitFigures = parsed.zip(positions)./({ case ((src, display), (xPct, yPct)) =>
+                f"""<img src="$src"
+                         title="$display"
+                         style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
+            }).mkString("")
+            val figureLayer = if (count > 0)
+                s"""<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;">$unitFigures</div>"""
+            else ""
+            val emptyCaption = if (count == 0)
+                s"""<div style="position: absolute; bottom: 6%; left: 0; right: 0; text-align: center; color: #c8a84b; text-shadow: 0 0 4px black, 0 0 4px black; font-size: 1.4em;">The Moon is empty.</div>"""
+            else ""
+            // Transparent backdrop. The outer table has no background. The
+            // moon image is sized so its FULL height fits inside the overlay
+            // pane (which is the map pane, 60vw × 60vh). max-height: 100%
+            // refers to the table cell, which fills the overlay container.
+            // height: 100% on html/body chain via the cell forces the image
+            // to be capped by the cell's available height; max-width: 100%
+            // also caps it horizontally. Using object-fit-style sizing keeps
+            // the moon centered with no letterboxing color.
+            s"""<table style="background: transparent; width: 100%; height: 100%; border-collapse: collapse;">
+              <tbody>
+                <tr>
+                  <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
+                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
+                      <img src="$moonSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
+                      $figureLayer
+                      $emptyCaption
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>"""
+
+        case $("BB", "Moon") =>
+            val moonSrc = imageSource("bb-moon-high-res")
+            s"""<table style="background: transparent; width: 100%; height: 100%; border-collapse: collapse;">
+              <tbody>
+                <tr>
+                  <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
+                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
+                      <img src="$moonSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>"""
+
+
+
         // Tombstalker (TS): Cursed Tomes overlay for TS's own card — shows all 11 tomes (white=remaining, grey=given away)
         case $("cursed-tomes", fStyle) if fStyle.toString == "ts" =>
             val givenAway = TSCursedTomesOverlay.tomesOnCard
@@ -1338,35 +1643,15 @@ object Overlays {
 
     def requirement(text : String) = s"""
         <table class="requirement-table" style="">
-            <thead>
-                <tr>
-                    <th style=width:20%>
-                    </th>
-                    <th style=width:60%>
-                    </th>
-                    <th style=width:20%>
-                    </th>
-                </tr>
-            </thead>
             <tbody>
                 <tr>
-                    <td>
-                    </td>
-                    <td>
+                    <td style="width:20%"></td>
+                    <td style="width:60%; vertical-align:middle; text-align:center;">
                         <div class="white-border">
                             ${text}
                         </div>
                     </td>
-                    <td>
-                    </td>
-                </tr>
-                <tr>
-                    <td>
-                    </td>
-                    <td>
-                    </td>
-                    <td>
-                    </td>
+                    <td style="width:20%"></td>
                 </tr>
             </tbody>
         </table>"""
@@ -1434,6 +1719,33 @@ object Overlays {
                 <div class=p>${combat} First roll the Azathoth die, then roll that many combat dice.</div>
                 <div class=p>${ref(CosmicRuler)} ${cost("(Post-Battle):")} When any Avatar is choosen to recieve a Kill or Elimination, instead you can Eliminate another Avatar in its stead, from anywhere on the map.</div>
             """),
+        ))
+    }
+
+    def bbFactionOverlay(altSB : Boolean) = {
+        // Lunacy is BB's Unique Ability (Ongoing) — same in BOTH the standard
+        // and alternate-spellbook variants. Catabolism (standard) and Syzygy
+        // (alt-variant) are SPELLBOOKS, not the Special Ability, and belong in
+        // the Spellbooks list — not at the top of the faction card.
+        val lunacyPhase = "Ongoing"
+        val lunacyText  = "Spellbooks and abilities that affect Cultists can target Earth Cats as if they are Acolytes. They cannot be captured as Cultists nor can they create or control Gates. This ability is not optional."
+        // The variant-dependent spellbook (Catabolism or Syzygy) is rendered in
+        // the Spellbooks line below, alongside the rest of BB's library that is
+        // already shown via the per-unit Spellbook references.
+        val variantSpellbook = if (altSB) Syzygy else Catabolism
+        faction(BB, "info:bb-background", Lunacy, lunacyPhase, lunacyText,
+            $(variantSpellbook), $(
+            (EarthCat,      6, "1",  "1",  s"""<div class=p>Spellbook: ${reference(BB, variantSpellbook)}</div>"""),
+            (CatFromMars,   2, "2",  "2",  s"""<div class=p>Spellbook: ${reference(BB, Zagazig)}</div>"""),
+            (CatFromSaturn, 2, "3",  "3",  s"""<div class=p>Spellbook: ${reference(BB, Savagery)}</div>"""),
+            (CatFromUranus, 2, "4",  "4",  s"""<div class=p>Spellbook: ${reference(BB, Predator)}</div>"""),
+            (Bastet,        1, "6",  "1 Kill",  s"""
+                <div class=p>${cost(s"How to Awaken ${Bastet.name}:")}</div>
+                <div class=p>${cost("1)")} All your Cat varieties are in play.</div>
+                <div class=p>${cost("2)")} Pay ${power(6)}.</div>
+                <div class=p>${cost("3)")} Place ${Bastet.name} in an Area containing no enemy Units.</div>
+                <div class=p>${combat} Add 1 Kill to your combat total (Bastet rolls no dice); the enemy must lower their Kill total by 1.</div>
+                <div class=p>${reference(BB, RequiresAttention)} ${cost("(Doom Phase):")} During the Doom Phase, if Bastet is in an Area containing an enemy Cultist, you may perform a Ritual of Annihilation. For you, this adds exactly 4 Doom plus: if Bastet’s Area has an Enemy-Controlled Gate, gain <span class=es>1 Elder Sign</span>; if Bastet’s Area has an Enemy Great Old One, gain <span class=es>2 Elder Sign</span>. These rewards are additive.</div>""")
         ))
     }
 

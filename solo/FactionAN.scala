@@ -208,7 +208,10 @@ object ANExpansion extends Expansion {
 
         case GiveWorstMonsterContinueAction(self, e :: rest) => {
             val monsters = e.pool.monsters./(_.uclass).distinct
-            val gates = e.allGates.onMap.distinct
+            // Bug 33 fix (user-reported): SBR text says "their gate" — does NOT
+            // say "on the map". The Moon (MoonGlyph) is in-play but not on-map,
+            // and is a controlled gate. Use .inPlay to include the Moon.
+            val gates = e.allGates.inPlay.distinct
 
             if (monsters.none) {
                 e.log("had no monsters available")
@@ -216,7 +219,7 @@ object ANExpansion extends Expansion {
             }
             else
             if (gates.none) {
-                e.log("had no gates", e.allGates.any.??("on the map"))
+                e.log("had no controlled gates")
                 Force(GiveWorstMonsterContinueAction(self, rest))
             }
             else {
@@ -258,7 +261,10 @@ object ANExpansion extends Expansion {
 
         case GiveBestMonsterContinueAction(self, e :: rest) => {
             val monsters = e.pool.monsters./(_.uclass).distinct
-            val gates = e.allGates.onMap.distinct
+            // Bug 33 fix (user-reported): SBR text says "their gate" — does NOT
+            // say "on the map". The Moon (MoonGlyph) is in-play but not on-map,
+            // and is a controlled gate. Use .inPlay to include the Moon.
+            val gates = e.allGates.inPlay.distinct
 
             if (monsters.none) {
                 e.log("had no monsters available")
@@ -266,7 +272,7 @@ object ANExpansion extends Expansion {
             }
             else
             if (gates.none) {
-                e.log("had no gates", e.allGates.any.??("on the map"))
+                e.log("had no controlled gates")
                 Force(GiveBestMonsterContinueAction(self, rest))
             }
             else {

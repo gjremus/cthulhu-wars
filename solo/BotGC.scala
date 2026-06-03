@@ -119,6 +119,16 @@ class GameEvaluationGC(implicit game : Game) extends GameEvaluation(GC)(game) {
             case DS =>
                 0
 
+            // Round 9 (BB): mirror BotX.ofinale BB pattern — BB's Doom curve
+            // via Bastet rituals (Catabolism/Syzygy) is mid-tier comparable to
+            // TT's. Without this case BotGC under-estimates BB's endgame doom
+            // potential and never bids first-player against a near-winning BB.
+            case BB =>
+                var p = f.power
+                if (f.has(Bastet))
+                    p += 6
+                p / 4
+
             case _ =>
                 0
         }))) >= 30 * 3
@@ -249,6 +259,9 @@ class GameEvaluationGC(implicit game : Game) extends GameEvaluation(GC)(game) {
 
             case MoveAction(_, u, o, d, cost) if u.uclass == Acolyte =>
                 active.none && o.ownGate && o.allies.cultists.num == 1 |=> - 200000 -> "gatekeeper"
+                // GC: penalise gate-to-gate shuffle and blocked-gate moves
+                o.ownGate && d.ownGate |=> -800 -> "no gate-to-gate shuffle"
+                d.gate && gateControlBlocked(d) |=> -1000000 -> "gate control blocked at dest"
                 active.none && d.freeGate |=> (2 * 100000 / 1) -> "safe move and get gate"
                 active.none && d.noGate && power > 3 |=> (2 * 100000 / 4) -> "safe move and build gate"
 
@@ -517,10 +530,12 @@ class GameEvaluationGC(implicit game : Game) extends GameEvaluation(GC)(game) {
                 result = eval(SummonAction(self, uc, r))
 
             case DreamsAction(_, r, f) =>
-                val c = f.at(r)(Acolyte).head
+                // BB: enemy faction's "cultist" can be EarthCat (no Acolyte). Use the broader
+                // targetableAsCultistByEnemy filter so the eval doesn't NoSuchElement on BB.
+                val cOpt = f.at(r).%(_.targetableAsCultistByEnemy).headOption
 
-                active.none && c.gateKeeper |=> 170000 -> "safe dreams and get gate"
-                active.none && c.gateKeeper && ofinale(f) |=> 300000 -> "finale dreams and get gate"
+                active.none && cOpt.exists(_.gateKeeper) |=> 170000 -> "safe dreams and get gate"
+                active.none && cOpt.exists(_.gateKeeper) && ofinale(f) |=> 300000 -> "finale dreams and get gate"
                 active.none && r.ocean.not |=> 50 -> "not ocean"
                 active.none && r.allies.monsterly.any |=> 30 -> "have monsters there"
 

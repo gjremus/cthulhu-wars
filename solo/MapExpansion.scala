@@ -356,7 +356,10 @@ object LibraryExpansion extends Expansion {
         case CustodianMoveToOublietteAction(self, r, target, uRef, remaining) =>
             val u = game.unit(uRef)
             val oubliette = game.board.regions.%(_.name == "Oubliette").head
+            // Parallel-guide Fix 38: Custodian forced move must NOT trigger FB Cyclopean Gaze.
+            game.fbSuppressCGForPlacement = true
             u.region = oubliette
+            game.fbSuppressCGForPlacement = false
             u.onGate = false
             target.log(u.uclass.styled(target), "moved to", oubliette, "(" + "Custodian".styled("lb") + ")")
             Force(CustodianResolveAgonyAction(self, r, remaining))
@@ -654,10 +657,14 @@ object LibraryExpansion extends Expansion {
         case UseTomeGuardianDestAction(self, source, target, dest) =>
             self.power -= 1
             game.tomeFaceUp = game.tomeFaceUp + (TomeGuardian -> false)
+            // Parallel-guide Fix 40: Library Guardian tome forcibly relocates enemy units.
+            // This must NOT trigger FB Cyclopean Gaze.
+            game.fbSuppressCGForPlacement = true
             target.at(source).%(u => u.uclass.utype != MapUnit).foreach { u =>
                 u.region = dest
                 u.onGate = false
             }
+            game.fbSuppressCGForPlacement = false
             self.log("used", TomeGuardian.elem, "to move", target.full, "units from", source, "to", dest)
             EndAction(self)
 

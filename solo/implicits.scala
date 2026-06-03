@@ -49,6 +49,8 @@ trait GameImplicits {
         def monsterly = u.uclass.utype == Monster || u.uclass.utype == Terror
         def terror = u.uclass.utype == Terror
         def cultist = u.uclass.utype == Cultist
+        // Lunacy (BB): Earth Cats count as Cultists for enemy-targeting spells/effects.
+        def targetableAsCultistByEnemy = u.uclass.utype == Cultist || (u.faction == BB && u.uclass == EarthCat)
         def inPlay = u.region.glyph.inPlay
         def onMap = u.region.glyph.onMap
     }

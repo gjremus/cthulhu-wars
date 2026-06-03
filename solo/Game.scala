@@ -23,6 +23,7 @@ case object Deep extends Glyph(true, false)
 case object Slumber extends Glyph(true, false)
 case object Sorcery extends Glyph(true, false)
 case object Extinct extends Glyph(false, false)
+case object MoonGlyph extends Glyph(true, false)
 
 trait Region extends GoodMatch {
     val id : String
@@ -96,6 +97,19 @@ case class Extinct(faction : Faction) extends FactionRegion {
     val name = "Extinct"
 }
 
+// BUBASTIS: Moon — off-map region that holds BB's Earth Cats at setup and
+// catnapped enemy units. onMap=false is used to keep Moon out of map-iteration
+// queries (Bastet awakening prerequisites, Ailurophobia non-Moon scoring,
+// etc.) but the Moon DOES count as a Bubastis-Controlled Gate "for all
+// purposes" per the Moon Tile rule — Earth Cats on the Moon still generate
+// Gather Power per their unit-card Special, are still in-play, and the Moon
+// is still a valid controlled-Gate Summon target.
+case class MoonHold(faction : Faction) extends FactionRegion {
+    val glyph = MoonGlyph
+    val id    = "MoonHold"
+    val name  = "the Moon"
+}
+
 
 trait Board {
     def id : String
@@ -115,6 +129,7 @@ trait Board {
     def silenceTokenMax(f : Faction) : Int = 0
     val unitScale : Double = 1.0
     val archways : Set[Region] = Set()
+    def allows6PowerAltForBB : Boolean = false
 }
 
 case class ElderSign(value : Int) {
@@ -160,6 +175,9 @@ case object Cultist extends UnitType { val priority = 10 }
 case object Monster extends UnitType { val priority = 20 }
 case object Terror extends UnitType { val priority = 30 }
 case object GOO extends UnitType { val priority = 40 }
+// BUBASTIS: ElderGod UnitType — same priority as GOO; Bastet uses this type.
+// isGOO helper below includes ElderGod so GOO-targeted effects fire for Bastet.
+case object ElderGod extends UnitType { val priority = 40 }
 case object Token extends UnitType { val priority = 2 }
 case object Building extends UnitType { val priority = 5 }
 case object MapUnit extends UnitType { val priority = 1 }
@@ -170,6 +188,10 @@ abstract class UnitClass(val name : String, val utype : UnitType, val cost : Int
     def plural = name + "s"
     def styled(f : Faction) = name.styled(f)
     val priority = utype.priority * 1_00_00_00 + cost * 1_00 + this.is[NeutralMonster].??(1_00_00)
+
+    // BUBASTIS: isGOO includes ElderGod so every GOO-targeted check fires for Bastet
+    def isGOO     : Boolean = utype == GOO || utype == ElderGod
+    def isElderGod: Boolean = utype == ElderGod
 
     def canMove(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !MindParasite.isParasitized(u)
     def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !MindParasite.isParasitized(u)
@@ -323,6 +345,7 @@ trait Faction { f =>
     def abilities : $[Spellbook]
     def library : $[Spellbook]
     def requirements(options : $[GameOption]) : $[Requirement]
+    def canRecruitHP : Boolean = true
     def recruitCost(u : UnitClass, r : Region)(implicit game : Game) = u.cost
     def summonCost(u : UnitClass, r : Region)(implicit game : Game) = u.cost
     def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = None
@@ -367,7 +390,8 @@ trait Faction { f =>
         units(GhatanotoaIGOO).not(Zeroed).num * opponent.allInPlay.%(_.uclass.utype == Cultist).num +
         // Cthugha: pre-battle combat = 1 if enemy GOO present in region (enables battle declaration)
         // Actual combat is calculated dynamically during battle (picks highest enemy GOO)
-        units(Cthugha).not(Zeroed).%(u => opponent.at(u.region).%(_.uclass.utype == GOO).any).num +
+        // HIGH-2 revised: ElderGod (Bastet) counts as GOO per spec §1.3.
+        units(Cthugha).not(Zeroed).%(u => opponent.at(u.region).%(_.uclass.isGOO).any).num +
         0 +
         // Atlach-Nacha: combat 0
         units(AtlachNacha).not(Zeroed).num * 0 +
@@ -380,9 +404,10 @@ trait Faction { f =>
 }
 
 // Elder Thing Mind Control: suppress GOO special abilities when Elder Thing shares area
+// HIGH-2 revised: ElderGod (Bastet) counts as GOO for ETMC suppression per spec §3.18.44.
 object ElderThingMindControl {
     def suppresses(u : UnitFigure)(implicit game : Game) : Boolean =
-        u.uclass.utype == GOO && game.factions.exists(f2 => f2 != u.faction && f2.at(u.region, ElderThing).any)
+        u.uclass.isGOO && game.factions.exists(f2 => f2 != u.faction && f2.at(u.region, ElderThing).any)
 }
 
 // Insects from Shaggai Mind Parasite
@@ -821,8 +846,12 @@ class Player(private val f : Faction)(implicit game : Game) {
     def all(uclass : UnitClass) = units.%(u => u.region.inPlay && u.uclass == uclass)
     def all(utype : UnitType) = units.%(u => u.region.inPlay && u.uclass.utype == utype)
     def allInPlay = units.%(_.region.inPlay)
-    def goos = units.%(_.region.inPlay).%(_.uclass.utype == GOO)
+    // HIGH-2 revised: ElderGod (Bastet) counts as GOO per spec §1.3 for capture-blocking,
+    // Nyarlathotep Harbinger 2-ES, multi-GOO checks, etc.
+    def goos = units.%(_.region.inPlay).%(_.uclass.isGOO)
     def cultists = units.%(_.region.inPlay).%(_.uclass.utype == Cultist)
+    // Lunacy (BB): Earth Cats count as Cultists for enemy-targeting effects.
+    def cultistsForEnemyTargeting = units.%(_.region.inPlay).%(_.targetableAsCultistByEnemy)
     def acolytes = units.%(_.region.inPlay).%(_.uclass == Acolyte)
 
     def goo(uclass : UnitClass) = all(uclass).headOption.getOrElse(new UnitFigure(f, uclass, 1, f.reserve))
@@ -862,23 +891,40 @@ class Player(private val f : Faction)(implicit game : Game) {
     }
 
     def place(uc : UnitClass, r : Region) {
-        val u = f.pool(uc).first
-        u.region = r
-        // Universal CG trigger — single chokepoint for all placements. Any
-        // non-FB placement of a non-Building unit into a region with an FB
-        // Revenant or Ghatanothoa must register the region for CG dispatch.
-        // Covers: SummonAction, AwakenAction, RecruitAction (via Game.scala),
-        // StartAction's initial acolyte placement (skipped — FB check guards),
-        // plus every expansion that calls `self.place(...)` directly
-        // (BG Avatar's replacement, AN Cathedral/Festival, YS Screaming Dead,
-        // TS Undulate/Hecatomb, SL Lethargy, etc.).
-        if (f != FB && uc.utype != Building &&
-            game.fbHasCGActive &&
-            FB.units.exists(u => u.region == r && (u.uclass == RevenantOfKnaa || u.uclass == Ghatanothoa)))
-            game.fbCyclopeanGazeActionRegions :+= r
+        // Bubastis Moon Guard (Fix 45, v2.4.13): non-BB factions may NEVER place
+        // any unit, building, or gate-equivalent on the Moon. The ONLY way for a
+        // non-BB unit to enter the Moon is BB's Catnapping action (which writes
+        // u.region = BB.moon directly in FactionBB.scala — it does not go
+        // through this place() chokepoint). This guard is defense-in-depth:
+        // every destination-list filter (areas, board.connected, summonRegions,
+        // game.gates) already excludes Moon for non-BB callers, but if a future
+        // ability accidentally lets Moon slip through, this stops it cold.
+        // Also blocks Yog-Sothoth gate-stacking, Cathedrals, Chaos Gates, Craters,
+        // Pyramids (when added), Glaciers, Worms of Groth, Insects from Shaggai,
+        // Mother Hydra Acolytes (Zygote), Hounds, Moonbeasts, etc. on Moon.
+        if (f != BB && r == BB.moon) {
+            f.log("placement of", uc.styled(f), "on", BB.moon, "blocked: only BB units may enter the Moon (Catnapping is the sole exception)")
+        }
+        else {
+            val u = f.pool(uc).first
+            u.region = r
+            // Universal CG trigger — single chokepoint for all placements. Any
+            // non-FB placement of a non-Building unit into a region with an FB
+            // Revenant or Ghatanothoa must register the region for CG dispatch.
+            // Covers: SummonAction, AwakenAction, RecruitAction (via Game.scala),
+            // StartAction's initial acolyte placement (skipped — FB check guards),
+            // plus every expansion that calls `self.place(...)` directly
+            // (BG Avatar's replacement, AN Cathedral/Festival, YS Screaming Dead,
+            // TS Undulate/Hecatomb, SL Lethargy, etc.).
+            if (f != FB && uc.utype != Building &&
+                game.fbHasCGActive &&
+                FB.units.exists(u => u.region == r && (u.uclass == RevenantOfKnaa || u.uclass == Ghatanothoa)))
+                game.fbCyclopeanGazeActionRegions :+= r
+            game.logElderThingMovementBlocks(u, r)
+        }
     }
 
-    def canAccessGate(r : Region) = gates.contains(r) || f.unitGate.?(_.region == r) || (has(TheyBreakThrough) && game.gates.contains(r))
+    def canAccessGate(r : Region) = gates.contains(r) || f.unitGate.?(_.region == r) || (has(TheyBreakThrough) && game.gates.contains(r)) || (f == BB && r == BB.moon)
 
     def canAttack(r : Region)(e : Faction) = e.at(r).any && f.strength(at(r), e) > 0 && at(r).%(_.canBattle).any
 
@@ -915,7 +961,7 @@ class Player(private val f : Faction)(implicit game : Game) {
             f.at(r, Monster).%(u => u.uclass.canCapture(u)).any
     }
 
-    def summonRegions : $[Region] = (f.allGates.onMap ++ f.can(TheyBreakThrough).??(f.enemies./~(_.allGates) ++ game.abandonedGates)).nex.distinct
+    def summonRegions : $[Region] = (f.allGates.onMap ++ f.can(TheyBreakThrough).??(f.enemies./~(_.allGates) ++ game.abandonedGates) ++ (f == BB).??($(BB.moon))).nex.distinct
 
     def iced(r : Region) : IceAges = {
         if (game.anyIceAge.not)
@@ -983,6 +1029,8 @@ case object DemandTsathoggua extends GameOption
 case object SleeperEasierSBR extends GameOption
 case object SleeperEnergyNexusPreBattle extends GameOption
 case object DSAlternateSpellbooks extends GameOption
+// BUBASTIS: alt-variant spellbook option (Syzygy replaces Catabolism, Carnivore replaces Ailurophobia)
+case object BBAlternateSpellbooks extends GameOption
 
 
 trait MapOption extends GameOption
@@ -1063,6 +1111,8 @@ object GameOptions {
         SleeperEasierSBR,
         SleeperEnergyNexusPreBattle,
         DSAlternateSpellbooks,
+        // BUBASTIS: alt-variant spellbook option
+        BBAlternateSpellbooks,
         MapEarth33,
         MapEarth35,
         MapEarth53,
@@ -1307,6 +1357,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case DS => $(DSExpansion)
             // Tcho-Tcho (TT): register TT expansion handler
             case TT => $(TTExpansion)
+            // Bubastis (BB): register BB expansion handler
+            case BB => $(BBExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any).$(NeutralMonstersExpansion) ++
@@ -1330,6 +1382,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var round = 1
     var doomPhase = false
     var gatherPowerPhase = false
+    var endActionPhasePrompts = false
+    def inActionPhase : Boolean = !doomPhase && !gatherPowerPhase && !endActionPhasePrompts
     var factions : $[Faction] = $
     var first : Faction = setup.first
     var gates : $[Region] = $
@@ -1341,6 +1395,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     DS.chaosGateRegions = $
     DS.azathothTrack = 0
     DS.azathothDieRoll = 0
+    DS.startingDecided = false
+    // TS singleton vars (TSExpansion object) — same reason; undo creates a new Game and these
+    // would otherwise persist across instances and corrupt replay state. (Parallel-guide Fix 33)
+    TSExpansion.shepherdDoneThisGather = false
+    TSExpansion.pgrLastFaction = null
+    TSExpansion.pureDHRitualsDone = 0
+    TSExpansion.pureDHMarkerIndices = $
+    TSExpansion.graspingDeadRemaining = $()
+    TSExpansion.graspingDeadFought = $()
+    TSExpansion.graspingDeadActive = false
     var ritualMarker = 0
     var ritualHistory : $[Faction] = $
     var ritualHistoryCeremony : $[Boolean] = $
@@ -1362,6 +1426,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var ubboGrowth : Int = 0           // Ubbo-Sathla's combat value; starts at 0, grows via Hell's Banquet
     var ttHellsBanquetDone : Boolean = false  // sentinel: prevents Hell's Banquet re-firing when DoomAction re-entered after roll
     var ttTribeChosen : Boolean = false        // sentinel: tribe selection asked once on first DoomAction
+
+    // Bubastis (BB) doom-phase passive sentinels — prevent Ailurophobia / Syzygy from
+    // re-firing each time DoomAction(BB) is re-entered (CRIT-7). Reset at end of BB's
+    // doom phase via DoomDoneAction(BB).
+    var bbAilurophobiaDone : Boolean = false
+    var bbSyzygyDone       : Boolean = false
 
     // Tombstalker (TS) state: Death's Head counter, Cursed Tome stack index, and per-faction tome ownership
     var deathsHead : Int = 0
@@ -1495,6 +1565,70 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Game.scala.AfterAction fires CG AFTER triggers()/SBRs resolve.
     var fbCyclopeanGazePendingSources : $[FBCyclopeanGazeSource] = $
     var fbCyclopeanGazePendingActor : |[Faction] = None
+
+    // Fix 30: Elder Thing passive-block movement logging.
+    // Fire-once guard: (mover ref, suppressed-GOO ref, ability label) triples already logged this tick.
+    var elderThingBlockGuard : $[(UnitRef, UnitRef, String)] = $
+
+    def elderThingBlockedAbilities(uc : UnitClass) : $[String] = uc match {
+        case Cthulhu        => $("Devour")
+        case ShubNiggurath  => $("Avatar")
+        case Nyarlathotep   => $("Harbinger")
+        case Hastur         => $()
+        case KingInYellow   => $("Desecrate")
+        case Tsathoggua     => $("Lethargy")
+        case RhanTegoth     => $()
+        case Ithaqua        => $("Eternal")
+        case Ghatanothoa    => $("Cyclopean Gaze")
+        case Yig            => $("Snakebite")
+        case FatherDagon    => $("Tsunami")
+        case MotherHydra    => $("Toad of Berkeley")
+        case Glaaki         => $("Shepherd of the Crypt")
+        case GhatanotoaIGOO => $("Blot Out the Sun")
+        case AzathothIGOO   => $("Nuclear Chaos combat boost")
+        case Cthugha        => $("Prime Cause")
+        case Tulzscha       => $("Undying Flame")
+        case Nyogtha        => $("From Below")
+        case AtlachNacha    => $("Place Spinneret")
+        case Bokrug         => $("Agony Sting")
+        case Daoloth        => $("Mummify")
+        case Ygolonac       => $("Velvet Fan")
+        case BloatedWoman   => $("Fire Vampires")
+        case Byatis         => $("Execration of Mu")
+        case Abhoth         => $("Filth spawn")
+        case _              => $()
+    }
+
+    def logElderThingBlocksForGOO(mover : UnitFigure, goo : UnitFigure, r : Region) {
+        val abilities = elderThingBlockedAbilities(goo.uclass)
+        abilities.foreach { ability =>
+            val key = (mover.ref, goo.ref, ability)
+            if (!elderThingBlockGuard.has(key) && ElderThingMindControl.suppresses(goo)) {
+                elderThingBlockGuard :+= key
+                goo.faction.log(ability.styled("nt"), "blocked by", "Elder Thing".styled("nt"), "in", r)
+            }
+        }
+    }
+
+    def logElderThingMovementBlocks(mover : UnitFigure, to : Region) {
+        if (mover.uclass == ElderThing) {
+            // ET moved into `to` — log every enemy GOO in `to` that is now suppressed
+            factions.but(mover.faction).foreach { f =>
+                f.allInPlay.%(u => u.region == to && ElderThingMindControl.suppresses(u) && elderThingBlockedAbilities(u.uclass).any).foreach { goo =>
+                    logElderThingBlocksForGOO(mover, goo, to)
+                }
+            }
+        } else if (elderThingBlockedAbilities(mover.uclass).any) {
+            // A GOO moved into `to` — log if any enemy ET is in `to`
+            factions.but(mover.faction).foreach { f =>
+                f.allInPlay.%(u => u.region == to && u.uclass == ElderThing).foreach { et =>
+                    if (ElderThingMindControl.suppresses(mover)) {
+                        logElderThingBlocksForGOO(et, mover, to)
+                    }
+                }
+            }
+        }
+    }
 
     def forNPowerWithTax(r : Region, f : Faction, n : Int) : String = { val p = n + f.taxIn(r) ; " for " + p.power }
     def for1PowerWithTax(r : Region, f : Faction) : String = { val p = 1 + f.taxIn(r) ; if (p != 1) " for " + p.power else "" }
@@ -1634,14 +1768,22 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def direction(from : Region, to : Region) = {
-        val (ax, ay) = board.gateXYO(from)
-        val (bx, by) = board.gateXYO(to)
+        // BB Moon Undo Fix: the Moon is off-map and has no gate XY coordinates.
+        // Any caller that reaches direction() with from=Moon or to=Moon (e.g.
+        // a stale arrow-overlay calculation during undo replay) would have
+        // thrown "Unknown region". Return 0 as a safe default — Moon moves
+        // are rendered without direction arrows by callers anyway.
+        if (from.is[MoonHold] || to.is[MoonHold]) 0
+        else {
+            val (ax, ay) = board.gateXYO(from)
+            val (bx, by) = board.gateXYO(to)
 
-        val shift = board.width * 13 / 11
+            val shift = board.width * 13 / 11
 
-        val (cx, cy) = ($(bx - shift, bx, bx + shift).minBy(x => (ax - x).abs), by)
+            val (cx, cy) = ($(bx - shift, bx, bx + shift).minBy(x => (ax - x).abs), by)
 
-        (((180 - math.atan2(cx - ax, 2*(cy - ay)) / math.Pi * 180) / 15).round * 15).toInt % 360
+            (((180 - math.atan2(cx - ax, 2*(cy - ay)) / math.Pi * 180) / 15).round * 15).toInt % 360
+        }
     }
 
     def showROAT() {
@@ -1652,7 +1794,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def checkGatesLost() {
         factions.foreach { f =>
             f.gates.foreach { r =>
-                if (f.at(r).%(_.onGate).none) {
+                // Bubastis Moon Gate: control cannot be seized/lost per the Moon Tile rule
+                // (source/bubastis.txt line 108) + FAQ #19 ("Bubastis' Moon Gate is inherent
+                // and always present"). Skip the abandon-on-no-onGate-unit check for BB.moon.
+                if (!(f == BB && r == BB.moon) && f.at(r).%(_.onGate).none) {
                     f.gates :-= r
                     f.log("lost control of the gate in", r)
                 }
@@ -1718,37 +1863,39 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         triggers()
 
         gates.nex.foreach { r =>
-            if (self.abandoned.has(r).not) {
-                if (DS.chaosGateRegions.has(r).not || self == DS) {
-                    if (factions.%(_.gates.has(r)).none) {
-                        // Library at Celaeno: custodian/librarian block gate control
-                        val libraryBlocker : |[String] = if (board.isLibraryMap) {
-                            if (librarianRegion.has(r)) |("Librarian")
-                            else if (custodianRegion.has(r)) |("Custodian")
-                            else None
-                        } else None
+            if (r != BB.moon) {
+                if (self.abandoned.has(r).not) {
+                    if (DS.chaosGateRegions.has(r).not || self == DS) {
+                        if (factions.%(_.gates.has(r)).none) {
+                            // Library at Celaeno: custodian/librarian block gate control
+                            val libraryBlocker : |[String] = if (board.isLibraryMap) {
+                                if (librarianRegion.has(r)) |("Librarian")
+                                else if (custodianRegion.has(r)) |("Custodian")
+                                else None
+                            } else None
 
-                        // Shadow Pharaoh: Hebephrenia — gates in SP's area cannot be controlled
-                        val shadowPharaohBlocks = factions.exists(f2 => f2.allInPlay.%(_.uclass == ShadowPharaoh).exists(_.region == r))
+                            // Shadow Pharaoh: Hebephrenia — gates in SP's area cannot be controlled
+                            val shadowPharaohBlocks = factions.exists(f2 => f2.allInPlay.%(_.uclass == ShadowPharaoh).exists(_.region == r))
 
-                        if (libraryBlocker.any || shadowPharaohBlocks) {
-                            // Silently block — don't log repeatedly (checkGatesGained is called every action cycle)
-                        }
-                        else {
-                            self.at(r).%(_.canControlGate).sortBy(_.uclass @@ {
-                                case DarkYoung => 1
-                                case Acolyte => 2
-                                case HighPriest => 3
-                            }).starting.foreach { u =>
-                                self.gates :+= r
-                                u.onGate = true
+                            if (libraryBlocker.any || shadowPharaohBlocks) {
+                                // Silently block — don't log repeatedly (checkGatesGained is called every action cycle)
+                            }
+                            else {
+                                self.at(r).%(_.canControlGate).sortBy(_.uclass @@ {
+                                    case DarkYoung => 1
+                                    case Acolyte => 2
+                                    case HighPriest => 3
+                                }).starting.foreach { u =>
+                                    self.gates :+= r
+                                    u.onGate = true
 
-                                if (self.oncePerAction.has(UmrAtTawil).not)
-                                    self.log("gained control of the gate in", r)
+                                    if (self.oncePerAction.has(UmrAtTawil).not)
+                                        self.log("gained control of the gate in", r)
 
-                                // Library at Celaeno: check tome acquisition on auto gate control
-                                if (board.isLibraryMap)
-                                    LibraryExpansion.checkTomeAcquisition()
+                                    // Library at Celaeno: check tome acquisition on auto gate control
+                                    if (board.isLibraryMap)
+                                        LibraryExpansion.checkTomeAcquisition()
+                                }
                             }
                         }
                     }
@@ -1768,7 +1915,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         (f.loyaltyCards.has(BokrugCard) && f.upgrades.has(DoomThatCameToSarnath).not).$(GiveBokrugMainAction(f)) ++
         (options.has(AsyncActions) || outOfTurn.not).??(
             (highPriests && f.all(HighPriest).any).$(SacrificeHighPriestOutOfTurnMainAction(f)) ++
-            { val vp = f.plans.%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+            { val vp = f.plans
+                .%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+                .%(p => inActionPhase || (p.is[GateDiplomacyPlan].not && p.is[HighPriestGatesPlan].not))
             vp.%(f.commands.has)./(p => Info(p.info)(p.group)) ++
             vp.any.$(CommandsMainAction(f)) }
         )
@@ -1833,6 +1982,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def controls(f : Faction)(implicit w : AskWrapper) {
+        // BB Fix (v2.4.10): Bubastis has no Cultists or Acolytes — the only units it
+        // could ever place "on the gate" are Earth Cats stuck on the Moon (which is
+        // its permanent gate-equivalent home, not a Map gate). So the "Control gates"
+        // menu option is meaningless for BB and was offered redundantly. Suppress
+        // for BB always, regardless of board state.
+        if (f == BB) return
         if (gates.nex.%(r => DS.chaosGateRegions.has(r).not || f == DS).exists(r => factions.%(_.gates.has(r)).none && f.at(r).exists(_.canControlGate))
             || f.gates.nex.exists(r => f.at(r).%(_.canControlGate)./(_.uclass).distinct.diff(f.commands.has(HighPriestGatesSkip).$(HighPriest)).num > 1)
             || (f.commands.has(GateDiplomacyPrompt) && f.gates.nex.any)
@@ -1853,7 +2008,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val parasitized : $[UnitFigure] = if (f.loyaltyCards.has(InsectsFromShaggaiCard))
             factions.but(f)./~(e => e.units.nex.onMap.not(Moved).%(u => MindParasite.controller(u).has(f)))
         else $
-        if ((f.units.nex.onMap.not(Moved).%(_.canMove).any || parasitized.any) && f.power > 0)
+        val moonUnits = (f == BB).??(f.at(BB.moon).not(Moved).%(_.canMove))
+        if ((f.units.nex.onMap.not(Moved).%(_.canMove).any || moonUnits.any || parasitized.any) && f.power > 0)
             + MoveMainAction(f)
     }
 
@@ -1875,6 +2031,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         availableCultists./(_.uclass).distinct.reverse.foreach { uc =>
             areas.%(f.present).some.|(areas).nex.%(r => f.affords(f.recruitCost(uc, r))(r)).some.foreach { l =>
                 + RecruitMainAction(f, uc, l)
+            }
+        }
+
+        // Bubastis (BB): Catabolism enables Recruiting Monster classes (CatFromMars/Saturn/Uranus).
+        // Inert when BBAlternateSpellbooks is on (Catabolism replaced by Syzygy in that variant).
+        if (f == BB && f.can(Catabolism) && !options.has(BBAlternateSpellbooks)) {
+            $(CatFromMars, CatFromSaturn, CatFromUranus).foreach { uc =>
+                if (f.pool(uc).any) {
+                    areas.%(f.present).some.|(areas).nex.%(r => f.affords(f.recruitCost(uc, r))(r)).some.foreach { l =>
+                        + RecruitMainAction(f, uc, l)
+                    }
+                }
             }
         }
 
@@ -1900,8 +2068,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // block all non-terror monster summons (not ServitorUnit itself)
         // Blocking text shown inside summon sub-menu, not here in top-level menu
 
+        val summonAreas = areas ++ ((f == BB).??($(BB.moon)))
+
         f.pool.monsterly.sortP./(_.uclass).distinct.%(_.canBeSummoned(f)).%(uc => f.all(uc).num < f.units./(_.uclass).count(uc)).foreach { uc =>
-            areas.nex.%(r => f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
+            summonAreas.nex.%(r => f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
                 + SummonMainAction(f, uc, l)
             }
         }
@@ -1934,7 +2104,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val poolMonsterClasses = f.pool.monsterly./(_.uclass).distinct
         val velvetFanMonsters = f.units.%(u => u.region.is[VelvetFanHold] && u.uclass.utype == Monster)
         velvetFanMonsters./(_.uclass).distinct.diff(poolMonsterClasses).foreach { uc =>
-            areas.nex.%(r => f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
+            summonAreas.nex.%(r => f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
                 + SummonMainAction(f, uc, l)
             }
         }
@@ -1946,13 +2116,20 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 + AwakenMainAction(f, uc, l)
             }
         }
+        // ElderGod units (Bastet) use a custom awakenCost but are not in factionGOOs
+        f.pool.%(_.uclass.utype == ElderGod)./(_.uclass).distinct.foreach { uc =>
+            areas.nex.%(r => f.affords(f.awakenCost(uc, r).|(999))(r)).some.foreach { l =>
+                + AwakenMainAction(f, uc, l)
+            }
+        }
     }
 
     def igooCost(f : Faction, igoo : IGOOLoyaltyCard) : Int = igoo match {
         // Cthugha: "6 minus your Great Old One's Awakening Cost"
         // Use the faction's awakenCost for their GOO (dynamic, accounts for rituals/discounts)
         case CthughaCard =>
-            val factionGOOs = f.units./(_.uclass).%(_.utype == GOO).%(_.isInstanceOf[FactionUnitClass]).distinct
+            // HIGH-2 revised: ElderGod (Bastet) counts as GOO per spec §1.3.
+            val factionGOOs = f.units./(_.uclass).%(_.isGOO).%(_.isInstanceOf[FactionUnitClass]).distinct
             val gooCost = factionGOOs.headOption./~(uc => f.allGates.onMap.headOption./~(r => f.awakenCost(uc, r))).|(factionGOOs.headOption./(_.cost).|(0))
             6 - gooCost
         case _ => igoo.power
@@ -1978,7 +2155,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // Cthugha: replace any non-Cthugha GOO at one of f's gates (cost = 6 - replaced.cost)
         val cthughaAvailable = loyaltyCards.has(CthughaCard) && {
-            val allGOOs = f.allInPlay.%(_.uclass.utype == GOO).%(u => u.uclass != Cthugha)
+            // HIGH-2 revised: ElderGod (Bastet) counts as GOO per spec §1.3.
+            val allGOOs = f.allInPlay.%(_.uclass.isGOO).%(u => u.uclass != Cthugha)
             allGOOs.%(goo => {
                 val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) f.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
                 val cthughaCost = 6 - gooCost
@@ -2066,7 +2244,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         else if (f.has(GhatanotoaIGOO) && f.power >= 1 && !f.allInPlay.%(_.uclass == GhatanotoaIGOO).exists(u => ElderThingMindControl.suppresses(u))) {
             val ghatRegion = f.allInPlay.%(_.uclass == GhatanotoaIGOO).headOption./(_.region)
             ghatRegion.foreach { r =>
-                if (f.enemies.exists(_.at(r).%(_.uclass.utype == Cultist).%(u => !game.mummifiedCultists.has(u.ref)).any))
+                // Lunacy (BB): Earth Cats are targetable as Cultists by enemy spellbooks.
+                if (f.enemies.exists(_.at(r).%(_.targetableAsCultistByEnemy).%(u => !game.mummifiedCultists.has(u.ref)).any))
                     + GhatanotoaMummifyAction(f)
             }
         }
@@ -2215,6 +2394,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (f.upgrades.has(CeremonyOfAnnihilation) && !f.oncePerGame.has(CeremonyOfAnnihilation) && f.acted.not)
             + CeremonyOfAnnihilationChoiceAction(f)
 
+        // Bubastis Requires Attention: Bastet ritual — optional doom-phase action
+        if (f == BB && f.acted.not) {
+            val bastetUnits = f.allInPlay.%(_.uclass == Bastet).%(_.region.onMap)
+            bastetUnits.foreach { bastet =>
+                val r = bastet.region
+                val hasEnemyCultist = factions.but(f).exists(e => e.at(r).%(u => u.uclass.utype == Cultist).any)
+                if (hasEnemyCultist)
+                    + RequiresAttentionMainAction(f)
+            }
+        }
+
         + SacrificeHighPriestAllowedAction
 
         + OutOfTurnRefresh(DoomAction(f))
@@ -2248,11 +2438,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             if (options.has(HighPriests)) {
                 setup.foreach { f =>
-                    f.loyaltyCards = f.loyaltyCards :+ HighPriestCard
+                    // Factions that cannot recruit a High Priest (BB, FB) skip HP card and unit
+                    if (f.canRecruitHP) {
+                        f.loyaltyCards = f.loyaltyCards :+ HighPriestCard
 
-                    // TT: pool is always 3 HPs regardless of expansion — HP already in allUnits
-                    if (f != TT)
-                        f.units :+= new UnitFigure(f, HighPriest, 1, f.reserve)
+                        // TT: pool is always 3 HPs regardless of expansion — HP already in allUnits
+                        if (f != TT)
+                            f.units :+= new UnitFigure(f, HighPriest, 1, f.reserve)
+                    }
                 }
             }
 
@@ -2284,6 +2477,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case StartingRegionAction(f, r) =>
             starting += f -> r
+            f.log("places its starting region glyph in", r)
 
             // TT with HP expansion: 5 Acolytes + 1 High Priest. All others: 6 Acolytes.
             if (f == TT && options.has(HighPriests)) {
@@ -2464,6 +2658,30 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     if (groyBonus > 0) {
                         f.power += groyBonus
                         f.log("Possession".styled("nt") + ":", groyBonus.power, "from", groyBonus, "captive".s(groyBonus))
+                    }
+                }
+
+                // Bubastis (BB): per-Cat unit Special — each Cat (Earth, Mars, Saturn, Uranus)
+                // generates +1 Power during the Gather Power Phase (rules: every Cat unit's
+                // "Special: Generates 1 Power during the Gather Power Phase"). This is NOT
+                // Catabolism — Catabolism is the Recruit-via-Earth-Cats spellbook gated in
+                // recruits(f). High Priests bonus: BB has no HP unit/card, so the HP option
+                // grants +1 Power per Gather instead (task 3.8.2).
+                if (f == BB) {
+                    // Per-Cat Special applies regardless of Moon vs. Earth area: the Moon counts
+                    // as a land Area with a Bubastis-Controlled Gate "for all purposes" except
+                    // control-seizure (source/bubastis.txt line 108). The unit card Special has
+                    // no "non-Moon" qualifier (contrast Ailurophobia which does). Count every BB
+                    // Monster Cat that is in play (i.e., has a region — not in pool/reserve and
+                    // not eliminated). f.allInPlay already gives in-play units.
+                    val bbCats = f.allInPlay.%(u => u.uclass.utype == Monster).num
+                    if (bbCats > 0) {
+                        f.power += bbCats
+                        f.log("gained", bbCats.power, "from", bbCats, "Cat".s(bbCats), "(per-Cat Special)")
+                    }
+                    if (options.has(HighPriests)) {
+                        f.power += 1
+                        f.log("gained", 1.power, "High Priests bonus")
                     }
                 }
             }
@@ -2665,6 +2883,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 return GameOverPhaseAction
 
             doomPhase = false
+            endActionPhasePrompts = false
             fbGhatoLastMoveOrigin = None
 
             // Nuclear Chaos (Azathoth spellbook): flip back face-up at start of Action Phase
@@ -2789,6 +3008,20 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // SPELLBOOK
         case CheckSpellbooksAction(next) =>
+            // Bubastis (BB): check auto-satisfiable requirements
+            if (factions.has(BB)) {
+                BB.satisfyIf(NoEarthCatsOnMoon,        "No Earth Cats on the Moon",                   BB.at(BB.moon).%(_.uclass == EarthCat).none)
+                val catInEveryStart = factions.but(BB).forall(e => starting.get(e).exists(r => BB.at(r).%(u => u.uclass == EarthCat || u.uclass == CatFromMars || u.uclass == CatFromSaturn || u.uclass == CatFromUranus).any))
+                if (BB.needs(CatInEveryEnemyStart) && catInEveryStart) {
+                    val bonus = factions.but(BB).num
+                    BB.satisfy(CatInEveryEnemyStart, "A Cat in every enemy faction's Start Area")
+                    if (bonus > 0) {
+                        BB.power += bonus
+                        BB.log("gained", bonus.power, "(Cat in every Start Area bonus)")
+                    }
+                }
+            }
+
             val fs = factions.%(f => f.unfulfilled.num + f.spellbooks.num < f.library.num)
             val fe = factions.%(f => f.es.%(_.value == 0).any)
 
@@ -2800,6 +3033,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     case (DS, FiendishGrowth) if options.has(DSAlternateSpellbooks) => FiendishSpawn
                     case (DS, UndirectedEnergy) if options.has(DSAlternateSpellbooks) => DirectedEnergy
                     case (SL, EnergyNexus) if options.has(SleeperEnergyNexusPreBattle) => EnergyNexusPB
+                    // BUBASTIS: alt-variant swaps Catabolism→Syzygy and Ailurophobia→Carnivore
+                    case (BB, Catabolism)   if options.has(BBAlternateSpellbooks) => Syzygy
+                    case (BB, Ailurophobia) if options.has(BBAlternateSpellbooks) => Carnivore
                     case _ => sb
                 }}
                 var bs = (effectiveLibrary.%!(f.has) ++ neutralSpellbooks).diff(f.ignorePerInstant)
@@ -2843,7 +3079,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val sbNext = CheckSpellbooksAction(next)
                 // If Hierophants was just earned and HP expansion active, also prompt all other factions first
                 if (sb == Hierophants && options.has(HighPriests)) {
-                    val others = factions.but(TT).%(_.pool(HighPriest).any)
+                    val others = factions.but(TT).%(_.canRecruitHP).%(_.pool(HighPriest).any)
                     if (others.any)
                         return Force(TTHierophantsOtherFactionsAction(f, others, sbNext))
                 }
@@ -3056,6 +3292,28 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 asking
             } else
                 CheckSpellbooksAction(DoomAction(f))
+
+        // Bubastis Requires Attention: doom-phase ritual via Bastet + enemy Cultist
+        case RequiresAttentionMainAction(self) =>
+            val bastetRegions = self.allInPlay.%(_.uclass == Bastet).%(_.region.onMap)./(_.region)
+            val eligible = bastetRegions.%(r => factions.but(self).exists(e => e.at(r).%(u => u.uclass.utype == Cultist).any))
+            Ask(self).each(eligible)(r => RequiresAttentionTargetAction(self, r)).cancel
+
+        case RequiresAttentionSkipAction(self) =>
+            self.log(RequiresAttention.styled(BB) + ": declined")
+            EndAction(self)
+
+        case RequiresAttentionTargetAction(self, r) =>
+            val enemyGate  = factions.but(self).exists(_.gates.has(r))
+            val enemyGOO   = factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any)
+            val esBonus    = enemyGate.??(1) + enemyGOO.??(2)
+            self.doom += 4
+            self.log(RequiresAttention.styled(BB) + ": ritual in", r, "— gained", 4.doom)
+            if (esBonus > 0)
+                self.log(RequiresAttention.styled(BB) + ":", esBonus.es, "bonus (" + enemyGate.??("enemy gate") + (enemyGate && enemyGOO).??(", ") + enemyGOO.??("enemy GOO") + ")")
+            self.takeES(esBonus)
+            self.acted = true
+            CheckSpellbooksAction(DoomAction(self))
 
         // MAIN
         case PreMainAction(f) if factions.exists(f => f.unfulfilled.num + f.spellbooks.num < f.spellbooks.num) =>
@@ -3289,6 +3547,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case EndAction(self) =>
             self.acted = true
             mindParasiteCaptureRejected = $
+            elderThingBlockGuard = $
             AfterAction(self)
 
         case AfterAction(self) =>
@@ -3376,6 +3635,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Then(PowerGatherAction(next))
 
         case EndPhasePromptsAction(next, l) =>
+            endActionPhasePrompts = true
             val asks = l./~{ f =>
                 implicit val asking = Asking(f)
 
@@ -3409,6 +3669,19 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             EndAction(self)
 
         // CONTROL
+        case AdjustGateControlAction(f, changed, then) if !inActionPhase =>
+            // Bug fix: outside the action phase (Doom Phase, Gather Power, or
+            // end-of-action-phase prompt window where endActionPhasePrompts=true),
+            // the gate-control menu should be a no-op pass-through. Returning
+            // UnknownContinue when changed=false caused a hard crash
+            // ("unknown continue on AdjustGateControlAction(...,false,MainAction(...))")
+            // when this option was reached after Action Phase wound down (e.g.
+            // pending in continue queue or re-entered via OutOfTurnRefresh after
+            // Tombstalker's Shepherd of the Crypt resolved during the gather→doom
+            // transition). Match sibling cases ControlGateAction / AbandonGateAction
+            // (lines below) which both Force(then) unconditionally outside action phase.
+            Force(then)
+
         case AdjustGateControlAction(f, changed, then) =>
             // Library at Celaeno: custodian/librarian block control of uncontrolled gates
             val libraryBlockedRegions : $[Region] = if (board.isLibraryMap) $(custodianRegion, librarianRegion).flatten else $()
@@ -3445,10 +3718,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     controlOptions ++
                     (f.gates.has(r) && f.clings.not && f.commands.has(GateDiplomacySkipAbandon).not).$(AbandonGateAction(f, r, then).as(abandonLabel)(""))
                 }
-                .add(OutOfTurnRefresh(AdjustGateControlAction(f, changed, then)))
+                .useIf(_ => inActionPhase)(_.add(OutOfTurnRefresh(AdjustGateControlAction(f, changed, then))))
                 .group(" ")
                 .doneIf(changed)(then)
                 .cancelIf(changed.not)
+
+        case ControlGateAction(f, r, u, then) if !inActionPhase =>
+            Force(then)
 
         case ControlGateAction(f, r, u, then) if u.onGate =>
             Force(AdjustGateControlAction(f, true, then))
@@ -3474,6 +3750,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // cultist on gate). They do NOT trigger CG — no unit movement occurs.
             Force(AdjustGateControlAction(f, true, then))
 
+        case AbandonGateAction(f, r, then) if !inActionPhase =>
+            Force(then)
+
         case AbandonGateAction(f, r, then) =>
             f.at(r).foreach(_.onGate = false)
 
@@ -3492,7 +3771,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (self.power == 0)
                 Then(MoveDoneAction(self))
             else {
-                val ownUnits = self.units.nex.onMap.not(Moved).%(_.canMove).sortA
+                val moonUnits = (self == BB).??(self.at(BB.moon).not(Moved).%(_.canMove))
+                val ownUnits = (self.units.nex.onMap.not(Moved).%(_.canMove) ++ moonUnits).sortA
                 // Mind Parasite: include parasitized enemy acolytes that this faction controls
                 val parasitized : $[UnitFigure] = if (self.loyaltyCards.has(InsectsFromShaggaiCard))
                     factions.but(self)./~(e => e.units.nex.onMap.not(Moved).%(u => MindParasite.controller(u)(game).has(self)))
@@ -3523,15 +3803,26 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (u.uclass == Shantak)
                 destinations = areas.but(from)
 
+            // BB: units moving FROM the Moon can reach any map area;
+            // BB units on a map area can move TO the Moon.
+            if (self == BB) {
+                if (from == BB.moon)
+                    destinations = areas
+                else
+                    destinations = destinations :+ BB.moon
+            }
+
             val arriving = self.units.%(_.region.glyph.onMap).tag(Moved)./(_.region).distinct
 
             val l1 = destinations.%(arriving.contains) ++ destinations.%!(arriving.contains)
 
-            val l2 = destinations.sortBy(to => direction(from, to))
+            val isMoonMove = from == BB.moon || destinations.has(BB.moon)
+            val l2 = isMoonMove.?(destinations).|( destinations.sortBy(to => direction(from, to)) )
 
             Ask(self)
                 .each(l2.%(self.affords(cost)))(to => MoveAction(self, u, from, to, cost).as
-                    (ConnectionGlyph(from, to) + to.toString, self.iced(to), s"""<img class=direction src="${Overlays.imageSource("move-deg-" + direction(from, to))}" />""")
+                    (ConnectionGlyph(from, to) + to.toString, self.iced(to),
+                     (isMoonMove || to == BB.moon).?("").|( s"""<img class=direction src="${Overlays.imageSource("move-deg-" + direction(from, to))}" />""" ))
                     ("Move", u, (cost == 0).??("for free"), "from", from, "to")
                 )
                 .cancelIf(cost > 0)
@@ -3547,6 +3838,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             self.units.foreach(_.remove(MovedForFree))
             self.units.foreach(_.remove(MovedForExtra))
 
+            EndAction(self)
+
+        // Bubastis Moon Guard (Fix 45, v2.4.13): block any non-BB unit move
+        // whose destination is the Moon. MoveSelectAction already filters
+        // Moon out of destination lists for non-BB factions, but this is a
+        // belt-and-suspender check at the action-execution layer so any
+        // future spell/ability that constructs a MoveAction directly cannot
+        // sneak a non-BB unit onto the Moon. Catnapping is the sole way for
+        // a non-BB unit to enter the Moon; Catnapping mutates u.region
+        // directly in FactionBB.scala, not via MoveAction.
+        case MoveAction(self, u, o, r, cost) if self != BB && r == BB.moon =>
+            self.log("move of", u, "to", BB.moon, "blocked: only BB units may enter the Moon (Catnapping is the sole exception)")
             EndAction(self)
 
         case MoveAction(self, u, o, r, cost) =>
@@ -3565,11 +3868,20 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (cost + t == 0)
                 u.add(MovedForFree)
 
+            // Catnapping refund: if a non-BB unit moves OFF the Moon and its owner paid Power,
+            // BB gains that same amount of Power.
+            if (factions.has(BB) && BB.can(Catnapping) && self != BB && o == BB.moon && cost > 0) {
+                BB.power += cost
+                BB.log(Catnapping.styled(BB) + ": gained", cost.power, "from", self.full, "moving off", BB.moon)
+            }
+
             // Track Ghato paid moves for anti-ping-pong
             if (self == FB && u.uclass == Ghatanothoa && cost > 0)
                 fbGhatoLastMoveOrigin = Some(o)
 
             self.log("moved", u, "from", o, "to", r)
+
+            logElderThingMovementBlocks(u, r)
 
             // Universal CG trigger: any non-FB unit moving into a region with
             // an FB Revenant or Ghatanothoa must fire CG. The snapshot-delta
@@ -3808,7 +4120,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case BuildGateMainAction(self, locations) =>
             Ask(self).each(locations.sortBy(self.taxIn))(r => BuildGateAction(self, r)).cancel
 
-        case BuildGateAction(self, r) =>
+        case BuildGateAction(self, r) if r != BB.moon =>
             self.power -= 3 - self.has(UmrAtTawil).??(1)
             self.payTax(r)
             gates :+= r
@@ -3968,7 +4280,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (options.has(HighPriests) && f.onMap(HighPriest).any && (f.commands.of[UnspeakableOathPlan].none || f.plans.of[UnspeakableOathPlan].none))
                 initHighPriestPlans(f)
 
-            val visiblePlans = f.plans.%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+            val visiblePlans = f.plans
+                .%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+                .%(p => inActionPhase || (p.is[GateDiplomacyPlan].not && p.is[HighPriestGatesPlan].not))
             Ask(f)
                 .each(visiblePlans) { p =>
                     if (f.commands.has(p))

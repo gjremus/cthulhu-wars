@@ -198,15 +198,15 @@ case class TTIdolatryDoneAction(self : Faction, dest : Region, pool : $[UnitRef]
 case class TTIdolatryChooseUnitAction(self : Faction, dest : Region, src : Region, pool : $[UnitRef]) extends ForcedAction
 // Add one unit from src to pool
 case class TTIdolatryAddUnitAction(self : Faction, dest : Region, src : Region, u : UnitRef, pool : $[UnitRef]) extends BaseFactionAction(
-    "Add to move", implicit g => g.unit(u).full + " from " + src + " → " + dest
+    "", implicit g => g.unit(u).full + " from " + src + " → " + dest
 )
 // Undo last unit added from src (removes last pool entry whose origin is src)
 case class TTIdolatryUndoLastAction(self : Faction, dest : Region, src : Region, pool : $[UnitRef]) extends BaseFactionAction(
-    "Undo last", implicit g => "remove last unit from " + src + " from move pool"
+    "", implicit g => "Undo last unit from " + src + " from the move pool"
 )
 // Cancel all units from src — remove from pool, return to source picker
 case class TTIdolatryCancelSourceAction(self : Faction, dest : Region, src : Region, pool : $[UnitRef]) extends BaseFactionAction(
-    "Cancel", implicit g => "remove all " + src + " units from move pool"
+    "", implicit g => "Remove all units from " + src + " from the move pool"
 )
 
 // TERROR (all tribes: pre-battle choice — reduce enemy or boost own)
@@ -627,8 +627,10 @@ object TTExpansion extends Expansion {
             Force(TTIdolatryChooseDestAction(self, targets, $()))
 
         case TTIdolatryChooseDestAction(self, targets, pool) =>
-            Ask(self).each(targets)(r => TTIdolatryChooseSourceAction(self, r, pool))
-                .add(TTIdolatryCancelAction(self))
+            Ask(self)
+                .group(Idolatry.styled(TT) + " — Choose area to move to")
+                .each(targets)(r => TTIdolatryChooseSourceAction(self, r, pool).as(r))
+                .add(TTIdolatryCancelAction(self).as("Cancel"))
 
         case TTIdolatryCancelAction(self) =>
             self.power += 1
@@ -637,18 +639,20 @@ object TTExpansion extends Expansion {
         case TTIdolatryChooseSourceAction(self, dest, pool) =>
             val sources = game.board.connected(dest).%(r => self.at(r).any)
             implicit val asking = Asking(self)
+            asking.ask = asking.ask.group(Idolatry.styled(TT) + " — Choose units from area (moving to " + dest + ")")
             if (pool.any)
-                + TTIdolatryDoneAction(self, dest, pool).as(Idolatry.styled(TT))("Done — move " + pool.num + " unit".s(pool.num))
+                + TTIdolatryDoneAction(self, dest, pool).as("Done — move", pool.num, "unit".s(pool.num))
             sources.foreach { src =>
-                + TTIdolatryChooseUnitAction(self, dest, src, pool).as("Choose units from")(src)
+                + TTIdolatryChooseUnitAction(self, dest, src, pool).as(src)
             }
-            + TTIdolatryCancelAction(self).as("Cancel all")(Idolatry.styled(TT) + " — refund " + 1.power)
+            + TTIdolatryCancelAction(self).as("Cancel all — refund", 1.power)
             asking
 
         case TTIdolatryChooseUnitAction(self, dest, src, pool) =>
             val alreadyPooled = pool./(game.unit).%(_.region == src)./(_.ref)
             val available = self.at(src)./(_.ref).diff(alreadyPooled)
             implicit val asking = Asking(self)
+            asking.ask = asking.ask.group(Idolatry.styled(TT) + " — Choose units to add to move")
             available.foreach { uref =>
                 + TTIdolatryAddUnitAction(self, dest, src, uref, pool)
             }
@@ -657,9 +661,7 @@ object TTExpansion extends Expansion {
                 + TTIdolatryUndoLastAction(self, dest, src, pool)
             if (fromSrc.any)
                 + TTIdolatryCancelSourceAction(self, dest, src, pool)
-            if (pool.any)
-                + TTIdolatryDoneAction(self, dest, pool).as(Idolatry.styled(TT))("Done — move " + pool.num + " unit".s(pool.num))
-            + TTIdolatryChooseSourceAction(self, dest, pool).as("Back")(Idolatry.styled(TT) + " — choose another source region")
+            + TTIdolatryChooseSourceAction(self, dest, pool).as("Choose another region to move units from")
             asking
 
         case TTIdolatryAddUnitAction(self, dest, src, uref, pool) =>

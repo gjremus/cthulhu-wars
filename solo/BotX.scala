@@ -6,6 +6,56 @@ import hrf.colmat._
 case class Evaluation(weight : Int, desc : String)
 case class ActionEval(action : Action, evaluations : $[Evaluation])
 
+// ─────────────────────────────────────────────────────────────────────────────
+// [2026-06-02 v2] Per-turn gate-occupation switch tracker — second attempt.
+//
+// User report (live game cwo.freeddns.org/BB/play/hcbrkuxrewgixsdb): TT/BB bot
+// still loops by abandoning and re-controlling a gate forever, even with v1
+// (BotGateLockout + per-faction eval-level penalties). Root cause of v1's
+// failure: the eval-level -1,000,000 penalty was ADDED to evaluations alongside
+// existing +1,000,000 "always control gate" scores, producing a sortByAbs tie
+// where the +1M still won the lexicographic compareEL tiebreak. The lockout
+// signaled "don't" but the eval said "definitely yes" and the eval won.
+//
+// v2 fix: filter candidate actions BEFORE evaluation. Once the lockout has
+// recorded one ControlGate switch OR one AbandonGate at (faction, turn, region),
+// every subsequent ControlGateAction-as-switch and AbandonGateAction at that
+// same (faction, region) this turn is REMOVED from the candidate list entirely.
+// Score arithmetic can no longer override the block — the action simply isn't
+// offered to the picker. Mirrors the prior FB/TS Bug 45 / "infinite gate
+// control swap" fix style (BotFB.scala / BotTS.scala) which used a single
+// strong negative score with no competing positive baseline.
+//
+// Source: ~/Google Drive/My Drive/Personal/Games/Cthulhu Wars/Tombstalker,
+// Library, Firstborn, and Daemon Sultan fixes and rollback guide.md, section
+// "Gate Diplomacy Fix (BotFB.scala)" lines 2739-2742, and BotTS.scala line
+// 1673-1699 ("Round 8 Bug 69" comment block).
+//
+// Keyed by (Faction, gameTurn, Region). Reset when the faction's turn rolls.
+// ─────────────────────────────────────────────────────────────────────────────
+object BotGateLockout {
+    private var switches : scala.collection.mutable.Map[(Faction, Int, Region), Int] =
+        scala.collection.mutable.Map()
+
+    def switchCount(f : Faction, turn : Int, r : Region) : Int =
+        switches.getOrElse((f, turn, r), 0)
+
+    def recordSwitch(f : Faction, turn : Int, r : Region) : Unit = {
+        val k = (f, turn, r)
+        switches(k) = switches.getOrElse(k, 0) + 1
+        // Trace breadcrumb: lets us diagnose any future loop from server logs.
+        println("[BotGateLockout] recordSwitch faction=" + f + " turn=" + turn +
+            " region=" + r + " count=" + switches(k))
+    }
+
+    def isLocked(f : Faction, turn : Int, r : Region) : Boolean =
+        switchCount(f, turn, r) >= 1
+
+    // Drop entries from prior turns to keep the map bounded.
+    def gc(currentTurn : Int) : Unit =
+        switches = switches.filter { case ((_, t, _), _) => t >= currentTurn }
+}
+
 class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
     def sortByAbs(a : $[Int]) : $[Int] =
         a.sortBy(v => -v.abs)
@@ -30,9 +80,43 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
             return actions.head
 
         val ev = ge(game)
+
+        // [2026-06-02 v2] Candidate-level lockout filter. Once this faction has
+        // already changed gate occupation OR abandoned a gate this turn at a
+        // region, drop every ControlGateAction-as-switch and AbandonGateAction
+        // for that (faction, region) from the candidate set. Prevents the
+        // endless ControlGate↔AbandonGate (and ControlGate-A ↔ ControlGate-B)
+        // swap loop. This sits ABOVE the evaluation step so no faction-eval
+        // scoring (e.g. BotTT's +1,000,000 default) can override it.
+        val filtered : $[Action] = {
+            implicit val g : Game = game
+            BotGateLockout.gc(game.turn)
+            actions.%(a => a.unwrap match {
+                case ControlGateAction(f, r, u, _) if f == ev.self && BotGateLockout.isLocked(f, game.turn, r) =>
+                    val currentlyOnGate = f.at(r).%(_.onGate)
+                    val isSwitch = currentlyOnGate.any && !currentlyOnGate.exists(_.ref == u)
+                    if (isSwitch) {
+                        println("[BotGateLockout] FILTER drop ControlGate switch f=" + f +
+                            " r=" + r + " u=" + u + " turn=" + game.turn)
+                        false
+                    } else true
+                case AbandonGateAction(f, r, _) if f == ev.self && BotGateLockout.isLocked(f, game.turn, r) =>
+                    println("[BotGateLockout] FILTER drop AbandonGate f=" + f +
+                        " r=" + r + " turn=" + game.turn)
+                    false
+                case _ => true
+            })
+        }
+        // Safety: if the filter would empty the candidate list (shouldn't happen
+        // because AdjustGateControlAction always offers a Done/Cancel path), fall
+        // back to the unfiltered list to avoid a hard crash.
+        val safeActions = if (filtered.any) filtered else actions
+        if (safeActions.num == 1)
+            return safeActions.head
+
         // Merge faction-specific scores with Library map scores (BotMaps)
-        val mapScores = BotMaps.eval(actions, ev.self)(game).groupBy(_._1).view.mapValues(_./(t => Evaluation(t._2, t._3))).toMap
-        val eas = actions./(a => ActionEval(a, ev.eval(a) ++ mapScores.getOrElse(a, $)))
+        val mapScores = BotMaps.eval(safeActions, ev.self)(game).groupBy(_._1).view.mapValues(_./(t => Evaluation(t._2, t._3))).toMap
+        val eas = safeActions./(a => ActionEval(a, ev.eval(a) ++ mapScores.getOrElse(a, $)))
         Bot3.lastEval = eas
 
         val o = eas.sortWith(compare)
@@ -48,7 +132,7 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
         }
 
         var v = o
-        val e = error * (1 - 2.0 /:/ actions.num)
+        val e = error * (1 - 2.0 /:/ safeActions.num)
 
         if (e > 0)
             while (random() < e) {
@@ -59,6 +143,29 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
             }
 
         val chosen = v.head
+
+        // [2026-06-02 v2] Track gate-occupation events per turn. ControlGateAction
+        // (when it's an actual switch) AND AbandonGateAction both burn the
+        // lockout. The candidate filter at the top of askE drops every
+        // subsequent ControlGateAction-as-switch / AbandonGateAction at the
+        // same (faction, region) once recorded.
+        {
+            implicit val g : Game = game
+            chosen.action.unwrap match {
+                case ControlGateAction(f, r, u, _) if f == ev.self =>
+                    val currentlyOnGate = f.at(r).%(_.onGate)
+                    val isSwitch = currentlyOnGate.any && !currentlyOnGate.exists(_.ref == u)
+                    if (isSwitch) {
+                        BotGateLockout.gc(game.turn)
+                        BotGateLockout.recordSwitch(f, game.turn, r)
+                    }
+                case AbandonGateAction(f, r, _) if f == ev.self =>
+                    BotGateLockout.gc(game.turn)
+                    BotGateLockout.recordSwitch(f, game.turn, r)
+                case _ =>
+            }
+        }
+
         chosen.action
     }
 
@@ -147,6 +254,12 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
         else FB.at(r, Ghatanothoa).num + FB.at(r, RevenantOfKnaa).num
     def hasFBCrater(r : Region) : Boolean =
         fbInGame && game.fbCraters.has(r)
+    // True when gate control at r is blocked by Shadow Pharaoh, Custodian, or Librarian.
+    def gateControlBlocked(r : Region) : Boolean =
+        game.factions.exists(f2 => f2.allInPlay.%(_.uclass == ShadowPharaoh).exists(_.region == r)) ||
+        game.custodianRegion.has(r) ||
+        game.librarianRegion.has(r)
+
     // Single-unit move: block if destination has ANY CG defender.
     def fbMoveAvoidance(r : Region) : |[(Int, String)] = {
         if (hasFBCrater(r)) |((-7000, "avoid FB crater region"))
@@ -467,6 +580,18 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
                 0
             else
                 1
+
+        // Round 9 (BB): mirror TS pattern — BB's Doom curve via Bastet rituals
+        // (Catabolism/Syzygy) is similar to TT's mid-tier engine. Without this
+        // case, BB falls into `case _ => 0` and bots under-estimate BB's
+        // endgame doom potential, allowing BB to ritual unopposed.
+        case BB =>
+            var p = f.power
+
+            if (f.has(Bastet))
+                p += 6
+
+            p / 4
 
         case _ =>
             0

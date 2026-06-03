@@ -173,11 +173,25 @@ class GameEvaluationTT(implicit game : Game) extends GameEvaluation(TT)(game) {
             case MoveAction(_, u, o, d, _) if u.uclass == Acolyte =>
                 fbMoveAvoidance(d).foreach(e => true |=> e)
                 active.none && o.ownGate && o.allies.cultists.num == 1 |=> -200000 -> "#TT gatekeeper"
+                // TT: penalise gate-to-gate shuffle (no-op gate control switching)
+                o.ownGate && d.ownGate |=> -800 -> "#TT no gate-to-gate shuffle"
+                // TT: do not move to a gate where control is blocked
+                d.gate && gateControlBlocked(d) |=> -1000000 -> "#TT gate control blocked at dest"
                 // AP1: move cultist to new gate after building it
                 (firstAP && d.ownGate && o.ownGate.not) |=> (2 * 100000 / 1) -> "#TT AP1 move cultist to new gate"
                 active.none && d.freeGate |=> (2 * 100000 / 1) -> "#TT safe move get gate"
                 active.none && d.noGate && power > 3 |=> (2 * 100000 / 4) -> "#TT safe move build gate"
                 d.allies.goos.any |=> 30 -> "#TT goo will protect"
+
+            case MoveAction(_, u, o, d, _) if u.uclass == HighPriest =>
+                fbMoveAvoidance(d).foreach(e => true |=> e)
+                // TT: keep HP on its gate; penalise leaving or pointless gate-to-gate moves
+                u.gateKeeper |=> -500 -> "#TT HP gatekeeper dont move"
+                o.ownGate && d.ownGate |=> -800 -> "#TT HP no gate-to-gate shuffle"
+                // TT: do not move HP to a gate where control is blocked
+                d.gate && gateControlBlocked(d) |=> -1000000 -> "#TT HP gate control blocked at dest"
+                d.freeGate |=> 200 -> "#TT HP claim free gate"
+                d.ownGate && d.allies.%(_.canControlGate).none |=> 300 -> "#TT HP guard unguarded gate"
 
             case MoveAction(_, u, o, d, _) if u.uclass == UbboSathla =>
                 fbMoveAvoidance(d).foreach(e => true |=> e)
@@ -346,10 +360,31 @@ class GameEvaluationTT(implicit game : Game) extends GameEvaluation(TT)(game) {
                 others.%(ofinale).any |=> 666000 -> "#TT extend finale"
                 true |=> 500 -> "#TT main done"
 
-            case ControlGateAction(_, _, _, _) =>
-                true |=> 1000000 -> "#TT always control gate"
+            case ControlGateAction(_, r, u, _) =>
+                // [2026-06-02 v2] Belt-and-braces with the candidate-level lockout
+                // filter in BotX.askE. The previous v1 fix added a -1,000,000
+                // penalty alongside the +1,000,000 "always control gate" baseline,
+                // so the +1M still won the sortByAbs/compareEL tiebreak and the
+                // bot kept swapping. v2 now (a) only adds the +1M baseline when
+                // it's NOT a switch (i.e. controlling a previously-empty gate is
+                // fine), and (b) when it IS a switch, scores the action with a
+                // single negative below the candidate-filter, preserving the
+                // legitimate "swap HP off the gate so the Acolyte controls" use
+                // case at +5000 (mirrors BotTS Bug 69 fix, BotTS.scala ~line 1688).
+                val currentlyOnGate = self.at(r).%(_.onGate)
+                val isSwitch = currentlyOnGate.any && !currentlyOnGate.exists(_.ref == u)
+                val swapHPforAco = isSwitch && currentlyOnGate.exists(_.uclass == HighPriest) && u.uclass == Acolyte
+                !isSwitch |=> 1000000 -> "#TT control empty gate"
+                // Allow ONE legit setup swap: HP→Acolyte on gate (mirrors BotTS Bug 69).
+                swapHPforAco |=> 5000 -> "#TT swap HP off gate, acolyte controls"
+                // Any other switch: score as a no-op. The candidate filter in
+                // BotX.askE (BotGateLockout) drops the second swap entirely.
+                (isSwitch && !swapHPforAco) |=> -1000000 -> "#TT no-op swap (matches remain calm)"
 
-            case AbandonGateAction(_, _, _) =>
+            case AbandonGateAction(_, r, _) =>
+                // [2026-06-02 v2] Single strong negative; mirrors BotFB / BotTS
+                // canonical pattern. The candidate filter in BotX.askE removes
+                // the action entirely on the second event at the same gate.
                 true |=> -1000000 -> "#TT never abandon gate"
 
             case RetreatUnitAction(_, u, r) =>

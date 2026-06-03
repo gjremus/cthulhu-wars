@@ -152,10 +152,13 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
         // GOO and FB applies steady CG pressure, but starting in early game its threat is
         // closer to mid-tier. Without this entry FB fell into `case _ => 0` and TS's bot
         // gave no preference to attacking FB-held gates.
+        // Round 9 (BB): BB=60 — slightly above FB's 50. BB's gates are similarly low-density,
+        // but Bastet at the gate makes them stickier than FB's; +10 over FB reflects the
+        // additional cost of dislodging Bastet (no-roll combat contribution + Catnapping recall).
         def factionTierBonus(r : Region) : Int = {
             others.%(ef => r.gateOf(ef) || ef.at(r).any)./(f => f match {
                 case SL => 200; case GC => 175; case DS => 175; case CC => 150; case BG => 125
-                case OW => 100; case WW => 75; case YS => 50; case FB => 50; case AN => 25
+                case OW => 100; case WW => 75; case BB => 60; case YS => 50; case FB => 50; case AN => 25
                 case _ => 0
             }).headOption.getOrElse(0)
         }
@@ -977,6 +980,9 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 !dtToGlaaki && !o.allies.goos.any |=> -100000 -> "#530 DT: no reason to move, save power"
 
             case MoveAction(_, u, o, d, _) if u.uclass == Acolyte =>
+                // TS: penalise gate-to-gate shuffle and blocked-gate moves
+                o.ownGate && d.ownGate |=> -800 -> "no gate-to-gate shuffle"
+                d.gate && gateControlBlocked(d) |=> -1000000 -> "gate control blocked at dest"
                 // [2026-04-02] Block acolyte raw move when Glaaki just moved (carry expected)
                 val glaakiJustMovedAco = have(Glaaki) && have(Undulate) && self.all(Glaaki).headOption.exists(_.tag(Moved))
                 glaakiJustMovedAco |=> -50000 -> "#524 NS: Glaaki just moved, use Undulate carry not raw acolyte move"

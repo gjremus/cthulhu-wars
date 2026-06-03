@@ -229,13 +229,15 @@ case class Bot3(faction : Faction) {
                     then == PreMainAction(self) && !c.gateKeeper && self.pool.cultists.none && areas.%(r => r.freeGate && r.capturers.none).any |=> 800 -> "devolve to recruit at free gate"
 
                 case DreamsAction(_, r, f) =>
-                    val c = f.at(r)(Acolyte).head
+                    // BB: enemy faction's "cultist" can be EarthCat (no Acolyte). Use the broader
+                    // targetableAsCultistByEnemy filter so the eval doesn't NoSuchElement on BB.
+                    val cOpt = f.at(r).%(_.targetableAsCultistByEnemy).headOption
 
                     true |=> -100 -> "dreams are expensive"
                     r.enemyGate |=> 300 -> "enemy gate"
-                    c.gateKeeper |=> 200 -> "enemy gate controller"
-                    c.friends.none |=> 200 -> "no friends"
-                    c.faction.power == 0 && !c.faction.has(Passion) |=> 200 -> "enemy out of power"
+                    cOpt.exists(_.gateKeeper) |=> 200 -> "enemy gate controller"
+                    cOpt.exists(_.friends.none) |=> 200 -> "no friends"
+                    cOpt.exists(c => c.faction.power == 0 && !c.faction.has(Passion)) |=> 200 -> "enemy out of power"
                     r.allies.goos.any && r.foes.goos.none |=> -300 -> "have goo there already"
                     others.%(_.power > 0 || power == 2).%(f => f.at(r).goos.any || (r.allies.none && f.at(r).monsterly.any)).any |=> -200 -> "may end captured"
 
@@ -1727,6 +1729,9 @@ case class Bot3(faction : Faction) {
 
                     case PrimeCauseSkipAction(_) =>
                         true |=> -200 -> "prime cause: skip"
+
+                    case PrimeCauseCancelReplacementAction(_) =>
+                        true |=> -1000 -> "prime cause: cancel replacement (bot never cancels)"
 
                     // ── Dhole Planetary Destruction (opponent's choice) ─────
                     case DholePlanetaryDestructionDoomAction(_, _) =>

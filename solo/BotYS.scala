@@ -323,6 +323,9 @@ class GameEvaluationYS(implicit game : Game) extends GameEvaluation(YS)(game) {
 
             case MoveAction(_, u, o, d, cost) if u.uclass == Acolyte =>
                 u.onGate |=> -10 -> "on gate"
+                // YS: penalise gate-to-gate shuffle and blocked-gate moves
+                o.ownGate && d.ownGate |=> -800 -> "no gate-to-gate shuffle"
+                d.gate && gateControlBlocked(d) |=> -1000000 -> "gate control blocked at dest"
 
                 val unemployed = !((o.ownGate || o.freeGate) && o.allies.cultists.num == 1)
                 val safe = d.allies.goos.any || (d.foes.goos.active.none && (d.allies.monsterly.any || d.foes.monsterly.active.none))

@@ -52,7 +52,12 @@
 
             .overlay {
                 overflow-y: auto !important;
-                background-color: #22222200 !important;
+                background-color: transparent !important;
+                border: none !important;
+            }
+            .outer:has(> .overlay) {
+                border: none !important;
+                background-color: transparent !important;
             }
 
             a {
@@ -222,6 +227,10 @@
                 color: #fc9ca0;
             }
 
+            .bb {
+                color: #c8a84b;
+            }
+
             .ds-background {
                 background-color: #3d2b1b !important;
             }
@@ -320,6 +329,14 @@
 
             .tt-border {
                 outline-color: #4a1020 !important;
+            }
+
+            .bb-background {
+                background-color: #3d2f15 !important;
+            }
+
+            .bb-border {
+                outline-color: #3d2f15 !important;
             }
 
             .p8 {
@@ -949,6 +966,19 @@
         <img class="asset" id="tt-proto-shoggoth" src="webp/images/tt-proto-shoggoth.webp" />
         <img class="asset" id="tt-ubbo-sathla"   src="webp/images/tt-ubbo-sathla.webp" />
 
+        <img class="asset" id="bb-glyph"          src="webp/images/bb-glyph.webp" />
+        <img class="asset" id="bb-glyph-hb"       src="webp/images/bb-glyph-hb.webp" />
+        <img class="asset" id="bb-acolyte"        src="webp/images/bb-acolyte.webp" />
+        <img class="asset" id="bb-earth-cat"      src="webp/images/bb-earth-cat.webp" />
+        <img class="asset" id="bb-cat-from-mars"  src="webp/images/bb-cat-from-mars.webp" />
+        <img class="asset" id="bb-cat-from-saturn" src="webp/images/bb-cat-from-saturn.webp" />
+        <img class="asset" id="bb-cat-from-uranus" src="webp/images/bb-cat-from-uranus.webp" />
+        <img class="asset" id="bb-bastet"          src="webp/images/bb-bastet.webp" />
+        <img class="asset" id="bb-moon-tile"       src="webp/images/bb-moon-tile.webp" />
+        <img class="asset" id="bb-moon-high-res"   src="webp/images/bb-moon-high-res.webp" />
+        <img class="asset" id="bb-moon-place"      src="webp/images/bb-moon-place.webp" />
+        <img class="asset" id="bb-moon-h-place"    src="webp/images/bb-moon-h-place.webp" />
+
         <img class="asset" id="ds-glyph"          src="webp/images/ds-glyph.webp" />
         <img class="asset" id="ds-acolyte"        src="webp/images/ds-acolyte.webp" />
         <img class="asset" id="ds-high-priest"    src="webp/images/ds-high-priest.webp" />
@@ -1103,6 +1133,14 @@
         <img class="asset" id="info:tt-high-priest"      src="webp/info/tt-high-priest.svg" />
         <img class="asset" id="info:tt-proto-shoggoth"   src="webp/info/tt-proto-shoggoth.svg" />
         <img class="asset" id="info:tt-ubbo-sathla"      src="webp/info/tt-ubbo-sathla.svg" />
+
+        <img class="asset" id="info:bb-acolyte"          src="webp/info/bb-acolyte.svg" />
+        <img class="asset" id="info:bb-background"       src="webp/info/bb-background.webp" />
+        <img class="asset" id="info:bb-earth-cat"        src="webp/info/bb-earth-cat.svg" />
+        <img class="asset" id="info:bb-cat-from-mars"    src="webp/info/bb-cat-from-mars.svg" />
+        <img class="asset" id="info:bb-cat-from-saturn"  src="webp/info/bb-cat-from-saturn.svg" />
+        <img class="asset" id="info:bb-cat-from-uranus"  src="webp/info/bb-cat-from-uranus.svg" />
+        <img class="asset" id="info:bb-bastet"           src="webp/info/bb-bastet.svg" />
 
         <img class="asset" id="info:bg-acolyte" src="webp/info/bg-acolyte.svg" />
         <img class="asset" id="info:bg-background" src="webp/info/bg-background.webp" />
