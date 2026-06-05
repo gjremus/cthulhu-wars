@@ -320,23 +320,41 @@ object ANExpansion extends Expansion {
             // has units there (catnapped). Per BB Implementation Guide §2.6c,
             // the Moon is adjacent to all regions for departure purposes;
             // Dematerialization therefore may move an AN unit FROM the Moon
-            // to any map area. Destinations stay map-only since `areas` does
-            // not contain BB.moon (the Fix 45 TO-Moon block is preserved).
+            // to any map area.
+            // BB Fix (v2.4.29): also include BB.moon as a valid DESTINATION.
+            // The Moon is adjacent to all regions for arrival purposes too,
+            // so AN may dematerialize an on-map unit TO the Moon. The Moon-
+            // entry place() guard in Game.scala (BB Fix 65) is extended in
+            // parallel with an AN-dematerialize exception via the transient
+            // game.anInDematerialize flag (defense-in-depth — this case
+            // assigns u.region = d directly, bypassing place(), but the flag
+            // covers any future place() route through Dematerialization).
             // Apologies for the long-standing gap.
             val origins = areas.%(r => self.at(r).any) ++ self.at(BB.moon).any.??($(BB.moon))
             Ask(self).each(origins)(r => DematerializationFromRegionAction(self, r)).cancel
 
         case DematerializationFromRegionAction(self, o) =>
             // Fix 55 (v2.4.21): destinations from Moon = all map areas.
-            Ask(self).each(areas.but(o))(r => DematerializationToRegionAction(self, o, r)).cancel
+            // BB Fix (v2.4.29): destinations from any on-map area also include
+            // the Moon (Moon is adjacent to all regions for arrival).
+            val destinations = areas.but(o) ++ (o != BB.moon).??($(BB.moon))
+            Ask(self).each(destinations)(r => DematerializationToRegionAction(self, o, r)).cancel
 
         case DematerializationToRegionAction(self, o, d) =>
             Ask(self).each(self.at(o).%(_.canBeMoved))(u => DematerializationMoveUnitAction(self, o, d, u.uclass)).cancel
 
         case DematerializationMoveUnitAction(self, o, d, uc) =>
             val u = self.at(o).one(uc)
+            // BB Fix (v2.4.29): set the AN-dematerialize transient flag while
+            // the unit is being placed onto its destination. This grants the
+            // Moon-entry place() guard (Game.scala) an exception when d ==
+            // BB.moon. The direct u.region = d assignment below bypasses
+            // place(), so the flag is primarily defense-in-depth for any
+            // future place() route through this action.
+            game.anInDematerialize = true
             u.region = d
             u.onGate = false
+            game.anInDematerialize = false
             self.log("sent", uc.styled(self), "from", o, "to", d, "with", Dematerialization)
             Ask(self).each(self.at(o).%(_.canMove))(u => DematerializationMoveUnitAction(self, o, d, u.uclass)).add(DematerializationDoneAction(self))
 

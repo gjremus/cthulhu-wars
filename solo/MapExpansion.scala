@@ -312,8 +312,17 @@ object LibraryExpansion extends Expansion {
 
             val currentRegion = game.custodianRegion
 
+            // BB Bullet 52 (v2.4.29): the Custodian (and Librarian) may be placed
+            // on the Moon. Moon is off-map (`MoonGlyph.onMap = false`) so it is
+            // NOT included in `board.regions.%(_.glyph.onMap)`; explicitly add
+            // BB.moon when BB is in the game so the Custodian's destination list
+            // covers the Moon as a valid Area. Custodian/Librarian write their
+            // region directly (`game.custodianRegion = |(r)`) — not through
+            // `place()` — so the Moon-entry guard at Game.scala:911 does not
+            // apply to MapUnit placement.
+            val moonRegions : $[Region] = if (factions.has(BB)) $(BB.moon) else $
             val stayActions = currentRegion./(r => CustodianStayAction(self, r)).$
-            val moveActions = game.board.regions.%(_.glyph.onMap).%(r => !currentRegion.has(r))./( r =>
+            val moveActions = (game.board.regions.%(_.glyph.onMap) ++ moonRegions).%(r => !currentRegion.has(r))./( r =>
                 CustodianMoveAction(self, r))
             Ask(self).each(stayActions ++ moveActions)(identity)
 
@@ -386,7 +395,14 @@ object LibraryExpansion extends Expansion {
 
             val overdueHolders = factions.but(self).%(f =>
                 game.tomeOverdue.exists { case (tome, overdue) => overdue && game.tomeHolders.get(tome).flatten.has(f) })
-            val validRegions = game.board.regions.%(_.glyph.onMap).%(r =>
+            // BB Bullet 52 (v2.4.29): the Librarian may be placed on the Moon.
+            // Moon is off-map so it is NOT in `board.regions.%(_.glyph.onMap)`;
+            // explicitly include BB.moon when BB is in the game so the Librarian
+            // can target catnapped enemy units on the Moon. The standard
+            // overdue-holder + units-present filter still applies — the Moon is
+            // only offered if an overdue-tome holder actually has units there.
+            val moonRegions : $[Region] = if (factions.has(BB)) $(BB.moon) else $
+            val validRegions = (game.board.regions.%(_.glyph.onMap) ++ moonRegions).%(r =>
                 overdueHolders.exists(_.at(r).%(u => u.uclass.utype != MapUnit).any))
 
             val stayActions = currentRegion./(r => LibrarianStayAction(self, r)).$

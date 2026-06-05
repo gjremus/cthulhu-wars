@@ -148,7 +148,17 @@ object GCExpansion extends Expansion {
                 + SubmergeMainAction(f, f.goo(Cthulhu).region)
 
             if (f.at(GC.deep).any)
-                areas.%(f.affords(0)).some.foreach { l =>
+                // BB Bullet 50 (v2.4.29): GC may unsubmerge onto the Moon.
+                // The Moon is adjacent to all regions for arrival purposes;
+                // GC's submerged court resides off-map and may surface
+                // anywhere. Append BB.moon to the destination list when GC
+                // can afford it. The Moon-entry place() guard (Game.scala)
+                // is extended in parallel with a GC-unsubmerge exception
+                // via the transient game.gcInUnsubmerge flag (defense-in-
+                // depth — UnsubmergeAction assigns u.region = r directly,
+                // bypassing place(), but the flag covers any future place()
+                // route through Unsubmerge).
+                (areas.%(f.affords(0)) ++ f.affords(0)(BB.moon).??($(BB.moon))).some.foreach { l =>
                     + UnsubmergeMainAction(f, l)
                 }
 
@@ -276,7 +286,16 @@ object GCExpansion extends Expansion {
             f.payTax(r)
             val cthulu = f.at(GC.deep).one(Cthulhu)
             val court = f.at(GC.deep).but(cthulu)
+            // BB Bullet 50 (v2.4.29): set the GC-unsubmerge transient flag
+            // while Cthulhu and his court are surfaced to the destination.
+            // This grants the Moon-entry place() guard (Game.scala) an
+            // exception when r == BB.moon. The direct u.region = r
+            // assignments below bypass place(), so the flag is primarily
+            // defense-in-depth for any future place() route through this
+            // action.
+            game.gcInUnsubmerge = true
             f.at(GC.deep).foreach(_.region = r)
+            game.gcInUnsubmerge = false
             log(cthulu, "unsubmerged in", r, court.any.??("with " + court.mkString(", ")))
             EndAction(f)
 

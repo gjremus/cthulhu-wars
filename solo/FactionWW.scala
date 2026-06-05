@@ -230,7 +230,12 @@ object WWExpansion extends Expansion {
             EndAction(self)
 
         // ARCTIC WIND
-        case MovedAction(self : WW, u, o, r) if u.uclass == Ithaqua && self.can(ArcticWind) =>
+        // BB Tasks Doc bullet 39: Arctic Wind cannot bring units ONTO the Moon.
+        // Ithaqua may legally LEAVE the Moon (source side is not blocked), but
+        // any Arctic Wind follow-up that would deposit additional WW units onto
+        // BB.moon is rejected here. We simply skip the Ask when r == BB.moon and
+        // fall through to MoveContinueAction so Ithaqua's own move still resolves.
+        case MovedAction(self : WW, u, o, r) if u.uclass == Ithaqua && self.can(ArcticWind) && r != BB.moon =>
             Ask(self)
                 .each(self.at(o).not(Moved).%(_.canMove).sortA)(u => ArcticWindAction(self, o, u, r).as(u.ref.full, "from", o)(ArcticWind, "to", r))
                 .done(MoveContinueAction(self, true))

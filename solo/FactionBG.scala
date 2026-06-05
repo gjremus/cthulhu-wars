@@ -176,39 +176,30 @@ object BGExpansion extends Expansion {
 
             game.independents(f)
 
-            if (f.has(Avatar) && f.onMap(ShubNiggurath).any && ElderThingMindControl.suppresses(f.goo(ShubNiggurath)))
+            // BB Fix 71 (v2.4.29): BG Avatar — negate all Moon exceptions.
+            // BG's Shub CAN avatar to the Moon, and CAN avatar off the Moon
+            // with ANY unit. Avatar is unrestricted with regards to Moon
+            // access. (Supersedes Fix 55's BB-only swap-target carve-out.)
+            //
+            // Implementation:
+            //   - Origin set: any region holding Shub-Niggurath, including
+            //     BB.moon. Use `f.all(ShubNiggurath)` (not `f.onMap`) since
+            //     `onMap` filters out the Moon glyph.
+            //   - Destination set: every area Shub could swap into, plus
+            //     BB.moon when BB is in the game (Moon is "in play" only when
+            //     BB has been chosen).
+            //   - Swap-target faction filter: any faction with a vulnerable
+            //     unit in the destination — no BB-only restriction.
+            if (f.has(Avatar) && f.all(ShubNiggurath).any && ElderThingMindControl.suppresses(f.goo(ShubNiggurath)))
                 + GroupAction("Avatar".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
-            else if (f.has(Avatar) && f.onMap(ShubNiggurath).any) {
+            else if (f.has(Avatar) && f.all(ShubNiggurath).any) {
                 val r = f.goo(ShubNiggurath).region
                 val t = f.taxIn(r)
-                areas.but(r).%(f.affords(1 + t)).%(r => factionlike.exists(_.at(r).vulnerable.any)).some.foreach { l =>
+                val moonDestinations = factions.has(BB).??($(BB.moon))
+                val candidateDestinations = (areas ++ moonDestinations).distinct.but(r)
+                candidateDestinations.%(f.affords(1 + t)).%(r => factionlike.exists(_.at(r).vulnerable.any)).some.foreach { l =>
                     + AvatarMainAction(f, r, l)
                 }
-            }
-            // Fix 55 (v2.4.21): BG Avatar FROM the Moon — Issue 4 default and
-            // Issue 5 exception. Per user direction (Game 499, 2026-06-04):
-            //   (4) "Exception — BG avatar. Because avatar makes shub swap
-            //   places with another unit, even avatar From the moon moves a
-            //   unit To the moon." → BG Avatar from Moon stays BLOCKED by
-            //   default because the swap-target would move TO Moon, which
-            //   Fix 45 forbids for non-BB units. The above branch uses
-            //   `f.onMap(ShubNiggurath)` which excludes BB.moon, so Avatar
-            //   from Moon is naturally suppressed in the default case.
-            //   (5) "Exception to that exception — BG avatar From the moon
-            //   with a Bb unit on the map. BG shub is leaving the moon (ok),
-            //   and a BB unit is moving To the moon (also ok)." → If at
-            //   least one BB unit currently sits on the map, BG Avatar from
-            //   the Moon is RE-ENABLED, but the swap-target list is filtered
-            //   to BB units only (so the only unit ever moved TO the Moon
-            //   is a BB unit, which is legal per Fix 45). Apologies that
-            //   this carve-out wasn't covered when Fix 45 went in.
-            else if (f.has(Avatar) && f.all(ShubNiggurath).any && f.goo(ShubNiggurath).region == BB.moon
-                     && ElderThingMindControl.suppresses(f.goo(ShubNiggurath)).not
-                     && factions.has(BB) && areas.exists(a => BB.at(a).any)) {
-                val r = f.goo(ShubNiggurath).region   // == BB.moon
-                val l = areas.%(a => BB.at(a).vulnerable.any).%(f.affords(1))
-                if (l.any)
-                    + AvatarMainAction(f, r, l)
             }
 
             if (f.can(Ghroth) && f.power >= 2)
@@ -283,31 +274,33 @@ object BGExpansion extends Expansion {
 
         // AVATAR
         case AvatarMainAction(self, o, l) =>
-            // Fix 55 (v2.4.21): when origin (Shub's region) is the Moon, the
-            // swap-target faction must be BB only — the swap-target moves TO
-            // the Moon, and Fix 45 only allows BB units to enter the Moon.
-            // Apologies for the missing carve-out when Fix 45 went in.
-            val factionFilter : Faction => Boolean =
-                if (o == BB.moon) (fa => fa == BB)
-                else (_ => true)
-            Ask(self).some(l)(r => factionlike.%(factionFilter).%(_.at(r).vulnerable.any).map(f => AvatarAction(self, o, r, f))).cancel
+            // BB Fix 71 (v2.4.29): no Moon-based faction restriction on the
+            // swap-target. BG Avatar is unrestricted with regards to Moon
+            // access — Shub may swap with ANY faction's vulnerable unit
+            // regardless of whether the origin or destination is the Moon.
+            Ask(self).some(l)(r => factionlike.%(_.at(r).vulnerable.any).map(f => AvatarAction(self, o, r, f))).cancel
 
         case AvatarAction(self, o, r, e) =>
             self.power -= 1
             self.payTax(r)
             self.payTax(o)
 
+            // BB Fix 71 (v2.4.29): set bgInAvatar around Shub's move so the
+            // place() Moon guard permits Shub onto the Moon when r == BB.moon.
+            // (Direct `u.region = r` bypasses place(), but we set the flag
+            // unconditionally to cover any indirect path and the swap-target
+            // move below.)
+            game.bgInAvatar = true
             val sn = self.goo(ShubNiggurath)
             sn.region = r
+            game.bgInAvatar = false
             log(sn, "avatared to", r)
 
-            // Fix 55 (v2.4.21): when origin is the Moon, restrict the swap-
-            // target unit list to BB units only. (factionFilter above already
-            // restricts the e parameter to BB when o == BB.moon, so this is
-            // belt-and-braces — defensive in case any future caller bypasses
-            // the AvatarMainAction filter.)
-            val l = if (o == BB.moon) e.at(r).vulnerable.preferablyNotOnGate.%(_.faction == BB)
-                    else e.at(r).vulnerable.preferablyNotOnGate
+            // BB Fix 71 (v2.4.29): no BB-only swap-target restriction. BG can
+            // avatar off the Moon with ANY unit; the swap-target moves to the
+            // origin (the Moon) regardless of its faction. Avatar is unrest-
+            // ricted with regards to Moon access.
+            val l = e.at(r).vulnerable.preferablyNotOnGate
 
             Ask(e.real.?(e).|(self)).each(l)(u => AvatarReplacementAction(e, self, r, o, u).as(u.ref.full)(Avatar, "replacement from", r, "to", o))
 
@@ -316,7 +309,13 @@ object BGExpansion extends Expansion {
             // Parallel-guide Fix 40: Shub-Niggurath Avatar forcibly displaces an enemy unit.
             // This must NOT trigger FB Cyclopean Gaze.
             game.fbSuppressCGForPlacement = true
+            // BB Fix 71 (v2.4.29): mark Avatar context so the Moon-entry place()
+            // guard permits the swap-target onto the Moon when o == BB.moon.
+            // (u.region = o bypasses place() in practice, but flag covers any
+            // indirect place() route and is consistent with AvatarAction.)
+            game.bgInAvatar = true
             u.region = o
+            game.bgInAvatar = false
             game.fbSuppressCGForPlacement = false
             u.onGate = false
             EndAction(f)

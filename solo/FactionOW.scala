@@ -209,7 +209,17 @@ object OWExpansion extends Expansion {
                 if (game.options.has(OpenerYogCurseDie) && f.allInPlay.%(_.uclass == YogSothoth).any)
                     n += 1
                 if (n > 0) {
-                    val l = areas.%(f.affords(2)).%(r => f.enemies.exists(_.at(r).any))
+                    // BB Tasks #43: Dread Curse may also be aimed at the Moon when
+                    // BB has units there. The Moon is a valid Dread Curse target
+                    // region — BB units on the Moon can be pained off it (and BB
+                    // units pained from the Moon may retreat to any map area, per
+                    // BB Implementation Guide §2.6c / Fix 55). `areas` excludes
+                    // BB.moon, so we append it explicitly when an enemy of OW has
+                    // units there (only BB ever does, but we keep the same
+                    // `f.enemies` predicate for symmetry with the map-area path).
+                    val mapTargets = areas.%(f.affords(2)).%(r => f.enemies.exists(_.at(r).any))
+                    val moonTarget = (f.affords(2)(BB.moon) && f.enemies.exists(_.at(BB.moon).any)).??($(BB.moon))
+                    val l = mapTargets ++ moonTarget
                     if (l.any)
                         + DreadCurseMainAction(f, n, l)
                 }
@@ -377,7 +387,19 @@ object OWExpansion extends Expansion {
             Ask(f).add(DreadCurseSplitAction(f, r, $, e, k, p))
 
         case DreadCurseRetreatAction(self, r, e, f, uc) =>
-            Ask(self).each(r.connectedForRetreat)(d => DreadCurseRetreatToAction(self, r, e, f, uc, d))
+            // BB Tasks #43 / BB Implementation Guide §2.6c + Fix 55:
+            //   - If Dread Curse was aimed at the Moon, pained units can retreat
+            //     to any map area (Moon is "adjacent to all regions"). The set
+            //     `r.connectedForRetreat` is empty for BB.moon, so we substitute
+            //     the full map area list.
+            //   - If Dread Curse was aimed at a map area, only BB-owned pained
+            //     units may retreat TO the Moon (non-BB pain destinations exclude
+            //     the Moon). Map.scala's `connectedForRetreat` already omits the
+            //     Moon for map regions, so we append BB.moon only when f == BB.
+            val moonOriginDests = (r == BB.moon).??(areas)
+            val moonDest = (r != BB.moon && f == BB).??($(BB.moon))
+            val dests = (r.connectedForRetreat ++ moonOriginDests ++ moonDest).distinct
+            Ask(self).each(dests)(d => DreadCurseRetreatToAction(self, r, e, f, uc, d))
 
         case DreadCurseRetreatToAction(self, r, e, f, uc, d) =>
             val u = f.at(r, uc).%(_.health == Pained).sortP.first

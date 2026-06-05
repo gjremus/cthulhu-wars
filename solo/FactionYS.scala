@@ -149,7 +149,21 @@ object YSExpansion extends Expansion {
 
             if (f.can(HWINTBN) && f.used(ScreamingDead).not && f.has(Hastur)) {
                 val o = f.goo(Hastur).region
-                areas.%(f.affords(1)).but(o).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
+                // Fix (BB Tasks bullet 45): YS CAN use He-Heard-His-Name to move
+                // Hastur onto the Moon (per user-confirmed rule clarification —
+                // explicit override of the generic non-BB Moon-entry block in
+                // bullet 139). `areas` excludes BB.moon, so the Moon was missing
+                // from the destination set; add it via the same `++ $(BB.moon)`
+                // lift used by Game.battles, summons, and FactionAN origins. The
+                // cultist-target filter is preserved unchanged: BB Earth Cats on
+                // the Moon satisfy `targetableAsCultistByEnemy` under Lunacy
+                // (Task 3.6.1, BB Implementation Guide §2.4 / FAQ), so the Moon
+                // is offered exactly when an Earth Cat is present there. The
+                // direct `region = r` write at HWINTBNAction bypasses the
+                // place() Moon Guard, which is correct here — this rule is the
+                // sanctioned exception for Hastur via HWINTBN.
+                val candidates = areas ++ $(BB.moon)
+                candidates.%(f.affords(1)).but(o).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
                     + HWINTBNMainAction(f, o, l)
                 }
             }

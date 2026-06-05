@@ -902,8 +902,27 @@ class Player(private val f : Faction)(implicit game : Game) {
         // Also blocks Yog-Sothoth gate-stacking, Cathedrals, Chaos Gates, Craters,
         // Pyramids (when added), Glaciers, Worms of Groth, Insects from Shaggai,
         // Mother Hydra Acolytes (Zygote), Hounds, Moonbeasts, etc. on Moon.
-        if (f != BB && r == BB.moon) {
-            f.log("placement of", uc.styled(f), "on", BB.moon, "blocked: only BB units may enter the Moon (Catnapping is the sole exception)")
+        // Exception: OW with TheyBreakThrough may summon to Moon (faction power).
+        // Exception: BG Avatar (BB Fix 71, v2.4.29) — Shub-Niggurath may avatar
+        // to the Moon, and may avatar off the Moon with ANY unit (the swap-
+        // target moves to the Moon during the swap). Avatar is unrestricted
+        // with regards to moon access. Detected via game.bgInAvatar transient
+        // flag set in FactionBG.AvatarAction.
+        // Exception: AN Dematerialization (BB Fix, v2.4.29) — AN may
+        // dematerialize a unit onto the Moon. Detected via
+        // game.anInDematerialize transient flag set in
+        // FactionAN.DematerializationMoveUnitAction.
+        // Exception: Dimensional Shambler deploy (BB Fix, v2.4.29) — ANY
+        // faction's Shambler may deploy to the Moon. Detected via
+        // game.shamblerInDeploy transient flag set in
+        // NeutralMonsters.ShamblerDeployAction.
+        // Exception: GC Unsubmerge (BB Bullet 50, v2.4.29) — Great Cthulhu
+        // may unsubmerge from the deep onto the Moon (the Moon is adjacent
+        // to all regions for arrival purposes; GC's submerged court resides
+        // off-map and may surface anywhere). Detected via game.gcInUnsubmerge
+        // transient flag set in FactionGC.UnsubmergeAction.
+        if (f != BB && !(f == OW && f.can(TheyBreakThrough)) && !(f == BG && game.bgInAvatar) && !(f == AN && game.anInDematerialize) && !game.shamblerInDeploy && !(f == GC && game.gcInUnsubmerge) && r == BB.moon) {
+            f.log("placement of", uc.styled(f), "on", BB.moon, "blocked: only BB units may enter the Moon (Catnapping is the sole exception, and OW after They Break Through)")
         }
         else {
             val u = f.pool(uc).first
@@ -1489,6 +1508,46 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Avoids repeated factions.has(FB) + FB.has(CG) + oncePerGame checks per unit move.
     def fbHasCGActive : Boolean = factions.has(FB) && FB.can(CyclopeanGaze)
     var fbDevilsMarkUsedThisDoom : Boolean = false
+    // BB Fix 71 (v2.4.29): BG Avatar transient flag. Set true while a BG Avatar
+    // action is resolving (Shub swap to/from any region including Moon). The
+    // Moon-entry place() guard (BB Fix 65) checks this flag to permit BG units
+    // moving onto the Moon during Avatar resolution. BG avatar is unrestricted
+    // with regards to moon access — Shub may avatar to the Moon, and Shub may
+    // avatar off the Moon swapping with ANY unit (the swap-target moves to the
+    // Moon, which is the only Avatar path that ever places a non-BB unit on
+    // the Moon and must be allowed). Most Avatar moves use direct
+    // `u.region = r` assignment (which bypasses place()), so this flag is
+    // primarily defense-in-depth for any future place() route through Avatar.
+    var bgInAvatar : Boolean = false
+    // BB Fix (v2.4.29): AN Dematerialization transient flag. Set true while
+    // an AN Dematerialization move is resolving (unit being relocated onto
+    // its destination, which may be BB.moon). The Moon-entry place() guard
+    // (BB Fix 65) checks this flag to permit AN units moving onto the Moon
+    // during Dematerialization resolution. The Dematerialization case in
+    // FactionAN.scala uses direct `u.region = d` assignment (which bypasses
+    // place()), so this flag is primarily defense-in-depth for any future
+    // place() route through Dematerialization.
+    var anInDematerialize : Boolean = false
+    // BB Fix (v2.4.29): Dimensional Shambler deploy transient flag. Set true
+    // while a Shambler deploy is resolving (Shambler relocated from the
+    // faction-card hold to a chosen destination, which may be BB.moon).
+    // The Shambler deploy explicitly opens the Moon to ANY faction — this
+    // is broader than other Moon allowances. The Moon-entry place() guard
+    // (BB Fix 65) checks this flag to permit any faction's Shambler moving
+    // onto the Moon during deploy. ShamblerDeployAction in NeutralMonsters
+    // .scala uses direct `u.region = r` assignment (which bypasses place()),
+    // so this flag is primarily defense-in-depth for any future place()
+    // route through Shambler deploy.
+    var shamblerInDeploy : Boolean = false
+    // BB Bullet 50 (v2.4.29): GC Unsubmerge transient flag. Set true while a
+    // GC Unsubmerge is resolving (Cthulhu and his court relocated from the
+    // submerged hold (GC.deep) to a chosen destination, which may be
+    // BB.moon). The Moon-entry place() guard (BB Fix 65) checks this flag
+    // to permit GC units moving onto the Moon during Unsubmerge resolution.
+    // The UnsubmergeAction in FactionGC.scala uses direct `u.region = r`
+    // assignment (which bypasses place()), so this flag is primarily
+    // defense-in-depth for any future place() route through Unsubmerge.
+    var gcInUnsubmerge : Boolean = false
 
     // ── Library at Celaeno state ──
     var silenceTokens : Map[Faction, Int] = Map()
@@ -2120,7 +2179,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // block all non-terror monster summons (not ServitorUnit itself)
         // Blocking text shown inside summon sub-menu, not here in top-level menu
 
-        val summonAreas = areas ++ ((f == BB).??($(BB.moon)))
+        val summonAreas = areas ++ ((f == BB || (f == OW && f.can(TheyBreakThrough))).??($(BB.moon)))
 
         f.pool.monsterly.sortP./(_.uclass).distinct.%(_.canBeSummoned(f)).%(uc => f.all(uc).num < f.units./(_.uclass).count(uc)).foreach { uc =>
             summonAreas.nex.%(r => f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>

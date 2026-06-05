@@ -416,18 +416,32 @@ object NeutralMonstersExpansion extends Expansion {
             Force(ShamblerDeployMainAction(f, then))
 
         case ShamblerDeployMainAction(f, then) =>
-            Ask(f).each(areas.nex)(r => ShamblerDeployAction(f, r, then)).cancel
+            // BB Fix (v2.4.29): Dimensional Shambler deploy offers BB.moon as a
+            // destination for ANY faction. The Shambler is a neutral monster and
+            // its deploy step explicitly opens the Moon to all factions (broader
+            // than other Moon allowances). The Moon-entry place() guard
+            // (Game.scala) is granted an exception via the transient
+            // game.shamblerInDeploy flag set in ShamblerDeployAction; the direct
+            // u.region = r assignment below bypasses place() but the flag is
+            // defense-in-depth for any future place() route.
+            Ask(f).each(areas.nex :+ BB.moon)(r => ShamblerDeployAction(f, r, then)).cancel
 
         case ShamblerDeployAction(f, r, then) =>
             if (f.at(ShamblerHold(f), DimensionalShamblerUnit).none)
                 then
             else {
             val u = f.at(ShamblerHold(f)).one(DimensionalShamblerUnit)
+            // BB Fix (v2.4.29): set shamblerInDeploy transient flag while the
+            // Shambler is being deployed; grants the Moon-entry place() guard
+            // an exception when r == BB.moon. Direct u.region = r assignment
+            // bypasses place(), so the flag is primarily defense-in-depth.
+            game.shamblerInDeploy = true
             u.region = r
+            game.shamblerInDeploy = false
             log(DimensionalShamblerUnit.styled(f), "deployed to", r)
 
             if (f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
-                Ask(f).each(areas.nex)(r => ShamblerDeployAction(f, r, then)).add(then.as("Done".styled("power")))
+                Ask(f).each(areas.nex :+ BB.moon)(r => ShamblerDeployAction(f, r, then)).add(then.as("Done".styled("power")))
             else {
                 game.triggers()
                 then

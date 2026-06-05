@@ -227,6 +227,38 @@ case class FBCyclopeanGazeSource(region : Region, unit : UnitClass)
 case class FBWritheKillEntry(unit : UnitRef, region : Region, origClass : UnitClass, replacement : |[UnitRef])
 case class FBWrithePainEntry(unit : UnitRef, fromRegion : Region, toRegion : Region)
 
+// BB Bullet 46 fix: Writhe bypasses the engine's MoveAction pipeline (it mutates
+// u.region directly), so the Catnapping refund hook in Game.scala MoveAction is
+// never reached when an FB unit pains off BB.moon during Writhe. Track the power
+// FB actually spent on the current Writhe activation (writheCost - IP discount)
+// so the Writhe pain handlers can refund BB if any FB unit leaves BB.moon. If FB
+// paid 0 (full IP discount), BB receives 0 — matching the universal rule
+// (§3.10.5b in BB Implementation Guide): "BB gains the same Power amount the
+// catnapped faction actually spent" — Eternal Servitude / IP-discount = no
+// power spent = no refund.
+//
+// BB Bullet 47 extension (v2.4.29): Writhe can pain a MIXED group of units —
+// some leaving BB.moon, others not. The original Bullet 46 fix refunded the
+// entire paidThisActivation once per activation as soon as any unit left the
+// Moon, which over-credited BB when only a subset of the writhed units actually
+// left the Moon. Per Bullet 47 the rule is per-unit: BB receives 1 power for
+// each FB unit pained OFF BB.moon during this Writhe, with the cumulative
+// refund capped at paidThisActivation (so BB never gets more than FB actually
+// paid — preserves FAQ #8 "full pay, not net" by capping). Units that did not
+// leave the Moon contribute 0 to the refund. unitsRefunded tracks how many
+// power-units of refund have already fired this activation so the cap is
+// enforced even across multiple pain handlers in one Writhe.
+//
+// CAVEAT (same as Bullet 46 / Fix 69): paidThisActivation and unitsRefunded
+// are file-scoped vars, NOT serialized into the Game state. Save/load mid-
+// Writhe will lose them and over- or under-refund BB on resume. Acceptable for
+// solo play; flagged for follow-up if multi-session save/load becomes a
+// concern.
+private object FBWritheRefundTracker {
+    var paidThisActivation : Int = 0   // power FB actually spent on current Writhe (post-discount)
+    var unitsRefunded      : Int = 0   // cumulative power refunded this activation (capped at paidThisActivation)
+}
+
 // ── THE EYE OPENS ACTIONS ── Cost 1: eliminate enemy cultists in areas with Desiccated, gain power
 // Round 8 Bug 42: was `with Soft` but the handler mutates state (deducts power via
 // consumeDiscount + power -= cost). Soft excludes the action from undo replay, so undoing
@@ -533,6 +565,32 @@ object FBExpansion extends Expansion {
         if (used > 0)
             FB.log("Infernal Pact".styled(FB), "discounted", used.power)
         used
+    }
+
+    // BB Bullet 46 / 47 fix: refund BB 1 power per FB unit pained off BB.moon
+    // during the current Writhe activation, capped at paidThisActivation (the
+    // power FB actually spent on this Writhe, post-IP-discount). Mirrors the
+    // Catnapping refund in Game.scala's MoveAction handler but fires PER UNIT
+    // because Writhe pays a flat 2-power cost up front and may move several
+    // units in one activation — Bullet 47 requires that BB only receive credit
+    // for units that actually left the Moon, not the writhe action as a whole.
+    //
+    // No-op if (a) BB is not in the game, (b) BB does not have Catnapping,
+    // (c) FB paid 0 (full IP discount), (d) the unit was not leaving BB.moon,
+    // or (e) the per-activation cap (paidThisActivation) has already been
+    // refunded. The cap preserves FAQ #8 "full pay, not net" — BB cannot gain
+    // more than FB actually spent on this Writhe even if more units leave the
+    // Moon than FB paid power for.
+    def maybeWritheMoonRefund(from : Region)(implicit game : Game) : Unit = {
+        if (from == BB.moon
+            && FBWritheRefundTracker.unitsRefunded < FBWritheRefundTracker.paidThisActivation
+            && FBWritheRefundTracker.paidThisActivation > 0
+            && game.factions.has(BB)
+            && BB.can(Catnapping)) {
+            BB.power += 1
+            FBWritheRefundTracker.unitsRefunded += 1
+            BB.log(Catnapping.styled(BB) + ": gained", 1.power, "from", FB.full, Writhe.styled(FB) + " off", BB.moon)
+        }
     }
 
 
@@ -874,6 +932,14 @@ object FBExpansion extends Expansion {
             val discountUsed = consumeDiscount(writheCost)
             self.power -= (writheCost - discountUsed)
             val numDice = self.power  // post-payment power = dice rolled
+            // BB Bullet 46 / 47: record the power FB actually spent so any
+            // pain off BB.moon during this Writhe activation can refund BB
+            // 1 power per moon-leaving unit, capped at paidThisActivation
+            // (mirrors Catnapping refund in Game.scala MoveAction). If discount
+            // fully covered the cost, paid is 0 and BB receives 0. unitsRefunded
+            // resets here so each Writhe activation starts with a fresh quota.
+            FBWritheRefundTracker.paidThisActivation = writheCost - discountUsed
+            FBWritheRefundTracker.unitsRefunded = 0
             game.fbWritheRerolled = false
             game.fbWritheUsedUnits = $
             game.fbWritheKillLog = $
@@ -1089,7 +1155,12 @@ object FBExpansion extends Expansion {
                 EndAction(self)
             else {
                 // Sort by region name, then by unit cost descending
-                val units = self.units.%(u => u.region.onMap && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref))
+                // BB Bullet 47 (v2.4.29): use u.region.inPlay (not onMap) so FB
+                // units catnapped to BB.moon are eligible to be writhed off the
+                // Moon. inPlay includes Moon (MoonGlyph.inPlay = true) but
+                // excludes Extinct, matching the rule "FB CAN choose units on
+                // the moon to writhe off the moon."
+                val units = self.units.%(u => u.region.inPlay && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref))
                     .sortBy(u => (u.region.toString, -u.uclass.cost))
                 if (units.none)
                     EndAction(self)
@@ -1112,7 +1183,10 @@ object FBExpansion extends Expansion {
                 Force(FBWritheMoveAllAction(self, newChosen))
             } else {
                 // Sort by region name, then by unit cost descending
-                val units = self.units.%(u => u.region.onMap && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref) && !newChosen.has(u.ref))
+                // BB Bullet 47 (v2.4.29): inPlay (not onMap) — see note in
+                // FBWritheAssignPainAction above; on-Moon FB units must be
+                // selectable for writhe-off-Moon.
+                val units = self.units.%(u => u.region.inPlay && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref) && !newChosen.has(u.ref))
                     .sortBy(u => (u.region.toString, -u.uclass.cost))
                 if (units.none) {
                     // No more units to choose, move with what we have
@@ -1131,14 +1205,23 @@ object FBExpansion extends Expansion {
             } else {
                 implicit val asking = Asking(self)
                 + FBWritheMoveSeparatelyAction(self, chosen)
-                val fbRegionRefs = areas.%(r => self.at(r).any).sortBy(_.toString)
+                // BB Bullet 47 (v2.4.29): BB.moon is a valid Writhe destination.
+                // Per the bullet "FB CAN choose the moon as a destination for
+                // writhe" — Writhe is a Moon access exception (akin to BB
+                // Catnapping / OW TheyBreakThrough). areas excludes Moon
+                // because MoonGlyph.onMap = false (board.regions filter), so
+                // we add it explicitly. The FB-region-refs path picks up Moon
+                // as a "join" target if FB already has a unit there (e.g. via
+                // earlier Catnapping or earlier Writhe-to-Moon).
+                val moonDest = (self == FB).??($(BB.moon))
+                val fbRegionRefs = (areas ++ moonDest).%(r => self.at(r).any).sortBy(_.toString)
                 fbRegionRefs.foreach { r =>
                     val candidates = self.at(r).%!(u => chosen.has(u.ref))
                     val rep = candidates.sortBy(-_.uclass.cost).headOption
                     val label = rep./(_.uclass.name).|(game.unit(chosen.head).uclass.name)
                     + FBWritheMoveAllToRegionJoinAction(self, r, chosen, label)
                 }
-                areas.%!(fbRegionRefs.has).foreach { r =>
+                (areas ++ moonDest).%!(fbRegionRefs.has).foreach { r =>
                     + FBWritheMoveAllToRegionAction(self, r, chosen)
                 }
                 + (FBWritheUndoAllAction(self, game.fbWritheRolls, game.fbWritheNumDice).as("Undo all back to dice roll")(Writhe.styled(FB)))
@@ -1154,6 +1237,9 @@ object FBExpansion extends Expansion {
                 u.onGate = false
                 game.fbWritheUsedUnits :+= uRef
                 self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
+                // BB Bullet 46/47: refund BB 1 power per FB unit pained off
+                // BB.moon (capped at paidThisActivation; 0 if IP-discounted to 0).
+                maybeWritheMoonRefund(from)
             }
             EndAction(self)
 
@@ -1166,6 +1252,9 @@ object FBExpansion extends Expansion {
                 u.onGate = false
                 game.fbWritheUsedUnits :+= uRef
                 self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
+                // BB Bullet 46/47: refund BB 1 power per FB unit pained off
+                // BB.moon (capped at paidThisActivation; 0 if IP-discounted to 0).
+                maybeWritheMoonRefund(from)
             }
             EndAction(self)
 
@@ -1191,7 +1280,13 @@ object FBExpansion extends Expansion {
             // hint; this expansion gives the player a one-click way to keep clusters
             // together regardless of which region the cluster is in.
             implicit val asking = Asking(self)
-            val fbRegionRefs = areas.%(r => self.at(r).any).sortBy(_.toString)
+            // BB Bullet 47 (v2.4.29): BB.moon is a valid Writhe destination.
+            // See note on FBWritheMoveAllAction. moonDest is added to the area
+            // pool so it surfaces both as a "join" target (when FB has a unit
+            // already on the Moon) and as a regular Writhe destination.
+            val moonDest = (self == FB).??($(BB.moon))
+            val allDests = areas ++ moonDest
+            val fbRegionRefs = allDests.%(r => self.at(r).any).sortBy(_.toString)
             fbRegionRefs.foreach { r =>
                 // Pick a representative FB unit in this region for the "join <X>"
                 // label. Prefer a unit other than the one being pained (so the label
@@ -1202,7 +1297,7 @@ object FBExpansion extends Expansion {
                 val label = rep./(_.uclass.name).|(u.uclass.name)
                 + FBWritheMoveOneJoinAction(self, uRef, r, remaining, label)
             }
-            areas.%!(fbRegionRefs.has).foreach(r => + FBWritheMoveOneToRegionAction(self, uRef, r, remaining))
+            allDests.%!(fbRegionRefs.has).foreach(r => + FBWritheMoveOneToRegionAction(self, uRef, r, remaining))
             if (game.fbWrithePainLog.any) + (FBWritheUndoLastMoveAction(self, uRef, remaining).as("Undo last region selection")(Writhe.styled(FB)))
             + (FBWritheUndoAllAction(self, game.fbWritheRolls, game.fbWritheNumDice).as("Undo all back to dice roll")(Writhe.styled(FB)))
             asking
@@ -1217,6 +1312,9 @@ object FBExpansion extends Expansion {
             game.fbWritheLastPainRegion = |(r)
             game.fbWritheLastPainedUnit = u.uclass.name
             self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
+            // BB Bullet 46/47: refund BB 1 power per FB unit pained off
+            // BB.moon (capped at paidThisActivation; 0 if IP-discounted to 0).
+            maybeWritheMoonRefund(from)
             if (remaining.any)
                 Force(FBWritheMoveOneAction(self, remaining.head, remaining.tail))
             else
@@ -1232,6 +1330,9 @@ object FBExpansion extends Expansion {
             game.fbWritheLastPainRegion = |(r)
             game.fbWritheLastPainedUnit = u.uclass.name
             self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
+            // BB Bullet 46/47: refund BB 1 power per FB unit pained off
+            // BB.moon (capped at paidThisActivation; 0 if IP-discounted to 0).
+            maybeWritheMoonRefund(from)
             if (remaining.any)
                 Force(FBWritheMoveOneAction(self, remaining.head, remaining.tail))
             else
@@ -1804,7 +1905,13 @@ object FBExpansion extends Expansion {
             // motion. Use Ask(FB) and pass FB as the destination action's `self` so the
             // menu is bordered in FB's color and the title is attributed to FB.
             val u = game.unit(uRef)
-            val destinations = game.board.connectedForRetreat(u.region).%(_.glyph.onMap).%(d => FB.at(d).%(_.uclass.utype != Building).none)
+            // BB Bullet 44 fix: a BB-owned unit pained by Cyclopean Gaze can retreat
+            // to the Moon (Moon is a valid pain destination for BB units only — see
+            // BB Implementation Guide §Task 3.2.4 / §2.6c "Moon adjacent to all
+            // regions"). Mirrors the Battle.scala retreat() pattern (moonDest).
+            // Non-BB units retain the existing on-map-only filter.
+            val moonDest = (u.faction == BB).??($(BB.moon))
+            val destinations = (game.board.connectedForRetreat(u.region).%(_.glyph.onMap).%(d => FB.at(d).%(_.uclass.utype != Building).none) ++ moonDest).distinct
             if (destinations.any)
                 Ask(FB).each(destinations)(dest => FBCyclopeanGazeDestinationAction(FB, uRef, dest, sourceUnit, sourcesPending, actor, fromBattle))
             else {
