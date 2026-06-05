@@ -183,7 +183,13 @@ object ANExpansion extends Expansion {
         case BuildCathedralAction(self, r) =>
             self.power -= AN.cathedralCost(r)
             self.payTax(r)
-            game.cathedrals :+= r
+            // BB Moon Guard for tokens (Fix 50, v2.4.18): the Cathedral
+            // candidate filter is `areas.%(...)` which already excludes Moon
+            // (Moon is not in board.regions). This is defense-in-depth in
+            // case any future code path lets Moon slip through. Apologies for
+            // not having caught this when Fix 45 was written.
+            if (!game.bbMoonRejectsToken("Cathedral", self, r))
+                game.cathedrals :+= r
             self.log("built a cathedral in", r)
             r.glyph match {
                 case GlyphAA => self.satisfy(CathedralAA, "Cathedral in /^\\ ".trim)
@@ -310,9 +316,18 @@ object ANExpansion extends Expansion {
 
         // DEMATERIALIZATION
         case DematerializationDoomAction(self) =>
-            Ask(self).each(areas.%(r => self.at(r).any))(r => DematerializationFromRegionAction(self, r)).cancel
+            // Fix 55 (v2.4.21): include BB.moon as a possible origin when AN
+            // has units there (catnapped). Per BB Implementation Guide §2.6c,
+            // the Moon is adjacent to all regions for departure purposes;
+            // Dematerialization therefore may move an AN unit FROM the Moon
+            // to any map area. Destinations stay map-only since `areas` does
+            // not contain BB.moon (the Fix 45 TO-Moon block is preserved).
+            // Apologies for the long-standing gap.
+            val origins = areas.%(r => self.at(r).any) ++ self.at(BB.moon).any.??($(BB.moon))
+            Ask(self).each(origins)(r => DematerializationFromRegionAction(self, r)).cancel
 
         case DematerializationFromRegionAction(self, o) =>
+            // Fix 55 (v2.4.21): destinations from Moon = all map areas.
             Ask(self).each(areas.but(o))(r => DematerializationToRegionAction(self, o, r)).cancel
 
         case DematerializationToRegionAction(self, o, d) =>

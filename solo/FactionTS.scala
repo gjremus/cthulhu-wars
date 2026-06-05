@@ -113,7 +113,10 @@ case class TSSkipRemoveTomeAction(self : Faction) extends OptionFactionAction("K
 }
 
 // [2026-04-04] TOME UNIT PLACEMENT — TS chooses which gate to place TH/Tendril from tomes 1-4
-case class TSPlaceTomeUnitAction(self : Faction, uc : UnitClass, r : Region, tomeNum : Int) extends BaseFactionAction("Place " + uc.styled(TS) + " from Tome " + tomeNumToRoman(tomeNum) + " at", r)
+// [2026-06-04 Fix 59] flipper field added: when a non-TS faction flipped the tome, the
+// post-place "unlimited action" prompt must return to flipper (the faction that flipped the
+// tome) rather than to TS. Mirrors AN GiveWorstMonsterAskAction pattern.
+case class TSPlaceTomeUnitAction(self : Faction, uc : UnitClass, r : Region, tomeNum : Int, flipper : Faction) extends BaseFactionAction("Place " + uc.styled(TS) + " from Tome " + tomeNumToRoman(tomeNum) + " at", r)
 
 // UNDULATE (carry chain: moved unit can carry lesser-cost units for free)
 case class TSUndulateCarryPhaseAction(self : Faction, from : Region, to : Region, carrierCost : Int) extends ForcedAction with PowerNeutral
@@ -466,16 +469,18 @@ object TSExpansion extends Expansion {
             tomeNum match {
                 case 1 | 2 =>
                     // [2026-04-04] TS chooses which gate to place Tomb-Herd
+                    // [2026-06-04 Fix 59] thread `self` (the flipper) so post-place returns to flipper
                     val gates = ts.gates.onMap.distinct
                     if (ts.pool(TombHerd).any && gates.any)
-                        Ask(ts).each(gates)(r => TSPlaceTomeUnitAction(ts, TombHerd, r, tomeNum))
+                        Ask(ts).each(gates)(r => TSPlaceTomeUnitAction(ts, TombHerd, r, tomeNum, self))
                     else
                         Force(EndAction(self))
                 case 3 | 4 =>
                     // [2026-04-04] TS chooses which gate to place Deep Tendril
+                    // [2026-06-04 Fix 59] thread `self` (the flipper) so post-place returns to flipper
                     val gates = ts.gates.onMap.distinct
                     if (ts.pool(DeepTendril).any && gates.any)
-                        Ask(ts).each(gates)(r => TSPlaceTomeUnitAction(ts, DeepTendril, r, tomeNum))
+                        Ask(ts).each(gates)(r => TSPlaceTomeUnitAction(ts, DeepTendril, r, tomeNum, self))
                     else
                         Force(EndAction(self))
                 case 5 | 6 =>
@@ -501,10 +506,12 @@ object TSExpansion extends Expansion {
             }
 
         // [2026-04-04] Handle TS's choice of gate for tome unit placement
-        case TSPlaceTomeUnitAction(self, uc, r, tomeNum) =>
+        // [2026-06-04 Fix 59] EndAction(flipper), not EndAction(self): the post-place
+        // unlimited-action prompt belongs to the faction that flipped the tome, not to TS.
+        case TSPlaceTomeUnitAction(self, uc, r, tomeNum, flipper) =>
             self.place(uc, r)
             self.log("placed", uc.styled(TS), "at", r, "from Tome", tomeNumToRoman(tomeNum))
-            EndAction(self)
+            EndAction(flipper)
 
         // CURSED TOME - ritual removal
         case TSRemoveTomeAction(self, tomeNum) =>

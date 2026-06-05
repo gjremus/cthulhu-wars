@@ -3163,16 +3163,57 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             case other         => f.short.toLowerCase + "-" + other.name.toLowerCase.replace(" ", "-").replace("'", "")
                         }
                     }
-                    val moonFigs = displayGame.factions./~(ff => ff.at(BB.moon))
+                    // Fix 55 (v2.4.21): dedupe Moon overlay unit list by UnitRef.
+                    // Per Game 499 user report: "The moon shows four Shoggoths from
+                    // the GC faction on it. GC only has two Shoggoths total. A
+                    // battle with GC on the moon showed only 2 Shoggoths in the
+                    // battle, so this is a visual error." Apologies for the visual
+                    // double-count — this dedupe pass guarantees one entry per
+                    // UnitRef regardless of any upstream double-bookkeeping in the
+                    // faction `units` list (e.g., transient battle-side residuals,
+                    // post-battle replace/regenerate transient duplicates, etc.).
+                    val moonFigs = displayGame.factions./~(ff => ff.at(BB.moon)).distinctBy(_.ref)
                     val moonCount = moonFigs.num
-                    // Encode each unit as "assetId|Display Name (FAC)" and join with ";".
+                    // Fix 56 (v2.4.22): Moon overlay visual cleanup of units killed
+                    // or pain-retreated in a Moon battle. The user reported that
+                    // even though the game state correctly removed dead / pain-
+                    // retreated non-BB units after a Moon battle, the Moon overlay
+                    // kept showing those unit images. Two visible problems were
+                    // mashed together: (a) standard map cleanup paints a red-X
+                    // over killed/pained unit sprites mid-battle and then drops
+                    // the sprite once region changes — the Moon overlay was
+                    // missing both the X marker AND the live re-render after the
+                    // region changes, so it looked frozen on the post-battle
+                    // image; (b) the overlay HTML packed at click time never re-
+                    // rendered while showing, so a battle that resolved with the
+                    // overlay open kept stale sprites onscreen until the user
+                    // closed and re-opened the overlay. Apologies for the long
+                    // gap between Fix 25 (initial Moon overlay) and now; please
+                    // forgive the oversight that left non-BB pain-retreat units
+                    // visually stuck on the Moon overlay.
+                    //
+                    // Encoding: each entry is "assetId|Display Name (FAC)|hp"
+                    // where hp is one of "alive", "killed", "pained" so the
+                    // overlay renderer can paint the same red-X / yellow-X
+                    // marker the standard map uses (DrawRect("kill"|"pain")).
                     // Strip any chars that would break the JS string literal we splice into
                     // the onclick attribute.
                     def safe(s : String) : String = s.replace("\"", "").replace("'", "").replace(";", "").replace("|", "")
+                    def hpTag(u : UnitFigure) : String = u.health match {
+                        case Killed                          => "killed"
+                        case DoubleHP(Killed, Killed)        => "killed"
+                        case DoubleHP(Killed, _)             => "killed"
+                        case DoubleHP(_, Killed)             => "killed"
+                        case Pained                          => "pained"
+                        case DoubleHP(Pained, _)             => "pained"
+                        case DoubleHP(_, Pained)             => "pained"
+                        case _                               => "alive"
+                    }
                     val moonList = moonFigs./(u => {
                         val asset   = safe(moonSpriteAssetId(u))
                         val display = safe(u.uclass.name) + " (" + safe(u.faction.short) + ")"
-                        asset + "|" + display
+                        val hp      = hpTag(u)
+                        asset + "|" + display + "|" + hp
                     }).mkString(";")
                     // BB Fix 31 (v2.4.8): if the HUD button is missing for any
                     // reason (orphaned by a map-small clear), recreate it now so
@@ -3186,6 +3227,15 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         el.setAttribute("onpointerover", "event.stopPropagation(); " + s.replace("Click","Over"))
                         el.setAttribute("onpointerout",  "event.stopPropagation(); " + s.replace("Click","Out"))
                     }
+                    // Fix 56 (v2.4.22): live re-render of the Moon overlay if it
+                    // is currently showing. Without this, the overlay HTML is
+                    // frozen at the time the user clicked the HUD button, so
+                    // mid-battle kills / pain assignments and post-battle pain
+                    // retreats / eliminations never updated the visible sprites.
+                    // Overlays.refreshMoonIfShowing() compares the latest packed
+                    // (count, list) to what is on screen and replaces the body
+                    // when they differ. See overlay.scala for the cache key.
+                    Overlays.refreshMoonIfShowing(moonCount, moonList)
                 }
 
                 mapWest.innerHTML = (board.west :+ GC.deep)./(r => processStatus(displayGame.regionStatus(r), "p8")).mkString("")
@@ -3507,24 +3557,51 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     }
 
                                     if (a.isVoid.not) {
-                                        val (l, c) = game.perform(a.unwrap)
+                                        // BB v2.4.16 (game 498 full-crash fix): wrap the recorded-replay
+                                        // perform in a try/catch so any single bad action — typically a
+                                        // version-drift serialization mismatch where a game saved on an
+                                        // older build replays into a newer build that has changed an
+                                        // action signature — does not abort the entire replay rebuild
+                                        // and leave the game stuck on a blank screen. Failed actions
+                                        // are logged inline and the replay continues from the last
+                                        // good Continue.
+                                        try {
+                                            val (l, c) = game.perform(a.unwrap)
 
-                                        l.foreach(s => log(s, showUndo(actions.num)))
+                                            l.foreach(s => log(s, showUndo(actions.num)))
 
-                                        if (a.isOutOfTurn.not)
-                                            cc = |(c)
-                                        else
-                                            c @@ {
-                                                case Then(OutOfTurnRepeat(f, action)) if self.has(f) => cc = |(c)
-                                                case Then(OutOfTurnRepeat(f, action)) if self.has(f).not =>
-                                                case c => cc = |(c)
-                                            }
+                                            if (a.isOutOfTurn.not)
+                                                cc = |(c)
+                                            else
+                                                c @@ {
+                                                    case Then(OutOfTurnRepeat(f, action)) if self.has(f) => cc = |(c)
+                                                    case Then(OutOfTurnRepeat(f, action)) if self.has(f).not =>
+                                                    case c => cc = |(c)
+                                                }
+                                        }
+                                        catch {
+                                            case t : Throwable =>
+                                                println("[BB v2.4.16 replay-tolerance] skipping action " + actions.num + " (" + a + "): " + t.getClass.getSimpleName + ": " + t.getMessage)
+                                                log("Replay: skipped action " + actions.num + " due to " + t.getClass.getSimpleName, showUndo(actions.num))
+                                        }
                                     }
                                 }
 
                                 savedContinue = cc
 
-                                queue :+= askFaction(cc.get)(game)
+                                // BB v2.4.16 (game 498 full-crash fix): also harden the post-replay
+                                // askFaction call. If the last Continue's menu builder throws (e.g.
+                                // a faction's MainAction case crashes when computing the menu after
+                                // a version-drift load), catch it so the user at least sees the
+                                // game state and can fall back to manual edit/rollback.
+                                try {
+                                    queue :+= askFaction(cc.get)(game)
+                                }
+                                catch {
+                                    case t : Throwable =>
+                                        println("[BB v2.4.16 replay-tolerance] askFaction crashed on resumed continue: " + t.getClass.getSimpleName + ": " + t.getMessage)
+                                        log("Replay: menu-build crash on resume — " + t.getClass.getSimpleName + ": " + t.getMessage, showUndo(actions.num))
+                                }
 
                                 Some((true, 0))
                             }

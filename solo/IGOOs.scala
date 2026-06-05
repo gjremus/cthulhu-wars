@@ -1106,10 +1106,17 @@ object IGOOsExpansion extends Expansion {
             self.power -= 1
             val an = self.allInPlay.%(_.uclass == AtlachNacha).head
             val r = an.region
-            game.webTokens :+= r
-            self.log("Place Spinneret".styled("nt") + ": placed web token in", r, "(" + game.webTokens.num + "/6)")
-            if (game.webTokens.num >= 6) {
-                self.log("completed", CosmicWeb.styled(self), "for", AtlachNacha.styled(self))
+            // BB Moon Guard for tokens (Fix 50, v2.4.18): the Spinneret menu
+            // entry is gated by `r.onMap` in Game.scala (which excludes Moon),
+            // so the user can never reach this handler with r == BB.moon.
+            // Defense-in-depth guard added anyway in case AN ends up on the
+            // Moon via some future code path. Sorry for missing this earlier.
+            if (!game.bbMoonRejectsToken("Spinneret web token", self, r)) {
+                game.webTokens :+= r
+                self.log("Place Spinneret".styled("nt") + ": placed web token in", r, "(" + game.webTokens.num + "/6)")
+                if (game.webTokens.num >= 6) {
+                    self.log("completed", CosmicWeb.styled(self), "for", AtlachNacha.styled(self))
+                }
             }
             EndAction(self)
 

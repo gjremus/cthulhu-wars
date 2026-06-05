@@ -269,40 +269,43 @@ object BBExpansion extends Expansion {
         case MainAction(f : BB.type) =>
             implicit val asking = Asking(f)
 
-            game.moves(f)
+            // BB v2.4.16 (game 498 full-crash fix): wrap each menu-builder call so a
+            // single throwing builder cannot kill the whole MainAction prompt. This
+            // protects games saved on an older BB build (e.g. v2.4.7) from crashing
+            // when replayed onto a newer build that may have introduced predicates
+            // or state fields not present in the older save.
+            def safeMenuStep(label : String)(body : => Unit) : Unit =
+                try body catch {
+                    case t : Throwable =>
+                        println("[BB v2.4.16 menu-tolerance] BB MainAction step '" + label + "' threw " + t.getClass.getSimpleName + ": " + t.getMessage)
+                }
 
-            game.captures(f)
+            safeMenuStep("moves")            { game.moves(f) }
+            safeMenuStep("captures")         { game.captures(f) }
+            safeMenuStep("recruits")         { game.recruits(f) }
+            safeMenuStep("battles")          { game.battles(f) }
+            safeMenuStep("controls")         { game.controls(f) }
+            safeMenuStep("builds")           { game.builds(f) }
+            safeMenuStep("summons")          { game.summons(f) }
+            safeMenuStep("awakens")          { game.awakens(f) }
+            safeMenuStep("independents")     { game.independents(f) }
+            safeMenuStep("neutralSpellbooks"){ game.neutralSpellbooks(f) }
 
-            game.recruits(f)
+            safeMenuStep("Pay2ForBB") {
+                if (f.needs(Pay2ForBB) && f.power >= 2)
+                    + Pay2ForBBAction(f)
+            }
 
-            game.battles(f)
+            safeMenuStep("Catnapping") {
+                if (f.can(Catnapping) && f.allInPlay.%(_.uclass == Bastet).any && f.power >= 1 &&
+                    game.factions.but(f).exists(e => f.allInPlay.%(_.uclass == Bastet).headOption.exists(b => e.at(b.region).any)))
+                    + CatnappingMainAction(f)
+            }
 
-            game.controls(f)
-
-            game.builds(f)
-
-            game.summons(f)
-
-            game.awakens(f)
-
-            game.independents(f)
-
-            game.neutralSpellbooks(f)
-
-            if (f.needs(Pay2ForBB) && f.power >= 2)
-                + Pay2ForBBAction(f)
-
-            if (f.can(Catnapping) && f.allInPlay.%(_.uclass == Bastet).any && f.power >= 1 &&
-                game.factions.but(f).exists(e => f.allInPlay.%(_.uclass == Bastet).headOption.exists(b => e.at(b.region).any)))
-                + CatnappingMainAction(f)
-
-            game.libraryActions(f)
-
-            game.highPriests(f)
-
-            game.reveals(f)
-
-            game.endTurn(f)(f.battled.any || game.nexed.any)
+            safeMenuStep("libraryActions") { game.libraryActions(f) }
+            safeMenuStep("highPriests")    { game.highPriests(f) }
+            safeMenuStep("reveals")        { game.reveals(f) }
+            safeMenuStep("endTurn")        { game.endTurn(f)(f.battled.any || game.nexed.any) }
 
             asking
 

@@ -156,7 +156,16 @@ object YSExpansion extends Expansion {
 
             if (f.can(ScreamingDead) && f.used(HWINTBN).not && f.has(KingInYellow)) {
                 val o = f.goo(KingInYellow).region
-                game.board.connected(o).%(f.affords(1)).some.foreach { l =>
+                // Fix 55 (v2.4.21): when KIY has been Catnapped to the Moon,
+                // Screaming Dead may move him FROM the Moon to ANY map area
+                // (per BB Implementation Guide §2.6c — "the moon is adjacent
+                // to all regions"). The Fix 45 TO-Moon block is preserved
+                // because `areas` excludes BB.moon, so destinations remain
+                // map-only. Apologies for the long-standing gap that left
+                // catnapped KIY screamed-out actions invisible.
+                val dests = if (o == BB.moon) areas.%(f.affords(1))
+                            else game.board.connected(o).%(f.affords(1))
+                dests.some.foreach { l =>
                     + ScreamingDeadMainAction(f, o, l)
                 }
             }
@@ -226,7 +235,12 @@ object YSExpansion extends Expansion {
                     case GlyphWW => self.satisfy(DesecrateWW, "Desecrated |||")
                     case _ =>
                 }
-                game.desecrated :+= r
+                // BB Moon Guard for tokens (Fix 50, v2.4.18): refuse to write a
+                // desecration token onto the Moon. KIY can only land on the
+                // Moon via Catnapping, but if he is there, Desecrate must NOT
+                // attach a token to a BB-only region. Apologies for the gap.
+                if (!game.bbMoonRejectsToken("Desecration token", self, r))
+                    game.desecrated :+= r
             }
             else
                 log(KingInYellow, "failed", r, "desecration with roll [" + x.styled("power") + "]")

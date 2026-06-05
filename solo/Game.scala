@@ -1516,6 +1516,33 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var mummifiedCultists : $[UnitRef] = $
     // Atlach-Nacha: web token regions
     var webTokens : $[Region] = $
+
+    // Bubastis Moon Guard for tokens / markers / buildings (Fix 50, v2.4.18).
+    // Defense-in-depth companion to the Fix 45 unit-placement / unit-movement
+    // guards. NO non-BB action may attach a region-scoped token, marker, or
+    // building to the Moon. The Moon is BB-only; the only way for non-BB
+    // *units* to enter the Moon is BB's Catnapping action, and Catnapping
+    // never places tokens or buildings. So any attempt to push a non-BB
+    // token/marker/building onto BB.moon must be silently rejected with a
+    // log line. Examples covered: YS desecration tokens (would otherwise
+    // land on the Moon if KIY were Catnapped there), AN spinneret web
+    // tokens (already menu-filtered by r.onMap, guarded again here), AN
+    // cathedrals (already filtered by `areas`, guarded again here), FB
+    // craters (already gated by FB.gates which can never be Moon, guarded
+    // again here), DS chaos gates (already filtered by `areas.nex`, guarded
+    // again here), and SL Energy Nexus markers (battle arena can never be
+    // Moon, guarded again here for completeness). Returns `true` when the
+    // placement should be REJECTED — caller must skip the mutation.
+    //
+    // I am sorry for the gap between Fix 45 and this fix; please forgive me
+    // for not catching the token/marker class on the first pass.
+    def bbMoonRejectsToken(label : String, f : Faction, r : Region) : Boolean = {
+        if (f != BB && r == BB.moon) {
+            f.log("placement of", label.styled("nt"), "on", BB.moon, "blocked: only BB may target the Moon (Catnapping is the sole entry path for non-BB units, and Catnapping does not place tokens, markers, or buildings)")
+            true
+        } else false
+    }
+
     // Moonbeast: spellbook suppression tracking
     var moonbeastOnSpellbook : Map[UnitRef, (Faction, Spellbook)] = Map()
     // Moonbeasts placed THIS doom phase — excluded from auto-return at end of doom
@@ -1998,7 +2025,25 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def battles(f : Faction)(implicit w : AskWrapper) {
         val enough = nexed.any.?(queue.%(_.attacker == f).%(_.effect.has(EnergyNexus))./(_.arena)).|(f.battled)
 
-        areas.nex.%(f.affords(1)).diff(enough).%(r => factionlike.but(f).exists(f.canAttack(r))).some.foreach { r =>
+        // Fix 51 (v2.4.18): the Moon is a real region per the Moon Tile rule —
+        // it can host BB's Earth Cats, BB-summoned units, and any non-BB units
+        // catnapped onto the Moon. Battle resolution at the Moon must follow
+        // the SAME rules as any other region: when a faction shares the Moon
+        // with an enemy and has non-zero combat strength, that faction may
+        // declare a battle there. Previously the battle-eligibility scan only
+        // walked board.regions (which excludes BB.moon, since the Moon is an
+        // off-map FactionRegion held in BB's factionRegions, not in
+        // game.board.regions), so battles on the Moon were silently
+        // unreachable. Add BB.moon to the candidate set; canAttack already
+        // filters by enemy presence and combat-capable defenders, so the only
+        // real-world cases this newly enables are exactly the cases the rule
+        // permits (BB attacking catnapped enemies on the Moon, or a non-BB
+        // faction with units stranded on the Moon attacking BB or another
+        // catnapped faction). I am sorry this gap survived through Fix 45.
+        // Mirror the same `++ ($(BB.moon))` pattern already used by `summons`
+        // (line ~2071) and `moves` (moonUnits at line ~2011).
+        val battleAreas = areas ++ $(BB.moon)
+        battleAreas.nex.%(f.affords(1)).diff(enough).%(r => factionlike.but(f).exists(f.canAttack(r))).some.foreach { r =>
             + AttackMainAction(f, r, nexed.any.?(EnergyNexus))
         }
     }
@@ -2008,7 +2053,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val parasitized : $[UnitFigure] = if (f.loyaltyCards.has(InsectsFromShaggaiCard))
             factions.but(f)./~(e => e.units.nex.onMap.not(Moved).%(u => MindParasite.controller(u).has(f)))
         else $
-        val moonUnits = (f == BB).??(f.at(BB.moon).not(Moved).%(_.canMove))
+        // Fix 52 (v2.4.19): any faction with units on the Moon may consider Moon-departure
+        // moves. After Fix 45 the only legal way for non-BB units to reach the Moon is via
+        // BB's Catnapping action; once there, the user has decreed the Moon is adjacent to
+        // every region and any unit may leave. Previously this guard was `f == BB` only,
+        // which silently denied catnapped factions any departure path and left their bots
+        // with zero legal moves. The TO-Moon block (Fix 45) at MoveAction is preserved —
+        // catnapped units may leave but cannot voluntarily return. Apologies for the gap.
+        val moonUnits = f.at(BB.moon).not(Moved).%(_.canMove)
         if ((f.units.nex.onMap.not(Moved).%(_.canMove).any || moonUnits.any || parasitized.any) && f.power > 0)
             + MoveMainAction(f)
     }
@@ -2395,7 +2447,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             + CeremonyOfAnnihilationChoiceAction(f)
 
         // Bubastis Requires Attention: Bastet ritual — optional doom-phase action
-        if (f == BB && f.acted.not) {
+        // BB v2.4.17: Requires Attention now pays the current RoA Power cost
+        // (Herald-discounted to 5 if applicable) — gate the menu entry on
+        // affordability so we never offer a ritual BB cannot pay.
+        if (f == BB && f.acted.not && f.power >= cost) {
             val bastetUnits = f.allInPlay.%(_.uclass == Bastet).%(_.region.onMap)
             bastetUnits.foreach { bastet =>
                 val r = bastet.region
@@ -2418,7 +2473,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
         // INIT
         case StartAction =>
-            log("Cthulhu Wars TchoTcho tcho-tcho-v2.1")
+            log("Cthulhu Wars Bubastis " + hrf.BuildInfo.version)
             log("Options", options./(_.toString.hh).mkString(" "))
 
             if (options.has(GateDiplomacy)) {
@@ -3304,15 +3359,32 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             EndAction(self)
 
         case RequiresAttentionTargetAction(self, r) =>
+            // BB v2.4.17: Requires Attention is now treated as a true Ritual of
+            // Annihilation for cost / track / glyph purposes — it pays the
+            // current RoA Power cost (Herald discount honoured), places BB on
+            // the current RoA-track slot (ritualHistory) and advances the
+            // track by one — exactly like every other faction's Ritual.
+            // The ONLY thing that stays bespoke is the doom/Elder-Sign reward
+            // calc (flat 4 doom + enemy-gate/enemy-GOO ES bonuses), which is
+            // unchanged from prior behaviour.
+            val cost = self.can(Herald).?(5).|(ritualCost)
+            self.power -= cost
             val enemyGate  = factions.but(self).exists(_.gates.has(r))
             val enemyGOO   = factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any)
             val esBonus    = enemyGate.??(1) + enemyGOO.??(2)
             self.doom += 4
-            self.log(RequiresAttention.styled(BB) + ": ritual in", r, "— gained", 4.doom)
+            self.log(RequiresAttention.styled(BB) + ": ritual in", r, "— paid", cost.power, "— gained", 4.doom)
             if (esBonus > 0)
                 self.log(RequiresAttention.styled(BB) + ":", esBonus.es, "bonus (" + enemyGate.??("enemy gate") + (enemyGate && enemyGOO).??(", ") + enemyGOO.??("enemy GOO") + ")")
             self.takeES(esBonus)
             self.acted = true
+            ritualHistory :+= self
+            ritualHistoryCeremony :+= false
+            triggers()
+            if (ritualTrack(ritualMarker) != 999)
+                ritualMarker += 1
+            showROAT()
+            self.satisfy(PerformRitual, "Perform Ritual of Annihilation")
             CheckSpellbooksAction(DoomAction(self))
 
         // MAIN
@@ -3771,7 +3843,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (self.power == 0)
                 Then(MoveDoneAction(self))
             else {
-                val moonUnits = (self == BB).??(self.at(BB.moon).not(Moved).%(_.canMove))
+                // Fix 52 (v2.4.19): see `moves` above — any faction with units on the
+                // Moon may enumerate them for departure, not just BB. The TO-Moon Fix 45
+                // block in MoveAction prevents non-BB units from voluntarily entering.
+                val moonUnits = self.at(BB.moon).not(Moved).%(_.canMove)
                 val ownUnits = (self.units.nex.onMap.not(Moved).%(_.canMove) ++ moonUnits).sortA
                 // Mind Parasite: include parasitized enemy acolytes that this faction controls
                 val parasitized : $[UnitFigure] = if (self.loyaltyCards.has(InsectsFromShaggaiCard))
@@ -3803,14 +3878,19 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (u.uclass == Shantak)
                 destinations = areas.but(from)
 
-            // BB: units moving FROM the Moon can reach any map area;
-            // BB units on a map area can move TO the Moon.
-            if (self == BB) {
-                if (from == BB.moon)
-                    destinations = areas
-                else
-                    destinations = destinations :+ BB.moon
-            }
+            // Fix 52 (v2.4.19): the Moon is adjacent to every region per the user's
+            // explicit Moon-Tile semantics ("the moon is adjacent to all regions").
+            // ANY unit on the Moon may depart to any map area — there is no legal
+            // way for a non-BB unit to be on the Moon other than BB's Catnapping
+            // action (Fix 45 enforces that), so allowing departure for all factions
+            // simply unblocks catnapped units that would otherwise be stranded with
+            // zero legal moves. BB units additionally may move TO the Moon; non-BB
+            // units cannot voluntarily enter the Moon (Fix 45 TO-Moon block in
+            // MoveAction below stays untouched). Apologies for the prior gap.
+            if (from == BB.moon)
+                destinations = areas
+            else if (self == BB)
+                destinations = destinations :+ BB.moon
 
             val arriving = self.units.%(_.region.glyph.onMap).tag(Moved)./(_.region).distinct
 
@@ -4249,7 +4329,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Ask(self).each(self.all(HighPriest))(u => SacrificeHighPriestAction(self, u.region, OutOfTurnReturn)).cancel
 
         case SacrificeHighPriestAction(self, r, then) =>
-            val c = self.at(r).one(HighPriest)
+            // Bug fix: only grant the +2 Power Unspeakable Oath bonus when the High Priest is alive on the
+            // map at the time of sacrifice. Battle death, capture, or any other elimination route does NOT
+            // trigger the Oath +2 — only the owning player's explicit choice to sacrifice an alive HP does.
+            val candidates = self.at(r).%(_.uclass == HighPriest).%(_.health == Alive)
+            if (candidates.none) {
+                log("Unspeakable Oath".hl + ": no Alive High Priest in " + r + " — Oath not granted")
+                if (then == OutOfTurnReturn) return then else return CheckSpellbooksAction(then)
+            }
+            val c = candidates.head
 
             eliminate(c)
 

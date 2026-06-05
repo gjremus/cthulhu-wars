@@ -1570,7 +1570,8 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 // [DEAD] true |=> 1598 -> "#236 remove tome prevents doom loss"
 
             // [2026-04-04] Tome unit placement — TS chooses which gate
-            case TSPlaceTomeUnitAction(_, uc, r, _) =>
+            // [2026-06-04 Fix 59] 5th field is flipper; not used in scoring, but pattern must match
+            case TSPlaceTomeUnitAction(_, uc, r, _, _) =>
                 // Prefer gates that need defense, or Glaaki's gate for Undulate combo
                 r.allies.goos.any |=> 3000 -> "tome place: at Glaaki gate for Undulate"
                 r.allies.monsterly.none && r.allies.cultists.any |=> 2500 -> "tome place: undefended gate"

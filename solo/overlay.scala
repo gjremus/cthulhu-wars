@@ -228,27 +228,31 @@ object TSCursedTomesOverlay {
 // image height as its scatter radius, which sent sprite centres beyond the
 // image edges and produced "cats spread across the whole screen" behaviour.
 //
-// Fix (2026-06-02): use a dedicated placement BITMAP — same approach as
-// earth*-place.webp / library*-place.webp. The bitmap is map-shaped (so the
-// circle's centre can be calibrated against the map for future re-use), with
-// a single solid-colour magenta (#FF00FF) circle covering 90% of the moon
-// disc's diameter. Magenta is verified distinct from every Earth and Library
+// Fix 58 (BB v2.4.24, 2026-06-04): rewrite to follow the standard map placement
+// pipeline used by GlyphPlacement.scala (findAnother / findStaticGlyphPos). The
+// placement bitmap is now PIXEL-1:1 with the displayed moon image — both
+// bb-moon-place.webp and bb-moon-h-place.webp are 1024×878 (matching
+// bb-moon-high-res.webp), with the magenta disc painted at the SAME center and
+// radius as the visible moon disc on bb-moon-high-res.webp (center (515, 440),
+// radius ≈ 363 — about 93% of the 391-pixel disc radius, leaving ~7% inset for
+// sprite half-height). sample() returns RAW PIXEL COORDINATES on that bitmap.
+// The overlay rendering converts those pixel coords into CSS percentages of
+// the displayed moon image dimensions (1024×878) — no normalize-then-stretch
+// detour, no fixed disc-rectangle constants. This is exactly how map glyph
+// placement works (sample placement bitmap, emit pixel coords, convert to
+// drawing coords once at render time).
+//
+// Magenta = (255, 0, 255). Verified distinct from every Earth and Library
 // region colour in EarthRegionPalette / RegionPalette.
-//
-// Two bitmaps:
-//   bb-moon-h-place.webp  — horizontal landscape (1791×894), circle at
-//                           (75%, 25%) of the map = top-right of map view.
-//   bb-moon-place.webp    — vertical portrait    (894×1791), circle at
-//                           (75%, 25%) of the rotated canvas.
-//
-// At runtime this object samples the chosen bitmap once, finds every magenta
-// pixel, normalises each pixel position to a fraction of the bitmap circle's
-// bounding box, and exposes those normalised points so the overlay layer can
-// map them onto the moon disc image. This guarantees every sprite lands
-// strictly inside the moon disc.
 object MoonPlacement {
     private var pointsHorizontal : scala.Option[Array[(Double, Double)]] = scala.None
     private var pointsVertical   : scala.Option[Array[(Double, Double)]] = scala.None
+
+    // Native dimensions of the moon image (bb-moon-high-res.webp). Both
+    // placement bitmaps are sized to match these dimensions exactly so each
+    // magenta pixel coordinate maps 1:1 onto the rendered moon image.
+    val moonImageW : Int = 1024
+    val moonImageH : Int = 878
 
     private def sample(assetId : String) : Array[(Double, Double)] = {
         val img = dom.document.getElementById(assetId).asInstanceOf[html.Image]
@@ -261,42 +265,22 @@ object MoonPlacement {
         val ctx = canvas.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D]
         ctx.drawImage(img, 0, 0)
         val data = ctx.getImageData(0, 0, w, h).data
-        // First pass: find bounding box of magenta circle.
-        var minX = w; var maxX = -1; var minY = h; var maxY = -1
-        var y = 0
-        while (y < h) {
-            var x = 0
-            while (x < w) {
-                val i = (y * w + x) * 4
-                val r = data(i)
-                val g = data(i + 1)
-                val b = data(i + 2)
-                if (r > 200 && g < 60 && b > 200) {
-                    if (x < minX) minX = x
-                    if (x > maxX) maxX = x
-                    if (y < minY) minY = y
-                    if (y > maxY) maxY = y
-                }
-                x += 1
-            }
-            y += 1
-        }
-        if (maxX < 0 || maxY < 0) return Array.empty
-        val bw = (maxX - minX).max(1).toDouble
-        val bh = (maxY - minY).max(1).toDouble
-        // Second pass: every 6th pixel — plenty of candidates without O(W·H) cost
-        // each render. Stored as (xFrac, yFrac) in [0..1] of the circle's bbox.
+        // Fix 58 (BB v2.4.24): emit RAW PIXEL COORDINATES directly — no bounding
+        // box, no normalisation. The placement bitmap is pixel-1:1 with the
+        // moon image, so each magenta pixel's (x, y) is the on-image position
+        // where a sprite may be centred. Sample every 6th pixel (same density
+        // as before) to keep the candidate pool a manageable size.
         val buf = scala.collection.mutable.ArrayBuffer.empty[(Double, Double)]
-        var py = minY
-        while (py <= maxY) {
-            var px = minX
-            while (px <= maxX) {
+        var py = 0
+        while (py < h) {
+            var px = 0
+            while (px < w) {
                 val i = (py * w + px) * 4
                 val r = data(i)
                 val g = data(i + 1)
                 val b = data(i + 2)
                 if (r > 200 && g < 60 && b > 200) {
-                    buf += (((px - minX) / bw, (py - minY) / bh))
+                    buf += ((px.toDouble, py.toDouble))
                 }
                 px += 6
             }
@@ -316,13 +300,12 @@ object MoonPlacement {
         pointsVertical.get
     }
 
-    // Pick `n` scatter positions for sprites. Returns (xFrac, yFrac) pairs in
-    // [0..1] of the magenta-circle bounding box. Caller maps these onto the
-    // rendered moon image rect (the moon disc fills almost the entire moon
-    // image). Greedy farthest-point sampling: each next point maximises the
-    // minimum distance to already-placed points — same UX intent as the prior
-    // polar scatter, no straight rows, minimal overlap, but every result is
-    // guaranteed inside the magenta circle (i.e. inside the disc).
+    // Pick `n` scatter positions for sprites. Returns (pixelX, pixelY) pairs
+    // in moon-image pixel space (0..moonImageW, 0..moonImageH). Caller converts
+    // to CSS % of the displayed moon image. Greedy farthest-point sampling:
+    // each next point maximises the minimum distance to already-placed points
+    // — no straight rows, minimal overlap, every result guaranteed inside the
+    // magenta disc.
     def scatter(n : Int, useHorizontal : Boolean, seed : Int) : Array[(Double, Double)] = {
         val pool = if (useHorizontal) horizontal else vertical
         if (pool.isEmpty || n <= 0) return Array.empty
@@ -378,6 +361,49 @@ object Overlays {
         }
     }
 
+    // Fix 56 (BB v2.4.22): track the current Moon overlay payload so the
+    // per-tick refresh in CthulhuWarsSolo.updateStatus() can detect a change
+    // (kill, pain, retreat, eliminate, plain move on/off Moon) and re-render
+    // the overlay HTML in place. Without this, the overlay was frozen at
+    // click time — units killed or pain-retreated mid-battle stayed visible
+    // on the Moon disc until the user closed and re-opened the overlay.
+    // We track the most recent Moon overlay HTML we *generated* (via either a
+    // user click through onExternalClick or a prior refresh tick). If the
+    // currently-showing overlay HTML equals that tracked Moon HTML, we know
+    // the user is looking at the Moon overlay — so when game state changes
+    // we may safely swap in the latest packed version. If `showing` does not
+    // match (user is on RoA / faction info / etc.) we leave it alone.
+    private var lastMoonHtml : |[String] = None
+
+    def refreshMoonIfShowing(count : Int, unitList : String) {
+        if (overlay.showing.none) {
+            lastMoonHtml = None
+            return
+        }
+        val newHtml = info($("BB", "Moon", count, unitList)).get
+        // If we have not yet observed the Moon overlay being opened this
+        // session, the only way to detect Moon-vs-other is to compare the
+        // current showing HTML against the Moon HTML for the latest packed
+        // (count, list). If they match, the user is viewing the Moon overlay
+        // and we keep tracking it.
+        val isMoonShowing = lastMoonHtml.exists(h => overlay.showing.has(h)) ||
+                            overlay.showing.has(newHtml)
+        if (isMoonShowing) {
+            if (newHtml != overlay.showing.get) {
+                overlay.showing = None
+                overlay.show(newHtml)
+            }
+            lastMoonHtml = |(newHtml)
+        }
+    }
+
+    // Called from onExternalClick to remember the freshly-opened Moon HTML
+    // so the per-tick refresh can find it. (For non-Moon overlays this is a
+    // no-op.)
+    def rememberMoonHtml(html : String) {
+        lastMoonHtml = |(html)
+    }
+
     @JSExportTopLevel("onExternalClick")
     def onExternalClick(s : Any*) {
         temp = false
@@ -393,6 +419,11 @@ object Overlays {
             overlay.toShow = text
             overlay.soonShow = 3
             overlay.soonHide = 0
+            // Fix 56 (BB v2.4.22): remember the Moon overlay HTML so the
+            // per-tick refresh can spot it and re-render when units leave
+            // the Moon mid-battle (kills, pain retreats, eliminations).
+            if (s.$.headOption.exists(_ == "BB") && s.$.lift(1).exists(_ == "Moon"))
+                rememberMoonHtml(text.get)
         }
     }
 
@@ -1077,57 +1108,86 @@ object Overlays {
         // it shows exactly the units who currently live in the Moon region,
         // exactly like rendering any other region.
         //
-        // Encoding: unitList is a `;`-separated list of `assetId|displayName`
-        // entries, packed in CthulhuWarsSolo.scala (see moonSpriteAssetId helper).
+        // Encoding (Fix 56, BB v2.4.22 onwards): unitList is a `;`-separated
+        // list of `assetId|displayName|hp` entries where `hp` is one of
+        // "alive", "killed", "pained". Pre-Fix-56 legacy entries with two
+        // fields default to "alive". The renderer overlays a red-X
+        // (kill.webp) or yellow-X (pain.webp) marker on top of any sprite
+        // whose hp is killed/pained — matching the standard map's mid-battle
+        // visual cleanup mechanic. Once the unit's region changes off the
+        // Moon (eliminate to reserve, pain retreat to a map area, plain
+        // movement off Moon) the entry vanishes from the packed list and
+        // the sprite + X are dropped on the next refresh tick (live re-
+        // render driven by Overlays.refreshMoonIfShowing).
         case $("BB", "Moon", count : Int, unitList : String) =>
             val moonSrc = imageSource("bb-moon-high-res")
             val rawEntries = if (unitList.toString.trim.nonEmpty)
                 unitList.toString.split(";").toList
             else List.empty
-            // Each entry: "asset-id|Display Name (FAC)". Render the map sprite
+            // Each entry: "asset-id|Display Name (FAC)|hp". Render the map sprite
             // image. Defensive empty fallback on missing asset ids so the
             // overlay never breaks if a future unit class slips through
-            // without a sprite mapping.
+            // without a sprite mapping. Missing hp field defaults to "alive"
+            // for backward compatibility.
             val parsed = rawEntries./(entry => {
-                val parts = entry.split("\\|", 2)
+                val parts = entry.split("\\|", 3)
                 val assetId = if (parts.length > 0) parts(0).trim else ""
                 val display = if (parts.length > 1) parts(1).trim else assetId
+                val hp      = if (parts.length > 2) parts(2).trim else "alive"
                 val src     = if (assetId.nonEmpty)
                     hrf.web.getElem(assetId).as[dom.html.Image]./(_.src).|("")
                 else ""
-                (src, display)
-            }).filter { case (src, _) => src.nonEmpty }
-            // [v2.4.10] Use the dedicated Moon placement bitmap (bb-moon-place /
-            // bb-moon-h-place) to scatter sprites strictly inside the moon disc.
-            // The bitmap drives placement just like earth*-place / library*-place
-            // bitmaps drive map region placement: a single solid magenta circle
-            // marks the valid zone. MoonPlacement samples that circle once and
-            // hands back farthest-point-spread (xFrac, yFrac) pairs in [0..1]
-            // of the circle's bounding box. We map those onto the moon image
-            // rect so every cat sprite lands inside the disc.
+                (src, display, hp)
+            }).filter { case (src, _, _) => src.nonEmpty }
+            // Fix 58 (BB v2.4.24): use the standard map placement pipeline.
+            // The placement bitmap (bb-moon-place / bb-moon-h-place) is now
+            // pixel-1:1 with the displayed moon image (both 1024×878). Magenta
+            // pixels mark the valid zone inside the moon disc. MoonPlacement
+            // emits raw PIXEL coordinates on that bitmap; we convert them to
+            // CSS % of the moon image dimensions for final positioning. No
+            // bounding-box normalisation, no fixed disc-rectangle stretch
+            // constants — same model as GlyphPlacement.scala for the map.
             val n = parsed.length
             // Sprite half-size in % of moon image height (sprite is 14% tall).
             val spriteH = 14.0
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
-            val seed = parsed.length * 31 + parsed./({ case (s, _) => s }).mkString.hashCode
+            // Stable seed: only the asset-id list affects scatter positions, so
+            // a unit's hp transition (alive → pained → killed → eliminated)
+            // does not jiggle every other sprite when the overlay re-renders.
+            val seed = parsed.length * 31 + parsed./({ case (s, _, _) => s }).mkString.hashCode
             val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
-            // Map each (xFrac, yFrac) of the circle bbox onto the moon image:
-            // the moon disc fills ~76% horizontally and ~89% vertically of
-            // bb-moon-high-res. Center each sprite around the disc's image
-            // center and scale by the disc's coverage fraction.
-            val discCx = 50.0
-            val discCy = 50.0
-            val discWPct = 76.0  // disc horizontal coverage of moon image
-            val discHPct = 89.0  // disc vertical   coverage of moon image
-            val positions : List[(Double, Double)] = rawScatter.toList./ { case (xf, yf) =>
-                val dx = (xf - 0.5) * discWPct
-                val dy = (yf - 0.5) * discHPct
-                (discCx + dx, discCy + dy)
+            // Convert pixel coords on the placement bitmap (which is 1:1 with
+            // the displayed moon image) into CSS % of the moon image's
+            // dimensions. The CSS positioning anchors each sprite at
+            // (left%, top%) relative to the moon-image rectangle.
+            val moonW = MoonPlacement.moonImageW.toDouble
+            val moonH = MoonPlacement.moonImageH.toDouble
+            val positions : List[(Double, Double)] = rawScatter.toList./ { case (px, py) =>
+                (px / moonW * 100.0, py / moonH * 100.0)
             }
-            val unitFigures = parsed.zip(positions)./({ case ((src, display), (xPct, yPct)) =>
+            // Fix 56 (BB v2.4.22): pre-resolve kill / pain marker image
+            // sources once. These are the SAME asset ids the standard map
+            // uses for its red-X / yellow-X DrawRect overlays at line ~1251
+            // / ~1254 in CthulhuWarsSolo.scala. By piggy-backing on the same
+            // assets we get visual parity between the standard map and the
+            // Moon overlay's mid-battle cleanup state.
+            val killSrc = hrf.web.getElem("kill").as[dom.html.Image]./(_.src).|("")
+            val painSrc = hrf.web.getElem("pain").as[dom.html.Image]./(_.src).|("")
+            // Marker covers ~50% of sprite height so it is clearly visible
+            // over a 14%-tall sprite without dominating the moon disc.
+            val markerH = spriteH * 0.5
+            val unitFigures = parsed.zip(positions)./({ case ((src, display, hp), (xPct, yPct)) =>
+                val markerSrc = hp match {
+                    case "killed" => killSrc
+                    case "pained" => painSrc
+                    case _        => ""
+                }
+                val markerImg = if (markerSrc.nonEmpty)
+                    f"""<img src="$markerSrc" style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $markerH%2.1f%%; width: auto; pointer-events: none; z-index: 2;" />"""
+                else ""
                 f"""<img src="$src"
                          title="$display"
-                         style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
+                         style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />""" + markerImg
             }).mkString("")
             val figureLayer = if (count > 0)
                 s"""<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;">$unitFigures</div>"""

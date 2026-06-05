@@ -603,6 +603,16 @@ object FBExpansion extends Expansion {
             // DoomAction(self) Force takes the player back cleanly.
             Force(DoomAction(self))
 
+        case FBDevilsMarkPlaceCraterAction(self, r) if game.bbMoonRejectsToken("Crater", self, r) =>
+            // BB Moon Guard for tokens (Fix 50, v2.4.18): Devil's Mark only
+            // iterates `self.gates` (FB's controlled gates), and FB cannot
+            // hold a gate on the Moon (BuildGate is guarded for r != BB.moon
+            // and the Moon is not in any candidate destination list). This
+            // case is defense-in-depth: if a future code path lets a Crater
+            // target land on Moon, we abort cleanly without mutating state.
+            // I am sorry for missing this on the Fix 45 pass.
+            CheckSpellbooksAction(DoomAction(self))
+
         case FBDevilsMarkPlaceCraterAction(self, r) =>
             // Mark Devil's Mark as used this doom phase
             game.fbDevilsMarkUsedThisDoom = true

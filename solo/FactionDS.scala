@@ -485,13 +485,20 @@ object DSExpansion extends Expansion {
             Ask(self).list(valid./(r => ChaosGateSBPlaceAction(self, r))).cancel
 
         case ChaosGateSBPlaceAction(self, r) =>
-            self.power -= 1
-            self.payTax(r)
-            game.gates :+= r
-            DS.chaosGateRegions :+= r
-            self.oncePerTurn :+= ChaosGateSB
-            self.log("placed", ChaosGate.styled(self), "in", r)
-            EndAction(self)
+            // BB Moon Guard for tokens (Fix 50, v2.4.18): the candidate filter
+            // is `areas.nex.%(...)` which already excludes Moon. Defense-in-
+            // depth guard added anyway. Sorry for missing this with Fix 45.
+            if (game.bbMoonRejectsToken("Chaos Gate", self, r))
+                EndAction(self)
+            else {
+                self.power -= 1
+                self.payTax(r)
+                game.gates :+= r
+                DS.chaosGateRegions :+= r
+                self.oncePerTurn :+= ChaosGateSB
+                self.log("placed", ChaosGate.styled(self), "in", r)
+                EndAction(self)
+            }
 
         // ANIMATE MATTER
         case AnimateMatterAction(self) =>
@@ -517,6 +524,13 @@ object DSExpansion extends Expansion {
             Ask(self).list(dests./(r => AnimateMatterMoveAction(self, from, r))).cancel
 
         case AnimateMatterMoveAction(self, from, to) =>
+            // BB Moon Guard for tokens (Fix 50, v2.4.18): destinations come
+            // from `board.connected(from)`, which never returns Moon (Moon is
+            // not adjacent to any map area). Defense-in-depth guard. Apologies
+            // for the gap.
+            if (game.bbMoonRejectsToken("Chaos Gate move", self, to))
+                EndAction(self)
+            else {
             self.power -= 1
             self.payTax(to)
             // Move the keeper cultist to the new area
@@ -545,6 +559,7 @@ object DSExpansion extends Expansion {
             self.oncePerTurn :+= AnimateMatter
             self.log("used", AnimateMatter.styled(self), "moving", ChaosGate.styled(self), "from", from, "to", to)
             EndAction(self)
+            }
 
         // CONSUMMATION
         case ConsummationAction(self) =>

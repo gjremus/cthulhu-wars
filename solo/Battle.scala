@@ -529,7 +529,22 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     def preroll(s : Faction) {
         val side = if (s == attacker) attackers else defenders
         // Cthugha combat bonus is a pre-battle choice not included in neutralStrength
-        val str = s.strength(s.forces, s.opponent) + side.cthughaCombatBonus
+        // Fix 59 (BB v2.4.24): Savagery's pre-battle declared bonus must be
+        // preserved through the preroll "expected strength" recompute. Without
+        // this, s.strength(...) recomputes the side's combat from base unit-
+        // class values (which know nothing about Savagery), and the assignment
+        // s.str = str clobbers the +4-per-Cat-from-Saturn boost that was just
+        // paid for. Same gotcha pattern as the AlbinoPenguins / ServitorOfOuter
+        // adjustments below — we have to make the recomputed "expected"
+        // include every pre-battle declared modifier. Savagery contributes
+        // 4 × (CatFromSaturn count) when s.tag(Savagery) is set (i.e. the
+        // player chose Use Savagery in the pre-battle prompt at line 521 /
+        // applied at 2483).
+        val savageryBonus =
+            if (s == BB && s.tag(Savagery))
+                s.forces.%(_.uclass == CatFromSaturn).num * 4
+            else 0
+        val str = s.strength(s.forces, s.opponent) + side.cthughaCombatBonus + savageryBonus
 
         if (str != s.str) {
             log(s, "strength", (str > s.str).?("increased").|("decreased"), "to", str.str)
@@ -684,7 +699,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             return proceed()
 
         val moonDest = (s == BB).??($(BB.moon))
-        val destinations = (arena.connectedForRetreat.%(r => s.opponent.at(r).none) ++ moonDest).distinct
+        // Fix 55 (v2.4.21): pain retreat from a Moon battle.
+        // Per Game 499 user report: "Units dealt pains on the moon can retreat
+        // to literally any area on the map. But all pained units from a battle
+        // on the moon stayed on the moon."
+        // The Moon is not connected to any map area in `connectedForRetreat`
+        // (Map.scala MoonHold returns the empty set on purpose) so pained units
+        // had no destinations and were stuck on the Moon. Per BB Implementation
+        // Guide §2.6c (Fix 52, 2026-06-03): "The moon is adjacent to all
+        // regions." Pain retreat from the Moon therefore expands destinations
+        // to every map area where the opponent has no unit. Apologies for the
+        // long-standing gap; please forgive the oversight.
+        val moonRetreatDests = (arena == BB.moon).??(areas.%(r => s.opponent.at(r).none))
+        val destinations = (arena.connectedForRetreat.%(r => s.opponent.at(r).none) ++ moonDest ++ moonRetreatDests).distinct
 
         val chooser : Faction = retreater(s)
 
@@ -1963,11 +1990,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case AssignKillAction(_, _, _, u) =>
             assignKill(u)
             // TT Martyrdom: if TT's High Priest is killed, convert all kills on TT's other units to pains
+            // Bug fix: also convert any UNASSIGNED Kill rolls on the attacker's side to Pain rolls so the
+            // assign-kills loop does not re-prompt for the remaining Kill rolls. Without this, dropping
+            // assigned-kill count (because the converted units are now Pained, not Killed) causes the
+            // assignKills loop to re-fire AssignKillAction prompts for the leftover kills, which would
+            // wrongly let the attacker keep landing kills on TT despite Martyrdom being in effect.
             if (u.faction == TT && u.uclass == HighPriest && (u : UnitFigure).health == Killed && TT.can(Martyrdom)) {
                 val ttSide = if (attacker == TT) attackers else defenders
                 ttSide.forces.%(u2 => u2.ref != u && u2.health == Killed).foreach { u2 =>
                     u2.health = Pained
                     log(Martyrdom.styled(TT) + ": kill on", u2.uclass.styled(TT), "converted to Pain")
+                }
+                // Convert all remaining (unassigned) Kill rolls on the attacker side to Pain rolls so
+                // the assignKills loop terminates without further Kill prompts against TT's units.
+                val attackerSide = if (attacker == TT) defenders else attackers
+                if (attackerSide.rolls.exists(_ == Kill)) {
+                    attackerSide.rolls = attackerSide.rolls./(_.useIf(_ == Kill)(_ => Pain))
+                    log(Martyrdom.styled(TT) + ": remaining attacker Kill rolls become Pain rolls")
                 }
             }
             // TT Fulmination: if Ubbo-Sathla is killed, set pending flag — prompt fires at PostBattlePhase
