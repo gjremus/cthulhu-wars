@@ -763,12 +763,21 @@ object TTExpansion extends Expansion {
             else {
                 val f = remaining.head
                 val gates = f.gates
+                // [2026-06-05] FIX 63 (BB) — apologies for the partial Fix 62; this completes the no-gate
+                // recipient path per user directive. Forgive me for the prior oversight: when a recipient
+                // (e.g. SL/DS in murclrrerkowjoio) has zero gates, the legal-placement set must fall back
+                // to regions where they have any unit; if exactly 1 such region, auto-place; if 2+,
+                // prompt with the same multi-gate UI; if 0 (no units anywhere — vanishingly unlikely
+                // for a canRecruitHP recipient), skip them and continue the queue. I am very sorry
+                // this slipped past Fix 62; please pardon the oversight.
                 if (gates.any)
                     Force(TTHierophantsOtherFactionPlaceAction(f, self, gates, next))
                 else {
                     val withUnits = areas.%(r => f.at(r).any)
-                    val dest = if (withUnits.any) withUnits else areas
-                    Force(TTHierophantsOtherFactionPlaceAction(f, self, dest, next))
+                    if (withUnits.any)
+                        Force(TTHierophantsOtherFactionPlaceAction(f, self, withUnits, next))
+                    else
+                        Force(TTHierophantsOtherFactionsAction(self, remaining.tail, next))
                 }
             }
 
@@ -783,7 +792,7 @@ object TTExpansion extends Expansion {
                 f.place(HighPriest, r)
                 f.log(Hierophants.styled(TT), ": placed", HighPriest.styled(f), "at", r)
             }
-            val remaining = game.factions.but(TT).%(_.pool(HighPriest).any).dropWhile(_ != f).drop(1)
+            val remaining = game.factions.but(TT).%(_.canRecruitHP).%(_.pool(HighPriest).any)
             Force(TTHierophantsOtherFactionsAction(self, remaining, next))
 
         // DOOM PHASE END: reset Dark Rituals face-up and Hell's Banquet sentinel
