@@ -212,7 +212,7 @@ object DSExpansion extends Expansion {
 
             game.independents(f)
 
-            if (f.can(ChaosGateSB) && DS.chaosGateRegions.num < 3 && areas.nex.%(r => game.gates.has(r).not && DS.at(r).%(_.canControlGate).any && f.affords(1)(r)).any)
+            if (f.can(ChaosGateSB) && DS.chaosGateRegions.num < 3 && areas.nex.%(r => game.gates.has(r).not && /* DS.at(r).%(_.canControlGate).any && */ f.affords(1)(r)).any)
                 + ChaosGateSBAction(f)
 
             if (f.can(AnimateMatter) && DS.chaosGateRegions.any) {
@@ -468,8 +468,11 @@ object DSExpansion extends Expansion {
             if (self.pool.%(_.uclass == Acolyte).none)
                 EndAction(self)
             else {
-                if (DS.cultists.none)
+                if (!DS.startingDecided) {
                     game.starting = game.starting + (DS -> r)
+                    DS.startingDecided = true
+                    self.log("places its starting region glyph in", r)
+                }
                 self.payTax(r)
                 self.place(Acolyte, r)
                 self.log("used", Psychosis.styled(self), "placing an Acolyte in", r)
@@ -478,7 +481,7 @@ object DSExpansion extends Expansion {
 
         // CHAOS GATE SPELLBOOK
         case ChaosGateSBAction(self) =>
-            val valid = areas.nex.%(r => game.gates.has(r).not && DS.at(r).%(_.canControlGate).any && self.affords(1)(r))
+            val valid = areas.nex.%(r => game.gates.has(r).not && /* DS.at(r).%(_.canControlGate).any && */ self.affords(1)(r))
             Ask(self).list(valid./(r => ChaosGateSBPlaceAction(self, r))).cancel
 
         case ChaosGateSBPlaceAction(self, r) =>
@@ -638,8 +641,11 @@ object DSExpansion extends Expansion {
 
         // RECRUIT — first acolyte placed via Recruit also defines DS's start area
         case RecruitAction(self : DS.type, Acolyte, r) =>
-            if (DS.cultists.none)
+            if (!DS.startingDecided) {
                 game.starting = game.starting + (DS -> r)
+                DS.startingDecided = true
+                self.log("places its starting region glyph in", r)
+            }
             UnknownContinue
 
         // ── OMNIPOTENCE ──
@@ -741,6 +747,7 @@ case object DS extends Faction { f =>
     var azathothTrack : Int = 0
     var azathothDieRoll : Int = 0
     var chaosGateRegions : $[Region] = $
+    var startingDecided : Boolean = false
 
     override def abilities = $(Psychosis, CosmicRuler)
     override def library = $(AnimateMatter, ChaosGateSB, Consummation, FiendishGrowth, Traitors, UndirectedEnergy)

@@ -1338,35 +1338,15 @@ object Overlays {
 
     def requirement(text : String) = s"""
         <table class="requirement-table" style="">
-            <thead>
-                <tr>
-                    <th style=width:20%>
-                    </th>
-                    <th style=width:60%>
-                    </th>
-                    <th style=width:20%>
-                    </th>
-                </tr>
-            </thead>
             <tbody>
                 <tr>
-                    <td>
-                    </td>
-                    <td>
+                    <td style="width:20%"></td>
+                    <td style="width:60%; vertical-align:middle; text-align:center;">
                         <div class="white-border">
                             ${text}
                         </div>
                     </td>
-                    <td>
-                    </td>
-                </tr>
-                <tr>
-                    <td>
-                    </td>
-                    <td>
-                    </td>
-                    <td>
-                    </td>
+                    <td style="width:20%"></td>
                 </tr>
             </tbody>
         </table>"""

@@ -258,7 +258,7 @@ object OWExpansion extends Expansion {
                 f.gates :+= r
                 f.at(o).%(_.onGate).single.foreach(_.region = r)
             }
-            self.at(o).one(uc).region = r
+            self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
             self.log("moved gate with", uc.styled(self), "from", o, "to", r)
             EndAction(self)
 

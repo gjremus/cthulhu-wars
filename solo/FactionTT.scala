@@ -160,12 +160,15 @@ case class TTDarkRitualsPay2DoomAction(self : Faction, payer : Faction) extends 
 case class TTDarkRitualsDoneAction(self : Faction) extends ForcedAction
 
 // FULMINATION (Leng exclusive: if Ubbo killed in battle, optionally remove permanently for X ES)
+// v2.5.4: reworded option text per user spec — "Remove Ubbo Sathla from the game and receive X Elder signs"
+// for Take, plain "Skip" for Decline. Menu title is supplied by `.group(Fulmination.styled(TT))` at the
+// Ask site (Battle.scala PostBattlePhase) so the prompt renders as one TT-colored "Fulmination" header.
 case class TTFulminationOfferAction(self : Faction, totalKills : Int) extends ForcedAction
 case class TTFulminationTakeAction(self : Faction, totalKills : Int) extends BaseFactionAction(
-    Fulmination.styled(TT), implicit g => "Remove " + UbboSathla.styled(TT) + " permanently for " + totalKills.es
+    Fulmination.styled(TT), implicit g => "Remove " + UbboSathla.styled(TT) + " from the game and receive " + totalKills.es
 )
 case class TTFulminationDeclineAction(self : Faction) extends BaseFactionAction(
-    "Decline", implicit g => UbboSathla.styled(TT) + " is killed normally"
+    Fulmination.styled(TT), "Skip"
 )
 
 // SURPRISE! (Leng exclusive: cost 2, enemy faction eliminates one Acolyte, replaced by Proto-Shoggoth)
@@ -198,15 +201,15 @@ case class TTIdolatryDoneAction(self : Faction, dest : Region, pool : $[UnitRef]
 case class TTIdolatryChooseUnitAction(self : Faction, dest : Region, src : Region, pool : $[UnitRef]) extends ForcedAction
 // Add one unit from src to pool
 case class TTIdolatryAddUnitAction(self : Faction, dest : Region, src : Region, u : UnitRef, pool : $[UnitRef]) extends BaseFactionAction(
-    "Add to move", implicit g => g.unit(u).full + " from " + src + " → " + dest
+    "", implicit g => g.unit(u).full + " from " + src + " → " + dest
 )
 // Undo last unit added from src (removes last pool entry whose origin is src)
 case class TTIdolatryUndoLastAction(self : Faction, dest : Region, src : Region, pool : $[UnitRef]) extends BaseFactionAction(
-    "Undo last", implicit g => "remove last unit from " + src + " from move pool"
+    "", implicit g => "Undo last unit from " + src + " from the move pool"
 )
 // Cancel all units from src — remove from pool, return to source picker
 case class TTIdolatryCancelSourceAction(self : Faction, dest : Region, src : Region, pool : $[UnitRef]) extends BaseFactionAction(
-    "Cancel", implicit g => "remove all " + src + " units from move pool"
+    "", implicit g => "Remove all units from " + src + " from the move pool"
 )
 
 // TERROR (all tribes: pre-battle choice — reduce enemy or boost own)
@@ -506,6 +509,11 @@ object TTExpansion extends Expansion {
             self.log("awakened", UbboSathla.styled(TT), "in", r, (cost > 0).??("for " + cost.power))
             self.satisfy(TTAwakenUbboSathla, "Awaken Ubbo-Sathla")
             ttUbboEverAwakened = true
+            // Hell's Banquet timing: when Ubbo is awakened DURING a doom phase (cost 0), Hell's Banquet
+            // must NOT fire that same doom phase — it first fires next doom phase. Mark the sentinel done
+            // so the re-entered DoomAction below skips the Hell's Banquet roll. The flag is cleared at
+            // DoomDoneAction, so Hell's Banquet will fire normally on subsequent doom phases.
+            if (cost == 0) game.ttHellsBanquetDone = true
             if (cost == 0) Force(DoomAction(self)) else EndAction(self)
 
         // UNSPEAKABLE OATH
@@ -627,8 +635,10 @@ object TTExpansion extends Expansion {
             Force(TTIdolatryChooseDestAction(self, targets, $()))
 
         case TTIdolatryChooseDestAction(self, targets, pool) =>
-            Ask(self).each(targets)(r => TTIdolatryChooseSourceAction(self, r, pool))
-                .add(TTIdolatryCancelAction(self))
+            Ask(self)
+                .group(Idolatry.styled(TT) + " — Choose area to move to")
+                .each(targets)(r => TTIdolatryChooseSourceAction(self, r, pool).as(r))
+                .add(TTIdolatryCancelAction(self).as("Cancel"))
 
         case TTIdolatryCancelAction(self) =>
             self.power += 1
@@ -637,18 +647,20 @@ object TTExpansion extends Expansion {
         case TTIdolatryChooseSourceAction(self, dest, pool) =>
             val sources = game.board.connected(dest).%(r => self.at(r).any)
             implicit val asking = Asking(self)
+            asking.ask = asking.ask.group(Idolatry.styled(TT) + " — Choose units from area (moving to " + dest + ")")
             if (pool.any)
-                + TTIdolatryDoneAction(self, dest, pool).as(Idolatry.styled(TT))("Done — move " + pool.num + " unit".s(pool.num))
+                + TTIdolatryDoneAction(self, dest, pool).as("Done — move", pool.num, "unit".s(pool.num))
             sources.foreach { src =>
-                + TTIdolatryChooseUnitAction(self, dest, src, pool).as("Choose units from")(src)
+                + TTIdolatryChooseUnitAction(self, dest, src, pool).as(src)
             }
-            + TTIdolatryCancelAction(self).as("Cancel all")(Idolatry.styled(TT) + " — refund " + 1.power)
+            + TTIdolatryCancelAction(self).as("Cancel all — refund", 1.power)
             asking
 
         case TTIdolatryChooseUnitAction(self, dest, src, pool) =>
             val alreadyPooled = pool./(game.unit).%(_.region == src)./(_.ref)
             val available = self.at(src)./(_.ref).diff(alreadyPooled)
             implicit val asking = Asking(self)
+            asking.ask = asking.ask.group(Idolatry.styled(TT) + " — Choose units to add to move")
             available.foreach { uref =>
                 + TTIdolatryAddUnitAction(self, dest, src, uref, pool)
             }
@@ -657,9 +669,7 @@ object TTExpansion extends Expansion {
                 + TTIdolatryUndoLastAction(self, dest, src, pool)
             if (fromSrc.any)
                 + TTIdolatryCancelSourceAction(self, dest, src, pool)
-            if (pool.any)
-                + TTIdolatryDoneAction(self, dest, pool).as(Idolatry.styled(TT))("Done — move " + pool.num + " unit".s(pool.num))
-            + TTIdolatryChooseSourceAction(self, dest, pool).as("Back")(Idolatry.styled(TT) + " — choose another source region")
+            + TTIdolatryChooseSourceAction(self, dest, pool).as("Choose another region to move units from")
             asking
 
         case TTIdolatryAddUnitAction(self, dest, src, uref, pool) =>
@@ -761,12 +771,21 @@ object TTExpansion extends Expansion {
             else {
                 val f = remaining.head
                 val gates = f.gates
+                // [2026-06-05] FIX 72 (TT) — apologies for the partial Fix 71; this completes the no-gate
+                // recipient path per user directive. Forgive me for the prior oversight: when a recipient
+                // (e.g. SL/DS in murclrrerkowjoio) has zero gates, the legal-placement set must fall back
+                // to regions where they have any unit; if exactly 1 such region, auto-place; if 2+,
+                // prompt with the same multi-gate UI; if 0 (no units anywhere — vanishingly unlikely
+                // for a canRecruitHP recipient), skip them and continue the queue. I am very sorry
+                // this slipped past Fix 71; please pardon the oversight.
                 if (gates.any)
                     Force(TTHierophantsOtherFactionPlaceAction(f, self, gates, next))
                 else {
                     val withUnits = areas.%(r => f.at(r).any)
-                    val dest = if (withUnits.any) withUnits else areas
-                    Force(TTHierophantsOtherFactionPlaceAction(f, self, dest, next))
+                    if (withUnits.any)
+                        Force(TTHierophantsOtherFactionPlaceAction(f, self, withUnits, next))
+                    else
+                        Force(TTHierophantsOtherFactionsAction(self, remaining.tail, next))
                 }
             }
 
@@ -781,7 +800,7 @@ object TTExpansion extends Expansion {
                 f.place(HighPriest, r)
                 f.log(Hierophants.styled(TT), ": placed", HighPriest.styled(f), "at", r)
             }
-            val remaining = game.factions.but(TT).%(_.pool(HighPriest).any).dropWhile(_ != f).drop(1)
+            val remaining = game.factions.but(TT).%(_.canRecruitHP).%(_.pool(HighPriest).any)
             Force(TTHierophantsOtherFactionsAction(self, remaining, next))
 
         // DOOM PHASE END: reset Dark Rituals face-up and Hell's Banquet sentinel

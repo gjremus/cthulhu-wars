@@ -176,9 +176,9 @@ object BGExpansion extends Expansion {
 
             game.independents(f)
 
-            if (f.has(Avatar) && f.has(ShubNiggurath) && ElderThingMindControl.suppresses(f.goo(ShubNiggurath)))
+            if (f.has(Avatar) && f.onMap(ShubNiggurath).any && ElderThingMindControl.suppresses(f.goo(ShubNiggurath)))
                 + GroupAction("Avatar".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
-            else if (f.has(Avatar) && f.has(ShubNiggurath)) {
+            else if (f.has(Avatar) && f.onMap(ShubNiggurath).any) {
                 val r = f.goo(ShubNiggurath).region
                 val t = f.taxIn(r)
                 areas.but(r).%(f.affords(1 + t)).%(r => factionlike.exists(_.at(r).vulnerable.any)).some.foreach { l =>
@@ -275,7 +275,11 @@ object BGExpansion extends Expansion {
 
         case AvatarReplacementAction(self, f, r, o, u) =>
             log(u, "was sent back to", o)
+            // Parallel-guide Fix 40: Shub-Niggurath Avatar forcibly displaces an enemy unit.
+            // This must NOT trigger FB Cyclopean Gaze.
+            game.fbSuppressCGForPlacement = true
             u.region = o
+            game.fbSuppressCGForPlacement = false
             u.onGate = false
             EndAction(f)
 

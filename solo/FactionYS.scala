@@ -95,12 +95,12 @@ case class ZingayaAction(self : YS, r : Region, f : Faction) extends BaseFaction
 
 object YSExpansion extends Expansion {
     override def eliminate(u : UnitFigure)(implicit game : Game) {
-        if (u.uclass.utype == Cultist && u.faction.can(Passion) && u.region.glyph.onMap && !MindParasite.isParasitized(u))
+        if (u.uclass.utype == Cultist && u.faction.has(Passion) && u.region.glyph.onMap && !MindParasite.isParasitized(u))
             u.faction.oncePerAction :+= Passion
     }
 
     override def afterAction()(implicit game : Game) {
-        factions.%(_.can(Passion)).%(_.oncePerAction.has(Passion)).foreach { f =>
+        factions.%(_.has(Passion)).%(_.oncePerAction.has(Passion)).foreach { f =>
             f.power += 1
 
             f.log("got", 1.power, "from", Passion)
@@ -136,9 +136,9 @@ object YSExpansion extends Expansion {
 
             game.independents(f)
 
-            if (f.has(Desecrate) && f.has(KingInYellow) && game.desecrated.num <= 12 && ElderThingMindControl.suppresses(f.goo(KingInYellow)))
+            if (f.has(Desecrate) && f.onMap(KingInYellow).any && game.desecrated.num <= 12 && ElderThingMindControl.suppresses(f.goo(KingInYellow)))
                 + GroupAction("Desecrate".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
-            else if (f.has(Desecrate) && f.has(KingInYellow) && game.desecrated.num <= 12) {
+            else if (f.has(Desecrate) && f.onMap(KingInYellow).any && game.desecrated.num <= 12) {
                 val r = f.goo(KingInYellow).region
                 if (game.desecrated.has(r).not) {
                     val te = f.has(Hastur) && f.can(ThirdEye)

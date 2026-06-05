@@ -1728,6 +1728,9 @@ case class Bot3(faction : Faction) {
                     case PrimeCauseSkipAction(_) =>
                         true |=> -200 -> "prime cause: skip"
 
+                    case PrimeCauseCancelReplacementAction(_) =>
+                        true |=> -1000 -> "prime cause: cancel replacement (bot never cancels)"
+
                     // ── Dhole Planetary Destruction (opponent's choice) ─────
                     case DholePlanetaryDestructionDoomAction(_, _) =>
                         // Opponent picks own doom vs own power. Doom is worse for us.

@@ -249,6 +249,9 @@ class GameEvaluationGC(implicit game : Game) extends GameEvaluation(GC)(game) {
 
             case MoveAction(_, u, o, d, cost) if u.uclass == Acolyte =>
                 active.none && o.ownGate && o.allies.cultists.num == 1 |=> - 200000 -> "gatekeeper"
+                // GC: penalise gate-to-gate shuffle and blocked-gate moves
+                o.ownGate && d.ownGate |=> -800 -> "no gate-to-gate shuffle"
+                d.gate && gateControlBlocked(d) |=> -1000000 -> "gate control blocked at dest"
                 active.none && d.freeGate |=> (2 * 100000 / 1) -> "safe move and get gate"
                 active.none && d.noGate && power > 3 |=> (2 * 100000 / 4) -> "safe move and build gate"
 

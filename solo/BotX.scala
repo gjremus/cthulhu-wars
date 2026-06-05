@@ -6,6 +6,47 @@ import hrf.colmat._
 case class Evaluation(weight : Int, desc : String)
 case class ActionEval(action : Action, evaluations : $[Evaluation])
 
+// ─────────────────────────────────────────────────────────────────────────────
+// [2026-06-02 v2] Per-turn gate-occupation switch tracker — second attempt.
+//
+// User report (live game cwo.freeddns.org/BB/play/hcbrkuxrewgixsdb): TT bot
+// loops by abandoning and re-controlling a gate forever. v1 of this fix lived
+// only in the Bubastis build; the TT build (this project) had no lockout at
+// all because BotGateLockout was never ported. v2 ports the lockout AND moves
+// the hard block from eval-level scoring to candidate-list filtering, which
+// matches the canonical pattern used by BotFB (Library "Gate Diplomacy Fix",
+// rollback guide lines 2739-2742) and BotTS (Bug 69 "Round 8" comment block,
+// BotTS.scala ~1673).
+//
+// Source: ~/Google Drive/My Drive/Personal/Games/Cthulhu Wars/Tombstalker,
+// Library, Firstborn, and Daemon Sultan fixes and rollback guide.md, section
+// "Gate Diplomacy Fix (BotFB.scala)" lines 2739-2742.
+//
+// Keyed by (Faction, gameTurn, Region). Reset when the faction's turn rolls.
+// ─────────────────────────────────────────────────────────────────────────────
+object BotGateLockout {
+    private var switches : scala.collection.mutable.Map[(Faction, Int, Region), Int] =
+        scala.collection.mutable.Map()
+
+    def switchCount(f : Faction, turn : Int, r : Region) : Int =
+        switches.getOrElse((f, turn, r), 0)
+
+    def recordSwitch(f : Faction, turn : Int, r : Region) : Unit = {
+        val k = (f, turn, r)
+        switches(k) = switches.getOrElse(k, 0) + 1
+        // Trace breadcrumb: lets us diagnose any future loop from server logs.
+        println("[BotGateLockout] recordSwitch faction=" + f + " turn=" + turn +
+            " region=" + r + " count=" + switches(k))
+    }
+
+    def isLocked(f : Faction, turn : Int, r : Region) : Boolean =
+        switchCount(f, turn, r) >= 1
+
+    // Drop entries from prior turns to keep the map bounded.
+    def gc(currentTurn : Int) : Unit =
+        switches = switches.filter { case ((_, t, _), _) => t >= currentTurn }
+}
+
 class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
     def sortByAbs(a : $[Int]) : $[Int] =
         a.sortBy(v => -v.abs)
@@ -30,9 +71,38 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
             return actions.head
 
         val ev = ge(game)
+
+        // [2026-06-02 v2] Candidate-level lockout filter — see BotGateLockout
+        // header comment. Drops second-and-beyond ControlGateAction-as-switch
+        // and AbandonGateAction at the same (faction, region) this turn so the
+        // bot can never re-enter the abandon/control loop, regardless of how
+        // any faction-eval class scores those actions.
+        val filtered : $[Action] = {
+            implicit val g : Game = game
+            BotGateLockout.gc(game.turn)
+            actions.%(a => a.unwrap match {
+                case ControlGateAction(f, r, u, _) if f == ev.self && BotGateLockout.isLocked(f, game.turn, r) =>
+                    val currentlyOnGate = f.at(r).%(_.onGate)
+                    val isSwitch = currentlyOnGate.any && !currentlyOnGate.exists(_.ref == u)
+                    if (isSwitch) {
+                        println("[BotGateLockout] FILTER drop ControlGate switch f=" + f +
+                            " r=" + r + " u=" + u + " turn=" + game.turn)
+                        false
+                    } else true
+                case AbandonGateAction(f, r, _) if f == ev.self && BotGateLockout.isLocked(f, game.turn, r) =>
+                    println("[BotGateLockout] FILTER drop AbandonGate f=" + f +
+                        " r=" + r + " turn=" + game.turn)
+                    false
+                case _ => true
+            })
+        }
+        val safeActions = if (filtered.any) filtered else actions
+        if (safeActions.num == 1)
+            return safeActions.head
+
         // Merge faction-specific scores with Library map scores (BotMaps)
-        val mapScores = BotMaps.eval(actions, ev.self)(game).groupBy(_._1).view.mapValues(_./(t => Evaluation(t._2, t._3))).toMap
-        val eas = actions./(a => ActionEval(a, ev.eval(a) ++ mapScores.getOrElse(a, $)))
+        val mapScores = BotMaps.eval(safeActions, ev.self)(game).groupBy(_._1).view.mapValues(_./(t => Evaluation(t._2, t._3))).toMap
+        val eas = safeActions./(a => ActionEval(a, ev.eval(a) ++ mapScores.getOrElse(a, $)))
         Bot3.lastEval = eas
 
         val o = eas.sortWith(compare)
@@ -48,7 +118,7 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
         }
 
         var v = o
-        val e = error * (1 - 2.0 /:/ actions.num)
+        val e = error * (1 - 2.0 /:/ safeActions.num)
 
         if (e > 0)
             while (random() < e) {
@@ -59,6 +129,29 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
             }
 
         val chosen = v.head
+
+        // [2026-06-02 v2] Track gate-occupation events per turn. ControlGateAction
+        // (when it's an actual switch) AND AbandonGateAction both burn the
+        // lockout. The candidate filter at the top of askE drops every
+        // subsequent ControlGateAction-as-switch / AbandonGateAction at the
+        // same (faction, region) once recorded.
+        {
+            implicit val g : Game = game
+            chosen.action.unwrap match {
+                case ControlGateAction(f, r, u, _) if f == ev.self =>
+                    val currentlyOnGate = f.at(r).%(_.onGate)
+                    val isSwitch = currentlyOnGate.any && !currentlyOnGate.exists(_.ref == u)
+                    if (isSwitch) {
+                        BotGateLockout.gc(game.turn)
+                        BotGateLockout.recordSwitch(f, game.turn, r)
+                    }
+                case AbandonGateAction(f, r, _) if f == ev.self =>
+                    BotGateLockout.gc(game.turn)
+                    BotGateLockout.recordSwitch(f, game.turn, r)
+                case _ =>
+            }
+        }
+
         chosen.action
     }
 
@@ -147,6 +240,12 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
         else FB.at(r, Ghatanothoa).num + FB.at(r, RevenantOfKnaa).num
     def hasFBCrater(r : Region) : Boolean =
         fbInGame && game.fbCraters.has(r)
+    // True when gate control at r is blocked by Shadow Pharaoh, Custodian, or Librarian.
+    def gateControlBlocked(r : Region) : Boolean =
+        game.factions.exists(f2 => f2.allInPlay.%(_.uclass == ShadowPharaoh).exists(_.region == r)) ||
+        game.custodianRegion.has(r) ||
+        game.librarianRegion.has(r)
+
     // Single-unit move: block if destination has ANY CG defender.
     def fbMoveAvoidance(r : Region) : |[(Int, String)] = {
         if (hasFBCrater(r)) |((-7000, "avoid FB crater region"))

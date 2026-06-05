@@ -70,6 +70,18 @@ case object HoundOfTindalos extends UnitClass("Hound of Tindalos", Terror, 4) wi
     override def canMove(u : UnitFigure)(implicit game : Game) = false
 }
 
+// "gate region" predicate for the Hound of Tindalos.
+object HoundOfTindalosGates {
+    def regions(implicit game : Game) : $[Region] = {
+        val realGates = game.gates.%(_.onMap)
+        val yogGates = game.factions./~(_.unitGate)./(_.region).%{ r =>
+            !game.factions./~(_.allInPlay).%(_.uclass == ElderThing).exists(et => et.region == r)
+        }
+        realGates ++ yogGates.%(!realGates.has(_))
+    }
+    def has(r : Region)(implicit game : Game) : Boolean = regions.has(r)
+}
+
 case object BrownJenkinCard extends NeutralTerrorLoyaltyCard(BrownJenkinIcon, BrownJenkin, cost = 2, powerCost = 2, quantity = 1, combat = 0)
 case object BrownJenkinIcon extends UnitClass(BrownJenkin.name + " Icon", Token, 0)
 case object BrownJenkin extends UnitClass("Brown Jenkin", Terror, 2) with NeutralMonster
@@ -332,8 +344,8 @@ object NeutralMonstersExpansion extends Expansion {
         // Exclude Shantak (has own MovedAction handler below) to avoid blocking carry-cultist
         case MovedAction(self, u, o, r) if u.uclass != HoundOfTindalos && u.uclass != Shantak && self.loyaltyCards.has(HoundOfTindalosCard) && self.allInPlay.%(_.uclass == HoundOfTindalos).any =>
             val hound = self.allInPlay.%(_.uclass == HoundOfTindalos).head
-            if (game.gates.has(hound.region)) {
-                val gates = game.gates.%(g => g != hound.region)
+            if (HoundOfTindalosGates.has(hound.region)) {
+                val gates = HoundOfTindalosGates.regions.%(g => g != hound.region)
                 if (gates.any)
                     Ask(self)
                         .each(gates)(g => CronophageTeleportAction(self, hound.ref, g).as("Teleport to", g)("Cronophage".styled("nt") + " — teleport " + HoundOfTindalos.styled(self)))
@@ -569,7 +581,7 @@ object NeutralMonstersExpansion extends Expansion {
         // Hound of Tindalos Angles of Time: eliminate if in gateless area
         factions.foreach { f =>
             f.allInPlay.%(_.uclass == HoundOfTindalos).foreach { h =>
-                if (!game.gates.has(h.region)) {
+                if (!HoundOfTindalosGates.has(h.region)) {
                     game.eliminate(h)
                     f.log("Angles of Time".styled("nt") + ":", HoundOfTindalos.styled(f), "eliminated (no Gate in", h.region + ")")
                 }

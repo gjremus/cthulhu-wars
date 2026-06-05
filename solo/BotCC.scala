@@ -236,6 +236,9 @@ class GameEvaluationCC(implicit game : Game) extends GameEvaluation(CC)(game) {
 
             case MoveAction(_, u, o, d, cost) if u.uclass == Acolyte =>
                 u.onGate |=> -10 -> "on gate"
+                // CC: penalise gate-to-gate shuffle and blocked-gate moves
+                o.ownGate && d.ownGate |=> -800 -> "no gate-to-gate shuffle"
+                d.gate && gateControlBlocked(d) |=> -1000000 -> "gate control blocked at dest"
 
                 WW.exists && game.board.starting(WW).contains(d) && d.noGate |=> -10000000 -> "starting ww"
 

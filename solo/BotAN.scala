@@ -402,6 +402,9 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
 
             case MoveAction(_, u, o, d, cost) if u.uclass == Acolyte =>
                 u.onGate |=> -10 -> "on gate"
+                // AN: penalise gate-to-gate shuffle and blocked-gate moves
+                o.ownGate && d.ownGate |=> -800 -> "no gate-to-gate shuffle"
+                d.gate && gateControlBlocked(d) |=> -1000000 -> "gate control blocked at dest"
 
                 d.allies.goos.any && o.foes.goos.%(_.faction.power > 0).any |=> 1100 -> "go to daddy"
 

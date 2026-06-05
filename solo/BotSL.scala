@@ -204,6 +204,9 @@ class GameEvaluationSL(implicit game : Game) extends GameEvaluation(SL)(game) {
 
             case MoveAction(_, u, o, d, cost) if u.uclass == Acolyte =>
                 u.onGate |=> -10 -> "on gate"
+                // SL: penalise gate-to-gate shuffle and blocked-gate moves
+                o.ownGate && d.ownGate |=> -800 -> "no gate-to-gate shuffle"
+                d.gate && gateControlBlocked(d) |=> -1000000 -> "gate control blocked at dest"
 
                 if (have(Burrow) && self.allInPlay.tag(Moved).num == 1) {
                     true |=> 1000 -> "move free"

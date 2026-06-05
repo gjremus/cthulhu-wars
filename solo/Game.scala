@@ -323,6 +323,7 @@ trait Faction { f =>
     def abilities : $[Spellbook]
     def library : $[Spellbook]
     def requirements(options : $[GameOption]) : $[Requirement]
+    def canRecruitHP : Boolean = true
     def recruitCost(u : UnitClass, r : Region)(implicit game : Game) = u.cost
     def summonCost(u : UnitClass, r : Region)(implicit game : Game) = u.cost
     def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = None
@@ -876,6 +877,7 @@ class Player(private val f : Faction)(implicit game : Game) {
             game.fbHasCGActive &&
             FB.units.exists(u => u.region == r && (u.uclass == RevenantOfKnaa || u.uclass == Ghatanothoa)))
             game.fbCyclopeanGazeActionRegions :+= r
+        game.logElderThingMovementBlocks(u, r)
     }
 
     def canAccessGate(r : Region) = gates.contains(r) || f.unitGate.?(_.region == r) || (has(TheyBreakThrough) && game.gates.contains(r))
@@ -1330,6 +1332,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var round = 1
     var doomPhase = false
     var gatherPowerPhase = false
+    var endActionPhasePrompts = false
+    def inActionPhase : Boolean = !doomPhase && !gatherPowerPhase && !endActionPhasePrompts
     var factions : $[Faction] = $
     var first : Faction = setup.first
     var gates : $[Region] = $
@@ -1341,6 +1345,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     DS.chaosGateRegions = $
     DS.azathothTrack = 0
     DS.azathothDieRoll = 0
+    DS.startingDecided = false
+    // TS singleton vars (TSExpansion object) — same reason; undo creates a new Game and these
+    // would otherwise persist across instances and corrupt replay state. (Parallel-guide Fix 33)
+    TSExpansion.shepherdDoneThisGather = false
+    TSExpansion.pgrLastFaction = null
+    TSExpansion.pureDHRitualsDone = 0
+    TSExpansion.pureDHMarkerIndices = $
+    TSExpansion.graspingDeadRemaining = $()
+    TSExpansion.graspingDeadFought = $()
+    TSExpansion.graspingDeadActive = false
     var ritualMarker = 0
     var ritualHistory : $[Faction] = $
     var ritualHistoryCeremony : $[Boolean] = $
@@ -1495,6 +1509,70 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Game.scala.AfterAction fires CG AFTER triggers()/SBRs resolve.
     var fbCyclopeanGazePendingSources : $[FBCyclopeanGazeSource] = $
     var fbCyclopeanGazePendingActor : |[Faction] = None
+
+    // Fix 30: Elder Thing passive-block movement logging.
+    // Fire-once guard: (mover ref, suppressed-GOO ref, ability label) triples already logged this tick.
+    var elderThingBlockGuard : $[(UnitRef, UnitRef, String)] = $
+
+    def elderThingBlockedAbilities(uc : UnitClass) : $[String] = uc match {
+        case Cthulhu        => $("Devour")
+        case ShubNiggurath  => $("Avatar")
+        case Nyarlathotep   => $("Harbinger")
+        case Hastur         => $()
+        case KingInYellow   => $("Desecrate")
+        case Tsathoggua     => $("Lethargy")
+        case RhanTegoth     => $()
+        case Ithaqua        => $("Eternal")
+        case Ghatanothoa    => $("Cyclopean Gaze")
+        case Yig            => $("Snakebite")
+        case FatherDagon    => $("Tsunami")
+        case MotherHydra    => $("Toad of Berkeley")
+        case Glaaki         => $("Shepherd of the Crypt")
+        case GhatanotoaIGOO => $("Blot Out the Sun")
+        case AzathothIGOO   => $("Nuclear Chaos combat boost")
+        case Cthugha        => $("Prime Cause")
+        case Tulzscha       => $("Undying Flame")
+        case Nyogtha        => $("From Below")
+        case AtlachNacha    => $("Place Spinneret")
+        case Bokrug         => $("Agony Sting")
+        case Daoloth        => $("Mummify")
+        case Ygolonac       => $("Velvet Fan")
+        case BloatedWoman   => $("Fire Vampires")
+        case Byatis         => $("Execration of Mu")
+        case Abhoth         => $("Filth spawn")
+        case _              => $()
+    }
+
+    def logElderThingBlocksForGOO(mover : UnitFigure, goo : UnitFigure, r : Region) {
+        val abilities = elderThingBlockedAbilities(goo.uclass)
+        abilities.foreach { ability =>
+            val key = (mover.ref, goo.ref, ability)
+            if (!elderThingBlockGuard.has(key) && ElderThingMindControl.suppresses(goo)) {
+                elderThingBlockGuard :+= key
+                goo.faction.log(ability.styled("nt"), "blocked by", "Elder Thing".styled("nt"), "in", r)
+            }
+        }
+    }
+
+    def logElderThingMovementBlocks(mover : UnitFigure, to : Region) {
+        if (mover.uclass == ElderThing) {
+            // ET moved into `to` — log every enemy GOO in `to` that is now suppressed
+            factions.but(mover.faction).foreach { f =>
+                f.allInPlay.%(u => u.region == to && ElderThingMindControl.suppresses(u) && elderThingBlockedAbilities(u.uclass).any).foreach { goo =>
+                    logElderThingBlocksForGOO(mover, goo, to)
+                }
+            }
+        } else if (elderThingBlockedAbilities(mover.uclass).any) {
+            // A GOO moved into `to` — log if any enemy ET is in `to`
+            factions.but(mover.faction).foreach { f =>
+                f.allInPlay.%(u => u.region == to && u.uclass == ElderThing).foreach { et =>
+                    if (ElderThingMindControl.suppresses(mover)) {
+                        logElderThingBlocksForGOO(et, mover, to)
+                    }
+                }
+            }
+        }
+    }
 
     def forNPowerWithTax(r : Region, f : Faction, n : Int) : String = { val p = n + f.taxIn(r) ; " for " + p.power }
     def for1PowerWithTax(r : Region, f : Faction) : String = { val p = 1 + f.taxIn(r) ; if (p != 1) " for " + p.power else "" }
@@ -1768,7 +1846,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         (f.loyaltyCards.has(BokrugCard) && f.upgrades.has(DoomThatCameToSarnath).not).$(GiveBokrugMainAction(f)) ++
         (options.has(AsyncActions) || outOfTurn.not).??(
             (highPriests && f.all(HighPriest).any).$(SacrificeHighPriestOutOfTurnMainAction(f)) ++
-            { val vp = f.plans.%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+            { val vp = f.plans
+                .%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+                .%(p => inActionPhase || (p.is[GateDiplomacyPlan].not && p.is[HighPriestGatesPlan].not))
             vp.%(f.commands.has)./(p => Info(p.info)(p.group)) ++
             vp.any.$(CommandsMainAction(f)) }
         )
@@ -2228,7 +2308,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
         // INIT
         case StartAction =>
-            log("Cthulhu Wars TchoTcho tcho-tcho-v2.1")
+            log("Cthulhu Wars TchoTcho " + hrf.BuildInfo.version)
             log("Options", options./(_.toString.hh).mkString(" "))
 
             if (options.has(GateDiplomacy)) {
@@ -2248,11 +2328,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             if (options.has(HighPriests)) {
                 setup.foreach { f =>
-                    f.loyaltyCards = f.loyaltyCards :+ HighPriestCard
+                    if (f.canRecruitHP) {
+                        f.loyaltyCards = f.loyaltyCards :+ HighPriestCard
 
-                    // TT: pool is always 3 HPs regardless of expansion — HP already in allUnits
-                    if (f != TT)
-                        f.units :+= new UnitFigure(f, HighPriest, 1, f.reserve)
+                        // TT: pool is always 3 HPs regardless of expansion — HP already in allUnits
+                        if (f != TT)
+                            f.units :+= new UnitFigure(f, HighPriest, 1, f.reserve)
+                    }
                 }
             }
 
@@ -2284,6 +2366,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case StartingRegionAction(f, r) =>
             starting += f -> r
+            f.log("places its starting region glyph in", r)
 
             // TT with HP expansion: 5 Acolytes + 1 High Priest. All others: 6 Acolytes.
             if (f == TT && options.has(HighPriests)) {
@@ -2665,6 +2748,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 return GameOverPhaseAction
 
             doomPhase = false
+            endActionPhasePrompts = false
             fbGhatoLastMoveOrigin = None
 
             // Nuclear Chaos (Azathoth spellbook): flip back face-up at start of Action Phase
@@ -2843,7 +2927,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val sbNext = CheckSpellbooksAction(next)
                 // If Hierophants was just earned and HP expansion active, also prompt all other factions first
                 if (sb == Hierophants && options.has(HighPriests)) {
-                    val others = factions.but(TT).%(_.pool(HighPriest).any)
+                    val others = factions.but(TT).%(_.canRecruitHP).%(_.pool(HighPriest).any)
                     if (others.any)
                         return Force(TTHierophantsOtherFactionsAction(f, others, sbNext))
                 }
@@ -3289,6 +3373,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case EndAction(self) =>
             self.acted = true
             mindParasiteCaptureRejected = $
+            elderThingBlockGuard = $
             AfterAction(self)
 
         case AfterAction(self) =>
@@ -3376,6 +3461,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Then(PowerGatherAction(next))
 
         case EndPhasePromptsAction(next, l) =>
+            endActionPhasePrompts = true
             val asks = l./~{ f =>
                 implicit val asking = Asking(f)
 
@@ -3409,6 +3495,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             EndAction(self)
 
         // CONTROL
+        case AdjustGateControlAction(f, changed, then) if !inActionPhase =>
+            if (changed) Force(then) else UnknownContinue
+
         case AdjustGateControlAction(f, changed, then) =>
             // Library at Celaeno: custodian/librarian block control of uncontrolled gates
             val libraryBlockedRegions : $[Region] = if (board.isLibraryMap) $(custodianRegion, librarianRegion).flatten else $()
@@ -3445,10 +3534,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     controlOptions ++
                     (f.gates.has(r) && f.clings.not && f.commands.has(GateDiplomacySkipAbandon).not).$(AbandonGateAction(f, r, then).as(abandonLabel)(""))
                 }
-                .add(OutOfTurnRefresh(AdjustGateControlAction(f, changed, then)))
+                .useIf(_ => inActionPhase)(_.add(OutOfTurnRefresh(AdjustGateControlAction(f, changed, then))))
                 .group(" ")
                 .doneIf(changed)(then)
                 .cancelIf(changed.not)
+
+        case ControlGateAction(f, r, u, then) if !inActionPhase =>
+            Force(then)
 
         case ControlGateAction(f, r, u, then) if u.onGate =>
             Force(AdjustGateControlAction(f, true, then))
@@ -3473,6 +3565,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Gate occupy/abandon are unlimited free actions (place/remove
             // cultist on gate). They do NOT trigger CG — no unit movement occurs.
             Force(AdjustGateControlAction(f, true, then))
+
+        case AbandonGateAction(f, r, then) if !inActionPhase =>
+            Force(then)
 
         case AbandonGateAction(f, r, then) =>
             f.at(r).foreach(_.onGate = false)
@@ -3570,6 +3665,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 fbGhatoLastMoveOrigin = Some(o)
 
             self.log("moved", u, "from", o, "to", r)
+
+            logElderThingMovementBlocks(u, r)
 
             // Universal CG trigger: any non-FB unit moving into a region with
             // an FB Revenant or Ghatanothoa must fire CG. The snapshot-delta
@@ -3937,7 +4034,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Ask(self).each(self.all(HighPriest))(u => SacrificeHighPriestAction(self, u.region, OutOfTurnReturn)).cancel
 
         case SacrificeHighPriestAction(self, r, then) =>
-            val c = self.at(r).one(HighPriest)
+            // Bug fix: only grant the +2 Power Unspeakable Oath bonus when the High Priest is alive on the
+            // map at the time of sacrifice. Battle death, capture, or any other elimination route does NOT
+            // trigger the Oath +2 — only the owning player's explicit choice to sacrifice an alive HP does.
+            val candidates = self.at(r).%(_.uclass == HighPriest).%(_.health == Alive)
+            if (candidates.none) {
+                log("Unspeakable Oath".hl + ": no Alive High Priest in " + r + " — Oath not granted")
+                if (then == OutOfTurnReturn) return then else return CheckSpellbooksAction(then)
+            }
+            val c = candidates.head
 
             eliminate(c)
 
@@ -3968,7 +4073,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (options.has(HighPriests) && f.onMap(HighPriest).any && (f.commands.of[UnspeakableOathPlan].none || f.plans.of[UnspeakableOathPlan].none))
                 initHighPriestPlans(f)
 
-            val visiblePlans = f.plans.%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+            val visiblePlans = f.plans
+                .%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
+                .%(p => inActionPhase || (p.is[GateDiplomacyPlan].not && p.is[HighPriestGatesPlan].not))
             Ask(f)
                 .each(visiblePlans) { p =>
                     if (f.commands.has(p))

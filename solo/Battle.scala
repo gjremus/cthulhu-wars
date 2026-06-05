@@ -126,6 +126,9 @@ case class PrimeCauseChooseReplacementAction(self : Faction, oldRef : UnitRef, n
 case class PrimeCauseSkipAction(self : Faction) extends BaseFactionAction("Prime Cause".styled("nt"), "Skip") {
     override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt")
 }
+case class PrimeCauseCancelReplacementAction(self : Faction) extends BaseFactionAction("Prime Cause".styled("nt"), "Cancel") {
+    override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt") + " — choose Unit to replace"
+}
 
 // Quachil Uttaus: Dust to Dust choices
 case class QuachilDustToDustRemoveAction(self : Faction, uRef : UnitRef, quOwner : Faction) extends BaseFactionAction(
@@ -390,6 +393,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             case DoubleHP(Alive, Alive) => DoubleHP(Killed, Alive)
             case Pained => log("ERROR - Assign KILL to PAINED"); Killed
             case Alive => Killed
+        }
+        // TT Fulmination: if Ubbo-Sathla just transitioned to Killed in battle and TT has Fulmination,
+        // set pending flag — prompt fires at PostBattlePhase. Hook here (not in AssignKillAction case)
+        // because bulk kills (assignKills line ~618) call assignKill directly, bypassing the action handler.
+        // v2.5.4 fix: previously only the AssignKillAction case set this flag, so when an enemy rolled enough
+        // kills to wipe out all targets (auto-bulk-assignment), the flag was never set and Fulmination
+        // never fired. Hooking inside assignKill itself catches both interactive and bulk paths.
+        if (unit.health == Killed && unit.faction == TT && unit.uclass == UbboSathla && TT.can(Fulmination) && !TTExpansion.ttUbboFulminated) {
+            TTExpansion.ttFulminationPending = true
         }
     }
 
@@ -1523,11 +1535,20 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 }
 
                 // TT Fulmination: if Ubbo was killed this battle and TT has Fulmination, offer permanent removal
-                // Fire here (after all kills/pains assigned) so totalKills is the final count
+                // Fire here (after EliminatePhase + assign-pains + post-battle abilities) so totalKills is final.
+                // v2.5.4 fix: count `eliminated` (all units removed via eliminate() this battle), NOT
+                // `sides.forces.count(_.health == Killed)`. By PostBattlePhase, EliminatePhase has already
+                // moved every Killed unit out of forces and game.eliminate() reset their health back to Alive
+                // (Game.scala line ~1666), so the old forces-based count was always 0 — even when the flag
+                // was set, the "X" in the prompt would render as 0 ES. Switching to `eliminated.num` gives
+                // the true total per the spell rule: "1 ES for each Unit Killed (by either side) in that
+                // Battle". Also wraps the Ask with `.group(Fulmination.styled(TT))` so the menu is presented
+                // as a single TT-colored "Fulmination" header with two options below.
                 if (TTExpansion.ttFulminationPending) {
                     TTExpansion.ttFulminationPending = false
-                    val totalKills = sides./~(_.forces).count(_.health == Killed)
+                    val totalKills = eliminated.num
                     return DelayedContinue(50, Ask(TT)
+                        .group(Fulmination.styled(TT))
                         .add(TTFulminationTakeAction(TT, totalKills))
                         .add(TTFulminationDeclineAction(TT)))
                 }
@@ -1668,7 +1689,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 u.uclass.isInstanceOf[FactionUnitClass] && self.awakenCost(u.uclass, battleRegion).nonEmpty
             )./(_.uclass).distinct
             val poolUnits = (poolNonGoo ++ poolGooKnown).distinct
-            Ask(self).each(poolUnits)(uc => PrimeCauseChooseReplacementAction(self, uRef, uc)).cancel
+            Ask(self).each(poolUnits)(uc => PrimeCauseChooseReplacementAction(self, uRef, uc)).add(PrimeCauseCancelReplacementAction(self))
 
         case PrimeCauseChooseReplacementAction(self, oldRef, newUC) =>
             primeCauseUsed :+= self
@@ -1723,6 +1744,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case PrimeCauseSkipAction(self) =>
             proceed()
+
+        case PrimeCauseCancelReplacementAction(self) =>
+            val units = self.forces.%(_.health != Killed)./(_.ref)
+            Ask(self)
+                .each(units)(u => PrimeCauseChooseUnitAction(self, u))
+                .add(PrimeCauseSkipAction(self))
 
         case QuachilDustToDustRemoveAction(self, uRef, quOwner) =>
             val u = game.unit(uRef)
@@ -1862,18 +1889,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case AssignKillAction(_, _, _, u) =>
             assignKill(u)
             // TT Martyrdom: if TT's High Priest is killed, convert all kills on TT's other units to pains
+            // Bug fix: also convert any UNASSIGNED Kill rolls on the attacker's side to Pain rolls so the
+            // assign-kills loop does not re-prompt for the remaining Kill rolls. Without this, dropping
+            // assigned-kill count (because the converted units are now Pained, not Killed) causes the
+            // assignKills loop to re-fire AssignKillAction prompts for the leftover kills, which would
+            // wrongly let the attacker keep landing kills on TT despite Martyrdom being in effect.
             if (u.faction == TT && u.uclass == HighPriest && (u : UnitFigure).health == Killed && TT.can(Martyrdom)) {
                 val ttSide = if (attacker == TT) attackers else defenders
                 ttSide.forces.%(u2 => u2.ref != u && u2.health == Killed).foreach { u2 =>
                     u2.health = Pained
                     log(Martyrdom.styled(TT) + ": kill on", u2.uclass.styled(TT), "converted to Pain")
                 }
+                // Convert all remaining (unassigned) Kill rolls on the attacker side to Pain rolls so
+                // the assignKills loop terminates without further Kill prompts against TT's units.
+                val attackerSide = if (attacker == TT) defenders else attackers
+                if (attackerSide.rolls.exists(_ == Kill)) {
+                    attackerSide.rolls = attackerSide.rolls./(_.useIf(_ == Kill)(_ => Pain))
+                    log(Martyrdom.styled(TT) + ": remaining attacker Kill rolls become Pain rolls")
+                }
             }
-            // TT Fulmination: if Ubbo-Sathla is killed, set pending flag — prompt fires at PostBattlePhase
-            // so totalKills includes all kills assigned this battle, not just those assigned before Ubbo
-            if (u.faction == TT && u.uclass == UbboSathla && (u : UnitFigure).health == Killed && TT.can(Fulmination) && !TTExpansion.ttUbboFulminated) {
-                TTExpansion.ttFulminationPending = true
-            }
+            // TT Fulmination: trigger flag is now set inside assignKill() itself (see line ~397 in this file).
+            // That covers both this AssignKillAction path AND the bulk auto-assign path (assignKills line ~618).
+            // v2.5.4 fix: previously this case-only check missed bulk kills, so Fulmination silently failed
+            // when an enemy rolled enough kills to wipe out the side without prompting per-unit assignment.
             proceed()
 
         case AssignPainAction(_, _, _, u) =>
@@ -2143,7 +2181,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case NecrophagyAction(self, u, r) =>
             self.oncePerAction :+= Necrophagy
 
+            // Parallel-guide Fix 38: Necrophagy is a Pain-driven forced move; it must NOT trigger
+            // FB Cyclopean Gaze.
+            game.fbSuppressCGForPlacement = true
             u.region = arena
+            game.fbSuppressCGForPlacement = false
             exempt(u)
             sides.foreach(_.rolls :+= Pain)
             log(u, "came from", "" + r + ",", "causing additonal", Pain, "to both sides")

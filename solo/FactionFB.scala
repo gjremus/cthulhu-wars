@@ -85,7 +85,8 @@ case object FB extends Faction { f =>
         case _ => None
     }
 
-    // Firstborn cannot recruit High Priests - handled in Game.scala recruits()
+    // Firstborn cannot recruit High Priests at all (no HP in pool, no Hierophants HP)
+    override val canRecruitHP = false
 
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
         if (units.none) return 0
@@ -100,10 +101,11 @@ case object FB extends Faction { f =>
 
         units(Desiccated).not(Zeroed).num * (onLand.?(1).|(0)) +
         units(RevenantOfKnaa).not(Zeroed).num * desiccatedInPlay +
-        // Bug fix: Ghatanothoa combat is power BEFORE the battle began (snapshot taken
-        // at battle start in Battle.scala). f.power decreases during a battle as costs are
-        // paid, which would otherwise reduce his combat unfairly.
-        units(Ghatanothoa).not(Zeroed).num * (if (game.battle.any && f == FB) game.fbPowerAtBattleStart else f.power) +
+        // Parallel-guide Fix 41 (2026-06-02): Ghatanothoa combat dice scale with FB.power AFTER
+        // the battle's attack cost has been paid, mirroring Writhe. AttackAction in Game.scala
+        // already deducts 1 power before Battle starts resolving, so f.power here is the
+        // post-payment value. The pre-battle snapshot path is no longer used.
+        units(Ghatanothoa).not(Zeroed).num * f.power +
         neutralStrength(units, opponent)
     }
 }
@@ -856,16 +858,12 @@ object FBExpansion extends Expansion {
         // Infernal Pact discount is gated by game.fbInfernalPactDiscount, which is 0
         // for non-FB. All three cases are safe — no special non-FB handling needed.
         case FBWritheMainAction(self) =>
-            // Round 8 Bug 75: Writhe dice count is based on REAL power BEFORE spending.
-            // Previously, flipping spellbooks added fake power to `self.power`, so the
-            // "power before spending" figure included the fake discount. Now discount
-            // is a separate pool: capture `self.power` first (real power, untouched by
-            // discount), then pay from discount + power, then roll dice based on the
-            // captured real-power-before-spending figure.
+            // Fix 1a: dice = power AFTER paying the writhe cost.
+            // Cost paid = max(0, 2 - min(IP, 2)). Dice is the remaining real power.
             val writheCost = 2
-            val numDice = self.power  // capture REAL power before spending
             val discountUsed = consumeDiscount(writheCost)
             self.power -= (writheCost - discountUsed)
+            val numDice = self.power  // post-payment power = dice rolled
             game.fbWritheRerolled = false
             game.fbWritheUsedUnits = $
             game.fbWritheKillLog = $

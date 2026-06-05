@@ -152,9 +152,9 @@ object SLExpansion extends Expansion {
         case MainAction(f : SL) =>
             implicit val asking = Asking(f)
 
-            if (f.has(Lethargy) && f.has(Tsathoggua) && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
+            if (f.has(Lethargy) && f.onMap(Tsathoggua).any && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
                 + GroupAction("Lethargy".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
-            else if (f.has(Lethargy) && f.has(Tsathoggua) && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && !ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
+            else if (f.has(Lethargy) && f.onMap(Tsathoggua).any && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && !ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
                 if (game.options.has(IceAgeAffectsLethargy).not || f.affords(0)(f.goo(Tsathoggua).region))
                     + LethargyMainAction(f)
 

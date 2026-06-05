@@ -869,12 +869,16 @@ object IGOOsExpansion extends Expansion {
             self.power -= 1
             self.payTax(r)
 
+            // Parallel-guide Fix 40: forced enemy-cultist relocation must NOT trigger
+            // FB Cyclopean Gaze.
+            game.fbSuppressCGForPlacement = true
             self.enemies.foreach { f =>
                 f.at(r).cultists.foreach { u =>
                     u.region = d
                     u.onGate = false
                 }
             }
+            game.fbSuppressCGForPlacement = false
 
             log(Byatis.styled(self), "used", GodOfForgetfulness.name.styled("nt"), "to move all enemy cultist from", r, "to", d)
             EndAction(self)

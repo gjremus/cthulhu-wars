@@ -2084,13 +2084,21 @@ object CthulhuWarsSolo {
 
                 // DS starting region glyph (DS isn't in the DrawItem loop above because
                 // it only shows when cultists are present, unlike FB/TS/AN/OW which show always)
-                if (game.setup.has(DS) && DS.cultists.any) {
-                    game.starting.get(DS).foreach { r =>
+                game.starting.get(DS).filter(_ => DS.cultists.any).foreach { r =>
+                    val size = (60 * board.unitScale).toInt
+                    val (sx, sy) = if (!horizontal && !board.isLibraryMap) {
+                        // Parallel-guide Fix 24 partial: portrait Earth — pass canonical
+                        // EarthRegionPalette color so findStaticGlyphPos doesn't sample the
+                        // bitmap at the rotated gate XY (gap-pixel risk → wrong region).
+                        val (ox, oy) = gateXYO(r)
+                        val rc = EarthRegionPalette.get(board.id, r).getOrElse(-1)
+                        val (fx, fy) = findStaticGlyphPos(ox, oy, rc)
+                        (mp.height - fy, fx)
+                    } else {
                         val (gx, gy) = gateXY(r)
-                        val size = (60 * board.unitScale).toInt
-                        val (sx, sy) = findStaticGlyphPos(gx, gy)
-                        g.drawImage(getAsset("ds-glyph"), sx - size / 2, sy - size / 2, size, size)
+                        findStaticGlyphPos(gx, gy)
                     }
+                    g.drawImage(getAsset("ds-glyph"), sx - size / 2, sy - size / 2, size, size)
                 }
 
                 // Library at Celaeno: draw tomes on the map for unclaimed tomes
@@ -4668,7 +4676,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                         val oldVersion = logs(0)
                         if (oldVersion != version)
-                            log("Incorrect game version: " + oldVersion.hl)
+                            // Purely informational — game's recorded build version doesn't match the
+                            // current build because a new version shipped while the game was in flight.
+                            // NOT an error. The `oldVersion @@ {...}` block below handles migration.
+                            log("Game version updated mid-game (was " + oldVersion.hl + ")")
 
                         oldVersion @@ {
                             case "Cthulhu Wars Solo HRF 1.8"
@@ -4903,9 +4914,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             "Back"
                         ), { _ => topMenu() })
                     case 6 =>
-                        // "Beta builds" — same menu in the MNU build. Link points back to root.
+                        // "Beta builds" — links to the other builds.
                         ask("Beta builds", $(
                             "<a href='/' target='_blank'><div>Library at Celaeno (main)</div></a>",
+                            "<a href='/mnu/' target='_blank'><div>More Neutral Units (MNU)</div></a>",
                             "Cancel"
                         ), { _ => topMenu() })
                     case 5 =>
