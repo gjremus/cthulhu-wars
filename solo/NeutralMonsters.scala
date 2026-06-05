@@ -264,10 +264,15 @@ object NeutralMonstersExpansion extends Expansion {
                 Ask(self).each(self.enemies)(f => ServitorAssignFactionAction(self, f)).cancel
             } else if (lc.unit == InsectsFromShaggai) {
                 // Insects from Shaggai: place in any Area
+                // BB Fix 80, v2.4.30 — Insects deploy may target Moon for any faction.
+                // The rule "place in any Area" includes the Moon for every faction
+                // (broader than the BB-only Moon access). The Moon-entry place()
+                // guard at Game.scala is granted an exception via the transient
+                // game.insectsInDeploy flag, set in LoyaltyCardSummonAction below.
                 lc.quantity.times(lc.unit).foreach { u =>
                     self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
                 }
-                Ask(self).each(areas)(r => LoyaltyCardSummonAction(self, lc.unit, r))
+                Ask(self).each(areas :+ BB.moon)(r => LoyaltyCardSummonAction(self, lc.unit, r))
             } else if (lc.unit == HoundOfTindalos) {
                 // Hound of Tindalos: place at ANY Gate (not just owner's Controlled Gate)
                 lc.quantity.times(lc.unit).foreach { u =>
@@ -292,7 +297,15 @@ object NeutralMonstersExpansion extends Expansion {
             }
 
         case LoyaltyCardSummonAction(self, uc, r) =>
+            // BB Fix 80, v2.4.30 — Insects deploy may target Moon for any faction.
+            // Bracket the place() call with the insectsInDeploy transient flag so
+            // the Moon-entry place() guard is satisfied when r == BB.moon for any
+            // faction (the Insects rule explicitly opens the Moon to all factions
+            // during initial loyalty-card deployment).
+            val isInsectsMoon = uc == InsectsFromShaggai && r == BB.moon
+            if (isInsectsMoon) game.insectsInDeploy = true
             self.place(uc, r)
+            if (isInsectsMoon) game.insectsInDeploy = false
             self.log("placed", uc.styled(self), "in", r)
 
             // Mind Parasite: check for conversions after placing insect

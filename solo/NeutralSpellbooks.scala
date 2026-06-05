@@ -80,11 +80,21 @@ object NeutralSpellbooksExpansion extends Expansion {
                 EndAction(self)
 
         // UNDIMENSIONED
+        // BB Fix 77, v2.4.30 — Undimensioned may target Moon only if faction has a unit there
         case UndimensionedMainAction(self) =>
-            UndimensionedContinueAction(self, self.units.onMap./(_.region).distinct, false)
+            val mapDestinations = self.units.onMap./(_.region).distinct
+            val moonDestination = self.units.%(_.region == BB.moon).any.$(BB.moon)
+            UndimensionedContinueAction(self, mapDestinations ++ moonDestination, false)
 
         case UndimensionedContinueAction(self, destinations, moved) =>
-            val units = self.units.nex.onMap.not(Moved).%(u => destinations.but(u.region).%(self.affords(self.units.onMap.tag(Moved).none.??(2))).any).sortA
+            // BB Fix 77, v2.4.30 — include Moon-resident units in the rearrange
+            // pool when Moon is in the destinations set (i.e., faction has a
+            // unit on the Moon). Without the inclusion the player could move
+            // off-Moon units onto the Moon but not move a Moon-resident unit
+            // back to a Map area, which would violate the "rearrange among
+            // your areas" rule.
+            val pool = if (destinations.has(BB.moon)) self.units.nex.%(_.region.inPlay).not(Moved) else self.units.nex.onMap.not(Moved)
+            val units = pool.%(u => destinations.but(u.region).%(self.affords(self.units.onMap.tag(Moved).none.??(2))).any).sortA
             if (units.none)
                 Then(UndimensionedDoneAction(self))
             else
@@ -114,7 +124,14 @@ object NeutralSpellbooksExpansion extends Expansion {
             self.payTax(r)
 
             val u = self.at(o, uc).not(Moved).first
+            // BB Fix 77, v2.4.30 — set undimensionedInPlay flag while writing
+            // u.region so the Moon-entry place() guard permits rearranges that
+            // target BB.moon. The direct u.region = r assignment bypasses
+            // place(), but the flag is defense-in-depth for any future place()
+            // route through Undimensioned.
+            game.undimensionedInPlay = true
             u.region = r
+            game.undimensionedInPlay = false
             u.add(Moved)
 
             log(uc.styled(self), "from", o, "is now in", r)

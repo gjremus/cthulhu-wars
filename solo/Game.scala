@@ -440,50 +440,68 @@ object MindParasite {
         game.mindParasiteOriginalFaction.get(u.ref)
 
     // Check if an Acolyte SHOULD be parasitized (off-gate, shares area with enemy Insect)
+    // BB Fix 80, v2.4.30 — Mind Parasite affects Earth Cats. Earth Cats are BB's
+    // Cultist-equivalent: every effect targeting Cultists also targets Earth Cats
+    // (Lunacy rule). The Acolyte filter is extended to also match EarthCat so the
+    // parasite conversion fires when an Insect from Shaggai shares an off-gate
+    // area with a BB Earth Cat. Earth Cats on the Moon are unaffected because
+    // u.region.onMap is false for the Moon.
     def shouldParasitize(u : UnitFigure)(implicit game : Game) : |[Faction] = {
-        if (u.uclass != Acolyte || u.onGate || !u.region.onMap) return None
+        if ((u.uclass != Acolyte && u.uclass != EarthCat) || u.onGate || !u.region.onMap) return None
         game.factions.find(f => f != u.faction && f.loyaltyCards.has(InsectsFromShaggaiCard) && f.at(u.region, InsectsFromShaggai).any)
     }
 
-    // Convert an Acolyte to MindParasiteCultist under the insect owner
+    // Convert an Acolyte (or BB Earth Cat) to MindParasiteCultist under the insect owner
+    // BB Fix 80, v2.4.30 — Earth Cats are parasitizable; track the original
+    // UnitClass so unparasitize restores the correct class.
     def parasitize(u : UnitFigure, insectOwner : Faction)(implicit game : Game) : Unit = {
         val originalFac = u.faction
+        val originalUClass = u.uclass
         val region = u.region
         val origIndex = u.index
-        // Remove original Acolyte
+        // Remove original unit
         originalFac.units :-= u
         // Create parasitized version under insect owner with unique index
         val mpIndex = game.mindParasiteNextIndex
         game.mindParasiteNextIndex += 1
         val parasitized = new UnitFigure(insectOwner, MindParasiteCultist, mpIndex, region)
         insectOwner.units :+= parasitized
-        // Track original faction and original index for restoration
+        // Track original faction, index, and UnitClass for restoration
         game.mindParasiteOriginalFaction += (parasitized.ref -> originalFac)
         game.mindParasiteOriginalIndex += (parasitized.ref -> origIndex)
-        game.appendLog($(styledAlt("Acolyte", originalFac, insectOwner), "in", region, "afflicted with", "Mind Parasite".styled("nt")))
+        game.mindParasiteOriginalUClass += (parasitized.ref -> originalUClass)
+        game.appendLog($(styledAlt(originalUClass.name, originalFac, insectOwner), "in", region, "afflicted with", "Mind Parasite".styled("nt")))
     }
 
-    // Convert a MindParasiteCultist back to normal Acolyte under original faction
+    // Convert a MindParasiteCultist back to its original UnitClass under the original faction
+    // BB Fix 80, v2.4.30 — restore using the tracked original UnitClass (Acolyte
+    // or EarthCat). Default fallback is Acolyte for backward compatibility with
+    // saves from before this fix.
     def unparasitize(u : UnitFigure)(implicit game : Game) : Unit = {
         val origFac = game.mindParasiteOriginalFaction.getOrElse(u.ref, u.faction)
         val region = u.region
         val origIndex = game.mindParasiteOriginalIndex.getOrElse(u.ref, u.index)
+        val origUClass = game.mindParasiteOriginalUClass.getOrElse(u.ref, Acolyte)
         // Remove parasitized unit from insect owner
         u.faction.units :-= u
-        // Create normal Acolyte under original faction with original index
-        val restored = new UnitFigure(origFac, Acolyte, origIndex, region)
+        // Create restored unit under original faction with original index and class
+        val restored = new UnitFigure(origFac, origUClass, origIndex, region)
         origFac.units :+= restored
         // Clean up tracking
         game.mindParasiteOriginalFaction -= u.ref
         game.mindParasiteOriginalIndex -= u.ref
-        game.appendLog($(styledAlt("Acolyte", origFac, u.faction), "in", region, "freed from", "Mind Parasite".styled("nt")))
+        game.mindParasiteOriginalUClass -= u.ref
+        game.appendLog($(styledAlt(origUClass.name, origFac, u.faction), "in", region, "freed from", "Mind Parasite".styled("nt")))
     }
 
     // Run conversion check — called from triggers()
+    // BB Fix 80, v2.4.30 — Mind Parasite affects Earth Cats. The Acolyte
+    // candidate-set filter is extended to also include EarthCat so Earth
+    // Cats co-located with enemy Insects from Shaggai get parasitized.
     def checkConversions()(implicit game : Game) : Unit = {
-        // Convert Acolytes that should be parasitized
+        // Convert Acolytes / Earth Cats that should be parasitized
         game.factions.foreach { f =>
-            f.units.%(u => u.uclass == Acolyte && u.region.onMap && !u.onGate).foreach { u =>
+            f.units.%(u => (u.uclass == Acolyte || u.uclass == EarthCat) && u.region.onMap && !u.onGate).foreach { u =>
                 val sp = shouldParasitize(u)
                 sp.foreach { insectOwner =>
                     parasitize(u, insectOwner)
@@ -502,9 +520,13 @@ object MindParasite {
     }
 
     // Old compatibility — check by Acolyte position (for canMove etc.)
+    // BB Fix 80, v2.4.30 — Mind Parasite affects Earth Cats. Extend the
+    // Acolyte filter to also match EarthCat so canMove / canBeMoved / parasite
+    // controller checks treat Earth Cats co-located with enemy Insects as
+    // parasite-controlled (Lunacy: Earth Cats are BB's Cultist-equivalent).
     def controller(u : UnitFigure)(implicit game : Game) : |[Faction] = {
         if (u.uclass == MindParasiteCultist) |(u.faction)
-        else if (u.uclass != Acolyte || u.onGate) None
+        else if ((u.uclass != Acolyte && u.uclass != EarthCat) || u.onGate) None
         else game.factions.find(f => f != u.faction && f.loyaltyCards.has(InsectsFromShaggaiCard) && f.at(u.region, InsectsFromShaggai).any)
     }
 }
@@ -921,7 +943,17 @@ class Player(private val f : Faction)(implicit game : Game) {
         // to all regions for arrival purposes; GC's submerged court resides
         // off-map and may surface anywhere). Detected via game.gcInUnsubmerge
         // transient flag set in FactionGC.UnsubmergeAction.
-        if (f != BB && !(f == OW && f.can(TheyBreakThrough)) && !(f == BG && game.bgInAvatar) && !(f == AN && game.anInDematerialize) && !game.shamblerInDeploy && !(f == GC && game.gcInUnsubmerge) && r == BB.moon) {
+        // Exception: Undimensioned (BB Fix 77, v2.4.30) — any faction may
+        // rearrange a unit onto the Moon via Undimensioned, but only if the
+        // faction already has at least one unit on the Moon (the destination-
+        // list filter at NeutralSpellbooks.scala enforces the eligibility;
+        // this flag carves the place() guard exception). Detected via
+        // game.undimensionedInPlay transient flag.
+        // Exception: Insects from Shaggai initial deploy (BB Fix 80, v2.4.30)
+        // — the loyalty-card deploy step explicitly allows placement in any
+        // Area for any faction, which includes the Moon. Detected via
+        // game.insectsInDeploy transient flag set in NeutralMonsters.scala.
+        if (f != BB && !(f == OW && f.can(TheyBreakThrough)) && !(f == BG && game.bgInAvatar) && !(f == AN && game.anInDematerialize) && !game.shamblerInDeploy && !(f == GC && game.gcInUnsubmerge) && !game.undimensionedInPlay && !game.insectsInDeploy && r == BB.moon) {
             f.log("placement of", uc.styled(f), "on", BB.moon, "blocked: only BB units may enter the Moon (Catnapping is the sole exception, and OW after They Break Through)")
         }
         else {
@@ -1548,6 +1580,25 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // assignment (which bypasses place()), so this flag is primarily
     // defense-in-depth for any future place() route through Unsubmerge.
     var gcInUnsubmerge : Boolean = false
+    // BB Fix 77 (v2.4.30): Undimensioned (neutral spellbook) transient flag.
+    // Set true while an Undimensioned rearrange step is resolving (faction
+    // unit relocated among areas the faction occupies, which may include
+    // BB.moon if the faction already has at least one unit there). The
+    // Moon-entry place() guard checks this flag to permit any faction's
+    // unit moving onto the Moon during Undimensioned. UndimensionedAction
+    // in NeutralSpellbooks.scala uses direct `u.region = r` assignment
+    // (which bypasses place()), so this flag is primarily defense-in-depth
+    // for any future place() route through Undimensioned.
+    var undimensionedInPlay : Boolean = false
+    // BB Fix 80 (v2.4.30): Insects from Shaggai initial-deploy transient
+    // flag. Set true while the Insects-from-Shaggai loyalty-card initial
+    // deployment is resolving. The rule "place in any Area" includes the
+    // Moon for any faction. The Moon-entry place() guard checks this flag
+    // to permit any faction's Insects deploy onto the Moon. The deploy
+    // path goes through self.place(uc, r) (NeutralMonsters.scala
+    // LoyaltyCardSummonAction), so this flag must be set across that
+    // place() call.
+    var insectsInDeploy : Boolean = false
 
     // ── Library at Celaeno state ──
     var silenceTokens : Map[Faction, Int] = Map()
@@ -1620,6 +1671,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var mindParasiteCaptureRejected : $[UnitRef] = $
     var mindParasiteNextIndex : Int = 100
     var mindParasiteOriginalIndex : Map[UnitRef, Int] = Map()
+    // BB Fix 80, v2.4.30 — track original UnitClass for each parasitized unit so
+    // an Earth Cat (BB's Cultist-equivalent under the Lunacy rule) restores back
+    // to EarthCat instead of Acolyte when the parasite leaves. Default lookup
+    // fallback is Acolyte for backward compatibility with pre-fix saves.
+    var mindParasiteOriginalUClass : Map[UnitRef, UnitClass] = Map()
     // Bug fix Round 6: track last Writhe pain destination for "join" UI hint when paining separately
     var fbWritheLastPainRegion : |[Region] = None
     var fbWritheLastPainedUnit : String = ""
@@ -1781,13 +1837,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         if (u.tag(Eliminated)) {
             // Mind Parasite: unparasitize on elimination — return to original faction's reserve
+            // BB Fix 80, v2.4.30 — restore using the tracked original UnitClass so an
+            // Earth Cat parasitized by Insects from Shaggai returns to BB's pool as an
+            // Earth Cat, not as an Acolyte.
             if (u.uclass == MindParasiteCultist) {
                 val origFac = mindParasiteOriginalFaction.get(u.ref).|(u.faction)
                 val origIndex = mindParasiteOriginalIndex.getOrElse(u.ref, u.index)
+                val origUClass = mindParasiteOriginalUClass.getOrElse(u.ref, Acolyte)
                 u.faction.units :-= u
                 mindParasiteOriginalFaction -= u.ref
                 mindParasiteOriginalIndex -= u.ref
-                val restored = new UnitFigure(origFac, Acolyte, origIndex, origFac.reserve)
+                mindParasiteOriginalUClass -= u.ref
+                val restored = new UnitFigure(origFac, origUClass, origIndex, origFac.reserve)
                 origFac.units :+= restored
                 return
             }
@@ -2384,7 +2445,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def neutralSpellbooks(f : Faction)(implicit w : AskWrapper) {
-        if (f.has(Undimensioned) && f.units.%(_.region.glyph.onMap)./(_.region).distinct.num > 1 && f.units.%(_.region.glyph.onMap)./(_.region).%(f.affords(2)).any)
+        // BB Fix 77, v2.4.30 — count BB.moon as a destination for Undimensioned
+        // when the faction has at least one unit there (rule: Moon is a valid
+        // rearrange destination iff faction already has a unit on the Moon).
+        // Without including the Moon, a faction with units split across one
+        // Map area + Moon would see distinct-region count = 1 and the menu
+        // would never offer Undimensioned, even though a valid rearrange
+        // (Moon ↔ Map) exists.
+        val undimRegions = f.units./(_.region).distinct.%(r => r.glyph.onMap || r == BB.moon)
+        if (f.has(Undimensioned) && undimRegions.num > 1 && undimRegions.%(f.affords(2)).any)
             + UndimensionedMainAction(f)
 
         if (f.has(Recriminations))
@@ -2514,7 +2583,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             bastetUnits.foreach { bastet =>
                 val r = bastet.region
                 val hasEnemyCultist = factions.but(f).exists(e => e.at(r).%(u => u.uclass.utype == Cultist).any)
-                if (hasEnemyCultist)
+                // BB Fix 78, v2.4.30 — Elder Thing co-located with Bastet suppresses Needs Attention (combat unaffected).
+                // If any Elder Thing (regardless of which faction holds the loyalty card) shares Bastet's area, the
+                // doom-phase Needs Attention ritual is suppressed. Bastet's combat abilities (kill rolls, Lunacy in
+                // battle) are NOT affected — only the doom-phase ritual menu entry. Mirrors the existing Elder Thing
+                // block messages used by other GOO faction abilities (FB Infernal Pact, BG Avatar, AN Spinneret, etc.).
+                val elderThingHere = factions.exists(e => e.at(r).%(_.uclass == ElderThing).any)
+                if (hasEnemyCultist && elderThingHere)
+                    + GroupAction(RequiresAttention.styled(BB) + " blocked by " + "Elder Thing".styled("nt"))
+                else if (hasEnemyCultist)
                     + RequiresAttentionMainAction(f)
             }
         }
@@ -3410,7 +3487,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // Bubastis Requires Attention: doom-phase ritual via Bastet + enemy Cultist
         case RequiresAttentionMainAction(self) =>
             val bastetRegions = self.allInPlay.%(_.uclass == Bastet).%(_.region.onMap)./(_.region)
+            // BB Fix 78, v2.4.30 — skip regions where any Elder Thing is co-located with Bastet (combat unaffected).
+            // Defense-in-depth filter mirrors the menu-gate suppression at neutralSpellbooks(); even if a stale
+            // RequiresAttentionMainAction reaches this handler from a queue / replay, the Elder-Thing-blocked region
+            // must not appear as a target.
             val eligible = bastetRegions.%(r => factions.but(self).exists(e => e.at(r).%(u => u.uclass.utype == Cultist).any))
+                                       .%(r => !factions.exists(e => e.at(r).%(_.uclass == ElderThing).any))
             Ask(self).each(eligible)(r => RequiresAttentionTargetAction(self, r)).cancel
 
         case RequiresAttentionSkipAction(self) =>

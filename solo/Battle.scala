@@ -817,20 +817,30 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Albino Penguins Laughingstock:
                 // Choice to involve penguins or not, then which penguins from which region
                 // Done exits entirely. Cancel goes back to main choice.
+                // BB Fix 79, v2.4.30 — Penguins may battle on Moon unless BB owns their loyalty card and is sending them.
+                // The general rule allows non-BB-owned Penguins to be sent into Moon battles freely. BB-owned Penguins
+                // are blocked from the Moon by BB's general Moon-restriction rules (BB cannot send any non-BB unit to
+                // the Moon). Here `owner` is both the loyalty-card owner and the sender of the Penguins, so the block
+                // condition reduces to: arena == BB.moon AND owner == BB.
                 factions.%(f => f.loyaltyCards.has(AlbinoPenguinsCard)).foreach { owner =>
-                    val penguinsElsewhere = owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region != arena)
-                    if (penguinsElsewhere.any) {
-                        return Ask(owner)
-                            .each(penguinsElsewhere)(u => LaughingstockMoveAction(owner, u.ref))
-                            .add(LaughingstockDoneAction(owner))
+                    if (arena == BB.moon && owner == BB) {
+                        log(BB.full, "Laughingstock".styled("nt"), "blocked: Bubastis-owned", AlbinoPenguins.styled(BB), "may not be sent to a battle on", BB.moon)
                     }
-                    // Penguins in arena but not yet assigned to a side (owner NOT in battle)
-                    if (!sides.has(owner)) {
-                        val unassigned = owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region == arena).%(u => !penguinOriginalOwner.contains(u.ref))
-                        if (unassigned.any) {
+                    else {
+                        val penguinsElsewhere = owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region != arena)
+                        if (penguinsElsewhere.any) {
                             return Ask(owner)
-                                .add(LaughingstockSideAction(owner, attacker))
-                                .add(LaughingstockSideAction(owner, defender))
+                                .each(penguinsElsewhere)(u => LaughingstockMoveAction(owner, u.ref))
+                                .add(LaughingstockDoneAction(owner))
+                        }
+                        // Penguins in arena but not yet assigned to a side (owner NOT in battle)
+                        if (!sides.has(owner)) {
+                            val unassigned = owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region == arena).%(u => !penguinOriginalOwner.contains(u.ref))
+                            if (unassigned.any) {
+                                return Ask(owner)
+                                    .add(LaughingstockSideAction(owner, attacker))
+                                    .add(LaughingstockSideAction(owner, defender))
+                            }
                         }
                     }
                 }
