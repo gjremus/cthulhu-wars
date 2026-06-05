@@ -523,9 +523,16 @@ object IGOOsExpansion extends Expansion {
         }
 
         // Azathoth: "Every Faction must have a GOO in play"
+        // BB Fix 85, v2.4.31 — For BB, Bastet (utype==ElderGod) counts as BB's GOO for
+        // the Nuclear Chaos activation gate. `allInPlay.goos` uses `isGOO` which already
+        // includes ElderGod, so Bastet on the Moon (inPlay) satisfies this gate. Make
+        // BB's gate explicit for clarity and defense-in-depth against future regressions.
         factions.foreach { f =>
             if (f.has(AzathothIGOO) && f.upgrades.has(NuclearChaos).not) {
-                if (factions.forall(e => e.allInPlay.goos.any)) {
+                if (factions.forall(e =>
+                    if (e == BB) e.allInPlay.%(u => u.uclass.isGOO || u.uclass == Bastet).any
+                    else e.allInPlay.goos.any
+                )) {
                     f.upgrades :+= NuclearChaos
                     f.log("gained", NuclearChaos.styled(f), "for", AzathothIGOO.styled(f))
                 }
@@ -873,12 +880,19 @@ object IGOOsExpansion extends Expansion {
             // Parallel-guide Fix 40: forced enemy-cultist relocation must NOT trigger
             // FB Cyclopean Gaze.
             game.fbSuppressCGForPlacement = true
+            // BB Fix 87, v2.4.31 — extend cultist filter to include EarthCats (BB's
+            // Cultist-equivalent). Bracket the region writes with byatisInForgetfulness
+            // so the Moon Guard exception chain permits cultists/EarthCats moving onto
+            // the Moon when Byatis is on the Moon.
+            val isMoonDest = d == BB.moon
+            if (isMoonDest) game.byatisInForgetfulness = true
             self.enemies.foreach { f =>
-                f.at(r).cultists.foreach { u =>
+                f.at(r).%(u => u.uclass.utype == Cultist || u.uclass == EarthCat).foreach { u =>
                     u.region = d
                     u.onGate = false
                 }
             }
+            if (isMoonDest) game.byatisInForgetfulness = false
             game.fbSuppressCGForPlacement = false
 
             log(Byatis.styled(self), "used", GodOfForgetfulness.name.styled("nt"), "to move all enemy cultist from", r, "to", d)
@@ -889,13 +903,22 @@ object IGOOsExpansion extends Expansion {
             Ask(self).each(l)(r => FilthAction(self, r)).cancel
 
         case FilthAction(self, r) =>
-            self.power -= 1
-            self.payTax(r)
+            // BB Fix 84, v2.4.31 — Defensive guard: Filth may never be placed on the Moon.
+            // The upstream destination list (areas.nex) already excludes Moon, but this
+            // explicit guard prevents any future regression from leaking Moon through.
+            if (r == BB.moon) {
+                self.log("Filth blocked: cannot be placed on", BB.moon)
+                EndAction(self)
+            }
+            else {
+                self.power -= 1
+                self.payTax(r)
 
-            self.place(Filth, r)
-            log(Abhoth.styled(self), "placed", Filth.styled(self), "in", r)
+                self.place(Filth, r)
+                log(Abhoth.styled(self), "placed", Filth.styled(self), "in", r)
 
-            EndAction(self)
+                EndAction(self)
+            }
 
         // DAOLOTH — Round 8 Bug 49 (FB CG ordering): when Daoloth moves to a new region
         // and the owner has Interdimensional, place the gate IMMEDIATELY here in the
@@ -1029,14 +1052,32 @@ object IGOOsExpansion extends Expansion {
             Force(DoomAction(self))
 
         // Father Dagon: Tsunami
+        // BB Fix 88, v2.4.31 — Moon counts as a "Land Area" per the Moon Lunacy
+        // rules and may be selected as the Tsunami source. The Moon is adjacent
+        // to every map region (Fix 52), so any Ocean area is a valid destination
+        // when Moon is the source. Cultists/EarthCats on the Moon get swept to
+        // a water area (the destination is a water area, NOT the Moon).
         case FatherDagonTsunamiMainAction(self) =>
             val landNearOcean = areas.%(r => r.glyph != Ocean && game.board.connected(r).exists(_.glyph == Ocean))
-            Ask(self).each(landNearOcean)(r => FatherDagonTsunamiTargetAction(self, r)).cancel
+            val sources =
+                if (factions.has(BB)) landNearOcean :+ BB.moon
+                else landNearOcean
+            Ask(self).each(sources)(r => FatherDagonTsunamiTargetAction(self, r)).cancel
 
         case FatherDagonTsunamiTargetAction(self, r) =>
             self.power -= 1
             // Each faction's cultists moved by their owner to adjacent ocean areas
-            val perFaction = factions./(f => (f, f.at(r).%(_.uclass.utype == Cultist))).%{ case (_, units) => units.any }
+            // BB Fix 88, v2.4.31 — Tsunami also sweeps EarthCats (BB's Cultist-equivalent),
+            // BUT only when held by a non-BB faction. BB's own EarthCats are NOT swept by
+            // Tsunami (spec qualifier: "if held by a non BB faction").
+            val perFaction = factions./{ f =>
+                val swept =
+                    if (f == BB)
+                        f.at(r).%(_.uclass.utype == Cultist)
+                    else
+                        f.at(r).%(u => u.uclass.utype == Cultist || u.uclass == EarthCat)
+                (f, swept)
+            }.%{ case (_, units) => units.any }
             self.log("Tsunami".styled("nt") + ": all Cultists in", r, "must move to adjacent Ocean")
             TsunamiProcessAction(self, r, perFaction, oceanDest = true, EndAction(self))
 
@@ -1058,8 +1099,13 @@ object IGOOsExpansion extends Expansion {
                 Force(then)
             } else {
                 val (faction, cultists) = remaining.head
+                // BB Fix 88, v2.4.31 — when Tsunami source is the Moon, the Moon is
+                // adjacent to every map region (Fix 52 Lunacy semantics), so all Ocean
+                // areas are valid destinations. The destination remains a water area
+                // (never the Moon itself).
                 val adj = if (oceanDest)
-                    game.board.connected(sourceRegion).%(_.glyph == Ocean)
+                    (if (sourceRegion == BB.moon) areas.%(_.glyph == Ocean)
+                     else game.board.connected(sourceRegion).%(_.glyph == Ocean))
                 else
                     game.board.connected(sourceRegion).%(_.glyph != Ocean)
                 if (adj.none || cultists.none) {
@@ -1353,7 +1399,16 @@ object IGOOsExpansion extends Expansion {
             bokrugOwner match {
                 case Some(owner) if owner.allInPlay.%(_.uclass == Bokrug).none =>
                     // Bokrug NOT on map — check for valid regions (no enemy units)
-                    val validRegions = areas.nex.%(r => owner.enemies.forall(_.at(r).%(_.uclass.utype != MapUnit).none))
+                    // BB Fix 86, v2.4.31 — Moon is a valid candidate when BB is in the
+                    // game (Moon counts as an "Area" for Ghosts of Ib placement). The
+                    // no-enemy-units check still applies; only BB's own units may be on
+                    // the Moon, so only BB itself can ever place Bokrug there.
+                    val baseRegions = areas.nex.%(r => owner.enemies.forall(_.at(r).%(_.uclass.utype != MapUnit).none))
+                    val validRegions =
+                        if (factions.has(BB) && owner.enemies.forall(_.at(BB.moon).%(_.uclass.utype != MapUnit).none))
+                            baseRegions :+ BB.moon
+                        else
+                            baseRegions
                     if (validRegions.any) {
                         log(Bokrug.styled(owner), "Ghosts of Ib".styled("nt") + ":", owner.full, "must place", Bokrug.styled(owner))
                         Ask(owner).each(validRegions)(r => GhostsOfIbChooseAction(owner, r, then))
@@ -1365,7 +1420,13 @@ object IGOOsExpansion extends Expansion {
 
         case GhostsOfIbChooseAction(self, r, then) =>
             val bokrug = self.pool.one(Bokrug)
+            // BB Fix 86, v2.4.31 — bracket the Moon-bound region write with the
+            // ghostsInPlace transient flag so the Moon Guard exception chain in
+            // Game.scala recognizes Ghosts of Ib placements as legal.
+            val isMoonPlace = r == BB.moon
+            if (isMoonPlace) game.ghostsInPlace = true
             bokrug.region = r
+            if (isMoonPlace) game.ghostsInPlace = false
             self.log("Ghosts of Ib".styled("nt") + ": placed", Bokrug.styled(self), "in", r)
             Force(then)
 

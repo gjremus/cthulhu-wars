@@ -314,9 +314,11 @@ object NeutralMonstersExpansion extends Expansion {
 
             // Satyr Fecund: place 1 Acolyte from Pool with every Satyr placed (LC path here;
             // SummonedAction handler below covers subsequent regular-summon placements).
-            if (uc == Satyr && self.loyaltyCards.has(SatyrCard) && self.pool(Acolyte).any) {
-                self.place(Acolyte, r)
-                self.log("Fecund".styled("nt") + ": placed", Acolyte.styled(self), "in", r, "with", Satyr.styled(self))
+            // BB Fix 81, v2.4.31 — Use EarthCat for BB instead of Acolyte.
+            val satyrFecundUC : UnitClass = if (self == BB) EarthCat else Acolyte
+            if (uc == Satyr && self.loyaltyCards.has(SatyrCard) && self.pool(satyrFecundUC).any) {
+                self.place(satyrFecundUC, r)
+                self.log("Fecund".styled("nt") + ": placed", satyrFecundUC.styled(self), "in", r, "with", Satyr.styled(self))
             }
 
             if (uc == Ghast && self.pool(Ghast).any)
@@ -354,9 +356,14 @@ object NeutralMonstersExpansion extends Expansion {
             Force(then)
 
         // SATYR FECUND: when a Satyr is summoned, also place 1 Acolyte from Pool
-        case SummonedAction(self, uc, r, l) if uc == Satyr && self.loyaltyCards.has(SatyrCard) && self.pool(Acolyte).any =>
-            self.place(Acolyte, r)
-            self.log("Fecund".styled("nt") + ": placed", Acolyte.styled(self), "in", r, "with", Satyr.styled(self))
+        // BB Fix 81, v2.4.31 — Use EarthCat for BB instead of Acolyte.
+        case SummonedAction(self, uc, r, l) if uc == Satyr && self.loyaltyCards.has(SatyrCard) && {
+                val satyrFecundUC : UnitClass = if (self == BB) EarthCat else Acolyte
+                self.pool(satyrFecundUC).any
+            } =>
+            val satyrFecundUC : UnitClass = if (self == BB) EarthCat else Acolyte
+            self.place(satyrFecundUC, r)
+            self.log("Fecund".styled("nt") + ": placed", satyrFecundUC.styled(self), "in", r, "with", Satyr.styled(self))
             EndAction(self)
 
         // HOUND OF TINDALOS CRONOPHAGE: when owner moves another unit, offer free Hound teleport
@@ -377,9 +384,16 @@ object NeutralMonstersExpansion extends Expansion {
                 UnknownContinue
 
         // SHANTAK
+        // BB Fix 82, v2.4.31 — When BB owns Shantak, carry can also include EarthCats
+        // (BB's Cultist-equivalent). Non-BB factions still carry only Cultists.
         case MovedAction(self, u, o, r) if u.uclass == Shantak =>
+            val carryCandidates =
+                if (self == BB)
+                    (self.at(o).not(Moved).cultists ++ self.at(o).not(Moved).%(_.uclass == EarthCat)).sortA
+                else
+                    self.at(o).not(Moved).cultists.sortA
             Ask(self)
-                .each(self.at(o).not(Moved).cultists.sortA)(u => ShantakCarryCultistAction(self, o, u, r).as(u.ref.full, "from", o)(Shantak, "carries", "Cultist".styled(self), "to", r))
+                .each(carryCandidates)(u => ShantakCarryCultistAction(self, o, u, r).as(u.ref.full, "from", o)(Shantak, "carries", "Cultist".styled(self), "to", r))
                 .skip(MoveContinueAction(self, true))
 
         case ShantakCarryCultistAction(self, o, u, r) =>

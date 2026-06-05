@@ -953,7 +953,15 @@ class Player(private val f : Faction)(implicit game : Game) {
         // — the loyalty-card deploy step explicitly allows placement in any
         // Area for any faction, which includes the Moon. Detected via
         // game.insectsInDeploy transient flag set in NeutralMonsters.scala.
-        if (f != BB && !(f == OW && f.can(TheyBreakThrough)) && !(f == BG && game.bgInAvatar) && !(f == AN && game.anInDematerialize) && !game.shamblerInDeploy && !(f == GC && game.gcInUnsubmerge) && !game.undimensionedInPlay && !game.insectsInDeploy && r == BB.moon) {
+        // Exception: Ghosts of Ib (BB Fix 86, v2.4.31) — Bokrug's doom-phase
+        // placement may target the Moon (Moon counts as a valid "Area" for
+        // Ghosts of Ib). Detected via game.ghostsInPlace transient flag set
+        // in IGOOs.scala GhostsOfIbChooseAction.
+        // Exception: Byatis God of Forgetfulness (BB Fix 87, v2.4.31) — when
+        // Byatis is on the Moon, cultists/EarthCats forgotten there land on
+        // the Moon. Detected via game.byatisInForgetfulness transient flag
+        // set in IGOOs.scala GodOfForgetfulnessAction.
+        if (f != BB && !(f == OW && f.can(TheyBreakThrough)) && !(f == BG && game.bgInAvatar) && !(f == AN && game.anInDematerialize) && !game.shamblerInDeploy && !(f == GC && game.gcInUnsubmerge) && !game.undimensionedInPlay && !game.insectsInDeploy && !game.ghostsInPlace && !game.byatisInForgetfulness && r == BB.moon) {
             f.log("placement of", uc.styled(f), "on", BB.moon, "blocked: only BB units may enter the Moon (Catnapping is the sole exception, and OW after They Break Through)")
         }
         else {
@@ -1599,6 +1607,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // LoyaltyCardSummonAction), so this flag must be set across that
     // place() call.
     var insectsInDeploy : Boolean = false
+    // BB Fix 86 (v2.4.31): Ghosts of Ib (Bokrug doom-phase placement) transient
+    // flag. Set true while Bokrug is being placed onto the Moon via Ghosts of Ib.
+    // The placement uses direct `u.region = r` assignment (which bypasses
+    // place()), so this flag is primarily defense-in-depth — and it also
+    // documents the Moon Guard exception chain entry below.
+    var ghostsInPlace : Boolean = false
+    // BB Fix 87 (v2.4.31): Byatis God of Forgetfulness transient flag. Set true
+    // while God of Forgetfulness is moving cultists/EarthCats onto the Moon
+    // (Byatis on the Moon as destination). The relocation uses direct region
+    // writes (which bypass place()), so this flag is primarily defense-in-depth
+    // for any future place() routing through God of Forgetfulness.
+    var byatisInForgetfulness : Boolean = false
 
     // ── Library at Celaeno state ──
     var silenceTokens : Map[Faction, Int] = Map()
@@ -2434,9 +2454,24 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         }
 
         // Round 8 Bug 40: also check facedown state for IGOO spellbooks
+        // BB Fix 87, v2.4.31 — bidirectional Moon support for God of Forgetfulness:
+        //   1. When Byatis is ON the Moon, the destination region is BB.moon (already
+        //      handled — `f.goo(Byatis).region` is BB.moon and that propagates to `d`).
+        //   2. When Byatis is on Earth, allow pulling cultists FROM the Moon (extend
+        //      source list to include BB.moon when BB is in the game).
+        //   3. EarthCats count as cultist-equivalent for the source filter (BB's
+        //      Cultist-equivalent — they should be eligible for forgetfulness
+        //      relocation alongside ordinary Cultists).
         if (f.has(GodOfForgetfulness) && !f.oncePerGame.has(GodOfForgetfulness) && f.has(Byatis) && f.allInPlay.%(_.uclass == Byatis).any) {
             $(f.goo(Byatis).region).nex.%(f.affords(1)).foreach { br =>
-                board.connected(br).%(r => factionlike.but(f).exists(_.at(r).cultists.any)).some.foreach { l =>
+                val cultistOrEarthCat : (UnitFigure => Boolean) = u => u.uclass.utype == Cultist || u.uclass == EarthCat
+                val baseSources = board.connected(br).%(r => factionlike.but(f).exists(_.at(r).%(cultistOrEarthCat).any))
+                val withMoon =
+                    if (factions.has(BB) && br != BB.moon && factionlike.but(f).exists(_.at(BB.moon).%(cultistOrEarthCat).any))
+                        baseSources :+ BB.moon
+                    else
+                        baseSources
+                withMoon.some.foreach { l =>
                     + GodOfForgetfulnessMainAction(f, br, l)
                 }
             }
@@ -2835,7 +2870,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         val enemyGateOwner = factions.but(f).find(_.gates.has(r))
                         enemyGateOwner.foreach { _ =>
                             // Card: "+1 more power for each enemy Cultist in the area" — ALL enemies
-                            val enemyCultists = factions.but(f)./~(_.at(r).%(_.uclass.utype == Cultist)).num
+                            // BB Fix 83, v2.4.31 — When non-BB faction holds Brown Jenkin, EarthCats
+                            // count as enemy "Cultists" for Loathsome Titter (BB's Cultist-equivalent).
+                            // When BB holds Brown Jenkin, EarthCats do NOT count (BB cannot generate
+                            // Loathsome Titter power off its own EarthCats).
+                            val enemyCultists =
+                                if (f != BB)
+                                    factions.but(f)./~(_.at(r).%(u => u.uclass.utype == Cultist || u.uclass == EarthCat)).num
+                                else
+                                    factions.but(f)./~(_.at(r).%(_.uclass.utype == Cultist)).num
                             val bonus = 2 + enemyCultists
                             f.power += bonus
                             f.log("Loathsome Titter".styled("nt") + ":", bonus.power, "in", r)
@@ -4018,6 +4061,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             if (u.uclass == Shantak)
                 destinations = areas.but(from)
+
+            // BB Fix 82, v2.4.31 — Only BB-owned Shantak may go to the Moon.
+            // Shantak's "anywhere" reach must exclude Moon for non-BB factions.
+            if (u.uclass == Shantak && self != BB)
+                destinations = destinations.but(BB.moon)
 
             // Fix 52 (v2.4.19): the Moon is adjacent to every region per the user's
             // explicit Moon-Tile semantics ("the moon is adjacent to all regions").
