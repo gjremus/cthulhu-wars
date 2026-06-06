@@ -828,7 +828,11 @@ class Player(private val f : Faction)(implicit game : Game) {
 
     def allGates = gates ++ unitGate./(_.region).$
     def needs(rq : Requirement) = unfulfilled.contains(rq)
-    def has(sb : Spellbook) = f.abilities.contains(sb) || spellbooks.contains(sb) || upgrades.contains(sb) || (borrowed.contains(sb) && spellbooks.contains(AncientSorcery) && !used(AncientSorcery))
+    // 2026-06-06 Fix 75 (Fix 2): slPermanentBorrowed lets SL retain DC unique
+    // abilities (Tenebrosum + Depravity) PERMANENTLY when they were copied via
+    // the Ancient Sorcery DC-bundle. Skips the normal "borrowed cleared at
+    // end of doom phase" reset and skips the AncientSorcery oncePerGame guard.
+    def has(sb : Spellbook) = f.abilities.contains(sb) || spellbooks.contains(sb) || upgrades.contains(sb) || (borrowed.contains(sb) && spellbooks.contains(AncientSorcery) && !used(AncientSorcery)) || (f == SL && game.slPermanentBorrowed.contains(sb))
     def used(sb : Spellbook) = oncePerGame.contains(sb) || oncePerTurn.contains(sb) || oncePerRound.contains(sb) || oncePerAction.contains(sb)
     def can(sb : Spellbook) = has(sb) && !used(sb)
     def ignored(sb : Spellbook) = ignorePerGame.contains(sb) || ignorePerTurn.contains(sb) || ignorePerInstant.contains(sb)
@@ -1447,16 +1451,34 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Action so the post-action repeat prompt can be offered. Cleared on EndAction.
     // dcTenebrosumGuard prevents the repeat itself from triggering another
     // Tenebrosum prompt (NON-RECURSIVE per §1.5.1 RESOLVED).
-    var dcLastActionForTenebrosum : Option[(Action, Int)] = None
+    // 2026-06-06 Fix 75: triple now stores (action, cost, actionName) so the
+    // repeat-button label can show "Repeat <name>" verbatim per user spec.
+    var dcLastActionForTenebrosum : Option[(Action, Int, String)] = None
     var dcTenebrosumGuard : Boolean = false
     // After Tenebrosum-paid repeat, grant ONE extra main-menu turn (treats DC
     // as not-yet-acted for the next MainAction). Cleared by EndAction(DC).
     var dcTenebrosumExtraTurn : Boolean = false
+    // 2026-06-06 Fix 75: per-TURN used flag (NOT per-action). Once Tenebrosum
+    // has been used this turn the option is hidden until the next PreMainAction
+    // resets it. Tracked per faction (DC + SL via Ancient Sorcery permanent).
+    var dcTenebrosumUsedThisTurn : Boolean = false
+    var slTenebrosumUsedThisTurn : Boolean = false
     // Dark Bargain round-of-prompts: collected per-enemy D6 picks during the
     // current DarkBargainAction resolution. Cleared at start of each DB cast.
     var dcDarkBargainPicks : $[(Faction, Int)] = $
     // Pending reserved-Acolyte placements after SB acquisition (queue of SBs).
     var dcPendingAcolytePlacements : $[Spellbook] = $
+
+    // 2026-06-06 Fix 75 (Fix 2): SL Ancient Sorcery DC-bundle. When SL takes
+    // the DC bundle via Ancient Sorcery, 2 Serpentmen go to DC's faction card
+    // (sentinel region) PERMANENTLY (skip doom-phase return) and SL retains
+    // both Tenebrosum + Depravity for the rest of the game (skip the standard
+    // _.borrowed = $ clear at end of doom phase). SL gets its own Sin pool.
+    var slDCBundleTaken : Boolean = false
+    var slSin : Int = 0
+    // Spellbooks held by SL via the permanent-bundle path (NOT cleared in
+    // the doom-phase borrowed-reset). Used in addition to f.borrowed.
+    var slPermanentBorrowed : $[Spellbook] = $
 
     // Tombstalker (TS) state: Death's Head counter, Cursed Tome stack index, and per-faction tome ownership
     var deathsHead : Int = 0
@@ -2724,6 +2746,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         f.power += 1
                         dcSin += 1
                         f.log("Bacchanal: gained", 1.power, "and", "1".styled("dc"), "Sin (Y'Golonac in play)")
+                    }
+                }
+
+                // 2026-06-06 Fix 75 (Fix 2): SL with permanent DC bundle gets
+                // Depravity (+1 Sin per SL Acolyte on map) into its own Sin
+                // pool slSin. Separate tracker from DC's.
+                if (f == SL && slPermanentBorrowed.has(Depravity)) {
+                    val slAcolytes = f.onMap(Acolyte).num
+                    if (slAcolytes > 0) {
+                        slSin += slAcolytes
+                        f.log("Depravity (via Ancient Sorcery): gained", slAcolytes.toString.styled("dc"),
+                            "Sin (now", slSin.toString.styled("dc") + ")")
                     }
                 }
             }

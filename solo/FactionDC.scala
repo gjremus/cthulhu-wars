@@ -115,10 +115,15 @@ case object DC extends Faction { f =>
 // Soft prompt (menu navigation) + Hard repeat action (state mutation).
 // Per guide G3 + G6 + FCG: Soft for prompt, Hard for debit/re-enqueue.
 // Offered as a main-menu option when game.dcLastActionForTenebrosum is set.
-case class DCTenebrosumMainAction(self : Faction, cost : Int)
-    extends OptionFactionAction(Tenebrosum.styled(DC) + ": repeat last action for " + cost.toString.styled("dc") + " Sin")
+// 2026-06-06 Fix 75: strict same-action replay. Button label uses the
+// action name (Battle/Move/Build/etc.) of the last action. PER-TURN flag,
+// not per-action: once Tenebrosum has been used this turn it's hidden until
+// PreMainAction resets it. self is the casting faction (DC, or SL via the
+// Ancient Sorcery permanent bundle).
+case class DCTenebrosumMainAction(self : Faction, cost : Int, actionName : String)
+    extends OptionFactionAction(Tenebrosum.styled(DC) + ": Repeat " + actionName.styled(self) + " for " + cost.toString.styled("dc") + " Sin")
     with MainQuestion with Soft with PowerNeutral
-case class DCTenebrosumRepeatAction(self : Faction, cost : Int)
+case class DCTenebrosumRepeatAction(self : Faction, cost : Int, actionName : String)
     extends ForcedAction with PowerNeutral
 
 // ── Reserved-Acolyte placement (fires on SB acquisition — §1.6 + §2.5) ─────
@@ -266,9 +271,10 @@ object DCExpansion extends Expansion {
             if (f.hasAllSB)
                 game.battles(f)
             // Tenebrosum: offer post-action repeat if last action recorded + Sin sufficient
-            game.dcLastActionForTenebrosum.foreach { case (_, cost) =>
-                if (cost > 0 && game.dcSin >= cost && !game.dcTenebrosumGuard)
-                    + DCTenebrosumMainAction(f, cost)
+            // 2026-06-06 Fix 75: hide once Tenebrosum has been used this turn.
+            game.dcLastActionForTenebrosum.foreach { case (_, cost, an) =>
+                if (cost > 0 && game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn)
+                    + DCTenebrosumMainAction(f, cost, an)
             }
             game.reveals(f)
             game.endTurn(f)(true)
@@ -309,9 +315,10 @@ object DCExpansion extends Expansion {
                 + DCDarkBargainMainAction(f)
 
             // Tenebrosum (Item 1): offer repeat of last DC Common/SB action if Sin >= cost
-            game.dcLastActionForTenebrosum.foreach { case (_, cost) =>
-                if (cost > 0 && game.dcSin >= cost && !game.dcTenebrosumGuard)
-                    + DCTenebrosumMainAction(f, cost)
+            // 2026-06-06 Fix 75: hide once Tenebrosum has been used this turn.
+            game.dcLastActionForTenebrosum.foreach { case (_, cost, an) =>
+                if (cost > 0 && game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn)
+                    + DCTenebrosumMainAction(f, cost, an)
             }
 
             game.libraryActions(f)
@@ -322,20 +329,28 @@ object DCExpansion extends Expansion {
             asking
 
         // ── Tenebrosum: Soft prompt — opens "are you sure" confirm ───────────
-        case DCTenebrosumMainAction(self, cost) =>
+        case DCTenebrosumMainAction(self, cost, an) =>
             implicit val asking = Asking(self)
-            + DCTenebrosumRepeatAction(self, cost)
+            + DCTenebrosumRepeatAction(self, cost, an)
             + CancelAction
             asking
 
         // ── Tenebrosum: Hard — debit Sin and grant one extra main action ──
-        case DCTenebrosumRepeatAction(self, cost) =>
+        // 2026-06-06 Fix 75: per-TURN used flag (NOT per-action). DC pays from
+        // dcSin; SL (via the Ancient Sorcery permanent bundle) pays from slSin.
+        case DCTenebrosumRepeatAction(self, cost, an) =>
             game.dcLastActionForTenebrosum match {
                 case Some(_) =>
-                    game.dcSin -= cost
+                    if (self == SL) {
+                        game.slSin -= cost
+                        game.slTenebrosumUsedThisTurn = true
+                    } else {
+                        game.dcSin -= cost
+                        game.dcTenebrosumUsedThisTurn = true
+                    }
                     game.dcTenebrosumGuard = true
                     game.dcTenebrosumExtraTurn = true
-                    self.log(Tenebrosum.styled(DC) + ": spent", cost.toString.styled("dc"), "Sin to repeat (next action is free)")
+                    self.log(Tenebrosum.styled(DC) + ": spent", cost.toString.styled("dc"), "Sin to Repeat", an.styled(self))
                     // Clear last-action so the SAME action isn't repeated as the "last" again
                     game.dcLastActionForTenebrosum = None
                     Force(MainAction(self))
@@ -411,7 +426,7 @@ object DCExpansion extends Expansion {
         case DCSatiateConfirmAction(self) =>
             self.power -= 2
             // Record last action for Tenebrosum (Item 1)
-            recordTenebrosum(action, 2)
+            recordTenebrosum(action, 2, "Satiate")
             val ygolonacOpt = self.allInPlay.%(_.uclass == YgolonacDC).headOption
             ygolonacOpt match {
                 case Some(yg) =>
@@ -469,7 +484,7 @@ object DCExpansion extends Expansion {
 
         case DCLureConfirmAction(self) =>
             self.power -= 1
-            recordTenebrosum(action, 1)
+            recordTenebrosum(action, 1, "Lure")
             val ygolonacOpt = self.allInPlay.%(_.uclass == YgolonacDC).headOption
             ygolonacOpt match {
                 case Some(yg) =>
@@ -542,7 +557,7 @@ object DCExpansion extends Expansion {
 
         case DCPilgrimageDestAction(self, prophet, dest) =>
             self.power -= 1
-            recordTenebrosum(action, 1)
+            recordTenebrosum(action, 1, "Pilgrimage")
             val p = game.unit(prophet)
             val src = p.region
             // Move all other DC units (NOT the prophet itself) to dest
@@ -559,7 +574,7 @@ object DCExpansion extends Expansion {
             asking
 
         case DCDarkBargainConfirmAction(self) =>
-            recordTenebrosum(action, 0)
+            recordTenebrosum(action, 0, "Dark Bargain")
             // Start round-of-prompts: each enemy picks a D6 face 1..6.
             game.dcDarkBargainPicks = $
             val enemies = game.factions.but(self)
@@ -676,30 +691,32 @@ object DCExpansion extends Expansion {
         // For Common Actions handled in Game.scala (Move/Build/Control/Recruit/
         // Summon/Capture/Awaken/Attack/Ritual), record the cost BEFORE the
         // engine handler executes. Return UnknownContinue so engine still runs.
-        case MoveAction(self : DC.type, u, o, r, cost) if cost > 0 =>
-            recordTenebrosum(action, cost)
+        // 2026-06-06 Fix 75: also record SL versions (when SL has the permanent
+        // DC bundle) so SL gets "Repeat <action>" with its own Sin tracker.
+        case MoveAction(self, u, o, r, cost) if cost > 0 && tenebrosumEligible(self) =>
+            recordTenebrosum(action, cost, "Move")
             UnknownContinue
-        case BuildGateAction(self : DC.type, _) =>
+        case BuildGateAction(self, _) if tenebrosumEligible(self) =>
             // Build Gate cost: 3 - (UmrAtTawil discount). We don't have an UmrAtTawil/DC interaction.
-            recordTenebrosum(action, 3)
+            recordTenebrosum(action, 3, "Build Gate")
             UnknownContinue
-        case RecruitAction(self : DC.type, uc, r) =>
-            recordTenebrosum(action, self.recruitCost(uc, r))
+        case RecruitAction(self, uc, r) if tenebrosumEligible(self) =>
+            recordTenebrosum(action, self.recruitCost(uc, r), "Recruit")
             UnknownContinue
-        case SummonAction(self : DC.type, uc, r) =>
-            recordTenebrosum(action, self.summonCost(uc, r))
+        case SummonAction(self, uc, r) if tenebrosumEligible(self) =>
+            recordTenebrosum(action, self.summonCost(uc, r), "Summon")
             UnknownContinue
-        case CaptureAction(self : DC.type, _, _, _) =>
-            recordTenebrosum(action, 1)
+        case CaptureAction(self, _, _, _) if tenebrosumEligible(self) =>
+            recordTenebrosum(action, 1, "Capture")
             UnknownContinue
-        case AttackAction(self : DC.type, _, _, _) =>
-            recordTenebrosum(action, 1)
+        case AttackAction(self, _, _, _) if tenebrosumEligible(self) =>
+            recordTenebrosum(action, 1, "Battle")
             UnknownContinue
-        case AwakenAction(self : DC.type, uc, r, _) =>
-            self.awakenCost(uc, r).foreach(c => recordTenebrosum(action, c))
+        case AwakenAction(self, uc, r, _) if tenebrosumEligible(self) =>
+            self.awakenCost(uc, r).foreach(c => recordTenebrosum(action, c, "Awaken"))
             UnknownContinue
 
-        case EndAction(self : DC.type) =>
+        case EndAction(self) if tenebrosumEligible(self) =>
             // Clear the guard flag if we were in a Tenebrosum repeat (one-shot).
             if (game.dcTenebrosumGuard) {
                 game.dcTenebrosumGuard = false
@@ -707,16 +724,30 @@ object DCExpansion extends Expansion {
             }
             UnknownContinue
 
+        // 2026-06-06 Fix 75: per-TURN reset on PreMainAction. The used flag is
+        // cleared at the start of each new turn so Tenebrosum becomes available
+        // again. Also clears any stale last-action recorded from a prior turn.
+        case PreMainAction(self) if tenebrosumEligible(self) =>
+            if (self == SL) game.slTenebrosumUsedThisTurn = false
+            else            game.dcTenebrosumUsedThisTurn = false
+            game.dcLastActionForTenebrosum = None
+            UnknownContinue
+
         case _ => UnknownContinue
     }
 
-    // Helper: record the just-resolved action + its Power cost for Tenebrosum.
+    // Helper: record the just-resolved action + its Power cost + display name.
     // Non-recursive: skipped if we're already inside a Tenebrosum-driven repeat.
-    private def recordTenebrosum(a : Action, cost : Int)(implicit game : Game) : Unit = {
+    private def recordTenebrosum(a : Action, cost : Int, an : String)(implicit game : Game) : Unit = {
         if (!game.dcTenebrosumGuard && cost > 0) {
-            game.dcLastActionForTenebrosum = Some((a, cost))
+            game.dcLastActionForTenebrosum = Some((a, cost, an))
         }
     }
+
+    // 2026-06-06 Fix 75: a faction is Tenebrosum-eligible if it's DC, or if it's
+    // SL holding the permanent DC bundle via Ancient Sorcery (Fix 2).
+    private def tenebrosumEligible(self : Faction)(implicit game : Game) : Boolean =
+        self == DC || (self == SL && game.slPermanentBorrowed.has(Tenebrosum))
 }
 
 
