@@ -1011,6 +1011,43 @@ object Overlays {
         case $("BB")                     => bbFactionOverlay(false)
         case $("BB", altSB : Boolean)    => bbFactionOverlay(altSB)
 
+        // Defilers Court (DC): faction info card — Homebrew faction
+        // Unique abilities: Tenebrosum (Ongoing) + Depravity (Gather Power).
+        // Card art transcribed from Defiler_Faction_Card.png + Defiler_Spellbooks.png.
+        case $("DC") => faction(DC, "info:dc-background", Tenebrosum, "Ongoing",
+            "When you perform a Common or Spellbook Action, you may perform the same Action again (if it is available to you) using Sin as if it were Power.<br/><br/>" +
+            "<span class=ability-color>Depravity</span> <span class=cost-color>(Gather Power):</span> Gain 1 Sin for each Cultist you have on the map. Sin is not Power & can be kept over multiple phases.",
+            $(), $(
+            (Acolyte,         6, "1", "0", s"""<div class=p>Start on Spellbook requirement slots. Released into play upon SB acquisition.</div>"""),
+            (MindlessHusk,    5, "1", "1", s"""<div class=p>Spellbook: ${reference(DC, Eschar)}</div>"""),
+            (FallenProphet,   4, "3", "?", s"""<div class=p>Combat: During your turn, equals the number of enemy Cultists in the Area. Any other time, equals the number of your Cultists in the Area.</div><div class=p>Spellbook: ${reference(DC, Pilgrimage)}</div>"""),
+            (YgolonacDC,      1, "?", "?", s"""
+                <div class=p>${cost(s"How to Awaken ${YgolonacDC.name}:")}</div>
+                <div class=p>${cost("1)")} Pay Power equal to the number of Spellbooks on your Faction Sheet.</div>
+                <div class=p>${cost("2)")} Y'Golonac appears in a LAND AREA lacking a Controlled Gate.</div>
+                <div class=p>${combat} Equals ceil(Sin / 2).</div>
+                <div class=p><span class=ability-color>Bacchanal</span> ${cost("(Ongoing):")} Y'Golonac can Build & Control Gates, & generates 1 Power and 1 Sin in the Gather Power Phase.</div>
+                <div class=p>Spellbooks: ${reference(DC, Lure)}, ${reference(DC, Eschar)}, ${reference(DC, DarkBargain)}</div>""")
+        ))
+
+        // Defilers Court (DC): spellbook requirement info card overlays
+        case $("DC", ProselytizeReq.text) => requirement("You may take this spellbook in the Doom Phase. When you do, gain 2 Sin per enemy Great Old One in play.")
+        case $("DC", SatiateReq.text)     => requirement("You may take this spellbook in the Doom Phase. When you do, gain 1 Power for each other Spellbook on your Faction Sheet and 1 Sin for each remaining Spellbook in your Pool.")
+        case $("DC", LureReq.text)        => requirement("Have no Mindless Husks in your Pool.")
+        case $("DC", EscharReq.text)      => requirement("Have no Fallen Prophets in your Pool.")
+        case $("DC", PilgrimageReq.text)  => requirement("Any player performs a Ritual of Annihilation.")
+        case $("DC", DarkBargainReq.text) => requirement("Awaken Y&#39;Golonac, Lord of Sin.")
+
+        // Defilers Court (DC): spellbook info card overlays (verbatim from card art)
+        case $("DC", Tenebrosum.name)  => spellbook(Tenebrosum.name,  "Ongoing (Faction Ability)", "When you perform a Common or Spellbook Action, you may perform the same Action again (if it is available to you) using Sin as if it were Power.")
+        case $("DC", Depravity.name)   => spellbook(Depravity.name,   "Gather Power (Faction Ability)", "Gain 1 Sin for each Cultist you have on the map. Sin is not Power & can be kept over multiple phases.")
+        case $("DC", Proselytize.name) => spellbook(Proselytize.name, "Ongoing", "Each of your Acolytes 'drag' an enemy Acolyte of each enemy Faction (of those player(s) choice) from any Areas they move from, to the Area they move to.")
+        case $("DC", Satiate.name)     => spellbook(Satiate.name,     "Action: Cost 2", "Capture a Cultist from each Faction with Cultists in Y'Golonac's Area including yourself. Gain 1 Elder Sign for each Cultist captured beyond the first. This Capture cannot be protected by the presence of enemy Great Old Ones or any other abilities (like Lunacy's capture protection, or Masquerade).")
+        case $("DC", Lure.name)        => spellbook(Lure.name,        "Action: Cost 1", "Each enemy Faction must move one of their Cultists from a (non-Moon) Area adjacent to Y'Golonac, into Y'Golonac's Area. Enemy Cultists in Areas containing an enemy Great Old One, Terror or Faction Buildings are exempt.")
+        case $("DC", Eschar.name)      => spellbook(Eschar.name,      "Post-Battle", "Gain 1 Sin per Mindless Husk that is Killed in Battle.")
+        case $("DC", Pilgrimage.name)  => spellbook(Pilgrimage.name,  "Action: Cost 1", "Choose a Fallen Prophet, then move any or all of your other Units from that Area to an adjacent Area for free.")
+        case $("DC", DarkBargain.name) => spellbook(DarkBargain.name, "Action: Cost 0", "If Y'Golonac is in play, all enemies have 30 seconds to choose a number using a D6. You gain Sin equal to one of those numbers of your choice, then distribute an equal amount of Power as evenly as possible among all enemies. Flip this spellbook facedown until the Gather Power Phase.")
+
         // Bubastis (BB): alternate spellbooks info overlay.
         // Help text shows the FULL rulebook text of both replacement spellbooks
         // (Syzygy and Carnivore), mirroring the DS Alternate Spellbooks help

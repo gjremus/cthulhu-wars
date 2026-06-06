@@ -705,6 +705,8 @@ object CthulhuWarsSolo {
                                         // Tcho-Tcho (TT): AI bot decision-making at Easy difficulty
                                         case TT => BotTT   .ask(actions, 0.2)(game)
                                         case BB => BotBB   .ask(actions, 0.2)(game)
+                                        // Defilers Court (DC): bot dispatch (Easy)
+                                        case DC => BotDC   .ask(actions, 0.2)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -725,6 +727,8 @@ object CthulhuWarsSolo {
                                         // Tcho-Tcho (TT): AI bot decision-making at Normal difficulty
                                         case TT => BotTT   .ask(actions, 0.03)(game)
                                         case BB => BotBB   .ask(actions, 0.03)(game)
+                                        // Defilers Court (DC): bot dispatch (Normal)
+                                        case DC => BotDC   .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -749,6 +753,8 @@ object CthulhuWarsSolo {
                                         case TT => BotTT   .ask(as, 0.03)(game)
                                         // Bubastis (BB): placeholder until BotBB is implemented (Task 3.16.1)
                                         case BB => Bot3(BB).ask(as, 0.03)(game)
+                                        // Defilers Court (DC): bot dispatch (AllVsHuman)
+                                        case DC => BotDC   .ask(as, 0.03)(game)
                                     })
 
 
@@ -931,6 +937,8 @@ object CthulhuWarsSolo {
                     case TT => Processing(|("#fc9ca0"), |("#333333"), None)
                     // Bubastis (BB): gold tone (placeholder until final art, Task 3.9.1)
                     case BB => Processing(|("#c8a84b"), |("#333333"), None)
+                    // Defilers Court (DC): gold tone per glyph
+                    case DC => Processing(|("#F0EDA8"), |("#333333"), None)
                     // Library map units: no tint (use original icon images)
                     case LibraryFaction => defaultProcessing
                     case _  => defaultProcessing
@@ -957,6 +965,8 @@ object CthulhuWarsSolo {
                         case DS => DrawRect("ds-acolyte", None, x - 17, y - 54, 38, 60)
                         // Bubastis (BB): acolyte unit sprite (placeholder until Task 3.9.1)
                         case BB => DrawRect("bb-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        // Defilers Court (DC): acolyte unit sprite
+                        case DC => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -1012,6 +1022,8 @@ object CthulhuWarsSolo {
                         // NOT FOR THE GAME ITSELF. In-game rendering always uses the standard
                         // bb-glyph regardless of the BBAlternateSpellbooks option.
                         case BB => DrawRect("bb-glyph", |(tint), x - 50, y - 50, 100, 100)
+                        // Defilers Court (DC): faction glyph sprite
+                        case DC => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
                         case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
@@ -1091,6 +1103,13 @@ object CthulhuWarsSolo {
                     // CatFromSaturn (real 70mm): slightly larger than Mars per art proportions — h=135.
                     // CatFromUranus (real 80mm): just below Tsathoggua (146) — h=142.
                     // Bastet (real 110mm): strictly larger than Tsathoggua (146), still below Cthulhu (225) — h=210.
+                    // Defilers Court (DC): unit sprites
+                    // MindlessHusk and FallenProphet reuse their custom dc-* webp; Y'Golonac
+                    // REUSES the iGOO n-ygolonac.webp at 1.75× scale per guide §2.11.
+                    case MindlessHusk  => DrawRect("dc-mindless-husk",  |(tint), x - 30, y - 75, 60, 80)
+                    case FallenProphet => DrawRect("dc-fallen-prophet", |(tint), x - 40, y - 110, 80, 115)
+                    case YgolonacDC    => DrawRect("n-ygolonac",        |(tint), x - 66, y - 158, 131, 175)
+
                     case EarthCat      => DrawRect("bb-earth-cat",      |(tint), x - 33, y - 70,  65,  70)
                     case CatFromMars   => DrawRect("bb-cat-from-mars",  |(tint), x - 46, y - 118, 92, 118)
                     case CatFromSaturn => DrawRect("bb-cat-from-saturn",|(tint), x - 51, y - 135, 101, 135)
@@ -2351,9 +2370,12 @@ object CthulhuWarsSolo {
                 val ttGrowthStr  = (f == TT).?(" | " + ("Growth " + game.ubboGrowth.toString).styled(TT)).|("")
                 val ttGrowthMStr = (f == TT).?(" | " + ("G" + game.ubboGrowth.toString).styled(TT)).|("")
                 val ttGrowthSStr = (f == TT).?(" " + ("G" + game.ubboGrowth.toString).styled(TT)).|("")
-                val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr)
-                val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr)
-                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr)
+                // Defilers Court (DC): append Sin counter to faction status panel — DH pattern.
+                val dcSinStr  = (f == DC).?(" | " + (game.dcSin.toString + " Sin").styled(DC)).|("")
+                val dcSinSStr = (f == DC).?(" " + (game.dcSin.toString + "S").styled(DC)).|("")
+                val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr + dcSinStr)
+                val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr + dcSinStr)
+                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr + dcSinSStr)
                 // Firstborn (FB): read Infernal Pact discount and stored Augury kills for the faction panel display
                 val fbIPDiscount = if (f == FB) game.fbInfernalPactDiscount else 0
                 val fbAugury = if (f == FB) game.fbAuguryKills else 0
@@ -4471,7 +4493,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
         // Master faction list — drives existing faction picker, replay parsing, and expansion dispatch order.
         // Order: GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC)
 
         // Alt picker display order (may differ from allFactions).
         // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB.

@@ -1359,6 +1359,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case TT => $(TTExpansion)
             // Bubastis (BB): register BB expansion handler
             case BB => $(BBExpansion)
+            // Defilers Court (DC): Homebrew faction
+            case DC => $(DCExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any).$(NeutralMonstersExpansion) ++
@@ -1432,6 +1434,29 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // doom phase via DoomDoneAction(BB).
     var bbAilurophobiaDone : Boolean = false
     var bbSyzygyDone       : Boolean = false
+
+    // Defilers Court (DC) state — per guide G29 (CRIT): Sin pool lives on Game.scala
+    // for undo safety (NOT on DCExpansion singleton). Sin is uncapped per §1.5.2.
+    var dcSin : Int = 0
+    // Reserved Acolyte tracking — each SB starts with a reserved Acolyte on its
+    // requirement slot; on SB acquisition, the Acolyte enters play.
+    var dcReservedSpellbookAcolytes : $[Spellbook] = $
+    // Dark Bargain face-down state — flips back face-up at Gather Power.
+    var dcDarkBargainFacedown : Boolean = false
+    // Tenebrosum afterAction tracking — records the just-resolved Common/SB
+    // Action so the post-action repeat prompt can be offered. Cleared on EndAction.
+    // dcTenebrosumGuard prevents the repeat itself from triggering another
+    // Tenebrosum prompt (NON-RECURSIVE per §1.5.1 RESOLVED).
+    var dcLastActionForTenebrosum : Option[(Action, Int)] = None
+    var dcTenebrosumGuard : Boolean = false
+    // After Tenebrosum-paid repeat, grant ONE extra main-menu turn (treats DC
+    // as not-yet-acted for the next MainAction). Cleared by EndAction(DC).
+    var dcTenebrosumExtraTurn : Boolean = false
+    // Dark Bargain round-of-prompts: collected per-enemy D6 picks during the
+    // current DarkBargainAction resolution. Cleared at start of each DB cast.
+    var dcDarkBargainPicks : $[(Faction, Int)] = $
+    // Pending reserved-Acolyte placements after SB acquisition (queue of SBs).
+    var dcPendingAcolytePlacements : $[Spellbook] = $
 
     // Tombstalker (TS) state: Death's Head counter, Cursed Tome stack index, and per-faction tome ownership
     var deathsHead : Int = 0
@@ -2682,6 +2707,23 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     if (options.has(HighPriests)) {
                         f.power += 1
                         f.log("gained", 1.power, "High Priests bonus")
+                    }
+                }
+
+                // Defilers Court (DC): Depravity (+1 Sin per DC Acolyte on map) + Bacchanal
+                // (+1 Power +1 Sin while Y'Golonac in play).
+                // Per guide §1.5.2 + §2.6: Acolytes only (Husks/Prophets are Monsters).
+                if (f == DC) {
+                    val dcAcolytes = f.onMap(Acolyte).num
+                    if (dcAcolytes > 0) {
+                        dcSin += dcAcolytes
+                        f.log("Depravity: gained", dcAcolytes.toString.styled("dc"), "Sin (now", dcSin.toString.styled("dc") + ")")
+                    }
+                    val ygolonacInPlay = f.allInPlay.%(_.uclass == YgolonacDC).any
+                    if (ygolonacInPlay) {
+                        f.power += 1
+                        dcSin += 1
+                        f.log("Bacchanal: gained", 1.power, "and", "1".styled("dc"), "Sin (Y'Golonac in play)")
                     }
                 }
             }

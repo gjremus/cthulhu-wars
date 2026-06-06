@@ -1662,6 +1662,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 sides.foreach(_.forces.foreach(_.remove(Retreated)))
                 sides.foreach(_.forces.foreach(_.remove(Zeroed)))
 
+                // Defilers Court (DC) Eschar (§1.10 + §3.10.4): post-battle, DC
+                // gains 1 Sin per Mindless Husk that was Killed in Battle.
+                if (factions.has(DC) && DC.can(Eschar) && sides.has(DC)) {
+                    val killedHusks = exempted.count(u => u.faction == DC && u.uclass == MindlessHusk && u.health == Killed)
+                    if (killedHusks > 0) {
+                        game.dcSin += killedHusks
+                        log(DC, Eschar.styled(DC) + ": gained", killedHusks.toString.styled("dc"), "Sin from", killedHusks, "killed", MindlessHusk.styled(DC),
+                            "(now", game.dcSin.toString.styled("dc") + ")")
+                    }
+                }
+
                 exempted.foreach(_.remove(Hidden))
                 exempted.foreach(_.remove(Absorbed))
 

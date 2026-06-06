@@ -170,7 +170,8 @@ class Serialize(val game : Game) {
 
 object Serialize {
     // BUBASTIS: BB added to faction registry (Task 3.15.1)
-    val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT, BB) ++ $(NeutralAbhoth, LibraryFaction)
+    // Defilers Court (DC): Homebrew faction
+    val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT, BB, DC) ++ $(NeutralAbhoth, LibraryFaction)
 
     val loyaltyCards = $(
         HighPriestCard,
