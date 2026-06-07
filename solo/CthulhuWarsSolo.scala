@@ -1231,6 +1231,11 @@ object CthulhuWarsSolo {
                     case StartingGlyph if faction == AN => DrawRect("an-glyph", None, x - 33, y - 33, 66, 66)
                     case StartingGlyph if faction == OW => DrawRect("ow-glyph", None, x - 33, y - 33, 66, 66, alpha = 0.55)
                     case StartingGlyph if faction == TT => DrawRect("tt-glyph", None, x - 33, y - 33, 66, 66)
+                    // HB Fix 88 (2026-06-07): DC glyph rendered on Y'Golonac's first-awaken
+                    // region (dynamic Start Area). Same dispatch pattern as FB/TS/AN — DC has
+                    // no fixed printed glyph; the start area is set in FactionDC.scala on the
+                    // AwakenedAction(YgolonacDC) handler.
+                    case StartingGlyph if faction == DC => DrawRect("dc-glyph", None, x - 33, y - 33, 66, 66)
 
                     // Library map units — larger than monsters, smaller than GOOs
                     case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 52, y - 104, 104, 104)
@@ -1899,6 +1904,11 @@ object CthulhuWarsSolo {
                     placeGlyph(TS)
                     placeGlyph(AN)
                     placeGlyph(OW)
+                    // HB Fix 88 (2026-06-07): DC glyph rendered on Y'Golonac's first-awaken
+                    // region. game.starting(DC) is updated by AwakenedAction(YgolonacDC) in
+                    // FactionDC.scala — before first awaken it points to the reserve sentinel
+                    // (no map region match), after first awaken it points to the real region.
+                    placeGlyph(DC)
 
                     if (game.setup.%(_.iceAge.?(_ == r)).any)
                         all +:= DrawItem(r, null, IceAgeToken, Alive, $, 0, 0)
