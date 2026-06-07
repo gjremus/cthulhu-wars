@@ -126,13 +126,22 @@ case class DCTenebrosumMainAction(self : Faction, cost : Int, actionName : Strin
 case class DCTenebrosumRepeatAction(self : Faction, cost : Int, actionName : String)
     extends ForcedAction with PowerNeutral
 
-// ── Reserved-Acolyte placement (fires on SB acquisition — §1.6 + §2.5) ─────
-case class DCPlaceReservedAcolyteMainAction(self : Faction, sb : Spellbook)
-    extends ForcedAction with PowerNeutral
-case class DCPlaceReservedAcolyteAction(self : Faction, sb : Spellbook, r : Region)
+// ── Reserved-Acolyte placement (conditional unlimited action — HB Fix 83) ──
+// HB Fix 83 (2026-06-07): Same-turn delivery via conditional UNLIMITED action.
+// When DC has at least one Acolyte still in DCFactionCardHold AND at least one
+// earned (in-hand) library Spellbook whose Acolyte has not yet been delivered,
+// a "Place Faction-Card Acolyte" option appears in DC's main menu (visible in
+// both pre-acted and post-acted branches — unlimited). Picking opens a region
+// picker; resolving moves one Acolyte from the faction-card pool to the map
+// and decrements game.dcReservedSpellbookAcolytes by the matching SB.
+case class DCPlaceReservedAcolyteMainAction(self : Faction)
+    extends OptionFactionAction("Place " + Acolyte.styled(DC) + " from Faction Card")
+    with MainQuestion with Soft with PowerNeutral
+case class DCPlaceReservedAcolyteAction(self : Faction, r : Region)
     extends BaseFactionAction(
-        "Place reserved " + Acolyte.styled(DC) + " from " + sb.styled(DC) + " in",
+        "Place " + Acolyte.styled(DC) + " from Faction Card in",
         implicit g => r.toString)
+    with PowerNeutral
 
 // ── Proselytize per-enemy drag (G11: self=enemyFaction for enemy-colored border) ─
 // Fix HB-79 (2026-06-06): Mirror DC Satiate/Lure per-faction chain. EVERY enemy
@@ -289,16 +298,14 @@ object DCExpansion extends Expansion {
             if (tenebrosumEligible(self) && cost > 0) recordTenebrosum(a, cost, "Ritual")
             UnknownContinue
 
-        // ── SB acquisition: Reserved-Acolyte placement trigger (Item 5) ──────
-        // When DC acquires a SB (via SpellbookAction in Game.scala line 3087),
-        // queue a reserved-Acolyte placement. We detect this in afterAction by
-        // comparing dcReservedSpellbookAcolytes vs current sheet.
-        // Hook here: after SpellbookAction resolves for DC, check for new SBs
-        // and append to pending placements queue.
-        case SpellbookAction(f, sb, then) if f == DC && game.dcReservedSpellbookAcolytes.has(sb) =>
-            // Let standard handler run first (it sets f.spellbooks). Then queue placement.
-            game.dcPendingAcolytePlacements :+= sb
-            UnknownContinue
+        // ── SB acquisition: Reserved-Acolyte same-turn delivery (HB Fix 83) ──
+        // HB Fix 83 (2026-06-07): No queue / no force-redirect. The standard
+        // SpellbookAction handler in Game.scala records the SB in f.spellbooks.
+        // The conditional unlimited action DCPlaceReservedAcolyteMainAction
+        // becomes visible in DC's main menu the next time it renders — both in
+        // the pre-acted main branch and the post-acted unlimited branch — so
+        // DC can deliver the Faction-Card Acolyte THIS SAME TURN.
+        // (No SpellbookAction case needed — base handler already does the work.)
 
         // ── MAIN ACTION ─────────────────────────────────────────────────────
         case MainAction(f : DC.type) if f.active.not =>
@@ -309,6 +316,12 @@ object DCExpansion extends Expansion {
             game.controls(f)
             if (f.hasAllSB)
                 game.battles(f)
+            // HB Fix 83 (2026-06-07): Reserved-Acolyte unlimited delivery —
+            // visible whenever DC has an earned library SB whose Faction-Card
+            // Acolyte hasn't been placed yet AND at least one Acolyte still in
+            // the Faction-Card pool. Same-turn delivery supported.
+            if (dcCanDeliverFactionCardAcolyte(f))
+                + DCPlaceReservedAcolyteMainAction(f)
             // Tenebrosum: offer post-action repeat if last action recorded + Sin sufficient
             // 2026-06-06 Fix 75: hide once Tenebrosum has been used this turn.
             game.dcLastActionForTenebrosum.foreach { case (_, cost, an) =>
@@ -325,12 +338,14 @@ object DCExpansion extends Expansion {
             // Tenebrosum extra-turn: consume the flag (one-shot).
             if (game.dcTenebrosumExtraTurn) game.dcTenebrosumExtraTurn = false
 
-            // Pending reserved-Acolyte placement (Item 5): if any SBs pending, prompt first.
-            // Force-direct to placement (no other options) — Soft chain.
-            if (game.dcPendingAcolytePlacements.any) {
-                val sb = game.dcPendingAcolytePlacements.first
-                return Force(DCPlaceReservedAcolyteMainAction(f, sb))
-            }
+            // HB Fix 83 (2026-06-07): Reserved-Acolyte conditional unlimited
+            // delivery — offered alongside normal main-menu options (NOT a
+            // force-redirect). Visible whenever DC has an earned library SB
+            // whose Faction-Card Acolyte hasn't been placed AND at least one
+            // Acolyte remains in the Faction-Card pool. Once placed it just
+            // functions as a normal Acolyte (death → standard pool).
+            if (dcCanDeliverFactionCardAcolyte(f))
+                + DCPlaceReservedAcolyteMainAction(f)
 
             game.moves(f)
             game.captures(f)
@@ -431,32 +446,40 @@ object DCExpansion extends Expansion {
             self.log("Satiate SBR: gained", otherSBs.power, "and", poolSBs.toString.styled("dc"), "Sin")
             Force(CheckSpellbooksAction(DoomAction(self)))
 
-        // ── Reserved-Acolyte placement on SB acquisition ─────────────────────
-        case DCPlaceReservedAcolyteMainAction(self, sb) =>
+        // ── Reserved-Acolyte conditional unlimited delivery (HB Fix 83) ──────
+        case DCPlaceReservedAcolyteMainAction(self) =>
             implicit val asking = Asking(self)
             // Offer every region on the map (any Area legal per §1.6).
             areas.foreach { r =>
-                + DCPlaceReservedAcolyteAction(self, sb, r)
+                + DCPlaceReservedAcolyteAction(self, r)
             }
+            + CancelAction
             asking
 
-        case DCPlaceReservedAcolyteAction(self, sb, r) =>
-            // HB Fix 78 (2026-06-06): find an Acolyte in the FACTION-CARD pool
-            // (DCFactionCardHold) — NOT the standard pool. Acolytes only land in
-            // the standard pool after they have first been placed on the map
-            // and then killed; those re-pool Acolytes are NOT gated by SBs.
+        case DCPlaceReservedAcolyteAction(self, r) =>
+            // HB Fix 78 + 83: pull from the FACTION-CARD pool (DCFactionCardHold)
+            // — NOT the standard pool. Standard-pool Acolytes (post-death) are
+            // ungated and recruit/summon via normal mechanics. The SB consumed
+            // is any earned library SB whose acolyte is still pending; we pick
+            // the first eligible to decrement the visual marker.
             val placed = self.units.%(u => u.uclass == Acolyte && u.region == DCFactionCardHold(self)).headOption
             placed match {
                 case Some(u) =>
                     u.region = r
-                    game.dcReservedSpellbookAcolytes = game.dcReservedSpellbookAcolytes.but(sb)
-                    self.log("placed", Acolyte.styled(DC), "from", sb.styled(DC), "Faction Card slot in", r)
+                    // Decrement the SB tracker by the first earned-library SB
+                    // whose Acolyte is still pending (visual marker bookkeeping).
+                    val sbToClear = game.dcReservedSpellbookAcolytes.%(sb => self.spellbooks.has(sb)).headOption
+                    sbToClear.foreach { sb =>
+                        game.dcReservedSpellbookAcolytes = game.dcReservedSpellbookAcolytes.but(sb)
+                        self.log("placed", Acolyte.styled(DC), "from", sb.styled(DC), "Faction Card slot in", r)
+                    }
+                    if (sbToClear.isEmpty)
+                        self.log("placed", Acolyte.styled(DC), "from Faction Card in", r)
                 case None =>
-                    self.log("no Faction Card Acolyte to place for", sb.styled(DC))
+                    self.log("no Faction Card Acolyte available to place")
             }
-            // Remove this SB from pending placements queue
-            game.dcPendingAcolytePlacements = game.dcPendingAcolytePlacements.but(sb)
-            UnknownContinue
+            // Unlimited action — return to MainAction so DC can take more turns.
+            Force(MainAction(self))
 
         // ── Satiate (cost 2, capture from each faction in Y'Golonac's area) ──
         case DCSatiateMainAction(self) =>
@@ -866,6 +889,19 @@ object DCExpansion extends Expansion {
     // SL holding the permanent DC bundle via Ancient Sorcery (Fix 2).
     private def tenebrosumEligible(self : Faction)(implicit game : Game) : Boolean =
         self == DC || (self == SL && game.slPermanentBorrowed.has(Tenebrosum))
+
+    // HB Fix 83 (2026-06-07): Conditional unlimited Faction-Card Acolyte
+    // delivery — visible whenever (a) at least one Acolyte still in the
+    // Faction-Card pool (DCFactionCardHold) AND (b) at least one earned
+    // library SB whose matching Faction-Card Acolyte has not yet been
+    // delivered. Per spec: "use acolyte faction card pool minus spell books
+    // earned" — i.e. only earned SBs unlock delivery; remaining SBs stay
+    // gated. Death/capture-return routes Acolytes to standard pool, not here.
+    private def dcCanDeliverFactionCardAcolyte(f : Faction)(implicit game : Game) : Boolean = {
+        val acolytesInFactionCard = f.units.%(u => u.uclass == Acolyte && u.region == DCFactionCardHold(f)).num
+        val earnedSBsStillPending = game.dcReservedSpellbookAcolytes.%(sb => f.spellbooks.has(sb)).num
+        acolytesInFactionCard > 0 && earnedSBsStillPending > 0
+    }
 }
 
 

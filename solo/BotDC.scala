@@ -86,7 +86,7 @@ class GameEvaluationDC(implicit game : Game) extends GameEvaluation(DC)(game) {
                 case DCSatiateReqOptInAction(f) =>
                     self.needs(SatiateReq)              |=> 1500 -> "take Satiate for SBR"
 
-                case DCPlaceReservedAcolyteAction(f, sb, r) =>
+                case DCPlaceReservedAcolyteAction(f, r) =>
                     r.freeGate                          |=> 800 -> "place reserved acolyte at free gate"
                     r.ownGate                           |=> 200 -> "place reserved acolyte at own gate"
 
