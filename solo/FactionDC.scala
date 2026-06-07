@@ -246,8 +246,12 @@ object DCExpansion extends Expansion {
             Force(CheckSpellbooksAction(EndAction(self)))
 
         // ── PilgrimageReq: trigger on any RitualAction ───────────────────────
-        case a : RitualAction if game.setup.has(DC) =>
+        // Also records Tenebrosum-eligible Ritual for the caster (§1.5.1 scope
+        // includes Ritual). Audit 2026-06-06: prior code skipped Tenebrosum
+        // recording on Ritual because the RitualAction case matched first.
+        case a @ RitualAction(self, cost, _) if game.setup.has(DC) =>
             DC.satisfyIf(PilgrimageReq, "A player performed a Ritual of Annihilation", true)
+            if (tenebrosumEligible(self) && cost > 0) recordTenebrosum(a, cost, "Ritual")
             UnknownContinue
 
         // ── SB acquisition: Reserved-Acolyte placement trigger (Item 5) ──────

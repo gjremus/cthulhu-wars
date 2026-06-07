@@ -1319,6 +1319,8 @@ object Overlays {
                         case "ts" => "sepia(1) hue-rotate(74deg) saturate(2) brightness(1.3)"
                         // Firstborn (FB): magenta/pink tint for RoA track ceremony glyphs
                         case "fb" => "sepia(1) hue-rotate(295deg) saturate(4) brightness(1.0)"
+                        // Defilers Court (DC): gold tint per glyph (#F0EDA8); audit 2026-06-06 G13
+                        case "dc" => "sepia(1) hue-rotate(20deg) saturate(2) brightness(1.4)"
                         case _    => "sepia(1)"
                     }
                     s"""<img src="${imageSource("n-tulzscha")}"
