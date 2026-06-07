@@ -121,7 +121,11 @@ case object DC extends Faction { f =>
 // PreMainAction resets it. self is the casting faction (DC, or SL via the
 // Ancient Sorcery permanent bundle).
 case class DCTenebrosumMainAction(self : Faction, cost : Int, actionName : String)
-    extends OptionFactionAction(Tenebrosum.styled(DC) + ": Repeat " + actionName.styled(self) + " for " + cost.toString.styled("dc") + " Sin")
+    extends OptionFactionAction(
+        // HB Fix 84 (2026-06-07): cost==0 (e.g. Dark Bargain) renders as a
+        // "free repeat" per user spec; cost>0 renders the Sin price.
+        Tenebrosum.styled(DC) + ": Repeat " + actionName.styled(self) +
+            (if (cost > 0) " for " + cost.toString.styled("dc") + " Sin" else " (free)"))
     with MainQuestion with Soft with PowerNeutral
 case class DCTenebrosumRepeatAction(self : Faction, cost : Int, actionName : String)
     extends ForcedAction with PowerNeutral
@@ -295,7 +299,8 @@ object DCExpansion extends Expansion {
         // recording on Ritual because the RitualAction case matched first.
         case a @ RitualAction(self, cost, _) if game.setup.has(DC) =>
             DC.satisfyIf(PilgrimageReq, "A player performed a Ritual of Annihilation", true)
-            if (tenebrosumEligible(self) && cost > 0) recordTenebrosum(a, cost, "Ritual")
+            // HB Fix 84 (2026-06-07): record all costs (0 too) — Tenebrosum free-repeat for 0-cost.
+            if (tenebrosumEligible(self)) recordTenebrosum(a, cost, "Ritual")
             UnknownContinue
 
         // ── SB acquisition: Reserved-Acolyte same-turn delivery (HB Fix 83) ──
@@ -324,8 +329,10 @@ object DCExpansion extends Expansion {
                 + DCPlaceReservedAcolyteMainAction(f)
             // Tenebrosum: offer post-action repeat if last action recorded + Sin sufficient
             // 2026-06-06 Fix 75: hide once Tenebrosum has been used this turn.
+            // HB Fix 84 (2026-06-07): 0-cost actions ARE eligible (free repeat),
+            // per user spec. Sin check is game.dcSin >= cost (trivially true at 0).
             game.dcLastActionForTenebrosum.foreach { case (_, cost, an) =>
-                if (cost > 0 && game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn)
+                if (game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn)
                     + DCTenebrosumMainAction(f, cost, an)
             }
             game.reveals(f)
@@ -370,8 +377,10 @@ object DCExpansion extends Expansion {
 
             // Tenebrosum (Item 1): offer repeat of last DC Common/SB action if Sin >= cost
             // 2026-06-06 Fix 75: hide once Tenebrosum has been used this turn.
+            // HB Fix 84 (2026-06-07): 0-cost actions ARE eligible (free repeat),
+            // per user spec. Sin check is game.dcSin >= cost (trivially true at 0).
             game.dcLastActionForTenebrosum.foreach { case (_, cost, an) =>
-                if (cost > 0 && game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn)
+                if (game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn)
                     + DCTenebrosumMainAction(f, cost, an)
             }
 
@@ -404,7 +413,12 @@ object DCExpansion extends Expansion {
                     }
                     game.dcTenebrosumGuard = true
                     game.dcTenebrosumExtraTurn = true
-                    self.log(Tenebrosum.styled(DC) + ": spent", cost.toString.styled("dc"), "Sin to Repeat", an.styled(self))
+                    // HB Fix 84 (2026-06-07): 0-cost repeat ("free repeat") logs
+                    // without the Sin-spent phrase to match user spec wording.
+                    if (cost > 0)
+                        self.log(Tenebrosum.styled(DC) + ": spent", cost.toString.styled("dc"), "Sin to Repeat", an.styled(self))
+                    else
+                        self.log(Tenebrosum.styled(DC) + ": free repeat of", an.styled(self))
                     // Clear last-action so the SAME action isn't repeated as the "last" again
                     game.dcLastActionForTenebrosum = None
                     Force(MainAction(self))
@@ -825,7 +839,9 @@ object DCExpansion extends Expansion {
         // engine handler executes. Return UnknownContinue so engine still runs.
         // 2026-06-06 Fix 75: also record SL versions (when SL has the permanent
         // DC bundle) so SL gets "Repeat <action>" with its own Sin tracker.
-        case MoveAction(self, u, o, r, cost) if cost > 0 && tenebrosumEligible(self) =>
+        case MoveAction(self, u, o, r, cost) if tenebrosumEligible(self) =>
+            // HB Fix 84 (2026-06-07): record all move costs (including 0 — e.g.
+            // free moves) so Tenebrosum free-repeat for 0-cost actions works.
             recordTenebrosum(action, cost, "Move")
             UnknownContinue
         case BuildGateAction(self, _) if tenebrosumEligible(self) =>
@@ -859,7 +875,15 @@ object DCExpansion extends Expansion {
         // 2026-06-06 Fix 75: per-TURN reset on PreMainAction. The used flag is
         // cleared at the start of each new turn so Tenebrosum becomes available
         // again. Also clears any stale last-action recorded from a prior turn.
-        case PreMainAction(self) if tenebrosumEligible(self) =>
+        // HB Fix 84 (2026-06-07): GUARD with !self.acted. PreMainAction fires
+        // AFTER EVERY action of self (engine routes EndAction → AfterAction →
+        // PreMainAction(self) at Game.scala line 3696). Previously this handler
+        // nuked dcLastActionForTenebrosum the moment an action ended, so the
+        // post-acted MainAction(f : DC.type) branch never saw a recorded
+        // action and the Tenebrosum repeat offer never rendered. Round-start
+        // is the only PreMainAction where self.acted is still false (cleared
+        // by NextPlayerAction at Game.scala 3712). Restrict reset to that.
+        case PreMainAction(self) if tenebrosumEligible(self) && !self.acted =>
             if (self == SL) game.slTenebrosumUsedThisTurn = false
             else            game.dcTenebrosumUsedThisTurn = false
             game.dcLastActionForTenebrosum = None
@@ -872,15 +896,17 @@ object DCExpansion extends Expansion {
     // Non-recursive: skipped if we're already inside a Tenebrosum-driven repeat.
     // Fix HB-77 (2026-06-06): Tenebrosum explicitly does NOT track or offer a
     // repeat for Control Gate or Abandon Gate. Both are free Common Actions
-    // that should not be repeatable via Sin (per user directive). Other 0-cost
-    // actions are excluded by the cost > 0 guard.
+    // that should not be repeatable via Sin (per user directive).
+    // HB Fix 84 (2026-06-07): per user spec, 0-cost actions (e.g. Dark Bargain)
+    // ARE Tenebrosum-eligible (free repeat — no Sin debit). Removed cost > 0
+    // guard. Sin-sufficiency is enforced separately at the offer site.
     private def recordTenebrosum(a : Action, cost : Int, an : String)(implicit game : Game) : Unit = {
         a match {
             case _ : ControlGateAction => return
             case _ : AbandonGateAction => return
             case _ =>
         }
-        if (!game.dcTenebrosumGuard && cost > 0) {
+        if (!game.dcTenebrosumGuard) {
             game.dcLastActionForTenebrosum = Some((a, cost, an))
         }
     }
