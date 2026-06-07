@@ -1112,8 +1112,12 @@ object CthulhuWarsSolo {
                     // Defilers Court (DC): unit sprites
                     // MindlessHusk and FallenProphet reuse their custom dc-* webp; Y'Golonac
                     // REUSES the iGOO n-ygolonac.webp at 1.75× scale per guide §2.11.
-                    case MindlessHusk  => DrawRect("dc-mindless-husk",  |(tint), x - 30, y - 75, 60, 80)
-                    case FallenProphet => DrawRect("dc-fallen-prophet", |(tint), x - 40, y - 110, 80, 115)
+                    // Husk/Prophet heights interpolated between Cultist (60) and Y'Golonac (175)
+                    // per Bubastis scale pattern: husk = 60 + (175-60)/3 = 98; prophet = 60 + (175-60)*2/3 = 136.
+                    // Widths scaled proportionally from prior pass aspect ratios (60w@80h → 74w@98h;
+                    // 80w@115h → 95w@136h) to preserve sprite shape.
+                    case MindlessHusk  => DrawRect("dc-mindless-husk",  |(tint), x - 37, y - 98,  74,  98)
+                    case FallenProphet => DrawRect("dc-fallen-prophet", |(tint), x - 47, y - 136, 95, 136)
                     case YgolonacDC    => DrawRect("n-ygolonac",        |(tint), x - 66, y - 158, 131, 175)
 
                     case EarthCat      => DrawRect("bb-earth-cat",      |(tint), x - 33, y - 70,  65,  70)
