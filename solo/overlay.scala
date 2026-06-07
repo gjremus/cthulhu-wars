@@ -653,6 +653,8 @@ object Overlays {
         case $("OW", TenGates.text) => requirement("There are 10 Gates on the Map.")
         case $("OW", TwelveGates.text) => requirement("There are 12 Gates on the Map.")
         case $("OW", UnitsAtEnemyGates.text) => requirement("You have Units in at least 2 Areas containing<br/>enemy-Controlled Gates.")
+        // OpenerCheapMutants variant: same SBR with threshold raised to 3.
+        case $("OW", "Units at 3 enemy gates") => requirement("You have Units in at least 3 Areas containing<br/>enemy-Controlled Gates.")
         case $("OW", LoseUnitInBattle.text) => requirement("Lose 1 of your own Units in Battle.")
         case $("OW", GooMeetsGoo.text) => requirement("Your Great Old One is in the same Area with<br/>an enemy Great Old One.")
         case $("OW", AwakenYogSothoth.text) => requirement("Awaken Yog-Sothoth.")
