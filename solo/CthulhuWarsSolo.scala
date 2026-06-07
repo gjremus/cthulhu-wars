@@ -2469,7 +2469,22 @@ object CthulhuWarsSolo {
                         val tintedSrc = getTintedAsset("n-moonbeast", tint).toDataURL("image/png")
                         s"<img src='${tintedSrc}' style='height:1.4em;vertical-align:middle;opacity:0.9;margin-right:0.3em;' />"
                     }).|("")
-                    val full = auguryPrefix + moonbeastImg + sb.elem
+                    // Fix HB-89 (2026-06-07): Defilers Court reserved-Acolyte
+                    // marker on EARNED spellbook slots. After DC earns a library
+                    // SB, the matching reserved Acolyte is still pending until
+                    // placed via the conditional-unlimited Place action. Show
+                    // the icon on the earned SB slot so visually one icon (and
+                    // only one) disappears at placement time — the icon for the
+                    // SB whose Acolyte was just placed. Keyed by SB membership
+                    // in dcReservedSpellbookAcolytes (not by slot index), so
+                    // placing one Acolyte never visually removes another slot's
+                    // icon by accident.
+                    val dcReservedEarnedImg = if (f == DC && displayGame.dcReservedSpellbookAcolytes.has(sb)) {
+                        val tint = DrawItem(null, DC, Acolyte, Alive, $, 0, 0).tint
+                        val tintedSrc = getTintedAsset("dc-acolyte", tint).toDataURL("image/png")
+                        s"<img src='${tintedSrc}' style='height:1.4em;vertical-align:middle;opacity:0.95;margin-right:0.3em;' />"
+                    } else ""
+                    val full = auguryPrefix + moonbeastImg + dcReservedEarnedImg + sb.elem
                     val s = sb.name.replace("\\", "\\\\").replace("'", "&#39") // "
                     // Pass option state for conditional overlay text
                     val sbExtra = (f, sb) match {
