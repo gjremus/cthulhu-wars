@@ -135,11 +135,18 @@ case class DCPlaceReservedAcolyteAction(self : Faction, sb : Spellbook, r : Regi
         implicit g => r.toString)
 
 // ── Proselytize per-enemy drag (G11: self=enemyFaction for enemy-colored border) ─
-case class DCProselytizeDragAction(self : Faction, acolyte : UnitRef, to : Region)
+// Fix HB-78 (2026-06-06): Mirror DC Satiate/Lure per-faction chain. EVERY enemy
+// with a cultist (Acolyte OR HighPriest) in the source area is forced to give
+// up one cultist to drag along with the DC Acolyte. The only "choice" is WHICH
+// cultist when the enemy has both an off-gate and an on-gate cultist available.
+// Pattern matches GC Devolve / HP Unspeakable Oath / Gate Diplomacy ("command thing").
+case class DCProselytizeFactionPickAction(self : Faction, area : Region, to : Region, remaining : $[Faction])
+    extends ForcedAction with PowerNeutral
+case class DCProselytizePickCultistAction(self : Faction, area : Region, to : Region, cultist : UnitRef, remaining : $[Faction])
     extends BaseFactionAction(
-        Proselytize.styled(DC) + ": choose " + Acolyte.styled(self) + " dragged to " + to.toString,
-        implicit g => g.unit(acolyte).uclass.styled(self) + " from " + g.unit(acolyte).region.toString)
-    with Soft with PowerNeutral
+        Proselytize.styled(DC) + ": " + self.short.styled(self) + " drags",
+        implicit g => g.unit(cultist).uclass.styled(self) + (if (g.unit(cultist).onGate) " (on gate)" else " (off gate)") + " to " + to.toString)
+    with PowerNeutral
 
 // ── Satiate (Action: Cost 2 — §1.10) ───────────────────────────────────────
 case class DCSatiateMainAction(self : Faction)
@@ -229,11 +236,20 @@ object DCExpansion extends Expansion {
 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
 
-        // ── SETUP: starting Power=4, Sin=0, 6 Acolytes on SB-requirement slots ─
+        // ── SETUP: starting Power=4, Sin=0, 6 Acolytes on Faction-Card pool ──
+        // HB Fix 78 (2026-06-06): DC's standard cultist pool starts EMPTY. All
+        // 6 Acolytes are moved out of f.reserve into the separate faction-card
+        // pool (DCFactionCardHold) so they cannot be summoned/recruited until
+        // released by a Spellbook requirement. Death later sends them to the
+        // standard pool (via game.eliminate → u.region = u.faction.reserve).
         case SetupFactionsAction if game.setup.has(DC) && !game.starting.contains(DC) =>
             val f = DC
-            // No map units placed. All 6 Acolytes are "reserved" on the 6 SB-req slots.
-            // Each SB → Acolyte mapping is implicit (1-to-1 by index).
+            // Move all 6 Acolyte UnitFigures from f.reserve to the faction-card pool.
+            // Husk/Prophet/Y'Golonac stay in f.reserve (standard pool) as normal.
+            f.units.%(_.uclass == Acolyte).foreach { a =>
+                a.region = DCFactionCardHold(f)
+            }
+            // Track which Spellbook each Acolyte is gated by (1-to-1 by library index).
             game.dcReservedSpellbookAcolytes = $(Proselytize, Satiate, Lure, Eschar, Pilgrimage, DarkBargain)
             // Mark DC as "placed" using a sentinel — Y'Golonac's first awaken
             // becomes the real Start Area (set in AwakenedAction handler below).
@@ -242,7 +258,7 @@ object DCExpansion extends Expansion {
             // Starting power 4 (override default 0)
             f.power = 4
             f.log("starts with", 4.power + " and 0 Sin".styled("dc"))
-            f.log("places 6 reserved", Acolyte.styled(DC), "on Spellbook requirement slots")
+            f.log("places 6", Acolyte.styled(DC), "on Faction Card (one per Spellbook requirement)")
             Force(SetupFactionsAction)
 
         // ── Y'Golonac Awakening: set Start Area on first awaken ──────────────
@@ -419,15 +435,18 @@ object DCExpansion extends Expansion {
             asking
 
         case DCPlaceReservedAcolyteAction(self, sb, r) =>
-            // Find an Acolyte in reserve and place it in r.
-            val placed = self.units.%(u => u.uclass == Acolyte && u.region == self.reserve).headOption
+            // HB Fix 78 (2026-06-06): find an Acolyte in the FACTION-CARD pool
+            // (DCFactionCardHold) — NOT the standard pool. Acolytes only land in
+            // the standard pool after they have first been placed on the map
+            // and then killed; those re-pool Acolytes are NOT gated by SBs.
+            val placed = self.units.%(u => u.uclass == Acolyte && u.region == DCFactionCardHold(self)).headOption
             placed match {
                 case Some(u) =>
                     u.region = r
                     game.dcReservedSpellbookAcolytes = game.dcReservedSpellbookAcolytes.but(sb)
-                    self.log("placed reserved", Acolyte.styled(DC), "from", sb.styled(DC), "in", r)
+                    self.log("placed", Acolyte.styled(DC), "from", sb.styled(DC), "Faction Card slot in", r)
                 case None =>
-                    self.log("no reserved Acolyte to place for", sb.styled(DC))
+                    self.log("no Faction Card Acolyte to place for", sb.styled(DC))
             }
             // Remove this SB from pending placements queue
             game.dcPendingAcolytePlacements = game.dcPendingAcolytePlacements.but(sb)
@@ -683,44 +702,70 @@ object DCExpansion extends Expansion {
             game.dcDarkBargainFacedown = false
             UnknownContinue
 
-        // ── Proselytize (Item 2): per-Acolyte drag chain on Move ─────────────
-        // After a DC Acolyte completes its move (MovedAction), prompt each
-        // enemy F with Acolyte(s) in source to choose one of theirs to drag.
-        // The chain is auto-resolved (forced for each enemy) — if enemy F has
-        // exactly 1 Acolyte at source, drag it; if 2+, ask F (self=F for G11).
+        // ── Proselytize (Item 2): forced per-enemy drag chain on Move ──────
+        // Fix HB-78 (2026-06-06): EVERY enemy with a cultist (Acolyte or
+        // HighPriest) in the source area MUST give up one cultist dragged to
+        // the destination. NOT a yes/no opt-in. The only "choice" each enemy
+        // gets is WHICH cultist — between an off-gate cultist and an on-gate
+        // cultist when both exist. If only one cultist or all cultists share
+        // gate status, auto-pick (no menu). Pattern matches GC Devolve / HP
+        // Unspeakable Oath / Gate Diplomacy "command thing" + DC Satiate/Lure
+        // per-faction chain.
         case MovedAction(self : DC.type, u, o, r) if u.uclass == Acolyte && self.can(Proselytize) && o != r =>
-            val enemies = game.factions.but(self).%(e => e.at(o).%(_.uclass == Acolyte).any)
+            val enemies = game.factions.but(self).%(e => e.at(o).%(_.uclass.utype == Cultist).any)
             if (enemies.any) {
-                // Process enemies one at a time; each enemy with 1 Acolyte → auto-drag,
-                // 2+ → menu. Return MoveContinueAction at the end (standard MovedAction fall-through).
-                enemies.foreach { e =>
-                    val acolytes = e.at(o).%(_.uclass == Acolyte)
-                    if (acolytes.num == 1) {
-                        val a = acolytes.first
-                        a.region = r
-                        e.log(Proselytize.styled(DC) + ":", e.short.styled(e), Acolyte.styled(e), "dragged from", o, "to", r)
-                    } else if (acolytes.num >= 2) {
-                        // Force a per-enemy choose-Acolyte menu (G11: self=e for enemy-colored border).
-                        // The pick action moves the chosen one to r.
-                        implicit val asking = Asking(e)
-                        acolytes.foreach { a =>
-                            + DCProselytizeDragAction(e, a.ref, r)
-                        }
-                        return asking
-                    }
-                }
-                MoveContinueAction(self, true)
+                Force(DCProselytizeFactionPickAction(self, o, r, enemies))
             } else {
                 UnknownContinue
             }
 
-        case DCProselytizeDragAction(self, acolyteRef, to) =>
-            val a = game.unit(acolyteRef)
-            val from = a.region
-            a.region = to
-            self.log(Proselytize.styled(DC) + ":", self.short.styled(self), Acolyte.styled(self), "dragged from", from, "to", to)
-            // Continue the move chain (standard post-move)
-            MoveContinueAction(DC, true)
+        case DCProselytizeFactionPickAction(self, area, to, remaining) =>
+            if (remaining.none) {
+                // All enemies processed — fall back to standard post-move chain.
+                MoveContinueAction(DC, true)
+            } else {
+                val e = remaining.first
+                val cultists = e.at(area).%(_.uclass.utype == Cultist)
+                if (cultists.none) {
+                    // Defensive: enemy may have lost cultists from this area mid-chain.
+                    Force(DCProselytizeFactionPickAction(self, area, to, remaining.dropStarting))
+                } else if (cultists.num == 1) {
+                    // Only one cultist — no choice, auto-drag.
+                    val c = cultists.first
+                    c.region = to
+                    e.log(Proselytize.styled(DC) + ":", e.short.styled(e), c.uclass.styled(e),
+                        if (c.onGate) "(on gate)" else "(off gate)", "dragged from", area, "to", to)
+                    Force(DCProselytizeFactionPickAction(self, area, to, remaining.dropStarting))
+                } else {
+                    val offGate = cultists.%(c => !c.onGate)
+                    val onGate  = cultists.%(c => c.onGate)
+                    if (offGate.none || onGate.none) {
+                        // All cultists share gate status — no real choice, auto-pick first.
+                        val c = cultists.first
+                        c.region = to
+                        e.log(Proselytize.styled(DC) + ":", e.short.styled(e), c.uclass.styled(e),
+                            if (c.onGate) "(on gate)" else "(off gate)", "dragged from", area, "to", to,
+                            "(no choice — all", cultists.num.toString, "cultists same status)")
+                        Force(DCProselytizeFactionPickAction(self, area, to, remaining.dropStarting))
+                    } else {
+                        // Real choice: off-gate vs on-gate. Present one option per group
+                        // (default off-gate first per spec preference). G11: self=e for
+                        // enemy-colored menu border.
+                        implicit val asking = Asking(e)
+                        + DCProselytizePickCultistAction(e, area, to, offGate.first.ref, remaining.dropStarting)
+                        + DCProselytizePickCultistAction(e, area, to, onGate.first.ref, remaining.dropStarting)
+                        asking
+                    }
+                }
+            }
+
+        case DCProselytizePickCultistAction(self, area, to, cultistRef, remaining) =>
+            val c = game.unit(cultistRef)
+            val from = c.region
+            c.region = to
+            self.log(Proselytize.styled(DC) + ":", self.short.styled(self), c.uclass.styled(self),
+                if (c.onGate) "(on gate)" else "(off gate)", "dragged from", from, "to", to)
+            Force(DCProselytizeFactionPickAction(DC, area, to, remaining))
 
         // ── LureReq / EscharReq pool-check satisfaction (Item 7) ─────────────
         // These are evaluated on triggers/state changes. Easiest hook: after
