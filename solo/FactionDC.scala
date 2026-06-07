@@ -216,20 +216,79 @@ case class DCPilgrimageDoneAction(self : Faction, prophet : UnitRef, dest : Regi
     extends BaseFactionAction(Pilgrimage.styled(DC), "Done".styled("power")) with Soft with PowerNeutral
 
 // ── Dark Bargain (Action: Cost 0 — §1.10) ──────────────────────────────────
-// Round-of-prompts pattern modeled on DS Azathoth + CC Thousand Forms.
+// HB Fix 93 (2026-06-07): rewrote Dark Bargain per user spec.
+//   1. Each enemy faction secretly picks a D6 face. Their pick is NOT logged
+//      until ALL enemies have chosen (then a single combined reveal line).
+//   2. DC then chooses ONE face from the DISTINCT values enemies picked
+//      (NOT 1..6). E.g. if enemies pick {1,3,5}, DC chooses from {1,3,5}.
+//   3. DC gains N Sin (where N = chosen face). N Power is then DISTRIBUTED
+//      to enemy factions as evenly as possible, whole numbers, NO subtraction.
+//   4. Distribution prompts always ask for the rarer slot. Wording follows
+//      user spec verbatim: single-slot "choose the faction that gets/only gets
+//      X power"; multi-slot "choose the {ordinal} of {K} factions to receive
+//      {X} power" with sequential picks removing chosen factions from the
+//      list. On ties, prompt the LOW (lesser-power) slot.
 case class DCDarkBargainMainAction(self : Faction)
     extends OptionFactionAction(DarkBargain.styled(DC) + " (Cost " + 0.power + ")")
     with MainQuestion with Soft
 case class DCDarkBargainConfirmAction(self : Faction)
     extends BaseFactionAction(DarkBargain.styled(DC), "Confirm".styled("power")) with Soft
-// Round-of-prompts: each enemy F picks a D6 face (self=enemy per G11 so menu
-// border renders in enemy color). Continue action steps through remaining enemies.
+// Round-of-prompts: each enemy F secretly picks a D6 face. NO log line is
+// emitted per-enemy — the picks are stored on game.dcDarkBargainPicks and
+// revealed as a single combined line once all enemies are done.
+// (self=enemy per G11 so menu border renders in enemy color.)
 case class DCDarkBargainEnemyContinueAction(self : Faction, remaining : $[Faction])
     extends ForcedAction with PowerNeutral
 case class DCDarkBargainEnemyPickAction(self : Faction, face : Int, remaining : $[Faction])
-    extends BaseFactionAction(DarkBargain.styled(DC) + ": " + self.short.styled(self) + " picks D6 face", implicit g => face.toString) with PowerNeutral
+    extends BaseFactionAction(DarkBargain.styled(DC) + ": " + self.short.styled(self) + " secretly picks D6 face", implicit g => face.toString) with PowerNeutral
+// DC's pick: only the DISTINCT faces enemies chose are offered.
 case class DCDarkBargainChooseSinAction(self : Faction, face : Int)
-    extends BaseFactionAction(DarkBargain.styled(DC) + ": gain Sin", implicit g => face.toString.styled("dc")) with PowerNeutral
+    extends BaseFactionAction(DarkBargain.styled(DC) + ": choose face", implicit g => face.toString.styled("dc")) with PowerNeutral
+// Distribution prompt: DC picks WHICH enemy gets the rarer power slot. The
+// `slot` is the ordinal of this pick within the rarer-slot batch (0-indexed,
+// total slots in `total`), `amt` is the power amount being assigned, and
+// `otherAmt` is the amount the unprompted factions will auto-receive.
+case class DCDarkBargainDistributeContinueAction(self : Faction, face : Int, remainingEnemies : $[Faction],
+        baseline : Int, plusOneRemaining : Int, slotIndex : Int, totalSlots : Int, promptAmt : Int, autoAmt : Int)
+    extends ForcedAction with PowerNeutral
+case class DCDarkBargainDistributePickAction(self : Faction, face : Int, picked : Faction,
+        baseline : Int, plusOneRemaining : Int, remainingEnemies : $[Faction],
+        slotIndex : Int, totalSlots : Int, promptAmt : Int, autoAmt : Int)
+    extends BaseFactionAction(DarkBargain.styled(DC) + ": assign", implicit g => picked.short.styled(picked) + " → " + promptAmt.power) with PowerNeutral {
+    // Spec-exact prompt header per user (HB Fix 93):
+    //  - totalSlots == 1: "choose the faction that {only} gets X power"
+    //    (use "only" when promptAmt < autoAmt, no "only" otherwise)
+    //  - totalSlots  > 1: "choose the {ordinal} of {totalSlots} factions to
+    //    receive {promptAmt} power" — sequentially worded; user example was
+    //    "first/second of two factions to receive 0 power".
+    override def question(implicit game : Game) : String = {
+        val header = DarkBargain.styled(DC) + " — "
+        if (totalSlots == 1) {
+            val only = if (promptAmt < autoAmt) "only " else ""
+            header + "choose the faction that " + only + "gets " + promptAmt.power
+        } else {
+            val ord = DCDarkBargainOrdinals.ordinal(slotIndex)
+            val cnt = DCDarkBargainOrdinals.numberWord(totalSlots)
+            header + "choose the " + ord + " of " + cnt + " factions to receive " + promptAmt.power
+        }
+    }
+}
+
+// Ordinal/number-word helper for Dark Bargain distribution prompts (HB Fix 93).
+// Used to render "first/second/third of two/three/four factions to receive X
+// power" in the spec-exact wording.
+object DCDarkBargainOrdinals {
+    private val ordinals : Array[String] = Array(
+        "first", "second", "third", "fourth", "fifth", "sixth"
+    )
+    private val numberWords : Array[String] = Array(
+        "zero", "one", "two", "three", "four", "five", "six"
+    )
+    def ordinal(i : Int) : String =
+        if (i >= 0 && i < ordinals.length) ordinals(i) else (i + 1).toString
+    def numberWord(n : Int) : String =
+        if (n >= 0 && n < numberWords.length) numberWords(n) else n.toString
+}
 
 
 // ============================================================================
@@ -693,7 +752,14 @@ object DCExpansion extends Expansion {
         case DCPilgrimageDoneAction(self, prophet, dest) =>
             EndAction(self)
 
-        // ── Dark Bargain (cost 0, D6 redistribution — full round-of-prompts) ─
+        // ── Dark Bargain (cost 0, secret D6 + even power distribution) ────────
+        // HB Fix 93 (2026-06-07): rewritten per user spec. Enemy picks are
+        // SECRET (no per-enemy log line); reveal is a single combined line.
+        // DC chooses face from DISTINCT enemy picks (NOT 1..6). DC gains face
+        // Sin and distributes face Power across enemies as evenly as possible
+        // (whole numbers, NO subtraction). Rarer-slot prompts (single faction:
+        // "choose the faction that {only} gets X power"; multi: "choose the
+        // {ordinal} of K factions to receive X power"). Ties prompt LOW side.
         case DCDarkBargainMainAction(self) =>
             implicit val asking = Asking(self)
             + DCDarkBargainConfirmAction(self)
@@ -702,22 +768,30 @@ object DCExpansion extends Expansion {
 
         case DCDarkBargainConfirmAction(self) =>
             recordTenebrosum(action, 0, "Dark Bargain")
-            // Start round-of-prompts: each enemy picks a D6 face 1..6.
+            // Start secret round-of-prompts: each enemy picks a D6 face 1..6.
             game.dcDarkBargainPicks = $
             val enemies = game.factions.but(self)
             Force(DCDarkBargainEnemyContinueAction(self, enemies))
 
         case DCDarkBargainEnemyContinueAction(self, remaining) =>
             if (remaining.none) {
-                // All enemies have picked — now ask DC which face to choose
-                implicit val asking = Asking(self)
-                $(1, 2, 3, 4, 5, 6).foreach { face =>
-                    + DCDarkBargainChooseSinAction(self, face)
+                // All enemies have picked. Reveal as a single combined line
+                // (per user spec: "Do not expose their dice sides in the game
+                // log until all have chosen.").
+                val combined = game.dcDarkBargainPicks./((f, face) =>
+                    f.short.styled(f) + "=" + face.toString).mkString(", ")
+                DC.log(DarkBargain.styled(DC) + ": enemies revealed picks —", combined)
+                // DC chooses ONE face from the DISTINCT values enemies picked.
+                val distinctFaces : $[Int] = game.dcDarkBargainPicks./((_, pf) => pf).distinct.sortBy(x => x)
+                implicit val asking = Asking(DC)
+                distinctFaces.foreach { face =>
+                    + DCDarkBargainChooseSinAction(DC, face)
                 }
                 asking
             } else {
                 val e = remaining.first
-                // Per-enemy D6 face pick (self=e for enemy-colored menu border per G11)
+                // Per-enemy D6 face pick (self=e for enemy-colored menu border per G11).
+                // SECRET: stored on game state, not logged until reveal.
                 implicit val asking = Asking(e)
                 $(1, 2, 3, 4, 5, 6).foreach { face =>
                     + DCDarkBargainEnemyPickAction(e, face, remaining.dropStarting)
@@ -726,39 +800,85 @@ object DCExpansion extends Expansion {
             }
 
         case DCDarkBargainEnemyPickAction(self, face, remaining) =>
+            // Store SILENTLY — no per-enemy log line. Reveal happens once all
+            // enemies have picked (handled in EnemyContinueAction with empty
+            // remaining branch).
             game.dcDarkBargainPicks :+= ((self, face))
-            self.log(DarkBargain.styled(DC) + ":", self.short.styled(self), "picked D6 face", face.toString)
             Force(DCDarkBargainEnemyContinueAction(DC, remaining))
 
         case DCDarkBargainChooseSinAction(self, face) =>
+            // DC gains `face` Sin. NO subtraction from enemies. Distribute
+            // `face` Power across enemies as evenly as possible (whole numbers).
             game.dcSin += face
-            // Gather enemies who picked the chosen face — they forfeit Power for redistribution
-            val matchingEnemies : $[Faction] = game.dcDarkBargainPicks.%((_, pf) => pf == face)./((f, _) => f).distinct
-            val totalForfeited = matchingEnemies./(e => math.min(e.power, face)).sum
-            matchingEnemies.foreach { e =>
-                val amt = math.min(e.power, face)
-                if (amt > 0) {
-                    e.power -= amt
-                    self.log(DarkBargain.styled(DC) + ": took", amt.power, "from", e.full, "(picked", face.toString + ")")
-                }
-            }
-            // Redistribute pooled power evenly across ALL enemies (per §1.10 reading)
+            self.log(DarkBargain.styled(DC) + ": DC chose face", face.toString.styled("dc") + "; gained", face.toString.styled("dc"), "Sin")
             val allEnemies = game.factions.but(self)
-            if (allEnemies.any && totalForfeited > 0) {
-                val per   = totalForfeited / allEnemies.num
-                val extra = totalForfeited % allEnemies.num
-                allEnemies.zipWithIndex.foreach { case (e, i) =>
-                    val amt = per + (if (i < extra) 1 else 0)
-                    if (amt > 0) {
-                        e.power += amt
-                        self.log(DarkBargain.styled(DC) + ": gave", amt.power, "to", e.full, "(redistribution)")
+            val e          = allEnemies.num
+            if (e == 0 || face == 0) {
+                // Degenerate — no enemies (shouldn't happen) or face 0.
+                game.dcDarkBargainFacedown = true
+                game.dcDarkBargainPicks = $
+                self.log(DarkBargain.styled(DC) + ": flipped facedown until Gather Power")
+                EndAction(self)
+            } else {
+                val baseline   = face / e
+                val remainder  = face % e
+                val highCount  = remainder         // factions getting baseline+1
+                val lowCount   = e - remainder     // factions getting baseline
+                if (highCount == 0) {
+                    // Clean division — every enemy gets baseline. No prompt.
+                    allEnemies.foreach { ee =>
+                        ee.power += baseline
+                        self.log(DarkBargain.styled(DC) + ": gave", baseline.power, "to", ee.full)
                     }
+                    game.dcDarkBargainFacedown = true
+                    game.dcDarkBargainPicks = $
+                    self.log(DarkBargain.styled(DC) + ": flipped facedown until Gather Power")
+                    EndAction(self)
+                } else {
+                    // Pick rarer slot. On tie (highCount == lowCount), prompt
+                    // the LOW (baseline) side per user spec example
+                    // (2 power → 4 enemies → prompt 2 to receive 0).
+                    val (promptCount, promptAmt, autoAmt) =
+                        if (highCount < lowCount) (highCount, baseline + 1, baseline)
+                        else                       (lowCount,  baseline,     baseline + 1)
+                    Force(DCDarkBargainDistributeContinueAction(self, face, allEnemies,
+                        baseline, promptCount, 0, promptCount, promptAmt, autoAmt))
                 }
             }
-            game.dcDarkBargainFacedown = true
-            game.dcDarkBargainPicks = $
-            self.log(DarkBargain.styled(DC) + ": flipped facedown until Gather Power; gained", face.toString.styled("dc"), "Sin")
-            EndAction(self)
+
+        case DCDarkBargainDistributeContinueAction(self, face, remainingEnemies, baseline, plusOneRemaining, slotIndex, totalSlots, promptAmt, autoAmt) =>
+            if (slotIndex >= totalSlots || remainingEnemies.none) {
+                // All rarer-slot picks done. Award `autoAmt` to every
+                // remaining enemy (the un-prompted ones).
+                remainingEnemies.foreach { ee =>
+                    ee.power += autoAmt
+                    if (autoAmt > 0)
+                        self.log(DarkBargain.styled(DC) + ": gave", autoAmt.power, "to", ee.full)
+                }
+                game.dcDarkBargainFacedown = true
+                game.dcDarkBargainPicks = $
+                self.log(DarkBargain.styled(DC) + ": flipped facedown until Gather Power")
+                EndAction(self)
+            } else {
+                implicit val asking = Asking(self)
+                remainingEnemies.foreach { ee =>
+                    + DCDarkBargainDistributePickAction(self, face, ee, baseline, plusOneRemaining,
+                        remainingEnemies, slotIndex, totalSlots, promptAmt, autoAmt)
+                }
+                asking
+            }
+
+        case DCDarkBargainDistributePickAction(self, face, picked, baseline, plusOneRemaining, remainingEnemies, slotIndex, totalSlots, promptAmt, autoAmt) =>
+            // Award promptAmt to the chosen faction, drop it from remaining,
+            // advance to next slot.
+            picked.power += promptAmt
+            if (promptAmt > 0)
+                self.log(DarkBargain.styled(DC) + ": gave", promptAmt.power, "to", picked.full)
+            else
+                self.log(DarkBargain.styled(DC) + ":", picked.full, "receives", 0.power)
+            val next = remainingEnemies.but(picked)
+            Force(DCDarkBargainDistributeContinueAction(self, face, next, baseline, plusOneRemaining,
+                slotIndex + 1, totalSlots, promptAmt, autoAmt))
 
         // ── Gather Power: flip Dark Bargain face-up again ─────────────────────
         case PowerGatherAction(_) if game.setup.has(DC) && game.dcDarkBargainFacedown =>
