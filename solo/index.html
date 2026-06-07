@@ -1166,7 +1166,12 @@
         <img class="asset" id="info:dc-background"       src="webp/info/dc-background.webp" />
         <img class="asset" id="info:dc-mindless-husk"    src="webp/info/dc-mindless-husk.svg" />
         <img class="asset" id="info:dc-fallen-prophet"   src="webp/info/dc-fallen-prophet.svg" />
-        <!-- DC's Y'Golonac reuses the iGOO n-ygolonac.svg (per guide §2.11). -->
+        <!-- DC's Y'Golonac reuses the iGOO n-ygolonac.svg (per guide §2.11).
+             Fix HB-82 (2026-06-07): explicit asset id matches the auto-derived
+             lookup in overlay.scala `faction()` helper (info:dc-y'golonac).
+             Without this alias, opening the DC faction card threw on the
+             unknown image source and the overlay never rendered. -->
+        <img class="asset" id="info:dc-y'golonac"        src="webp/info/n-ygolonac.svg" />
 
         <img class="asset" id="info:bg-acolyte" src="webp/info/bg-acolyte.svg" />
         <img class="asset" id="info:bg-background" src="webp/info/bg-background.webp" />

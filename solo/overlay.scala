@@ -1029,7 +1029,7 @@ object Overlays {
             }
             faction(DC, "info:dc-background", Tenebrosum, "Ongoing",
             "When you perform a Common or Spellbook Action, you may perform the same Action again (if it is available to you) using Sin as if it were Power.<br/><br/>" +
-            "<span class=ability-color>Depravity</span> <span class=cost-color>(Gather Power):</span> Gain 1 Sin for each Cultist you have on the map. Sin is not Power & can be kept over multiple phases.",
+            "<span class=ability-color>Depravity</span> <span class=cost-color>(Gather Power):</span> Gain 1 Sin for each Cultist you have on the map. Sin is not Power & can be kept over multiple phases with a max equal to twice the Ritual Marker.",
             $(), $(
             (Acolyte,         6, "1", "0", s"""<div class=p>Start on Spellbook requirement slots. Released into play upon SB acquisition.</div>"""),
             (MindlessHusk,    5, "1", "1", s"""<div class=p>Spellbook: ${reference(DC, Eschar)}</div>"""),
@@ -1038,7 +1038,7 @@ object Overlays {
                 <div class=p>${cost(s"How to Awaken ${YgolonacDC.name}:")}</div>
                 <div class=p>${cost("1)")} Pay Power equal to the number of Spellbooks on your Faction Sheet.</div>
                 <div class=p>${cost("2)")} Y'Golonac appears in a LAND AREA lacking a Controlled Gate.</div>
-                <div class=p>${combat} Equals ceil(Sin / 2).</div>
+                <div class=p>${combat} Equals half your amount of Sin (rounded up).</div>
                 <div class=p><span class=ability-color>Bacchanal</span> ${cost("(Ongoing):")} Y'Golonac can Build & Control Gates, & generates 1 Power and 1 Sin in the Gather Power Phase.</div>
                 <div class=p>Spellbooks: ${reference(DC, Lure)}, ${reference(DC, Eschar)}, ${reference(DC, DarkBargain)}</div>""")
         ))
@@ -1053,7 +1053,7 @@ object Overlays {
 
         // Defilers Court (DC): spellbook info card overlays (verbatim from card art)
         case $("DC", Tenebrosum.name)  => spellbook(Tenebrosum.name,  "Ongoing (Faction Ability)", "When you perform a Common or Spellbook Action, you may perform the same Action again (if it is available to you) using Sin as if it were Power.")
-        case $("DC", Depravity.name)   => spellbook(Depravity.name,   "Gather Power (Faction Ability)", "Gain 1 Sin for each Cultist you have on the map. Sin is not Power & can be kept over multiple phases.")
+        case $("DC", Depravity.name)   => spellbook(Depravity.name,   "Gather Power (Faction Ability)", "Gain 1 Sin for each Cultist you have on the map. Sin is not Power & can be kept over multiple phases with a max equal to twice the Ritual Marker.")
         case $("DC", Proselytize.name) => spellbook(Proselytize.name, "Ongoing", "Each of your Acolytes 'drag' an enemy Acolyte of each enemy Faction (of those player(s) choice) from any Areas they move from, to the Area they move to.")
         case $("DC", Satiate.name)     => spellbook(Satiate.name,     "Action: Cost 2", "Capture a Cultist from each Faction with Cultists in Y'Golonac's Area including yourself. Gain 1 Elder Sign for each Cultist captured beyond the first. This Capture cannot be protected by the presence of enemy Great Old Ones or any other abilities (like Lunacy's capture protection, or Masquerade).")
         case $("DC", Lure.name)        => spellbook(Lure.name,        "Action: Cost 1", "Each enemy Faction must move one of their Cultists from a (non-Moon) Area adjacent to Y'Golonac, into Y'Golonac's Area. Enemy Cultists in Areas containing an enemy Great Old One, Terror or Faction Buildings are exempt.")
