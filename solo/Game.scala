@@ -740,6 +740,17 @@ case object HighPriestGatesPrompt extends HighPriestGatesPlan("Prompt controllin
 case object HighPriestGatesSkip extends HighPriestGatesPlan("Always prefer Acolytes on the gates") with OneOfPlan
 
 
+// HB Fix 79 (2026-06-06): DC Proselytize per-enemy drag command-plan menu.
+// When a DC Acolyte moves out of an area carrying enemy Acolytes along, the
+// per-enemy choice between off-gate vs on-gate Acolyte respects this plan.
+sealed abstract class DCProselytizePlan(val label : String) extends Plan {
+    val group = "DC Proselytize".styled(DC)
+}
+case object DCProselytizePrompt extends DCProselytizePlan("Always prompt") with DefaultPlan with OneOfPlan
+case object DCProselytizePreferOnGate  extends DCProselytizePlan("Prefer Acolytes on Gate")  with OneOfPlan
+case object DCProselytizePreferOffGate extends DCProselytizePlan("Prefer Acolytes off Gate") with OneOfPlan
+
+
 sealed abstract class DevolvePlan(val label : String) extends Plan {
     val group = "Devolve".styled(GC)
 }
