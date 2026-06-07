@@ -180,6 +180,19 @@ case class DCPilgrimageProphetAction(self : Faction, prophet : UnitRef)
     with Soft with PowerNeutral
 case class DCPilgrimageDestAction(self : Faction, prophet : UnitRef, dest : Region)
     extends BaseFactionAction(Pilgrimage.styled(DC) + ": move other units to", implicit g => dest.toString) with Soft
+// Per-unit opt-in chain (Fix HB-77): after the destination is chosen, prompt
+// the DC player for each OTHER DC unit in the Prophet's source area. Each unit
+// gets a Move/Stay choice; Done finishes the entire Pilgrimage early.
+case class DCPilgrimageUnitContinueAction(self : Faction, prophet : UnitRef, dest : Region, remaining : $[UnitRef])
+    extends ForcedAction with PowerNeutral
+case class DCPilgrimageUnitMoveAction(self : Faction, prophet : UnitRef, dest : Region, unit : UnitRef, remaining : $[UnitRef])
+    extends BaseFactionAction(Pilgrimage.styled(DC) + ": move", implicit g => g.unit(unit).uclass.styled(DC) + " to " + dest.toString)
+    with Soft with PowerNeutral
+case class DCPilgrimageUnitStayAction(self : Faction, prophet : UnitRef, dest : Region, unit : UnitRef, remaining : $[UnitRef])
+    extends BaseFactionAction(Pilgrimage.styled(DC) + ": leave", implicit g => g.unit(unit).uclass.styled(DC) + " in " + g.unit(unit).region.toString)
+    with Soft with PowerNeutral
+case class DCPilgrimageDoneAction(self : Faction, prophet : UnitRef, dest : Region)
+    extends BaseFactionAction(Pilgrimage.styled(DC), "Done".styled("power")) with Soft with PowerNeutral
 
 // ── Dark Bargain (Action: Cost 0 — §1.10) ──────────────────────────────────
 // Round-of-prompts pattern modeled on DS Azathoth + CC Thousand Forms.
@@ -564,10 +577,38 @@ object DCExpansion extends Expansion {
             recordTenebrosum(action, 1, "Pilgrimage")
             val p = game.unit(prophet)
             val src = p.region
-            // Move all other DC units (NOT the prophet itself) to dest
-            val movers = self.at(src).%(u => u.ref != prophet)
-            movers.foreach(_.region = dest)
-            self.log(Pilgrimage.styled(DC) + ": moved", movers.num, "unit".s(movers.num), "from", src, "to", dest)
+            // Per-unit opt-in (Fix HB-77): rules say each OTHER DC unit in the
+            // Prophet's source area gets its own choice (move with the Prophet
+            // or stay behind). Iterate units via the Continue chain.
+            val others = self.at(src).%(u => u.ref != prophet)./(_.ref)
+            self.log(Pilgrimage.styled(DC) + ": Fallen Prophet moves to", dest)
+            Force(DCPilgrimageUnitContinueAction(self, prophet, dest, others))
+
+        case DCPilgrimageUnitContinueAction(self, prophet, dest, remaining) =>
+            if (remaining.none) {
+                EndAction(self)
+            } else {
+                implicit val asking = Asking(self)
+                val u = remaining.first
+                + DCPilgrimageUnitMoveAction(self, prophet, dest, u, remaining.dropStarting)
+                + DCPilgrimageUnitStayAction(self, prophet, dest, u, remaining.dropStarting)
+                + DCPilgrimageDoneAction(self, prophet, dest)
+                asking
+            }
+
+        case DCPilgrimageUnitMoveAction(self, prophet, dest, unitRef, remaining) =>
+            val u = game.unit(unitRef)
+            val src = u.region
+            u.region = dest
+            self.log(Pilgrimage.styled(DC) + ": moved", u.uclass.styled(DC), "from", src, "to", dest)
+            Force(DCPilgrimageUnitContinueAction(self, prophet, dest, remaining))
+
+        case DCPilgrimageUnitStayAction(self, prophet, dest, unitRef, remaining) =>
+            val u = game.unit(unitRef)
+            self.log(Pilgrimage.styled(DC) + ": left", u.uclass.styled(DC), "in", u.region)
+            Force(DCPilgrimageUnitContinueAction(self, prophet, dest, remaining))
+
+        case DCPilgrimageDoneAction(self, prophet, dest) =>
             EndAction(self)
 
         // ── Dark Bargain (cost 0, D6 redistribution — full round-of-prompts) ─
@@ -742,7 +783,16 @@ object DCExpansion extends Expansion {
 
     // Helper: record the just-resolved action + its Power cost + display name.
     // Non-recursive: skipped if we're already inside a Tenebrosum-driven repeat.
+    // Fix HB-77 (2026-06-06): Tenebrosum explicitly does NOT track or offer a
+    // repeat for Control Gate or Abandon Gate. Both are free Common Actions
+    // that should not be repeatable via Sin (per user directive). Other 0-cost
+    // actions are excluded by the cost > 0 guard.
     private def recordTenebrosum(a : Action, cost : Int, an : String)(implicit game : Game) : Unit = {
+        a match {
+            case _ : ControlGateAction => return
+            case _ : AbandonGateAction => return
+            case _ =>
+        }
         if (!game.dcTenebrosumGuard && cost > 0) {
             game.dcLastActionForTenebrosum = Some((a, cost, an))
         }

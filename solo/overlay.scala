@@ -425,6 +425,11 @@ object Overlays {
 
     def imageSource(id : String) = hrf.web.getElem(id).as[dom.html.Image]./(_.src).|!("unknown image source " + id)
 
+    // Fix HB-77 (2026-06-06): Y'Golonac dynamic awaken-cost display reads the
+    // current DC spellbook count from the live Game. Set by the main render
+    // loop on each draw (CthulhuWarsSolo.scala uses displayGame).
+    var currentGame : |[Game] = None
+
     implicit class ElementString(val s : String) extends AnyVal {
         def & = "<span style=inline-block>" + s + "</span>"
     }
@@ -1014,14 +1019,22 @@ object Overlays {
         // Defilers Court (DC): faction info card — Homebrew faction
         // Unique abilities: Tenebrosum (Ongoing) + Depravity (Gather Power).
         // Card art transcribed from Defiler_Faction_Card.png + Defiler_Spellbooks.png.
-        case $("DC") => faction(DC, "info:dc-background", Tenebrosum, "Ongoing",
+        // Fix HB-77 (2026-06-06): Y'Golonac awaken cost is dynamic — reads the
+        // current DC spellbook count from Overlays.currentGame. Pattern mirrors
+        // TS Glaaki's awakenCost(): live formula, not a static "?".
+        case $("DC") =>
+            val ygCostDisplay : String = Overlays.currentGame match {
+                case Some(g) => { implicit val gg : Game = g; s"${DC.spellbooks.num} Power" }
+                case None    => "?"
+            }
+            faction(DC, "info:dc-background", Tenebrosum, "Ongoing",
             "When you perform a Common or Spellbook Action, you may perform the same Action again (if it is available to you) using Sin as if it were Power.<br/><br/>" +
             "<span class=ability-color>Depravity</span> <span class=cost-color>(Gather Power):</span> Gain 1 Sin for each Cultist you have on the map. Sin is not Power & can be kept over multiple phases.",
             $(), $(
             (Acolyte,         6, "1", "0", s"""<div class=p>Start on Spellbook requirement slots. Released into play upon SB acquisition.</div>"""),
             (MindlessHusk,    5, "1", "1", s"""<div class=p>Spellbook: ${reference(DC, Eschar)}</div>"""),
             (FallenProphet,   4, "3", "?", s"""<div class=p>Combat: During your turn, equals the number of enemy Cultists in the Area. Any other time, equals the number of your Cultists in the Area.</div><div class=p>Spellbook: ${reference(DC, Pilgrimage)}</div>"""),
-            (YgolonacDC,      1, "?", "?", s"""
+            (YgolonacDC,      1, ygCostDisplay, "?", s"""
                 <div class=p>${cost(s"How to Awaken ${YgolonacDC.name}:")}</div>
                 <div class=p>${cost("1)")} Pay Power equal to the number of Spellbooks on your Faction Sheet.</div>
                 <div class=p>${cost("2)")} Y'Golonac appears in a LAND AREA lacking a Controlled Gate.</div>

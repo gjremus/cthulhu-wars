@@ -1301,6 +1301,11 @@ object CthulhuWarsSolo {
             def drawMap(implicit game : Game) {
                 val upscale = 2
 
+                // Fix HB-77 (2026-06-06): expose live game to Overlays so the
+                // Y'Golonac unit row can show a dynamic awaken-cost (DC spellbook
+                // count + " Power") instead of "?".
+                Overlays.currentGame = Some(game)
+
                 val dpr = dom.window.devicePixelRatio
                 if (cachedMapWidth == 0 || cachedDPR != dpr) {
                     cachedMapWidth = map.node.clientWidth * dpr
@@ -2477,6 +2482,23 @@ object CthulhuWarsSolo {
                         val tintedSrc = getTintedAsset("n-moonbeast", tint).toDataURL("image/png")
                         s"<img src='${tintedSrc}' style='height:1.4em;vertical-align:middle;opacity:0.9;margin-right:0.3em;' />"
                     } else ""
+                    // Fix HB-77 (2026-06-06): Defilers Court reserved-Acolyte
+                    // marker. Each SBR slot holding a reserved Acolyte gets a
+                    // small DC-tinted acolyte icon next to it (per user spec —
+                    // follow Moonbeast SBR visual formatting). The reserved
+                    // list is maintained on the live game; requirements map
+                    // 1-to-1 with library entries by index.
+                    val dcReservedImg = if (f == DC) {
+                        val reqIndex = f.requirements(displayGame.options).indexOf(r)
+                        val sbForReq = if (reqIndex >= 0 && reqIndex < f.library.num) Some(f.library(reqIndex)) else None
+                        sbForReq.filter(sb => displayGame.dcReservedSpellbookAcolytes.has(sb)) match {
+                            case Some(_) =>
+                                val tint = DrawItem(null, DC, Acolyte, Alive, $, 0, 0).tint
+                                val tintedSrc = getTintedAsset("dc-acolyte", tint).toDataURL("image/png")
+                                s"<img src='${tintedSrc}' style='height:1.4em;vertical-align:middle;opacity:0.95;margin-right:0.3em;' />"
+                            case None => ""
+                        }
+                    } else ""
                     // Sleeper easier SBR: show alternate requirement text on faction card
                     val displayText = if (f == SL && game.options.has(SleeperEasierSBR)) r match {
                         case Pay3SomeoneGains3 => "Pay your last power"
@@ -2489,7 +2511,7 @@ object CthulhuWarsSolo {
                         onclick='event.stopPropagation(); onExternalClick("${f.short}", "${s}")'
                         onpointerover='event.stopPropagation(); onExternalOver("${f.short}", "${s}")'
                         onpointerout='event.stopPropagation(); onExternalOut("${f.short}", "${s}")'
-                        >${mbImg}${displayText}</div>"""
+                        >${mbImg}${dcReservedImg}${displayText}</div>"""
                     d
                 }.mkString("")
 
