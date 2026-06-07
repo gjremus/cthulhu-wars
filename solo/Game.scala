@@ -85,6 +85,20 @@ case class ShamblerHold(faction : Faction) extends FactionRegion {
     val name = faction.name + " Shambler Hold"
 }
 
+// HB Fix 78 (2026-06-06): DC Acolyte faction-card pool. Per user-corrected DC
+// spec — DC's standard cultist pool starts EMPTY. All 6 Acolytes start in this
+// separate faction-card pool, ungated for summon/recruit/deploy/capture. When
+// DC satisfies a Spellbook requirement, the matching Acolyte transfers from
+// here to the chosen Area on the map. If killed in play, the Acolyte returns
+// to DC's STANDARD pool (f.reserve) — NOT here — and from then on is summonable
+// via normal mechanics. Pool glyph (inPlay=false, onMap=false) — this keeps
+// DCFactionCardHold acolytes invisible to allInPlay/onMap/pool-recruit queries.
+case class DCFactionCardHold(faction : Faction) extends FactionRegion {
+    val glyph = Pool
+    val id = "DCFactionCardHold"
+    val name = faction.name + " Faction Card"
+}
+
 case class VelvetFanHold(faction : Faction) extends FactionRegion {
     val glyph = Pool
     val id = "VelvetFanHold"
