@@ -92,6 +92,12 @@ case class GameOverAction(winners : $[Faction], msg : String) extends Action wit
 object CthulhuWarsSolo {
     val original = dom.document.documentElement.outerHTML
 
+    // [2026-05-31] Random Neutrals (alt faction picker). Picker arms this
+    // closure; startSetup and startOnlineSetup invoke + clear it immediately
+    // after creating their local Setup so the picked Use* options are added
+    // before the Variants menu renders.
+    var pendingRandomNeutrals : Option[Setup => Unit] = None
+
     def main(args : Array[String]) {
         if (dom.document.readyState == dom.DocumentReadyState.complete)
             setupUI()
@@ -1234,6 +1240,11 @@ object CthulhuWarsSolo {
                     horizontal = !horizontal
                     oldPositions = $
                     oldGates = $
+                    // Earth maps: gateXY rotates coords on H/V flip, so cached
+                    // glyph positions are stale. Library maps clear this cache
+                    // in their own placement-bitmap-swap block below; Earth maps
+                    // had no clear path until now.
+                    glyphPosCache.clear()
                 }
 
                 // Library maps: switch placement bitmap based on orientation
@@ -1975,6 +1986,17 @@ object CthulhuWarsSolo {
                         }
                     else $
 
+                    // Soft glyph-avoidance: discourage placing units directly atop the
+                    // starting-glyph rendered in this same region (FB/TS/AN/OW dynamic
+                    // glyphs are already in `fixed` as StartingGlyph items by now). Soft
+                    // penalty (~5 max) loses to the 500-cliff gate/tome constraints, so
+                    // when a region is full units still land on the glyph; only breaks
+                    // ties between otherwise-equal candidates.
+                    val glyphAvoidRadius = 60.0 * board.unitScale
+                    val regionGlyphCenters = fixed.collect {
+                        case gi if gi.region == r && gi.unit == StartingGlyph =>
+                            (gi.x.toDouble, gi.y.toDouble)
+                    }
                     def overlapOf(dd : DrawItem) : Double = (draws ++ fixed ++ sticking).map { oo =>
                         val d = dd.rect
                         val o = oo.rect
@@ -2004,6 +2026,16 @@ object CthulhuWarsSolo {
                             val base = s * (1.0 / (ow * oh) + 1.0 / (d.width * d.height))
                             val tomeFlatPenalty = if (s > 0) 500.0 else 0.0
                             base * 25.0 + tomeFlatPenalty
+                        }
+                    }.sum + regionGlyphCenters.map { case (gxC, gyC) =>
+                        val d = dd.rect
+                        if (d == null) 0.0
+                        else {
+                            val dcx = d.x + d.width / 2.0
+                            val dcy = d.y + d.height / 2.0
+                            val dist = math.hypot(dcx - gxC, dcy - gyC)
+                            if (dist < glyphAvoidRadius) 5.0 * (1.0 - dist / glyphAvoidRadius)
+                            else 0.0
                         }
                     }.sum
 
@@ -2058,14 +2090,28 @@ object CthulhuWarsSolo {
                     }.toMap
 
                 // DS starting region glyph (DS isn't in the DrawItem loop above because
-                // it only shows when cultists are present, unlike FB/TS/AN/OW which show always)
-                if (game.setup.has(DS) && DS.cultists.any) {
-                    game.starting.get(DS).foreach { r =>
-                        val (gx, gy) = gateXY(r)
-                        val size = (60 * board.unitScale).toInt
-                        val (sx, sy) = findStaticGlyphPos(gx, gy)
-                        g.drawImage(getAsset("ds-glyph"), sx - size / 2, sy - size / 2, size, size)
+                // it only shows when cultists are present, unlike FB/TS/AN/OW which show always).
+                // Trigger per OG haunt-roll-fail PR #10 (b8617a8): game.starting.get(DS) +
+                // DS.cultists.any filter. Location stays on the current findStaticGlyphPos engine.
+                game.starting.get(DS).filter(_ => DS.cultists.any).foreach { r =>
+                    val (gx, gy) = gateXY(r)
+                    val size = (60 * board.unitScale).toInt
+                    val (sx, sy) = if (!horizontal && !board.isLibraryMap) {
+                        // Portrait/mobile Earth: gateXY returns V-rotated coords
+                        // (mp.height - y, x). The placement bitmap is H-oriented,
+                        // so un-rotate to original landscape coords, search there,
+                        // then rotate result back. Pass canonical EarthRegionPalette
+                        // color so findStaticGlyphPos doesn't sample at the wrong
+                        // pixel (same Australia-bug fix as placeGlyph above).
+                        val (ox, oy) = (gy, mp.height - gx)
+                        val rc = EarthRegionPalette.get(board.id, r).getOrElse(-1)
+                        val (fx, fy) = findStaticGlyphPos(ox, oy, rc)
+                        (mp.height - fy, fx)
+                    } else {
+                        val rc = if (!board.isLibraryMap) EarthRegionPalette.get(board.id, r).getOrElse(-1) else -1
+                        findStaticGlyphPos(gx, gy, rc)
                     }
+                    g.drawImage(getAsset("ds-glyph"), sx - size / 2, sy - size / 2, size, size)
                 }
 
                 // Library at Celaeno: draw tomes on the map for unclaimed tomes
@@ -3579,6 +3625,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             if (factions.has(SL))
                 setup.options :+= DemandTsathoggua
 
+            // [2026-05-31] Apply any pending Random Neutrals selection from the
+            // alt faction picker, then clear so it doesn't leak to a later setup.
+            pendingRandomNeutrals.foreach(_(setup))
+            pendingRandomNeutrals = None
+
             def showMapPreview() {
                 val mapDiv = getElem("map-small")
                 setup.options.of[MapOption].lastOption.foreach { opt =>
@@ -3884,6 +3935,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             val seatings = all.%(s => all.indexOf(s) <= all.indexOf(s.take(1) ++ s.drop(1).reverse))
 
             val setup = new Setup(seatings(0), Human)
+
+            // [2026-05-31] Apply any pending Random Neutrals selection from the
+            // alt faction picker, then clear so it doesn't leak to a later setup.
+            pendingRandomNeutrals.foreach(_(setup))
+            pendingRandomNeutrals = None
 
             def showMapPreview() {
                 val mapDiv = getElem("map-small")
@@ -4226,6 +4282,46 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             for (i <- 0 until pn) allFactions.foreach(f => enabledFactions(i) += f)
             var randomizeOrder = false
 
+            // [2026-05-31] Random Neutrals: optional random subset of Monsters /
+            // Terrors / iGOOs to include in the game. Each category has an
+            // enable checkbox and a count; on Continue we shuffle that
+            // category's Use* option list, take the first N, add the umbrella
+            // option (NeutralMonsters / NeutralTerrors / IGOOs) + the picked
+            // Use* options to setup.options.
+            val randMonsterPool : $[GameOption] = $(
+                UseDimensionalShamblers, UseElderThing, UseGhast, UseAlbinoPenguins,
+                UseGnorri, UseGug, UseInsectsFromShaggai, UseLengSpider, UseMoonbeast,
+                UseSatyr, UseServitor, UseShantak, UseStarVampire, UseVoonith
+            )
+            val randTerrorPool : $[GameOption] = $(
+                UseBrownJenkin, UseDhole, UseElderShoggoth, UseGreatRaceOfYith,
+                UseHoundOfTindalos, UseQuachilUttaus, UseShadowPharaoh
+            )
+            val randIGOOPool : $[GameOption] = $(
+                UseAbhoth, UseAtlachNacha, UseAzathothIGOO, UseBokrug, UseByatis,
+                UseCthugha, UseDaoloth, UseFatherDagon, UseGhatanotoaIGOO,
+                UseGlaakiIGOO, UseMotherHydra, UseNyogtha, UseBloatedWoman,
+                UseTulzscha, UseYgolonac, UseYig
+            )
+            var randMonsters = false
+            var randTerrors = false
+            var randIGOOs = false
+            // [2026-06-03] Auto-populate count fields based on player count
+            // (pn). Previously hard-coded as 4/2/4 regardless of pn, which the
+            // user noticed for pn=3 (got 4/4/2 — first two categories at 4,
+            // third at 2 from the iGOO default the user remembered backwards).
+            // [2026-06-07] Terrors default updated from max(1, pn-1) to pn so
+            // all three categories match the player count (per user spec).
+            // New formula:
+            //   Monsters: pn       (one fresh monster per player)
+            //   Terrors:  pn       (one fresh terror per player)
+            //   iGOOs:    pn       (one fresh iGOO per player)
+            // Floor at 1 so a 1-player setup still has a runnable default;
+            // pool-cap clamping happens at Generate time, not here.
+            var randMonsterCount = math.max(1, pn)
+            var randTerrorCount = math.max(1, pn)
+            var randIGOOCount = math.max(1, pn)
+
             // [2026-05-23] Per user: HIDE the other screen sections (map halves,
             // faction status panels, game log) for the duration of the alt
             // picker flow. Save their display values + the action panel's
@@ -4452,6 +4548,128 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     root.appendChild(row)
                 }
 
+                // [2026-05-31] Random Neutrals section. Three checkbox+count
+                // rows under a small heading, one each for Monsters / Terrors /
+                // iGOOs. Validation per row:
+                //   count <= 0        → forcibly un-check that category
+                //   count >  pool     → red "all units picked, will not be random"
+                //   count >= pool     → red "Only X units available, choose less"
+                //                         + disable Continue (rnHardBlock)
+                var rnHardBlock = false
+                val rnHeading = dom.document.createElement("div").asInstanceOf[html.Div]
+                rnHeading.style.cssText = "margin-top:14px;font-size:12pt;font-weight:600;color:#fff;border-top:1px solid #2a2e36;padding-top:10px;"
+                rnHeading.innerHTML = "Random Neutrals"
+                root.appendChild(rnHeading)
+
+                def renderRandRow(
+                    label : String,
+                    poolSize : Int,
+                    getEnabled : () => Boolean,
+                    setEnabled : Boolean => Unit,
+                    getCount : () => Int,
+                    setCount : Int => Unit
+                ) {
+                    val r = dom.document.createElement("div").asInstanceOf[html.Div]
+                    r.style.cssText = "padding:6px 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"
+                    val cb = dom.document.createElement("input").asInstanceOf[html.Input]
+                    cb.`type` = "checkbox"
+                    cb.checked = getEnabled()
+                    cb.style.cssText = "margin:0;cursor:pointer;"
+                    val lbl = dom.document.createElement("label").asInstanceOf[html.Label]
+                    lbl.style.cssText = "color:#e6edf3;font-size:10.5pt;cursor:pointer;"
+                    lbl.innerHTML = label + " (from " + poolSize + " total)"
+                    lbl.onclick = (_) => { cb.checked = !cb.checked; setEnabled(cb.checked); render() }
+                    cb.onchange = (_) => { setEnabled(cb.checked); render() }
+
+                    // [2026-06-03] Stepper control replaces the previous
+                    // free-text number input. Why: a free-text <input
+                    // type="number"> here triggered render() on every
+                    // keystroke (oninput), which clears `root` and rebuilds
+                    // it — so the input lost focus after every digit. The
+                    // user perceived this as "the page steals focus back to
+                    // the canvas." Switching to explicit ▼ / ▲ buttons
+                    // eliminates the typing path entirely: clicks don't
+                    // need the input to retain focus, and there is no
+                    // canvas-vs-input focus race. The value readout in the
+                    // middle is a non-interactive <span>, not an editable
+                    // input, so there's nothing left to steal focus from.
+                    val stepWrap = dom.document.createElement("div").asInstanceOf[html.Div]
+                    stepWrap.style.cssText = "display:inline-flex;align-items:center;gap:0;border:1px solid #30363d;border-radius:5px;background:#0d1117;overflow:hidden;"
+
+                    val btnStyle =
+                        "padding:4px 10px;background:#161b22;color:#e6edf3;border:none;" +
+                        "cursor:pointer;font-family:inherit;font-size:11pt;font-weight:600;" +
+                        "user-select:none;line-height:1;"
+
+                    val downBtn = dom.document.createElement("button").asInstanceOf[html.Button]
+                    downBtn.`type` = "button"
+                    downBtn.innerHTML = "&#9660;"  // ▼
+                    downBtn.style.cssText = btnStyle
+                    downBtn.title = "Decrease"
+                    downBtn.onclick = (_) => {
+                        val n = math.max(0, getCount() - 1)
+                        setCount(n)
+                        if (n <= 0) setEnabled(false)
+                        render()
+                    }
+
+                    val valSpan = dom.document.createElement("span").asInstanceOf[html.Span]
+                    valSpan.style.cssText = "min-width:32px;padding:4px 8px;text-align:center;color:#e6edf3;font-family:inherit;font-size:10.5pt;background:#0d1117;border-left:1px solid #30363d;border-right:1px solid #30363d;"
+                    valSpan.innerHTML = getCount().toString
+
+                    val upBtn = dom.document.createElement("button").asInstanceOf[html.Button]
+                    upBtn.`type` = "button"
+                    upBtn.innerHTML = "&#9650;"  // ▲
+                    upBtn.style.cssText = btnStyle
+                    upBtn.title = "Increase"
+                    upBtn.onclick = (_) => {
+                        // Cap at poolSize — going over only produces a red
+                        // warning, never useful values, so block at the
+                        // ceiling for cleaner UX. Validation messages below
+                        // still cover the legacy out-of-range cases (in case
+                        // pn-derived defaults exceed the pool for very small
+                        // pools).
+                        val n = math.min(poolSize, getCount() + 1)
+                        setCount(n)
+                        render()
+                    }
+
+                    stepWrap.appendChild(downBtn)
+                    stepWrap.appendChild(valSpan)
+                    stepWrap.appendChild(upBtn)
+
+                    r.appendChild(cb)
+                    r.appendChild(lbl)
+                    r.appendChild(stepWrap)
+                    if (getEnabled()) {
+                        val n = getCount()
+                        if (n >= poolSize) {
+                            val warn = dom.document.createElement("span").asInstanceOf[html.Span]
+                            warn.style.cssText = "color:#f85149;font-size:10pt;font-weight:600;"
+                            warn.innerHTML = "Only " + poolSize + " units available, choose a number less than " + poolSize
+                            r.appendChild(warn)
+                            rnHardBlock = true
+                        }
+                        else if (n > poolSize) {
+                            val warn = dom.document.createElement("span").asInstanceOf[html.Span]
+                            warn.style.cssText = "color:#f85149;font-size:10pt;font-weight:600;"
+                            warn.innerHTML = "all units picked, will not be random"
+                            r.appendChild(warn)
+                        }
+                    }
+                    root.appendChild(r)
+                }
+
+                renderRandRow("Monsters", randMonsterPool.num,
+                    () => randMonsters, v => randMonsters = v,
+                    () => randMonsterCount, v => randMonsterCount = v)
+                renderRandRow("Terrors", randTerrorPool.num,
+                    () => randTerrors, v => randTerrors = v,
+                    () => randTerrorCount, v => randTerrorCount = v)
+                renderRandRow("iGOOs", randIGOOPool.num,
+                    () => randIGOOs, v => randIGOOs = v,
+                    () => randIGOOCount, v => randIGOOCount = v)
+
                 // Randomize-order row
                 val rndRow = dom.document.createElement("div").asInstanceOf[html.Div]
                 rndRow.style.cssText = "padding:10px 6px;display:flex;align-items:center;gap:8px;margin-top:6px;"
@@ -4469,7 +4687,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 root.appendChild(rndRow)
 
                 // Feasibility warning + button row
-                val feasible = isFeasible()
+                val feasible = isFeasible() && !rnHardBlock
                 if (!feasible) {
                     val warn = dom.document.createElement("div").asInstanceOf[html.Div]
                     warn.style.cssText = "color:#f85149;font-weight:600;font-size:11pt;margin-top:10px;"
@@ -4561,6 +4779,28 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 cont.onclick = (_) => {
                     restoreOtherSections()
                     clear(actionDiv)
+                    // [2026-05-31] Arm Random Neutrals closure (consumed by
+                    // startSetup / startOnlineSetup right after they create
+                    // their local Setup). For each enabled category, shuffle
+                    // the pool, take the requested count, add umbrella +
+                    // picks to setup.options.
+                    pendingRandomNeutrals = Some({ setup =>
+                        if (randMonsters && randMonsterCount > 0) {
+                            val picks = scala.util.Random.shuffle(randMonsterPool.toList).take(randMonsterCount)
+                            setup.options = (setup.options.notOf[NeutralMonsterOption]).but(NeutralMonsters)
+                            setup.options ++= (NeutralMonsters +: picks)
+                        }
+                        if (randTerrors && randTerrorCount > 0) {
+                            val picks = scala.util.Random.shuffle(randTerrorPool.toList).take(randTerrorCount)
+                            setup.options = (setup.options.notOf[NeutralTerrorOption]).but(NeutralTerrors)
+                            setup.options ++= (NeutralTerrors +: picks)
+                        }
+                        if (randIGOOs && randIGOOCount > 0) {
+                            val picks = scala.util.Random.shuffle(randIGOOPool.toList).take(randIGOOCount)
+                            setup.options = (setup.options.notOf[IGOOOption]).but(IGOOs)
+                            setup.options ++= (IGOOs +: picks)
+                        }
+                    })
                     onContinue(ordered.map(_._2))
                 }
                 val backBtn = dom.document.createElement("button").asInstanceOf[html.Button]
@@ -4867,9 +5107,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             "Back"
                         ), { _ => topMenu() })
                     case 6 =>
-                        // "Beta builds" — same menu in the MNU build. Link points back to root.
+                        // "Beta builds" — same menu in the MNU build. Links to Library main + TchoTcho + Bubastis betas.
                         ask("Beta builds", $(
                             "<a href='/' target='_blank'><div>Library at Celaeno (main)</div></a>",
+                            "<a href='/TchoTcho/' target='_blank'><div>TchoTcho</div></a>",
+                            "<a href='/BB/' target='_blank'><div>Bubastis</div></a>",
                             "Cancel"
                         ), { _ => topMenu() })
                     case 5 =>
