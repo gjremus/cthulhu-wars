@@ -4534,7 +4534,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC)
 
         // Alt picker display order (may differ from allFactions).
-        // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB.
+        // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB, DC.
         //
         // [2026-06-02] §3.13.3: a SECOND BB entry sits at picker position 12,
         // immediately after standard BB. Picking it auto-toggles
@@ -4549,7 +4549,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             def short : String = if (alt) faction.short + "-alt" else faction.short
             def label : String = if (alt) faction.full + " (alt SBs)" else faction.full
         }
-        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB)
+        // [2026-06-06] DC (Defilers Court) appended to the END of the alt
+        // picker. Click handler / selection flow are reused as-is via the
+        // standard PickerEntry pipeline — glyphSrc resolves to dc-glyph.webp
+        // from DC.short.toLowerCase, matching every other faction.
+        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC)
         val altPickerEntries : $[PickerEntry] =
             altPickerFactions./(f => PickerEntry(f, false)).flatMap {
                 // Insert the BB-alt entry immediately after standard BB.
