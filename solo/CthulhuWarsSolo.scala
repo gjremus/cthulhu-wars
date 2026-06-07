@@ -4576,14 +4576,16 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // (pn). Previously hard-coded as 4/2/4 regardless of pn, which the
             // user noticed for pn=3 (got 4/4/2 — first two categories at 4,
             // third at 2 from the iGOO default the user remembered backwards).
+            // [2026-06-07] Terrors default updated from max(1, pn-1) to pn so
+            // all three categories match the player count (per user spec).
             // New formula:
             //   Monsters: pn       (one fresh monster per player)
-            //   Terrors:  max(1, pn-1)  (fewer terrors — they are stronger)
+            //   Terrors:  pn       (one fresh terror per player)
             //   iGOOs:    pn       (one fresh iGOO per player)
             // Floor at 1 so a 1-player setup still has a runnable default;
             // pool-cap clamping happens at Generate time, not here.
             var randMonsterCount = math.max(1, pn)
-            var randTerrorCount = math.max(1, pn - 1)
+            var randTerrorCount = math.max(1, pn)
             var randIGOOCount = math.max(1, pn)
 
             // [2026-05-23] Per user: HIDE the other screen sections (map halves,
