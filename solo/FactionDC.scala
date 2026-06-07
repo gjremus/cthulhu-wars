@@ -338,7 +338,7 @@ object DCExpansion extends Expansion {
             // to repeat (pool/target/region availability) — see tenebrosumLegalToRepeat.
             game.dcLastActionForTenebrosum.foreach { case (a, cost, an) =>
                 if (game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn
-                    && tenebrosumLegalToRepeat(f, a, an))
+                    && tenebrosumLegalToRepeat(f, a, cost, an))
                     + DCTenebrosumMainAction(f, cost, an)
             }
             game.reveals(f)
@@ -386,7 +386,7 @@ object DCExpansion extends Expansion {
             // to repeat (pool/target/region availability) — see tenebrosumLegalToRepeat.
             game.dcLastActionForTenebrosum.foreach { case (a, cost, an) =>
                 if (game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn
-                    && tenebrosumLegalToRepeat(f, a, an))
+                    && tenebrosumLegalToRepeat(f, a, cost, an))
                     + DCTenebrosumMainAction(f, cost, an)
             }
 
@@ -938,61 +938,85 @@ object DCExpansion extends Expansion {
 
     // HB Fix 90 (2026-06-07): Public wrapper so FactionSL can call the same
     // legality check for its borrowed-Tenebrosum offer.
-    def tenebrosumLegalToRepeatPublic(self : Faction, a : Action, an : String)(implicit game : Game) : Boolean =
-        tenebrosumLegalToRepeat(self, a, an)
+    // HB Fix 92 (2026-06-07): now takes the recorded cost so the legality
+    // check can account for the power refund Tenebrosum applies before the
+    // replay chooser opens. SL call-site updated accordingly.
+    def tenebrosumLegalToRepeatPublic(self : Faction, a : Action, cost : Int, an : String)(implicit game : Game) : Boolean =
+        tenebrosumLegalToRepeat(self, a, cost, an)
 
     // HB Fix 90 (2026-06-07): Bug 1 — Tenebrosum can only be OFFERED if the
     // recorded action class is still legally repeatable. Pool empty, no valid
     // region, no remaining target → no offer. Re-uses the same predicates the
     // engine uses when deciding whether to render the original main-action.
-    private def tenebrosumLegalToRepeat(self : Faction, a : Action, an : String)(implicit game : Game) : Boolean = a match {
-        // MOVE — any of self's units still un-Moved and self has at least 1 power.
-        case _ : MoveAction =>
-            self.units.nex.onMap.not(Moved).%(_.canMove).any && self.power > 0
-        // BUILD GATE — any area without a gate where self has a gate-controller.
-        case _ : BuildGateAction =>
-            areas.nex.%(self.affords(3 - self.has(UmrAtTawil).??(1))).%!(game.gates.has).%(r => self.at(r).%(_.canControlGate).any).any
-        // RECRUIT — pool has a cultist + at least one valid area.
-        case RecruitAction(_, uc, _) =>
-            self.pool(uc).any && areas.%(self.present).some.|(areas).nex.%(r => self.affords(self.recruitCost(uc, r))(r)).any
-        // SUMMON — pool has the unit + at least one valid gate area.
-        case SummonAction(_, uc, _) =>
-            val summonAreas = areas ++ ((self == BB).??($(BB.moon)))
-            self.pool(uc).any && summonAreas.nex.%(r => self.affords(self.summonCost(uc, r))(r)).%(self.canAccessGate).any
-        // CAPTURE — any area with an eligible enemy cultist target.
-        case _ : CaptureAction =>
-            areas.nex.%(self.affords(1)).%(r => game.factionlike.but(self).%(self.canCapture(r)).any).any
-        // BATTLE — any region with a valid attack target that self HAS NOT
-        // already battled in this turn (CW rules: 1 battle per region per turn).
-        case _ : AttackAction =>
-            areas.nex.%(self.affords(1)).diff(self.battled).%(r => game.factionlike.but(self).exists(self.canAttack(r))).any
-        // AWAKEN — pool has the GOO (e.g. Y'Golonac: only 1 in pool — if awoken, no offer).
-        case AwakenAction(_, uc, _, _) =>
-            self.pool(uc).any && areas.nex.%(r => self.affords(self.awakenCost(uc, r).|(999))(r)).any
-        // RITUAL — at least one gate to ritual at.
-        case _ : RitualAction =>
-            self.allGates.any
-        // DC SB Satiate — needs Y'Golonac on map, 2 power, and at least one
-        // enemy cultist in Y'Golonac's area.
-        case _ : DCSatiateConfirmAction =>
-            self.can(Satiate) && self.power >= 2 && self.allInPlay.%(_.uclass == YgolonacDC).any &&
-                self.allInPlay.%(_.uclass == YgolonacDC).exists(yg => game.factions.but(self).exists(e => e.at(yg.region).%(_.uclass.utype == Cultist).any))
-        // DC SB Lure — needs Y'Golonac on map, 1 power, and at least one
-        // adjacent enemy cultist eligible.
-        case _ : DCLureConfirmAction =>
-            self.can(Lure) && self.power >= 1 && self.allInPlay.%(_.uclass == YgolonacDC).any &&
-                self.allInPlay.%(_.uclass == YgolonacDC).exists { yg =>
-                    val adj = game.board.connected(yg.region)
-                    game.factions.but(self).exists(e => adj./~(e.at).%(_.uclass.utype == Cultist).any)
-                }
-        // DC SB Pilgrimage — needs a Fallen Prophet on map, 1 power.
-        case _ : DCPilgrimageDestAction =>
-            self.can(Pilgrimage) && self.power >= 1 && self.allInPlay.%(_.uclass == FallenProphet).any
-        // DC SB Dark Bargain — Y'Golonac on map, not facedown this round.
-        case _ : DCDarkBargainConfirmAction =>
-            self.can(DarkBargain) && self.allInPlay.%(_.uclass == YgolonacDC).any && !game.dcDarkBargainFacedown
-        // Default: if we don't recognize the action, assume legal (conservative).
-        case _ => true
+    //
+    // HB Fix 92 (2026-06-07): bug — the affordability checks below used
+    // self.affords(n)(r) which requires self.power >= taxIn(r) + n at CURRENT
+    // power. But Tenebrosum REFUNDS the recorded action's power cost before
+    // the chooser fires (Sin is paid in lieu of Power). So the legality test
+    // must use post-refund power (self.power + cost), otherwise repeatable
+    // actions like "Summon Mindless Husk for 1 power" get hidden when the
+    // player has 0 power remaining despite having Sin + pool + gate. User
+    // bug 2026-06-07: "I just summon a mindless husk for 1 power. I have
+    // 3 sin. 4 mindless husks in pool. It should have prompted me to
+    // summon Another mindless husk for 1 sin." The recorded cost is threaded
+    // through so each affords check considers the refund.
+    private def tenebrosumLegalToRepeat(self : Faction, a : Action, cost : Int, an : String)(implicit game : Game) : Boolean = {
+        // Post-refund affordability: same shape as self.affords(n)(r) =
+        // power >= taxIn(r) + n, but using (power + cost) since the recorded
+        // cost will be refunded before the chooser opens.
+        def affordsRefund(n : Int)(r : Region) : Boolean = self.power + cost >= self.taxIn(r) + n
+        a match {
+            // MOVE — any of self's units still un-Moved. Power gate: post-refund
+            // (self.power + cost) > 0; since recorded Move costs are typically 1
+            // and refund restores them, this trivially holds for the same-region
+            // repeat case but a different region with higher tax could fail.
+            case _ : MoveAction =>
+                self.units.nex.onMap.not(Moved).%(_.canMove).any && (self.power + cost) > 0
+            // BUILD GATE — any area without a gate where self has a gate-controller.
+            case _ : BuildGateAction =>
+                areas.nex.%(affordsRefund(3 - self.has(UmrAtTawil).??(1))).%!(game.gates.has).%(r => self.at(r).%(_.canControlGate).any).any
+            // RECRUIT — pool has a cultist + at least one valid area (post-refund affords).
+            case RecruitAction(_, uc, _) =>
+                self.pool(uc).any && areas.%(self.present).some.|(areas).nex.%(r => affordsRefund(self.recruitCost(uc, r))(r)).any
+            // SUMMON — pool has the unit + at least one valid gate area (post-refund affords).
+            case SummonAction(_, uc, _) =>
+                val summonAreas = areas ++ ((self == BB).??($(BB.moon)))
+                self.pool(uc).any && summonAreas.nex.%(r => affordsRefund(self.summonCost(uc, r))(r)).%(self.canAccessGate).any
+            // CAPTURE — any area with an eligible enemy cultist target.
+            case _ : CaptureAction =>
+                areas.nex.%(affordsRefund(1)).%(r => game.factionlike.but(self).%(self.canCapture(r)).any).any
+            // BATTLE — any region with a valid attack target that self HAS NOT
+            // already battled in this turn (CW rules: 1 battle per region per turn).
+            case _ : AttackAction =>
+                areas.nex.%(affordsRefund(1)).diff(self.battled).%(r => game.factionlike.but(self).exists(self.canAttack(r))).any
+            // AWAKEN — pool has the GOO (e.g. Y'Golonac: only 1 in pool — if awoken, no offer).
+            case AwakenAction(_, uc, _, _) =>
+                self.pool(uc).any && areas.nex.%(r => affordsRefund(self.awakenCost(uc, r).|(999))(r)).any
+            // RITUAL — at least one gate to ritual at.
+            case _ : RitualAction =>
+                self.allGates.any
+            // DC SB Satiate — needs Y'Golonac on map, post-refund 2 power, and
+            // at least one enemy cultist in Y'Golonac's area.
+            case _ : DCSatiateConfirmAction =>
+                self.can(Satiate) && (self.power + cost) >= 2 && self.allInPlay.%(_.uclass == YgolonacDC).any &&
+                    self.allInPlay.%(_.uclass == YgolonacDC).exists(yg => game.factions.but(self).exists(e => e.at(yg.region).%(_.uclass.utype == Cultist).any))
+            // DC SB Lure — needs Y'Golonac on map, post-refund 1 power, and at
+            // least one adjacent enemy cultist eligible.
+            case _ : DCLureConfirmAction =>
+                self.can(Lure) && (self.power + cost) >= 1 && self.allInPlay.%(_.uclass == YgolonacDC).any &&
+                    self.allInPlay.%(_.uclass == YgolonacDC).exists { yg =>
+                        val adj = game.board.connected(yg.region)
+                        game.factions.but(self).exists(e => adj./~(e.at).%(_.uclass.utype == Cultist).any)
+                    }
+            // DC SB Pilgrimage — needs a Fallen Prophet on map, post-refund 1 power.
+            case _ : DCPilgrimageDestAction =>
+                self.can(Pilgrimage) && (self.power + cost) >= 1 && self.allInPlay.%(_.uclass == FallenProphet).any
+            // DC SB Dark Bargain — Y'Golonac on map, not facedown this round.
+            case _ : DCDarkBargainConfirmAction =>
+                self.can(DarkBargain) && self.allInPlay.%(_.uclass == YgolonacDC).any && !game.dcDarkBargainFacedown
+            // Default: if we don't recognize the action, assume legal (conservative).
+            case _ => true
+        }
     }
 
     // HB Fix 90 (2026-06-07): Bug 2 — open the SAME action-class chooser as

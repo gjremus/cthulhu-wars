@@ -231,7 +231,7 @@ object SLExpansion extends Expansion {
                 game.dcLastActionForTenebrosum.foreach { case (a, cost, an) =>
                     if (cost > 0 && game.slSin >= cost && !game.dcTenebrosumGuard
                         && !game.slTenebrosumUsedThisTurn
-                        && DCExpansion.tenebrosumLegalToRepeatPublic(f, a, an))
+                        && DCExpansion.tenebrosumLegalToRepeatPublic(f, a, cost, an))
                         + DCTenebrosumMainAction(f, cost, an)
                 }
             }
