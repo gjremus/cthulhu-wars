@@ -223,9 +223,15 @@ object SLExpansion extends Expansion {
 
             // 2026-06-06 Fix 75 (Fix 1 via SL): if SL has Tenebrosum via the
             // permanent DC bundle, offer "Repeat <action>" using SL's Sin pool.
+            // HB Fix 90 (2026-06-07): also gated by Tenebrosum-legal-to-repeat
+            // (see FactionDC.tenebrosumLegalToRepeat). Legality re-checks pool /
+            // target / region for the recorded action class so Tenebrosum isn't
+            // offered after an iGOO awakens with empty pool, etc.
             if (game.slPermanentBorrowed.has(Tenebrosum)) {
-                game.dcLastActionForTenebrosum.foreach { case (_, cost, an) =>
-                    if (cost > 0 && game.slSin >= cost && !game.dcTenebrosumGuard && !game.slTenebrosumUsedThisTurn)
+                game.dcLastActionForTenebrosum.foreach { case (a, cost, an) =>
+                    if (cost > 0 && game.slSin >= cost && !game.dcTenebrosumGuard
+                        && !game.slTenebrosumUsedThisTurn
+                        && DCExpansion.tenebrosumLegalToRepeatPublic(f, a, an))
                         + DCTenebrosumMainAction(f, cost, an)
                 }
             }

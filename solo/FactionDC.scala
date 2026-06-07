@@ -315,8 +315,11 @@ object DCExpansion extends Expansion {
         // ── MAIN ACTION ─────────────────────────────────────────────────────
         case MainAction(f : DC.type) if f.active.not =>
             UnknownContinue
-        case MainAction(f : DC.type) if f.acted && !game.dcTenebrosumExtraTurn =>
+        case MainAction(f : DC.type) if f.acted =>
             // Post-acted: still allow Tenebrosum repeat + controls + endTurn (G1)
+            // HB Fix 90 (2026-06-07): dcTenebrosumExtraTurn flag retired — Tenebrosum
+            // now replays the SAME action class via the chooser (not a fresh main),
+            // and post-acted unlimited menu fires naturally after the replay ends.
             implicit val asking = Asking(f)
             game.controls(f)
             if (f.hasAllSB)
@@ -331,8 +334,11 @@ object DCExpansion extends Expansion {
             // 2026-06-06 Fix 75: hide once Tenebrosum has been used this turn.
             // HB Fix 84 (2026-06-07): 0-cost actions ARE eligible (free repeat),
             // per user spec. Sin check is game.dcSin >= cost (trivially true at 0).
-            game.dcLastActionForTenebrosum.foreach { case (_, cost, an) =>
-                if (game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn)
+            // HB Fix 90 (2026-06-07): also check the action class is still LEGAL
+            // to repeat (pool/target/region availability) — see tenebrosumLegalToRepeat.
+            game.dcLastActionForTenebrosum.foreach { case (a, cost, an) =>
+                if (game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn
+                    && tenebrosumLegalToRepeat(f, a, an))
                     + DCTenebrosumMainAction(f, cost, an)
             }
             game.reveals(f)
@@ -341,9 +347,6 @@ object DCExpansion extends Expansion {
 
         case MainAction(f : DC.type) =>
             implicit val asking = Asking(f)
-
-            // Tenebrosum extra-turn: consume the flag (one-shot).
-            if (game.dcTenebrosumExtraTurn) game.dcTenebrosumExtraTurn = false
 
             // HB Fix 83 (2026-06-07): Reserved-Acolyte conditional unlimited
             // delivery — offered alongside normal main-menu options (NOT a
@@ -379,8 +382,11 @@ object DCExpansion extends Expansion {
             // 2026-06-06 Fix 75: hide once Tenebrosum has been used this turn.
             // HB Fix 84 (2026-06-07): 0-cost actions ARE eligible (free repeat),
             // per user spec. Sin check is game.dcSin >= cost (trivially true at 0).
-            game.dcLastActionForTenebrosum.foreach { case (_, cost, an) =>
-                if (game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn)
+            // HB Fix 90 (2026-06-07): also check the action class is still LEGAL
+            // to repeat (pool/target/region availability) — see tenebrosumLegalToRepeat.
+            game.dcLastActionForTenebrosum.foreach { case (a, cost, an) =>
+                if (game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn
+                    && tenebrosumLegalToRepeat(f, a, an))
                     + DCTenebrosumMainAction(f, cost, an)
             }
 
@@ -398,12 +404,20 @@ object DCExpansion extends Expansion {
             + CancelAction
             asking
 
-        // ── Tenebrosum: Hard — debit Sin and grant one extra main action ──
+        // ── Tenebrosum: Hard — debit Sin and replay the same action class ──
         // 2026-06-06 Fix 75: per-TURN used flag (NOT per-action). DC pays from
         // dcSin; SL (via the Ancient Sorcery permanent bundle) pays from slSin.
+        // HB Fix 90 (2026-06-07): Tenebrosum no longer opens a fresh main menu
+        // (which previously let DC take a 2nd power-paid main action). Instead
+        // it refunds the recorded action's Power cost and re-opens the SAME
+        // action-class chooser (Move / Build / Recruit / Summon / Capture /
+        // Attack / Awaken / Ritual or DC SB chooser). After that one action
+        // resolves, EndAction → AfterAction → PreMainAction → MainAction(self)
+        // and since f.acted is still true the post-acted UNLIMITED branch fires
+        // (NOT a second main menu).
         case DCTenebrosumRepeatAction(self, cost, an) =>
             game.dcLastActionForTenebrosum match {
-                case Some(_) =>
+                case Some((recordedAction, _, _)) =>
                     if (self == SL) {
                         game.slSin -= cost
                         game.slTenebrosumUsedThisTurn = true
@@ -412,7 +426,6 @@ object DCExpansion extends Expansion {
                         game.dcTenebrosumUsedThisTurn = true
                     }
                     game.dcTenebrosumGuard = true
-                    game.dcTenebrosumExtraTurn = true
                     // HB Fix 84 (2026-06-07): 0-cost repeat ("free repeat") logs
                     // without the Sin-spent phrase to match user spec wording.
                     if (cost > 0)
@@ -421,7 +434,14 @@ object DCExpansion extends Expansion {
                         self.log(Tenebrosum.styled(DC) + ": free repeat of", an.styled(self))
                     // Clear last-action so the SAME action isn't repeated as the "last" again
                     game.dcLastActionForTenebrosum = None
-                    Force(MainAction(self))
+                    // Refund the recorded cost so the replay chooser nets zero
+                    // power (Sin paid in lieu of Power per Tenebrosum semantics).
+                    if (cost > 0) self.power += cost
+                    // Force the SAME chooser the recorded action came from. After
+                    // it resolves, EndAction → unlimited menu (post-acted MainAction
+                    // branch fires since f.acted is true and extra-turn flag isn't
+                    // set — this is the Bug 2 fix per spec).
+                    tenebrosumRepeatChooser(self, recordedAction)
                 case None =>
                     UnknownContinue
             }
@@ -915,6 +935,103 @@ object DCExpansion extends Expansion {
     // SL holding the permanent DC bundle via Ancient Sorcery (Fix 2).
     private def tenebrosumEligible(self : Faction)(implicit game : Game) : Boolean =
         self == DC || (self == SL && game.slPermanentBorrowed.has(Tenebrosum))
+
+    // HB Fix 90 (2026-06-07): Public wrapper so FactionSL can call the same
+    // legality check for its borrowed-Tenebrosum offer.
+    def tenebrosumLegalToRepeatPublic(self : Faction, a : Action, an : String)(implicit game : Game) : Boolean =
+        tenebrosumLegalToRepeat(self, a, an)
+
+    // HB Fix 90 (2026-06-07): Bug 1 — Tenebrosum can only be OFFERED if the
+    // recorded action class is still legally repeatable. Pool empty, no valid
+    // region, no remaining target → no offer. Re-uses the same predicates the
+    // engine uses when deciding whether to render the original main-action.
+    private def tenebrosumLegalToRepeat(self : Faction, a : Action, an : String)(implicit game : Game) : Boolean = a match {
+        // MOVE — any of self's units still un-Moved and self has at least 1 power.
+        case _ : MoveAction =>
+            self.units.nex.onMap.not(Moved).%(_.canMove).any && self.power > 0
+        // BUILD GATE — any area without a gate where self has a gate-controller.
+        case _ : BuildGateAction =>
+            areas.nex.%(self.affords(3 - self.has(UmrAtTawil).??(1))).%!(game.gates.has).%(r => self.at(r).%(_.canControlGate).any).any
+        // RECRUIT — pool has a cultist + at least one valid area.
+        case RecruitAction(_, uc, _) =>
+            self.pool(uc).any && areas.%(self.present).some.|(areas).nex.%(r => self.affords(self.recruitCost(uc, r))(r)).any
+        // SUMMON — pool has the unit + at least one valid gate area.
+        case SummonAction(_, uc, _) =>
+            val summonAreas = areas ++ ((self == BB).??($(BB.moon)))
+            self.pool(uc).any && summonAreas.nex.%(r => self.affords(self.summonCost(uc, r))(r)).%(self.canAccessGate).any
+        // CAPTURE — any area with an eligible enemy cultist target.
+        case _ : CaptureAction =>
+            areas.nex.%(self.affords(1)).%(r => game.factionlike.but(self).%(self.canCapture(r)).any).any
+        // BATTLE — any region with a valid attack target that self HAS NOT
+        // already battled in this turn (CW rules: 1 battle per region per turn).
+        case _ : AttackAction =>
+            areas.nex.%(self.affords(1)).diff(self.battled).%(r => game.factionlike.but(self).exists(self.canAttack(r))).any
+        // AWAKEN — pool has the GOO (e.g. Y'Golonac: only 1 in pool — if awoken, no offer).
+        case AwakenAction(_, uc, _, _) =>
+            self.pool(uc).any && areas.nex.%(r => self.affords(self.awakenCost(uc, r).|(999))(r)).any
+        // RITUAL — at least one gate to ritual at.
+        case _ : RitualAction =>
+            self.allGates.any
+        // DC SB Satiate — needs Y'Golonac on map, 2 power, and at least one
+        // enemy cultist in Y'Golonac's area.
+        case _ : DCSatiateConfirmAction =>
+            self.can(Satiate) && self.power >= 2 && self.allInPlay.%(_.uclass == YgolonacDC).any &&
+                self.allInPlay.%(_.uclass == YgolonacDC).exists(yg => game.factions.but(self).exists(e => e.at(yg.region).%(_.uclass.utype == Cultist).any))
+        // DC SB Lure — needs Y'Golonac on map, 1 power, and at least one
+        // adjacent enemy cultist eligible.
+        case _ : DCLureConfirmAction =>
+            self.can(Lure) && self.power >= 1 && self.allInPlay.%(_.uclass == YgolonacDC).any &&
+                self.allInPlay.%(_.uclass == YgolonacDC).exists { yg =>
+                    val adj = game.board.connected(yg.region)
+                    game.factions.but(self).exists(e => adj./~(e.at).%(_.uclass.utype == Cultist).any)
+                }
+        // DC SB Pilgrimage — needs a Fallen Prophet on map, 1 power.
+        case _ : DCPilgrimageDestAction =>
+            self.can(Pilgrimage) && self.power >= 1 && self.allInPlay.%(_.uclass == FallenProphet).any
+        // DC SB Dark Bargain — Y'Golonac on map, not facedown this round.
+        case _ : DCDarkBargainConfirmAction =>
+            self.can(DarkBargain) && self.allInPlay.%(_.uclass == YgolonacDC).any && !game.dcDarkBargainFacedown
+        // Default: if we don't recognize the action, assume legal (conservative).
+        case _ => true
+    }
+
+    // HB Fix 90 (2026-06-07): Bug 2 — open the SAME action-class chooser as
+    // the recorded action (so DC re-picks the unit / target / region) rather
+    // than re-issuing the exact same action or opening the full main menu.
+    // Power was already refunded by the caller; the chooser will re-debit it
+    // (net zero). After the action resolves, the engine routes to the
+    // post-acted unlimited menu naturally.
+    private def tenebrosumRepeatChooser(self : Faction, a : Action)(implicit game : Game) : Continue = a match {
+        case _ : MoveAction               => Force(MoveMainAction(self))
+        case _ : BuildGateAction          =>
+            val l = areas.nex.%(self.affords(3 - self.has(UmrAtTawil).??(1))).%!(game.gates.has).%(r => self.at(r).%(_.canControlGate).any).some.|($)
+            Force(BuildGateMainAction(self, l))
+        case RecruitAction(_, uc, _)      =>
+            val l = areas.%(self.present).some.|(areas).nex.%(r => self.affords(self.recruitCost(uc, r))(r)).some.|($)
+            Force(RecruitMainAction(self, uc, l))
+        case SummonAction(_, uc, _)       =>
+            val summonAreas = areas ++ ((self == BB).??($(BB.moon)))
+            val l = summonAreas.nex.%(r => self.affords(self.summonCost(uc, r))(r)).%(self.canAccessGate).some.|($)
+            Force(SummonMainAction(self, uc, l))
+        case _ : CaptureAction            =>
+            val l = areas.nex.%(self.affords(1)).%(r => game.factionlike.but(self).%(self.canCapture(r)).any).some.|($)
+            Force(CaptureMainAction(self, l, None))
+        case _ : AttackAction             =>
+            val l = areas.nex.%(self.affords(1)).diff(self.battled).%(r => game.factionlike.but(self).exists(self.canAttack(r))).some.|($)
+            Force(AttackMainAction(self, l, None))
+        case AwakenAction(_, uc, _, _)    =>
+            val l = areas.nex.%(r => self.affords(self.awakenCost(uc, r).|(999))(r)).some.|($)
+            Force(AwakenMainAction(self, uc, l))
+        // RitualAction has no chooser — re-issue the recorded action directly.
+        // Cost was refunded by caller; the RitualAction handler re-debits it.
+        case _ : RitualAction             => Force(a)
+        case _ : DCSatiateConfirmAction   => Force(DCSatiateMainAction(self))
+        case _ : DCLureConfirmAction      => Force(DCLureMainAction(self))
+        case _ : DCPilgrimageDestAction   => Force(DCPilgrimageMainAction(self))
+        case _ : DCDarkBargainConfirmAction => Force(DCDarkBargainMainAction(self))
+        // Fallback: re-issue the recorded action directly.
+        case _                            => Force(a)
+    }
 
     // HB Fix 83 (2026-06-07): Conditional unlimited Faction-Card Acolyte
     // delivery — visible whenever (a) at least one Acolyte still in the
