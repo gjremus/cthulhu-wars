@@ -474,6 +474,14 @@ object DCExpansion extends Expansion {
         // resolves, EndAction → AfterAction → PreMainAction → MainAction(self)
         // and since f.acted is still true the post-acted UNLIMITED branch fires
         // (NOT a second main menu).
+        // HB Fix 94 (2026-06-07): repeat action follows the SAME interactive
+        // menu flow as the original action (sin paid in lieu of power per
+        // §1.5.1). Sin debit + power refund happen here, then control hands
+        // off to tenebrosumRepeatChooser which routes through the existing
+        // MainAction variants (Summon → region picker, Battle → region+enemy
+        // picker, DC SB → confirm + downstream picks, etc.). No code in this
+        // repeat path re-implements menu logic — it reuses the engine's own
+        // OptionFactionAction / MainQuestion handlers.
         case DCTenebrosumRepeatAction(self, cost, an) =>
             game.dcLastActionForTenebrosum match {
                 case Some((recordedAction, _, _)) =>
@@ -1145,6 +1153,15 @@ object DCExpansion extends Expansion {
     // Power was already refunded by the caller; the chooser will re-debit it
     // (net zero). After the action resolves, the engine routes to the
     // post-acted unlimited menu naturally.
+    // HB Fix 94 (2026-06-07): each branch below maps the recorded action to
+    // its existing engine-side MainAction handler, which in turn opens the
+    // SAME interactive prompt the player would see in the original action
+    // flow. Per user spec: summons prompt for region, battles prompt with
+    // region+enemy variants in a single grouped Ask, captures prompt for
+    // region+enemy, DC SB actions re-open their confirm + downstream picker
+    // chains. No menu logic is duplicated here — Force(XxxMainAction) hands
+    // off to the canonical engine path. Sin is paid in lieu of power (debit
+    // + refund handled in the DCTenebrosumRepeatAction case above).
     private def tenebrosumRepeatChooser(self : Faction, a : Action)(implicit game : Game) : Continue = a match {
         case _ : MoveAction               => Force(MoveMainAction(self))
         case _ : BuildGateAction          =>
