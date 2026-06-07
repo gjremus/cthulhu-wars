@@ -2487,7 +2487,23 @@ object CthulhuWarsSolo {
                         val tintedSrc = getTintedAsset("dc-acolyte", tint).toDataURL("image/png")
                         s"<img src='${tintedSrc}' style='height:1.4em;vertical-align:middle;opacity:0.95;margin-right:0.3em;' />"
                     } else ""
-                    val full = auguryPrefix + moonbeastImg + dcReservedEarnedImg + sb.elem
+                    // HB Fix 95 (2026-06-07): Defilers Court Dark Bargain card
+                    // visually flips face-down after use (per rules: "when Dark
+                    // Bargain is used, FLIP IT FACE DOWN. And it stays face down
+                    // until gather power, when it is flipped face up"). The
+                    // dcDarkBargainFacedown flag is set in the Dark Bargain
+                    // handler and cleared on PowerGatherAction (see FactionDC
+                    // line ~892). The rendered face-down label uses the same
+                    // "?" face-down convention the unfulfilled-SB pile already
+                    // uses (line ~2504), styled in DC color and tagged with
+                    // "(face down)" so it's unambiguous.
+                    val isDCDarkBargainFacedown =
+                        f == DC && sb == DarkBargain && displayGame.dcDarkBargainFacedown
+                    val full =
+                        if (isDCDarkBargainFacedown)
+                            "?".styled(f) + " " + "(face down)".styled("lb")
+                        else
+                            auguryPrefix + moonbeastImg + dcReservedEarnedImg + sb.elem
                     val s = sb.name.replace("\\", "\\\\").replace("'", "&#39") // "
                     // Pass option state for conditional overlay text
                     val sbExtra = (f, sb) match {
@@ -2499,7 +2515,8 @@ object CthulhuWarsSolo {
                         onpointerover='event.stopPropagation(); onExternalOver("${f.short}", "${s}")'
                         onpointerout='event.stopPropagation(); onExternalOut("${f.short}", "${s}")'
                         >${full}</div>"""
-                    f.can(sb).?(d).|(d.styled("used"))
+                    if (isDCDarkBargainFacedown) d.styled("used")
+                    else f.can(sb).?(d).|(d.styled("used"))
                 }.mkString("") +
                 (1.to(6 - f.spellbooks.num - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") +
                 f.unfulfilled./{ r =>

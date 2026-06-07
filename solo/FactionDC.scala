@@ -127,8 +127,19 @@ case class DCTenebrosumMainAction(self : Faction, cost : Int, actionName : Strin
         Tenebrosum.styled(DC) + ": Repeat " + actionName.styled(self) +
             (if (cost > 0) " for " + cost.toString.styled("dc") + " Sin" else " (free)"))
     with MainQuestion with Soft with PowerNeutral
+// HB Fix 95 (2026-06-07): was a bare ForcedAction, which made the post-
+// Tenebrosum confirm step render with title "N/A" and option "N/A" (the
+// abstract ForcedAction defaults) — the user-visible bug "subsequent menu
+// has 'N/A' and 'Cancel' with title 'N/A.'" Now a BaseFactionAction with
+// the same shape as DCSatiateConfirmAction / DCLureConfirmAction /
+// DCDarkBargainConfirmAction so the confirm prompt shows
+// "Tenebrosum: Repeat <action> for N Sin"  +  "Confirm" option.
 case class DCTenebrosumRepeatAction(self : Faction, cost : Int, actionName : String)
-    extends ForcedAction with PowerNeutral
+    extends BaseFactionAction(
+        Tenebrosum.styled(DC) + ": Repeat " + actionName.styled(self) +
+            (if (cost > 0) " for " + cost.toString.styled("dc") + " Sin" else " (free)"),
+        "Confirm".styled("power"))
+    with Soft with PowerNeutral
 
 // ── Reserved-Acolyte placement (conditional unlimited action — HB Fix 83) ──
 // HB Fix 83 (2026-06-07): Same-turn delivery via conditional UNLIMITED action.
