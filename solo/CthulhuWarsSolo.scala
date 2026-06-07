@@ -231,7 +231,7 @@ object CthulhuWarsSolo {
             case _ =>
                 val path = dom.window.location.pathname
 
-                if (path.startsWith("/play/quick") || path.startsWith("/mnu/play/quick") || path.startsWith("/TchoTcho/play/quick") || path.startsWith("/BB/play/quick"))
+                if (path.startsWith("/play/quick") || path.startsWith("/mnu/play/quick") || path.startsWith("/TchoTcho/play/quick") || path.startsWith("/BB/play/quick") || path.startsWith("/HB/play/quick"))
                     ("", true)
                 else
                 if (path.startsWith("/play/"))
@@ -245,6 +245,9 @@ object CthulhuWarsSolo {
                 else
                 if (path.startsWith("/BB/play/"))
                     (path.drop("/BB/play/".length), false)
+                else
+                if (path.startsWith("/HB/play/"))
+                    (path.drop("/HB/play/".length), false)
                 else
                     ("", false)
         }
@@ -5227,12 +5230,15 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         else if (curPath.startsWith("/TchoTcho/")) "/TchoTcho/play/" + hash
                         else if (curPath.startsWith("/BB/play/")) "/BB/play/" + hash
                         else if (curPath.startsWith("/BB/")) "/BB/play/" + hash
+                        else if (curPath.startsWith("/HB/play/")) "/HB/play/" + hash
+                        else if (curPath.startsWith("/HB/")) "/HB/play/" + hash
                         else "/play/" + hash
                     val needsRewrite =
                         !curPath.startsWith("/play/") &&
                         !curPath.startsWith("/mnu/play/") &&
                         !curPath.startsWith("/TchoTcho/play/") &&
-                        !curPath.startsWith("/BB/play/")
+                        !curPath.startsWith("/BB/play/") &&
+                        !curPath.startsWith("/HB/play/")
                     if (needsRewrite)
                         dom.window.history.pushState("initilaize", "", targetPath)
                 }
