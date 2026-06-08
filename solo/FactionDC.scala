@@ -345,6 +345,9 @@ object DCExpansion extends Expansion {
             // Starting power 4 (override default 0)
             f.power = 4
             f.log("starts with", 4.power + " and 0 Sin".styled("dc"))
+            // HB Fix 99 (2026-06-08): log the starting Sin cap so the user sees
+            // it is 10 at game start (2 × Ritual Marker position 5), NEVER 0.
+            f.log("Sin cap:", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.dcRitualMarkerPosition + " = " + game.dcSinCap + ")")
             f.log("places 6", Acolyte.styled(DC), "on Faction Card (one per Spellbook requirement)")
             // HB Fix 79: register DC Proselytize plan menu (Always prompt /
             // Prefer Acolytes on Gate / Prefer Acolytes off Gate). Default is

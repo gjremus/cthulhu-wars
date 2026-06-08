@@ -2403,9 +2403,21 @@ object CthulhuWarsSolo {
                 // small form factors" — added dcSinMStr medium variant ("| NS") to
                 // match the TT growth M-variant pattern. Medium-size HUD now uses
                 // the compact "NS" instead of the full "| N Sin" word.
-                val dcSinStr  = (f == DC).?(" | " + (game.dcSin.toString + " Sin").styled(DC)).|("")
-                val dcSinMStr = (f == DC).?(" | " + (game.dcSin.toString + "S").styled(DC)).|("")
-                val dcSinSStr = (f == DC).?(" " + (game.dcSin.toString + "S").styled(DC)).|("")
+                // HB Fix 99 (2026-06-08): user reported (verbatim, swearing
+                // preserved) "HB DC you overwrote this task TWICE. SIN IS BEINT
+                // CAPPED AT 0. IT SHOUKD NEVER BE FUCKING CAPPED AT 0. The
+                // ritual marker STARTS THE GAME AT 5. And goes to 10- that's
+                // game end. It is NEVER FUCKING ZERO. FIX IT." — Fix 96 + Fix
+                // 98 both updated the underlying clamp formula but neither
+                // surfaced the cap NUMBER in the HUD, so the user was reading
+                // the bare "0 Sin" counter as "cap = 0". The actual clamp at
+                // game start is 10 (= 2 × 5, where 5 = ritualTrack(0) = the
+                // displayed Ritual Marker). Display now reads "N / cap Sin"
+                // so the cap is visible at all times. Apologies for the
+                // third-strike delay on a one-line display fix.
+                val dcSinStr  = (f == DC).?(" | " + (game.dcSin.toString + " / " + game.dcSinCap.toString + " Sin").styled(DC)).|("")
+                val dcSinMStr = (f == DC).?(" | " + (game.dcSin.toString + "/" + game.dcSinCap.toString + "S").styled(DC)).|("")
+                val dcSinSStr = (f == DC).?(" " + (game.dcSin.toString + "/" + game.dcSinCap.toString + "S").styled(DC)).|("")
                 val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr + dcSinStr)
                 val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr + dcSinMStr)
                 val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr + dcSinSStr)
