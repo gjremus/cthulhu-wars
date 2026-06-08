@@ -564,7 +564,7 @@ object DCExpansion extends Expansion {
             val proselytizeGained = game.grantDCSin(proselytizeWant)
             self.log("Proselytize SBR: gained", proselytizeGained.toString.styled("dc"), "Sin (2 per", enemyGOOs, "enemy GOO)")
             if (proselytizeGained < proselytizeWant)
-                self.log("Proselytize SBR: Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.ritualMarker + ")")
+                self.log("Proselytize SBR: Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.dcRitualMarkerPosition + ")")
             Force(CheckSpellbooksAction(DoomAction(self)))
 
         case DCSatiateReqOptInAction(self) =>
@@ -576,7 +576,7 @@ object DCExpansion extends Expansion {
             val satiateGained = game.grantDCSin(poolSBs)
             self.log("Satiate SBR: gained", otherSBs.power, "and", satiateGained.toString.styled("dc"), "Sin")
             if (satiateGained < poolSBs)
-                self.log("Satiate SBR: Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.ritualMarker + ")")
+                self.log("Satiate SBR: Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.dcRitualMarkerPosition + ")")
             Force(CheckSpellbooksAction(DoomAction(self)))
 
         // ── Reserved-Acolyte conditional unlimited delivery (HB Fix 83) ──────
@@ -870,7 +870,7 @@ object DCExpansion extends Expansion {
             val darkBargainGained = game.grantDCSin(face)
             self.log(DarkBargain.styled(DC) + ": DC chose face", face.toString.styled("dc") + "; gained", darkBargainGained.toString.styled("dc"), "Sin")
             if (darkBargainGained < face)
-                self.log(DarkBargain.styled(DC) + ": Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.ritualMarker + ")")
+                self.log(DarkBargain.styled(DC) + ": Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.dcRitualMarkerPosition + ")")
             val allEnemies = game.factions.but(self)
             val e          = allEnemies.num
             if (e == 0 || face == 0) {

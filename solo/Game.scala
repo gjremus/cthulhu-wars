@@ -1472,17 +1472,29 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     // Defilers Court (DC) state — per guide G29 (CRIT): Sin pool lives on Game.scala
     // for undo safety (NOT on DCExpansion singleton). HB Fix 96 (2026-06-07):
-    // Sin is now CAPPED at 2 * current ritualMarker per user directive ("yes,
-    // cap it to current ritual marker x2") and the long-standing faction-card
-    // tooltip text ("max equal to twice the Ritual Marker"). The cap is
-    // re-evaluated at every grant site. If a grant would push Sin over the
-    // cap, the result is CLAMPED to the cap (the grant is partially absorbed,
-    // not discarded). The cap dropping (e.g., if a hypothetical effect lowers
-    // ritualMarker) does NOT retroactively shrink existing Sin — preserved
+    // Sin is CAPPED at 2 × the current Ritual Marker POSITION on the doom track
+    // per user directive ("yes, cap it to current ritual marker x2") and the
+    // long-standing faction-card tooltip text ("max equal to twice the Ritual
+    // Marker"). HB Fix 98 (2026-06-08): the cap formula now reads the Ritual
+    // Marker POSITION via `ritualTrack(ritualMarker)` — which is the value the
+    // user sees on the doom track (5, 6, 7, ... 10, 999). Fix 96 INCORRECTLY
+    // used the raw index `ritualMarker`, which starts at 0 (so the cap was
+    // showing 0 at game start instead of 10 = 2 × 5). The cap is re-evaluated
+    // at every grant site. If a grant would push Sin over the cap, the result
+    // is CLAMPED to the cap (the grant is partially absorbed, not discarded).
+    // The cap dropping does NOT retroactively shrink existing Sin — preserved
     // per "no faction loses power" spirit. All ADD sites must go through
     // grantDCSin so the clamp is applied consistently.
     var dcSin : Int = 0
-    def dcSinCap : Int = 2 * ritualMarker
+    /** Current Ritual Marker POSITION on the doom track (5, 6, 7, ... 10).
+     *  Once the marker reaches 999 (Instant Death), the cap collapses to its
+     *  last finite ceiling of 20 (= 2 × 10) so an end-game spike doesn't
+     *  uncap Sin. */
+    def dcRitualMarkerPosition : Int = {
+        val v = ritualTrack(ritualMarker)
+        if (v == 999) 10 else v
+    }
+    def dcSinCap : Int = 2 * dcRitualMarkerPosition
     /** Grants n Sin to DC, clamped to dcSinCap. Returns the actual amount
      *  added (may be less than n if cap was hit; never negative). */
     def grantDCSin(n : Int) : Int = {
@@ -2796,7 +2808,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         if (gained > 0)
                             f.log("Depravity: gained", gained.toString.styled("dc"), "Sin (now", dcSin.toString.styled("dc") + ")")
                         if (gained < dcAcolytes)
-                            f.log("Depravity: Sin capped at", dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + ritualMarker + ")")
+                            f.log("Depravity: Sin capped at", dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + dcRitualMarkerPosition + ")")
                     }
                     val ygolonacInPlay = f.allInPlay.%(_.uclass == YgolonacDC).any
                     if (ygolonacInPlay) {

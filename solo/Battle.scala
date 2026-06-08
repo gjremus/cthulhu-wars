@@ -1673,7 +1673,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             log(DC, Eschar.styled(DC) + ": gained", gained.toString.styled("dc"), "Sin from", killedHusks, "killed", MindlessHusk.styled(DC),
                                 "(now", game.dcSin.toString.styled("dc") + ")")
                         if (gained < killedHusks)
-                            log(DC, Eschar.styled(DC) + ": Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.ritualMarker + ")")
+                            log(DC, Eschar.styled(DC) + ": Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.dcRitualMarkerPosition + ")")
                     }
                 }
 
