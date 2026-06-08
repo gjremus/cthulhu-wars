@@ -1667,9 +1667,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 if (factions.has(DC) && DC.can(Eschar) && sides.has(DC)) {
                     val killedHusks = exempted.count(u => u.faction == DC && u.uclass == MindlessHusk && u.health == Killed)
                     if (killedHusks > 0) {
-                        game.dcSin += killedHusks
-                        log(DC, Eschar.styled(DC) + ": gained", killedHusks.toString.styled("dc"), "Sin from", killedHusks, "killed", MindlessHusk.styled(DC),
-                            "(now", game.dcSin.toString.styled("dc") + ")")
+                        // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
+                        val gained = game.grantDCSin(killedHusks)
+                        if (gained > 0)
+                            log(DC, Eschar.styled(DC) + ": gained", gained.toString.styled("dc"), "Sin from", killedHusks, "killed", MindlessHusk.styled(DC),
+                                "(now", game.dcSin.toString.styled("dc") + ")")
+                        if (gained < killedHusks)
+                            log(DC, Eschar.styled(DC) + ": Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.ritualMarker + ")")
                     }
                 }
 

@@ -10,7 +10,10 @@ import html._
 //
 // Per "DC Faction Implementation Guide.docx" (read 2026-06-06).
 // Theme: corruption/conversion faction led by Y'Golonac (standard GOO).
-// Resource: Sin (uncapped Int, lives on Game.scala as game.dcSin per G29).
+// Resource: Sin (Int, lives on Game.scala as game.dcSin per G29). HB Fix 96
+//           (2026-06-07): Sin is capped at 2 * ritualMarker per user directive
+//           and faction-card tooltip ("max equal to twice the Ritual Marker").
+//           All grant sites must go through game.grantDCSin which clamps.
 // Units: Acolyte (6 — start ON the 6 SB-requirement slots, NOT in pool),
 //        MindlessHusk (pool 5, base combat 1), FallenProphet (pool 4, variable
 //        combat), YgolonacDC (1 GOO, awaken cost = SB count, combat = ceil(Sin/2)).
@@ -545,8 +548,12 @@ object DCExpansion extends Expansion {
         case DCProselytizeReqOptInAction(self) =>
             val enemyGOOs = game.factions.but(self)./~(_.allInPlay).%(_.uclass.utype == GOO).num
             self.satisfy(ProselytizeReq, "Took Proselytize in Doom Phase")
-            game.dcSin += 2 * enemyGOOs
-            self.log("Proselytize SBR: gained", (2 * enemyGOOs).toString.styled("dc"), "Sin (2 per", enemyGOOs, "enemy GOO)")
+            // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
+            val proselytizeWant   = 2 * enemyGOOs
+            val proselytizeGained = game.grantDCSin(proselytizeWant)
+            self.log("Proselytize SBR: gained", proselytizeGained.toString.styled("dc"), "Sin (2 per", enemyGOOs, "enemy GOO)")
+            if (proselytizeGained < proselytizeWant)
+                self.log("Proselytize SBR: Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.ritualMarker + ")")
             Force(CheckSpellbooksAction(DoomAction(self)))
 
         case DCSatiateReqOptInAction(self) =>
@@ -554,8 +561,11 @@ object DCExpansion extends Expansion {
             val poolSBs  = self.unfulfilled.num
             self.satisfy(SatiateReq, "Took Satiate in Doom Phase")
             self.power += otherSBs
-            game.dcSin += poolSBs
-            self.log("Satiate SBR: gained", otherSBs.power, "and", poolSBs.toString.styled("dc"), "Sin")
+            // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
+            val satiateGained = game.grantDCSin(poolSBs)
+            self.log("Satiate SBR: gained", otherSBs.power, "and", satiateGained.toString.styled("dc"), "Sin")
+            if (satiateGained < poolSBs)
+                self.log("Satiate SBR: Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.ritualMarker + ")")
             Force(CheckSpellbooksAction(DoomAction(self)))
 
         // ── Reserved-Acolyte conditional unlimited delivery (HB Fix 83) ──────
@@ -828,8 +838,11 @@ object DCExpansion extends Expansion {
         case DCDarkBargainChooseSinAction(self, face) =>
             // DC gains `face` Sin. NO subtraction from enemies. Distribute
             // `face` Power across enemies as evenly as possible (whole numbers).
-            game.dcSin += face
-            self.log(DarkBargain.styled(DC) + ": DC chose face", face.toString.styled("dc") + "; gained", face.toString.styled("dc"), "Sin")
+            // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
+            val darkBargainGained = game.grantDCSin(face)
+            self.log(DarkBargain.styled(DC) + ": DC chose face", face.toString.styled("dc") + "; gained", darkBargainGained.toString.styled("dc"), "Sin")
+            if (darkBargainGained < face)
+                self.log(DarkBargain.styled(DC) + ": Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.ritualMarker + ")")
             val allEnemies = game.factions.but(self)
             val e          = allEnemies.num
             if (e == 0 || face == 0) {

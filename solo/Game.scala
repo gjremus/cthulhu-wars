@@ -1471,8 +1471,30 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var bbSyzygyDone       : Boolean = false
 
     // Defilers Court (DC) state — per guide G29 (CRIT): Sin pool lives on Game.scala
-    // for undo safety (NOT on DCExpansion singleton). Sin is uncapped per §1.5.2.
+    // for undo safety (NOT on DCExpansion singleton). HB Fix 96 (2026-06-07):
+    // Sin is now CAPPED at 2 * current ritualMarker per user directive ("yes,
+    // cap it to current ritual marker x2") and the long-standing faction-card
+    // tooltip text ("max equal to twice the Ritual Marker"). The cap is
+    // re-evaluated at every grant site. If a grant would push Sin over the
+    // cap, the result is CLAMPED to the cap (the grant is partially absorbed,
+    // not discarded). The cap dropping (e.g., if a hypothetical effect lowers
+    // ritualMarker) does NOT retroactively shrink existing Sin — preserved
+    // per "no faction loses power" spirit. All ADD sites must go through
+    // grantDCSin so the clamp is applied consistently.
     var dcSin : Int = 0
+    def dcSinCap : Int = 2 * ritualMarker
+    /** Grants n Sin to DC, clamped to dcSinCap. Returns the actual amount
+     *  added (may be less than n if cap was hit; never negative). */
+    def grantDCSin(n : Int) : Int = {
+        if (n <= 0) 0
+        else {
+            val cap     = dcSinCap
+            val headroom = math.max(0, cap - dcSin)
+            val granted  = math.min(n, headroom)
+            dcSin += granted
+            granted
+        }
+    }
     // Reserved Acolyte tracking — each SB starts with a reserved Acolyte on its
     // requirement slot; on SB acquisition, the Acolyte enters play.
     var dcReservedSpellbookAcolytes : $[Spellbook] = $
@@ -2769,14 +2791,22 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 if (f == DC) {
                     val dcAcolytes = f.onMap(Acolyte).num
                     if (dcAcolytes > 0) {
-                        dcSin += dcAcolytes
-                        f.log("Depravity: gained", dcAcolytes.toString.styled("dc"), "Sin (now", dcSin.toString.styled("dc") + ")")
+                        // HB Fix 96: clamp to dcSinCap = 2 * ritualMarker
+                        val gained = grantDCSin(dcAcolytes)
+                        if (gained > 0)
+                            f.log("Depravity: gained", gained.toString.styled("dc"), "Sin (now", dcSin.toString.styled("dc") + ")")
+                        if (gained < dcAcolytes)
+                            f.log("Depravity: Sin capped at", dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + ritualMarker + ")")
                     }
                     val ygolonacInPlay = f.allInPlay.%(_.uclass == YgolonacDC).any
                     if (ygolonacInPlay) {
                         f.power += 1
-                        dcSin += 1
-                        f.log("Bacchanal: gained", 1.power, "and", "1".styled("dc"), "Sin (Y'Golonac in play)")
+                        // HB Fix 96: clamp Sin portion only; Power grant is unaffected
+                        val gained = grantDCSin(1)
+                        if (gained > 0)
+                            f.log("Bacchanal: gained", 1.power, "and", "1".styled("dc"), "Sin (Y'Golonac in play)")
+                        else
+                            f.log("Bacchanal: gained", 1.power, "(Sin at cap", dcSinCap.toString.styled("dc") + ")")
                     }
                 }
 
