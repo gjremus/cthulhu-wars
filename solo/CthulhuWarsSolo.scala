@@ -2399,10 +2399,15 @@ object CthulhuWarsSolo {
                 val ttGrowthMStr = (f == TT).?(" | " + ("G" + game.ubboGrowth.toString).styled(TT)).|("")
                 val ttGrowthSStr = (f == TT).?(" " + ("G" + game.ubboGrowth.toString).styled(TT)).|("")
                 // Defilers Court (DC): append Sin counter to faction status panel — DH pattern.
+                // HB Fix 97.D (2026-06-07): per user "use the compact version for
+                // small form factors" — added dcSinMStr medium variant ("| NS") to
+                // match the TT growth M-variant pattern. Medium-size HUD now uses
+                // the compact "NS" instead of the full "| N Sin" word.
                 val dcSinStr  = (f == DC).?(" | " + (game.dcSin.toString + " Sin").styled(DC)).|("")
+                val dcSinMStr = (f == DC).?(" | " + (game.dcSin.toString + "S").styled(DC)).|("")
                 val dcSinSStr = (f == DC).?(" " + (game.dcSin.toString + "S").styled(DC)).|("")
                 val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr + dcSinStr)
-                val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr + dcSinStr)
+                val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr + dcSinMStr)
                 val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr + dcSinSStr)
                 // Firstborn (FB): read Infernal Pact discount and stored Augury kills for the faction panel display
                 val fbIPDiscount = if (f == FB) game.fbInfernalPactDiscount else 0

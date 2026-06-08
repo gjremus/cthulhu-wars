@@ -354,12 +354,13 @@ object DCExpansion extends Expansion {
             Force(SetupFactionsAction)
 
         // ── Y'Golonac Awakening: set Start Area on first awaken ──────────────
+        // HB Fix 97.A (2026-06-07): per user "Yes - no free gate". Rule §1.6/§3.4.3
+        // is just "this becomes the Start Area" — no silent gate grant. Removed
+        // game.gates :+= r and self.gates :+= r. Start Area marking preserved.
         case AwakenedAction(self : DC.type, YgolonacDC, r, _) =>
             // First-awaken sets the DC Start Area (per §1.6 / §3.4.3).
             if (game.starting.get(DC).contains(self.reserve)) {
                 game.starting = game.starting + (DC -> r)
-                game.gates :+= r
-                self.gates :+= r
                 self.log("Start Area set to", r, "(via Y'Golonac awakening)")
             }
             // Satisfy DarkBargain SBR (§3.12.6). Wrap in CheckSpellbooksAction (G28/Item 9).
@@ -507,12 +508,22 @@ object DCExpansion extends Expansion {
                         game.dcTenebrosumUsedThisTurn = true
                     }
                     game.dcTenebrosumGuard = true
+                    // HB Fix 97.E (2026-06-07): per user "game log should show this
+                    // as a tenebrosum action, and it should Not have the turn
+                    // divider between it and the preceding normal action". Clear
+                    // any pending DottedLine (buffered via pendingLine) so the
+                    // Tenebrosum repeat does NOT inherit a turn-passed divider
+                    // from a prior path. The "Tenebrosum action:" label below
+                    // explicitly tags the repeat as a Tenebrosum action.
+                    game.pendingLine = None
                     // HB Fix 84 (2026-06-07): 0-cost repeat ("free repeat") logs
                     // without the Sin-spent phrase to match user spec wording.
+                    // HB Fix 97.E: prefix log with "Tenebrosum action:" so the
+                    // replay is unmistakably labeled in the game log.
                     if (cost > 0)
-                        self.log(Tenebrosum.styled(DC) + ": spent", cost.toString.styled("dc"), "Sin to Repeat", an.styled(self))
+                        self.log(Tenebrosum.styled(DC) + " action: spent", cost.toString.styled("dc"), "Sin to Repeat", an.styled(self))
                     else
-                        self.log(Tenebrosum.styled(DC) + ": free repeat of", an.styled(self))
+                        self.log(Tenebrosum.styled(DC) + " action: free repeat of", an.styled(self))
                     // Clear last-action so the SAME action isn't repeated as the "last" again
                     game.dcLastActionForTenebrosum = None
                     // Refund the recorded cost so the replay chooser nets zero
@@ -590,10 +601,16 @@ object DCExpansion extends Expansion {
                     u.region = r
                     // Decrement the SB tracker by the first earned-library SB
                     // whose Acolyte is still pending (visual marker bookkeeping).
+                    // HB Fix 97.F (2026-06-07): per user "acolytes are on spell
+                    // book requirements, not on spell books. Game log should
+                    // credit the specific requirement for having been fulfilled."
+                    // Map the earned SB to its matching SBR and credit the SBR
+                    // name in the log instead of the SB name.
                     val sbToClear = game.dcReservedSpellbookAcolytes.%(sb => self.spellbooks.has(sb)).headOption
                     sbToClear.foreach { sb =>
                         game.dcReservedSpellbookAcolytes = game.dcReservedSpellbookAcolytes.but(sb)
-                        self.log("placed", Acolyte.styled(DC), "from", sb.styled(DC), "Faction Card slot in", r)
+                        val sbr = dcSBRForSB(sb)
+                        self.log("placed", Acolyte.styled(DC), "for fulfilled SBR", sbr.text.styled(DC), "in", r)
                     }
                     if (sbToClear.isEmpty)
                         self.log("placed", Acolyte.styled(DC), "from Faction Card in", r)
@@ -660,6 +677,12 @@ object DCExpansion extends Expansion {
             if (bonus > 0) self.takeES(bonus)
             self.log(Satiate.styled(DC) + ": captured", capturedSoFar, "cultist".s(capturedSoFar), "in", area,
                 if (bonus > 0) ", gained " + bonus.es else "")
+            // HB Fix 97.G (2026-06-07): per user "Yes, add it." — when Satiate
+            // captures only a single Cultist (e.g. just a DC self-Cultist with
+            // no enemies in the area), 0 ES is correctly awarded but the log
+            // was silent. Add an explicit explanatory log line.
+            if (capturedSoFar > 0 && bonus == 0)
+                self.log(Satiate.styled(DC) + ": no Elder Sign because no captures beyond the first")
             EndAction(self)
 
         // ── Lure (cost 1, force-move adjacent enemy cultists into Y'Golonac's area) ──
@@ -692,7 +715,12 @@ object DCExpansion extends Expansion {
                     val hasEnemyGOO = game.factions.but(e).exists(o => o.at(r).%(_.uclass.utype == GOO).any)
                     val hasTerror   = game.factions./~(_.at(r)).%(_.uclass.utype == Terror).any
                     val hasFactionBuilding = game.factions./~(_.at(r)).%(_.uclass.utype == Building).any
-                    val isMoon = r.toString.contains("Moon")
+                    // HB Fix 97.B (2026-06-07): per user "fix, this only applies to
+                    // the Bubastis moon area". Prior code matched any region whose
+                    // display name contained "Moon" (string match). Replaced with
+                    // canonical BB.moon region equality — only the Bubastis Moon
+                    // tile is exempted.
+                    val isMoon = r == BB.moon
                     if (hasEnemyGOO || hasTerror || hasFactionBuilding || isMoon) $()
                     else e.at(r).%(_.uclass.utype == Cultist)
                 }
@@ -1017,8 +1045,13 @@ object DCExpansion extends Expansion {
             recordTenebrosum(action, cost, "Move")
             UnknownContinue
         case BuildGateAction(self, _) if tenebrosumEligible(self) =>
-            // Build Gate cost: 3 - (UmrAtTawil discount). We don't have an UmrAtTawil/DC interaction.
-            recordTenebrosum(action, 3, "Build Gate")
+            // HB Fix 97.C (2026-06-07): per user "the cost, in sin, of a tenebrosum
+            // action is the total power spent on that action". Build Gate's actual
+            // power deduction in Game.scala (BuildGateAction handler) is
+            // `3 - self.has(UmrAtTawil).??(1)` — record the same expression here
+            // instead of the hardcoded 3 so the Sin cost matches the actual power
+            // spent (covers future UmrAtTawil/DC interactions).
+            recordTenebrosum(action, 3 - self.has(UmrAtTawil).??(1), "Build Gate")
             UnknownContinue
         case RecruitAction(self, uc, r) if tenebrosumEligible(self) =>
             recordTenebrosum(action, self.recruitCost(uc, r), "Recruit")
@@ -1229,6 +1262,21 @@ object DCExpansion extends Expansion {
         val acolytesInFactionCard = f.units.%(u => u.uclass == Acolyte && u.region == DCFactionCardHold(f)).num
         val earnedSBsStillPending = game.dcReservedSpellbookAcolytes.%(sb => f.spellbooks.has(sb)).num
         acolytesInFactionCard > 0 && earnedSBsStillPending > 0
+    }
+
+    // HB Fix 97.F (2026-06-07): Map a DC spellbook to its matching SBR so the
+    // reserved-Acolyte placement log can credit the SPECIFIC requirement that
+    // got fulfilled (per user: "acolytes are on spell book requirements, not
+    // on spell books. Game log should credit the specific requirement for
+    // having been fulfilled.").
+    private def dcSBRForSB(sb : Spellbook) : Requirement = sb match {
+        case Proselytize => ProselytizeReq
+        case Satiate     => SatiateReq
+        case Lure        => LureReq
+        case Eschar      => EscharReq
+        case Pilgrimage  => PilgrimageReq
+        case DarkBargain => DarkBargainReq
+        case _           => ProselytizeReq // unreachable for DC SBs; fallback
     }
 }
 
