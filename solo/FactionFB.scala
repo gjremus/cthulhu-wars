@@ -741,9 +741,16 @@ object FBExpansion extends Expansion {
             // 2026-05-11: also suppress if FB cancelled an IP session this turn —
             // prevents Cancel→IPMain→Cancel watchdog loop when wantIP score keeps
             // pulling bot in but every flip is blocked by per-SB scoring.
+            // 2026-06-08: the cancel-loop is only a concern when NO intervening
+            // state-changing action has fired since the cancel (the loop happens
+            // entirely within one MainAction render). If FB has battled since
+            // (unlimited battle from hasAllSB), the loop is broken by definition
+            // and IP must be re-offered for the genuine main action. Fixes user-
+            // reported game where FB battled unlimited post-cancel and main-action
+            // menu refused to show IP discount despite Ghato on map + 6 SBs face up.
             // Trigger: any face-up IP-eligible item (faction SB, iGOO SB, library tome).
             if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && hasAnyIPEligibleFaceUp && !f.acted &&
-                !game.fbInfernalPactCancelledThisTurn)
+                (!game.fbInfernalPactCancelledThisTurn || f.battled.any))
                 + FBInfernalPactMainAction(f)
 
             // ── Round 8 Bug 75: Transient power boost for offer checks ──
