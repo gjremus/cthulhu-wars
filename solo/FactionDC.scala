@@ -484,11 +484,28 @@ object DCExpansion extends Expansion {
             asking
 
         // ── Tenebrosum: Soft prompt — opens "are you sure" confirm ───────────
+        // HB Fix 102 (2026-06-08): defensive re-entry guard. If the player
+        // clicks a STALE Tenebrosum offer (e.g. the chooser was Cancel'd back
+        // to a snapshot Ask that still has the option), the flags
+        // dcTenebrosumGuard/dcTenebrosumUsedThisTurn/dcLastActionForTenebrosum
+        // may already be in their post-confirm state. Re-entering would
+        // either crash (None last-action) or double-debit Sin. Detect the
+        // stale state and bail to a freshly rendered MainAction (which will
+        // NOT offer Tenebrosum because the flag checks now correctly fail).
         case DCTenebrosumMainAction(self, cost, an) =>
-            implicit val asking = Asking(self)
-            + DCTenebrosumRepeatAction(self, cost, an)
-            + CancelAction
-            asking
+            if (game.dcTenebrosumGuard || game.dcTenebrosumUsedThisTurn || game.dcLastActionForTenebrosum.none) {
+                // Stale menu — caller should never have been able to click. Clear
+                // any leftover one-shot prefix flag (paranoia) and re-render the
+                // main menu so the player sees the current legal options.
+                game.dcTenebrosumPrefixPending = false
+                game.dcTenebrosumPrefixCost = 0
+                Force(MainAction(self))
+            } else {
+                implicit val asking = Asking(self)
+                + DCTenebrosumRepeatAction(self, cost, an)
+                + CancelAction
+                asking
+            }
 
         // ── Tenebrosum: Hard — debit Sin and replay the same action class ──
         // 2026-06-06 Fix 75: per-TURN used flag (NOT per-action). DC pays from
@@ -510,6 +527,25 @@ object DCExpansion extends Expansion {
         // repeat path re-implements menu logic — it reuses the engine's own
         // OptionFactionAction / MainQuestion handlers.
         case DCTenebrosumRepeatAction(self, cost, an) =>
+            // HB Fix 102 (2026-06-08): defensive re-entry guard. Fix 101 set
+            // dcTenebrosumGuard=true here and cleared dcLastActionForTenebrosum
+            // immediately, but never cleared the guard on the cancel path of
+            // the downstream chooser (`tenebrosumRepeatChooser` → empty/Cancel).
+            // The player could then click a STALE Tenebrosum offer in the
+            // snapshot post-acted Ask and re-enter this handler with the
+            // last-action already None, hitting UnknownContinue (= engine
+            // crash). Detect any of the stale-state markers and bail to a
+            // fresh MainAction so the next render reflects the true state
+            // (which correctly suppresses the offer because the flags are
+            // set). The full clear of the guard / used / prefix flags happens
+            // in EndAction (when a real action completes) and in PreMainAction
+            // at round start (belt-and-suspenders for paths where no action
+            // ever resolved).
+            if (game.dcTenebrosumGuard || game.dcLastActionForTenebrosum.none) {
+                game.dcTenebrosumPrefixPending = false
+                game.dcTenebrosumPrefixCost = 0
+                return Force(MainAction(self))
+            }
             game.dcLastActionForTenebrosum match {
                 case Some((recordedAction, _, _)) =>
                     if (self == SL) {
@@ -1126,6 +1162,16 @@ object DCExpansion extends Expansion {
             if (self == SL) game.slTenebrosumUsedThisTurn = false
             else            game.dcTenebrosumUsedThisTurn = false
             game.dcLastActionForTenebrosum = None
+            // HB Fix 102 (2026-06-08): also clear the guard + one-shot prefix
+            // flags at round-start. Fix 101 set dcTenebrosumGuard=true on the
+            // confirm path but only cleared it on EndAction. If the chooser
+            // was canceled (no inner action ever ran → no EndAction), the
+            // guard persisted into the next turn and silently suppressed
+            // power deductions for non-Tenebrosum actions. PreMainAction
+            // round-start (self.acted=false) is the canonical reset point.
+            game.dcTenebrosumGuard = false
+            game.dcTenebrosumPrefixPending = false
+            game.dcTenebrosumPrefixCost = 0
             UnknownContinue
 
         case _ => UnknownContinue
