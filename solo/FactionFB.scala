@@ -692,7 +692,9 @@ object FBExpansion extends Expansion {
             // are available, FB can flip SBs to discount the battle cost. The
             // pre-main IP session's flips are now committed (via EndAction
             // commit hook), so any cancel here only reverses post-main flips.
-            if (f.hasAllSB && hasAnyIPEligibleFaceUp && game.fbInfernalPactDiscount == game.fbInfernalPactCommittedDiscount && !game.fbInfernalPactCancelledThisTurn) {
+            // 2026-06-08: cancel guard relaxed when FB has battled since cancel —
+            // see pre-acted handler below for full rationale. Mirrors Library fix.
+            if (f.hasAllSB && hasAnyIPEligibleFaceUp && game.fbInfernalPactDiscount == game.fbInfernalPactCommittedDiscount && (!game.fbInfernalPactCancelledThisTurn || f.battled.any)) {
                 if (f.has(Ghatanothoa) && f.all(Ghatanothoa).any && ElderThingMindControl.suppresses(f.goo(Ghatanothoa)))
                     + GroupAction("Infernal Pact".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
                 else
@@ -730,7 +732,14 @@ object FBExpansion extends Expansion {
             // available. After f.acted is true (faction has spent its action this turn), only
             // Soft / PowerNeutral options remain, so Infernal Pact discount cannot be applied
             // and the menu entry would be a dead end. Suppress it in that state.
-            if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && hasAnyIPEligibleFaceUp && !f.acted && !game.fbInfernalPactCancelledThisTurn) {
+            // 2026-06-08: the fbInfernalPactCancelledThisTurn guard is a bot-side
+            // watchdog against a Cancel→IPMain→Cancel render loop, but it persisted
+            // for the entire turn — blocking IP after FB cancelled, then took an
+            // unlimited battle (legal via hasAllSB), and reached its real main action.
+            // The cancel-loop is purely within one MainAction render; if FB has
+            // battled since the cancel, the loop is broken and IP must be re-offered.
+            // Fixes user-reported Library game_id=444 (mjlchieoofokmlin); mirrored here.
+            if (f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && hasAnyIPEligibleFaceUp && !f.acted && (!game.fbInfernalPactCancelledThisTurn || f.battled.any)) {
                 if (ElderThingMindControl.suppresses(f.goo(Ghatanothoa)))
                     + GroupAction("Infernal Pact".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
                 else
