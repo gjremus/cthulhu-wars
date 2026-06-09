@@ -119,7 +119,9 @@ object EarthMap4v35 extends Board {
     val Australia = Area("Australia", GlyphAA)
 
     val regions = $(ArcticOcean, NorthAtlantic, SouthAtlantic, NorthPacific, IndianOcean, SouthPacific, Scandinavia, Europe, NorthAsia, SouthAsia, Arabia, WestAfrica, EastAfrica, NorthAmerica, SouthAmerica, Australia, Antarctica)
-    val nonFactionRegions = $(NorthAtlantic, SouthAtlantic, NorthPacific, IndianOcean, Scandinavia, NorthAsia, Arabia, EastAfrica, SouthAmerica, Australia)
+    // Arabia is CC's printed starting region on the Earth board (see board.starting(CC) below).
+    // It is therefore a faction region, not a non-faction region.
+    val nonFactionRegions = $(NorthAtlantic, SouthAtlantic, NorthPacific, IndianOcean, Scandinavia, NorthAsia, SouthAsia, EastAfrica, SouthAmerica, Australia)
     val west = $(ArcticOcean, NorthPacific, NorthAmerica, NorthAtlantic, Australia, SouthPacific, SouthAmerica, SouthAtlantic, Antarctica)
     val east = $(Scandinavia, Europe, NorthAsia, SouthAsia, Arabia, WestAfrica, EastAfrica, IndianOcean)
 
@@ -160,7 +162,11 @@ object EarthMap4v35 extends Board {
 
     def starting(faction : Faction) = faction match {
         case GC => $(SouthPacific)
-        case CC => $(SouthAsia)
+        // CC's printed starting glyph on the Earth board is in Arabia (not SouthAsia).
+        // Fixes the cross-build bug where FB Devil's Mark / BB SBR for starting glyphs /
+        // TT Idolatry / etc. did not treat Arabia as having a faction starting glyph
+        // when CC was not in the game.
+        case CC => $(Arabia)
         case BG => $(WestAfrica)
         case YS => $(Europe)
         case SL => $(NorthAmerica)
@@ -335,7 +341,9 @@ object EarthMap5 extends Board {
     val NewZealand = Area("New Zealand", GlyphAA)
 
     val regions = $(ArcticOcean, NorthAtlantic, SouthAtlantic, NorthPacific, IndianOcean, SouthPacific, Scandinavia, Europe, NorthAsia, SouthAsia, Arabia, WestAfrica, EastAfrica, NorthAmericaWest, NorthAmericaEast, CentralAmerica, SouthAmericaWest, SouthAmericaEast, Australia, NewZealand, Antarctica)
-    val nonFactionRegions = $(NorthAtlantic, SouthAtlantic, NorthPacific, IndianOcean, Scandinavia, NorthAsia, Arabia, EastAfrica, NorthAmericaEast, CentralAmerica, SouthAmericaWest, SouthAmericaEast, Australia, NewZealand)
+    // Arabia is CC's printed starting region on the Earth board (see board.starting(CC) below).
+    // It is therefore a faction region, not a non-faction region.
+    val nonFactionRegions = $(NorthAtlantic, SouthAtlantic, NorthPacific, IndianOcean, Scandinavia, NorthAsia, SouthAsia, EastAfrica, NorthAmericaEast, CentralAmerica, SouthAmericaWest, SouthAmericaEast, Australia, NewZealand)
     val west = $(ArcticOcean, NorthPacific, NorthAmericaWest, NorthAmericaEast, CentralAmerica, NorthAtlantic, Australia, NewZealand, SouthPacific, SouthAmericaWest, SouthAmericaEast, SouthAtlantic, Antarctica)
     val east = $(Scandinavia, Europe, NorthAsia, SouthAsia, Arabia, WestAfrica, EastAfrica, IndianOcean)
 
@@ -380,7 +388,11 @@ object EarthMap5 extends Board {
 
     def starting(faction : Faction) = faction match {
         case GC => $(SouthPacific)
-        case CC => $(SouthAsia)
+        // CC's printed starting glyph on the Earth board is in Arabia (not SouthAsia).
+        // Fixes the cross-build bug where FB Devil's Mark / BB SBR for starting glyphs /
+        // TT Idolatry / etc. did not treat Arabia as having a faction starting glyph
+        // when CC was not in the game.
+        case CC => $(Arabia)
         case BG => $(WestAfrica)
         case YS => $(Europe)
         case SL => $(NorthAmericaWest)
@@ -456,7 +468,9 @@ object EarthMap6 extends Board {
     val NewZealand = Area("New Zealand", GlyphAA)
 
     val regions = $(BeringSea, ArcticOcean, NorthAtlantic, MediterraneanSea, SouthAtlantic, NorthPacific, IndianOcean, SouthPacific, Scandinavia, Europe, NorthAsia, SouthAsia, Arabia, WestAfrica, EastAfrica, NorthAmericaWest, NorthAmericaEast, CentralAmerica, SouthAmericaWest, SouthAmericaEast, Australia, NewZealand, Antarctica, MountainsOfMadness)
-    val nonFactionRegions = $(BeringSea, NorthAtlantic, MediterraneanSea, SouthAtlantic, NorthPacific, IndianOcean, Scandinavia, NorthAsia, Arabia, EastAfrica, NorthAmericaEast, CentralAmerica, SouthAmericaWest, SouthAmericaEast, Australia, NewZealand, Antarctica)
+    // Arabia is CC's printed starting region on the Earth board (see board.starting(CC) below).
+    // It is therefore a faction region, not a non-faction region.
+    val nonFactionRegions = $(BeringSea, NorthAtlantic, MediterraneanSea, SouthAtlantic, NorthPacific, IndianOcean, Scandinavia, NorthAsia, SouthAsia, EastAfrica, NorthAmericaEast, CentralAmerica, SouthAmericaWest, SouthAmericaEast, Australia, NewZealand, Antarctica)
     val west = $(BeringSea, ArcticOcean, NorthPacific, NorthAmericaWest, NorthAmericaEast, CentralAmerica, NorthAtlantic, MediterraneanSea, Australia, NewZealand, SouthPacific, SouthAmericaWest, SouthAmericaEast, SouthAtlantic, Antarctica)
     val east = $(Scandinavia, Europe, NorthAsia, SouthAsia, Arabia, WestAfrica, EastAfrica, IndianOcean, MountainsOfMadness)
 
@@ -504,7 +518,11 @@ object EarthMap6 extends Board {
 
     def starting(faction : Faction) = faction match {
         case GC => $(SouthPacific)
-        case CC => $(SouthAsia)
+        // CC's printed starting glyph on the Earth board is in Arabia (not SouthAsia).
+        // Fixes the cross-build bug where FB Devil's Mark / BB SBR for starting glyphs /
+        // TT Idolatry / etc. did not treat Arabia as having a faction starting glyph
+        // when CC was not in the game.
+        case CC => $(Arabia)
         case BG => $(WestAfrica)
         case YS => $(Europe)
         case SL => $(NorthAmericaWest)
@@ -551,6 +569,69 @@ object EarthMap6 extends Board {
         case NewZealand => (265, 710)
         case _ => throw new Error("Unknown region " + r)
     }
+}
+
+
+// [2026-05-23] Canonical region color palette for Earth boards — Option B fix
+// for the portrait/mobile glyph-misplacement bug. The placement bitmaps
+// (earth33/35/53/55-place.webp) store each region as a distinct solid color
+// separated by black GAP pixels. Hard-coding the canonical color per region
+// per board means the glyph-placement algorithm never has to SAMPLE the
+// bitmap at the gate XY to learn the region's color — eliminating the entire
+// class of "sampled at a boundary or rotated coord → wrong region" bugs.
+// Colors were sampled from the unrotated landscape bitmap at each board's
+// gateXYO; verified visually distinct per region.
+object EarthRegionPalette {
+    private[cws] val byBoard : Map[String, Map[Region, Int]] = {
+        import EarthMap3._
+        val earth33 = Map[Region, Int](
+            ArcticOcean -> 0xafbeb3, Europe -> 0x857d3f, Asia -> 0xba441e, Africa -> 0x9f9a7f,
+            NorthAtlantic -> 0x505c70, SouthAtlantic -> 0x597f7d, Antarctica -> 0xcdac85,
+            SouthPacific -> 0x405061, SouthAmerica -> 0xcc4438, NorthAmerica -> 0xd8952d,
+            NorthPacific -> 0x274a66, IndianOcean -> 0x506a8c, Australia -> 0x8d6919,
+        )
+        val earth35 = {
+            import EarthMap4v35._
+            Map[Region, Int](
+                ArcticOcean -> 0xafbeb3, Scandinavia -> 0xa3741a, Europe -> 0x857d3f,
+                NorthAsia -> 0xba441e, SouthAsia -> 0x670f0b, Arabia -> 0xcba750,
+                EastAfrica -> 0x9d6d63, WestAfrica -> 0x9f9a7f,
+                NorthAtlantic -> 0x505c70, SouthAtlantic -> 0x597f7d, Antarctica -> 0xcdac85,
+                SouthPacific -> 0x405061, SouthAmerica -> 0xcc4438, NorthAmerica -> 0xd8952d,
+                NorthPacific -> 0x274a66, IndianOcean -> 0x506a8c, Australia -> 0x8d6919,
+            )
+        }
+        val earth53 = {
+            import EarthMap4v53._
+            Map[Region, Int](
+                ArcticOcean -> 0xafbeb3, Europe -> 0x857d3f, Asia -> 0xba441e, Africa -> 0x9f9a7f,
+                NorthAtlantic -> 0x505c70, SouthAtlantic -> 0x597f7d, Antarctica -> 0xcdac85,
+                SouthPacific -> 0x405061, SouthAmerica -> 0xcc4438, NorthAmerica -> 0xa6905f,
+                NorthPacific -> 0x274a66, IndianOcean -> 0x506a8c, Australia -> 0x8d6919,
+            )
+        }
+        val earth55 = {
+            import EarthMap5._
+            Map[Region, Int](
+                ArcticOcean -> 0xafbeb3, Europe -> 0x857d3f, Asia -> 0x670f0b, Africa -> 0x9f9a7f,
+                NorthAtlantic -> 0x505c70, SouthAtlantic -> 0x597f7d, Antarctica -> 0xcdac85,
+                SouthPacific -> 0x405061,
+                SouthAmericaWest -> 0xcc4438, SouthAmericaEast -> 0x6b5540,
+                CentralAmerica -> 0xd8952d,
+                NorthAmericaWest -> 0xa6905f, NorthAmericaEast -> 0xc87c5c,
+                NorthPacific -> 0x274a66, IndianOcean -> 0x506a8c,
+                Australia -> 0x8a3a0f, NewZealand -> 0x8d6919,
+            )
+        }
+        Map(
+            "earth33" -> earth33,
+            "earth35" -> earth35,
+            "earth53" -> earth53,
+            "earth55" -> earth55,
+        )
+    }
+    def get(boardId : String, r : Region) : Option[Int] =
+        byBoard.get(boardId).flatMap(_.get(r))
 }
 
 
