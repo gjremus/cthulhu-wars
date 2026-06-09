@@ -1018,9 +1018,16 @@ class Player(private val f : Faction)(implicit game : Game) {
     def payTax(r : Region) : Int = {
         val s = iced(r)
         if (s.any) {
-            f.power -= s.tax
-            f.log("lost", s.tax.power, "due to", s.list./(IceAge.styled).mkString(", "))
-            s.tax
+            // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
+            // the IceAge power tax — Sin was paid in lieu of power per §1.5.1.
+            // Also keeps the tax log line from consuming the one-shot Tenebrosum
+            // prefix that's reserved for the headline action log.
+            if (game.dcTenebrosumGuard) 0
+            else {
+                f.power -= s.tax
+                f.log("lost", s.tax.power, "due to", s.list./(IceAge.styled).mkString(", "))
+                s.tax
+            }
         }
         else
             0
@@ -1520,6 +1527,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // repeat-button label can show "Repeat <name>" verbatim per user spec.
     var dcLastActionForTenebrosum : Option[(Action, Int, String)] = None
     var dcTenebrosumGuard : Boolean = false
+    // HB Fix 101 (2026-06-08): one-shot log-prefix flag. When set, the very next
+    // appendLog call prefixes the line with "Defilers Court used Tenebrosum to "
+    // and then clears the flag. Per user spec: "the game log for tenbrosum needs
+    // to always start with 'Defilers Court used Tenebrosum to'". This makes the
+    // engine-side action log line unmistakably a Tenebrosum repeat (sin-paid,
+    // not power-paid) so no serializer/replay path can mistake it for a normal
+    // power-paid action. Paired with the dcTenebrosumGuard-conditioned power
+    // skips in each action handler (no power debit on a Tenebrosum repeat).
+    var dcTenebrosumPrefixPending : Boolean = false
+    var dcTenebrosumPrefixCost : Int = 0
     // After Tenebrosum-paid repeat, grant ONE extra main-menu turn (treats DC
     // as not-yet-acted for the next MainAction). Cleared by EndAction(DC).
     var dcTenebrosumExtraTurn : Boolean = false
@@ -1780,7 +1797,27 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     def appendLog(args : $[Any]) {
         if (logging) {
-            val line = args./(desc).mkString(" ")
+            val raw = args./(desc).mkString(" ")
+            // HB Fix 101 (2026-06-08): one-shot Tenebrosum prefix. Per user spec
+            // "HB DC- the game log for tenbrosum needs to always start with
+            // 'Defilers Court used Tenebrosum to'. Right now, because the game
+            // log just shows the action, the game engine (serializer? Something
+            // like that) is seeing it as a normal action, deducting power, and
+            // even running DC into negative power situations." This prefix tags
+            // the resolved action's log line so the engine/replay path cannot
+            // confuse the Tenebrosum repeat with a normal power-paid action.
+            // Power is NOT deducted on a Tenebrosum repeat — the dcTenebrosumGuard
+            // branches in each action handler skip self.power -= cost; Sin
+            // (already debited in DCTenebrosumRepeatAction) is the only cost.
+            val line =
+                if (dcTenebrosumPrefixPending) {
+                    dcTenebrosumPrefixPending = false
+                    val sinTag = if (dcTenebrosumPrefixCost > 0)
+                        " (" + dcTenebrosumPrefixCost + " Sin)"
+                    else
+                        " (free repeat)"
+                    "Defilers Court used Tenebrosum to " + raw + sinTag
+                } else raw
 
             if (undoubled.has(line).not && pendingLine.any)
                 mlog = pendingLine.get +: mlog
@@ -3369,7 +3406,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // RITUAL
         case RitualAction(f, cost, k) =>
-            f.power -= cost
+            // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip the
+            // power debit — Sin was already debited in DCTenebrosumRepeatAction.
+            if (!dcTenebrosumGuard)
+                f.power -= cost
 
             // Round 8 Bug 40: also check facedown state for IGOO spellbooks
             val brood = f.enemies.%(e => e.has(TheBrood) && !e.oncePerGame.has(TheBrood))
@@ -4004,7 +4044,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case MoveAction(self, u, o, r, cost) =>
             val t = self.payTax(r)
 
-            if (cost > 0)
+            // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
+            // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+            if (cost > 0 && !dcTenebrosumGuard)
                 self.power -= cost
 
             u.region = r
@@ -4083,7 +4125,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (factions.has(FB))
                 fbPowerAtBattleStart = FB.power
 
-            if (effect.has(FromBelow).not)
+            // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
+            // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+            if (effect.has(FromBelow).not && !dcTenebrosumGuard)
                 self.power -= 1
 
             self.payTax(r)
@@ -4150,7 +4194,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 .skipIf(effect.has(FromBelow))(EndAction(self))
 
         case CaptureAction(self, r, f, effect) =>
-            if (effect.has(FromBelow).not)
+            // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
+            // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+            if (effect.has(FromBelow).not && !dcTenebrosumGuard)
                 self.power -= 1
 
             if (effect.has(FromBelow).not || self.all(Nyogtha)./(_.region).but(r).any)
@@ -4270,7 +4316,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Ask(self).each(locations.sortBy(self.taxIn))(r => BuildGateAction(self, r)).cancel
 
         case BuildGateAction(self, r) if r != BB.moon =>
-            self.power -= 3 - self.has(UmrAtTawil).??(1)
+            // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
+            // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+            if (!dcTenebrosumGuard)
+                self.power -= 3 - self.has(UmrAtTawil).??(1)
             self.payTax(r)
             gates :+= r
             self.oncePerAction :+= UmrAtTawil
@@ -4292,7 +4341,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case RecruitAction(self, uc, r) =>
             val cost = self.recruitCost(uc, r)
-            self.power -= cost
+            // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
+            // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+            if (!dcTenebrosumGuard)
+                self.power -= cost
             self.payTax(r)
             // Bloated Woman: check if unit is on a VelvetFanHold — pay BW owner instead
             val onCard = self.units.%(u => u.uclass == uc && u.region.is[VelvetFanHold])
@@ -4334,7 +4386,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 EndAction(self)
             else {
                 val cost = self.summonCost(uc, r)
-                self.power -= cost
+                // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
+                // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+                if (!dcTenebrosumGuard)
+                    self.power -= cost
                 self.payTax(r)
                 // Bloated Woman: check if unit is on a VelvetFanHold — pay BW owner instead
                 val onCard = self.units.%(u => u.uclass == uc && u.region.is[VelvetFanHold])
@@ -4374,7 +4429,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (self.pool(uc).none || self.affords(cost)(r).not)
                 EndAction(self)
             else {
-                self.power -= cost
+                // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
+                // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+                if (!dcTenebrosumGuard)
+                    self.power -= cost
 
                 self.payTax(r)
                 self.place(uc, r)

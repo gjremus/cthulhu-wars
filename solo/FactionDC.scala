@@ -525,22 +525,31 @@ object DCExpansion extends Expansion {
                     // divider between it and the preceding normal action". Clear
                     // any pending DottedLine (buffered via pendingLine) so the
                     // Tenebrosum repeat does NOT inherit a turn-passed divider
-                    // from a prior path. The "Tenebrosum action:" label below
-                    // explicitly tags the repeat as a Tenebrosum action.
+                    // from a prior path.
                     game.pendingLine = None
-                    // HB Fix 84 (2026-06-07): 0-cost repeat ("free repeat") logs
-                    // without the Sin-spent phrase to match user spec wording.
-                    // HB Fix 97.E: prefix log with "Tenebrosum action:" so the
-                    // replay is unmistakably labeled in the game log.
-                    if (cost > 0)
-                        self.log(Tenebrosum.styled(DC) + " action: spent", cost.toString.styled("dc"), "Sin to Repeat", an.styled(self))
-                    else
-                        self.log(Tenebrosum.styled(DC) + " action: free repeat of", an.styled(self))
+                    // HB Fix 101 (2026-06-08): per user verbatim "HB DC- the game
+                    // log for tenbrosum needs to always start with 'Defilers Court
+                    // used Tenebrosum to'. Right now, because the game log just
+                    // shows the action, the game engine (serializer? Something
+                    // like that) is seeing it as a normal action, deducting power,
+                    // and even running DC into negative power situations." Set a
+                    // one-shot prefix flag that appendLog consumes on the very
+                    // next log line — that line is the action handler's own log
+                    // (e.g. "summoned Mindless Husk in Roundtree"), so the final
+                    // log entry becomes "Defilers Court used Tenebrosum to
+                    // summoned Mindless Husk in Roundtree (2 Sin)". No standalone
+                    // pre-action log line is emitted (would have been double-
+                    // prefixed and confused the serializer). Power refund is
+                    // REMOVED: prior code refunded the recorded cost and let the
+                    // handler re-debit, but if the current cost differed (tax /
+                    // discount drift) the net could be negative. The handlers
+                    // now skip self.power -= cost entirely when dcTenebrosumGuard
+                    // is true (guarded inline in Game.scala) — so power is never
+                    // touched and negative-power states cannot arise.
+                    game.dcTenebrosumPrefixPending = true
+                    game.dcTenebrosumPrefixCost = cost
                     // Clear last-action so the SAME action isn't repeated as the "last" again
                     game.dcLastActionForTenebrosum = None
-                    // Refund the recorded cost so the replay chooser nets zero
-                    // power (Sin paid in lieu of Power per Tenebrosum semantics).
-                    if (cost > 0) self.power += cost
                     // Force the SAME chooser the recorded action came from. After
                     // it resolves, EndAction → unlimited menu (post-acted MainAction
                     // branch fires since f.acted is true and extra-turn flag isn't
@@ -640,7 +649,10 @@ object DCExpansion extends Expansion {
             asking
 
         case DCSatiateConfirmAction(self) =>
-            self.power -= 2
+            // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
+            // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+            if (!game.dcTenebrosumGuard)
+                self.power -= 2
             // Record last action for Tenebrosum (Item 1)
             recordTenebrosum(action, 2, "Satiate")
             val ygolonacOpt = self.allInPlay.%(_.uclass == YgolonacDC).headOption
@@ -705,7 +717,10 @@ object DCExpansion extends Expansion {
             asking
 
         case DCLureConfirmAction(self) =>
-            self.power -= 1
+            // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
+            // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+            if (!game.dcTenebrosumGuard)
+                self.power -= 1
             recordTenebrosum(action, 1, "Lure")
             val ygolonacOpt = self.allInPlay.%(_.uclass == YgolonacDC).headOption
             ygolonacOpt match {
@@ -783,7 +798,10 @@ object DCExpansion extends Expansion {
             asking
 
         case DCPilgrimageDestAction(self, prophet, dest) =>
-            self.power -= 1
+            // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
+            // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+            if (!game.dcTenebrosumGuard)
+                self.power -= 1
             recordTenebrosum(action, 1, "Pilgrimage")
             val p = game.unit(prophet)
             val src = p.region
@@ -1086,6 +1104,10 @@ object DCExpansion extends Expansion {
             if (game.dcTenebrosumGuard) {
                 game.dcTenebrosumGuard = false
                 game.dcLastActionForTenebrosum = None
+                // HB Fix 101: defensively clear the one-shot prefix flag in case
+                // some action path resolved without emitting any log line.
+                game.dcTenebrosumPrefixPending = false
+                game.dcTenebrosumPrefixCost = 0
             }
             UnknownContinue
 
