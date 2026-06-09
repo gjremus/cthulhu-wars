@@ -96,9 +96,18 @@ case object DC extends Faction { f =>
         val husks  = units(MindlessHusk).not(Zeroed).num
         // Fallen Prophet (§1.10 Reading + §2.12): during DC's turn = enemy Cultists
         // in the Prophet's Area; any other time = DC Cultists in the Prophet's Area.
-        // Use game.battle attacker as proxy for "DC's turn" (during a battle DC
-        // initiated). Outside battle, DC.acted/active also implies DC's turn.
-        val isDCTurn = game.battle./(_.attacker).has(f) || (game.battle.none && f.active && !f.acted)
+        // HB Fix 100.A (2026-06-08, closes audit BUG #3): the only reliable
+        // "DC's turn" signal during combat is who INITIATED the battle. DC can
+        // only initiate battles on its own turn, so battle.attacker == self
+        // proves it's DC's turn for THIS battle — even when DC has already
+        // acted earlier in the turn (e.g. multi-battle Tenebrosum chains, or
+        // unlimited-combat scenarios with several attacks in one turn). The
+        // prior proxy `f.active && !f.acted` flipped false after DC's first
+        // action of the turn and broke the basis on every subsequent battle.
+        // In-battle: use battle.attacker == self (the initiator field).
+        // Out-of-battle (bot projections only): fall back to f.active (the
+        // active-player flag), without the broken !f.acted clamp.
+        val isDCTurn = game.battle./(_.attacker).has(f) || (game.battle.none && f.active)
         val prophets = units(FallenProphet).not(Zeroed)./{ p =>
             if (isDCTurn) opponent.at(p.region).%(_.uclass.utype == Cultist).num
             else          f.at(p.region).%(_.uclass.utype == Cultist).num

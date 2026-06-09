@@ -2510,17 +2510,16 @@ object CthulhuWarsSolo {
                     // until gather power, when it is flipped face up"). The
                     // dcDarkBargainFacedown flag is set in the Dark Bargain
                     // handler and cleared on PowerGatherAction (see FactionDC
-                    // line ~892). The rendered face-down label uses the same
-                    // "?" face-down convention the unfulfilled-SB pile already
-                    // uses (line ~2504), styled in DC color and tagged with
-                    // "(face down)" so it's unambiguous.
+                    // line ~892).
+                    // HB Fix 100.B (2026-06-08): per user — face-down spellbooks
+                    // should render exactly like any other "flip face down" SB:
+                    // KEEP the original SB name text and just apply the standard
+                    // .styled("used") strike-through. No "?" substitution, no
+                    // "(face down)" suffix on the faction-card text. The Fix 95
+                    // label substitution above was wrong and is reverted here.
                     val isDCDarkBargainFacedown =
                         f == DC && sb == DarkBargain && displayGame.dcDarkBargainFacedown
-                    val full =
-                        if (isDCDarkBargainFacedown)
-                            "?".styled(f) + " " + "(face down)".styled("lb")
-                        else
-                            auguryPrefix + moonbeastImg + dcReservedEarnedImg + sb.elem
+                    val full = auguryPrefix + moonbeastImg + dcReservedEarnedImg + sb.elem
                     val s = sb.name.replace("\\", "\\\\").replace("'", "&#39") // "
                     // Pass option state for conditional overlay text
                     val sbExtra = (f, sb) match {
