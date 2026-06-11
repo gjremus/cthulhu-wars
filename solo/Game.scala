@@ -1537,6 +1537,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // skips in each action handler (no power debit on a Tenebrosum repeat).
     var dcTenebrosumPrefixPending : Boolean = false
     var dcTenebrosumPrefixCost : Int = 0
+    // HB Fix 108 (2026-06-10): set true while resolving a Tenebrosum-paid Move
+    // repeat. When set, the MoveAction handler charges 1 Sin per unit moved
+    // (DC: dcSin, SL: slSin) instead of the prior flat 1-Sin-for-all-units
+    // model, and MoveContinueAction stops offering further moves once Sin is
+    // exhausted. Cleared in EndAction / PreMainAction alongside the guard.
+    var dcTenebrosumMovePerUnit : Boolean = false
     // After Tenebrosum-paid repeat, grant ONE extra main-menu turn (treats DC
     // as not-yet-acted for the next MainAction). Cleared by EndAction(DC).
     var dcTenebrosumExtraTurn : Boolean = false
@@ -3295,6 +3301,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 return Force(TTHierophantsPlaceHPAction(f, f.gates, sbNext))
             }
 
+            // HB Fix 104 (2026-06-10): DC reserved-Acolyte IMMEDIATE forced
+            // delivery. The moment DC earns a library Spellbook whose reserved
+            // Acolyte is still on the Faction Card, prompt DC to place it NOW
+            // (forced, no Cancel) before the SB/ES loop continues — replacing
+            // the prior unlimited-action delivery model per user spec. Mirrors
+            // the TT Hierophants immediate-placement pattern just above and
+            // AN's immediate-grant SBR flow. The placement action wraps the
+            // downstream CheckSpellbooksAction(next) as its continuation.
+            if (f == DC && DCExpansion.dcShouldDeliverOnAcquire(sb))
+                return Force(DCDeliverReservedAcolyteForceAction(DC, sb, CheckSpellbooksAction(next)))
+
             CheckSpellbooksAction(next)
 
         case ElderSignAction(f, _, v, public, next) =>
@@ -3980,7 +3997,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             MoveContinueAction(self, false)
 
         case MoveContinueAction(self, moved) =>
-            if (self.power == 0)
+            // HB Fix 108 (2026-06-10): during a Tenebrosum Move repeat, Sin (not
+            // Power) funds each unit move (1 Sin per unit). Stop offering further
+            // moves once the casting faction's Sin is exhausted. Otherwise use
+            // the normal Power==0 stop condition.
+            val tenebrosumMoveSin = dcTenebrosumGuard && dcTenebrosumMovePerUnit
+            val outOfFunds = if (tenebrosumMoveSin) ((if (self == SL) slSin else dcSin) < 1) else (self.power == 0)
+            if (outOfFunds)
                 Then(MoveDoneAction(self))
             else {
                 val moonUnits = (self == BB).??(self.at(BB.moon).not(Moved).%(_.canMove))
@@ -4031,8 +4054,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val isMoonMove = from == BB.moon || destinations.has(BB.moon)
             val l2 = isMoonMove.?(destinations).|( destinations.sortBy(to => direction(from, to)) )
 
+            // HB Fix 108 (2026-06-10): during a Tenebrosum Move repeat, Sin (not
+            // Power) funds the move, so the per-destination Power affordability
+            // filter must be bypassed — otherwise a 0-power DC sees no legal
+            // destinations despite having Sin. Tax (if any) is still paid by the
+            // handler's payTax; the move loop is bounded by Sin in MoveContinue.
+            val tenebrosumMoveSin = dcTenebrosumGuard && dcTenebrosumMovePerUnit
+            val l3 = if (tenebrosumMoveSin) l2 else l2.%(self.affords(cost))
+
             Ask(self)
-                .each(l2.%(self.affords(cost)))(to => MoveAction(self, u, from, to, cost).as
+                .each(l3)(to => MoveAction(self, u, from, to, cost).as
                     (ConnectionGlyph(from, to) + to.toString, self.iced(to),
                      (isMoonMove || to == BB.moon).?("").|( s"""<img class=direction src="${Overlays.imageSource("move-deg-" + direction(from, to))}" />""" ))
                     ("Move", u, (cost == 0).??("for free"), "from", from, "to")
@@ -4071,6 +4102,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
             if (cost > 0 && !dcTenebrosumGuard)
                 self.power -= cost
+
+            // HB Fix 108 (2026-06-10): Tenebrosum Move repeat charges 1 Sin PER
+            // UNIT moved (not a flat 1 Sin for all units). Debit here, once per
+            // resolved unit move, from the casting faction's Sin pool.
+            if (dcTenebrosumGuard && dcTenebrosumMovePerUnit) {
+                if (self == SL) slSin -= 1 else dcSin -= 1
+            }
 
             u.region = r
             u.add(Moved)

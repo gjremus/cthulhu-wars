@@ -3033,7 +3033,18 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 val captured = {
                     var draws : $[DrawItem] = $
 
-                    game.setup.but(f)./~(_.at(f.prison)).foreach { u =>
+                    // HB Fix 109 (2026-06-10): render OWN captured cultists too.
+                    // Per user — "If DC captures its own cultists with satiate,
+                    // those need to be shown on the faction card the same as
+                    // other factions captured cultists." DC's Satiate self-
+                    // captures route a DC Acolyte into DC.prison, but the prior
+                    // filter game.setup.but(f) excluded the prison-owner's OWN
+                    // units, so self-captures were invisible. Use game.setup
+                    // (no .but(f)) so each captured unit renders in its OWNING
+                    // faction's color regardless of who holds the prison. Safe
+                    // for all factions: only DC self-captures into its own
+                    // prison, so non-DC prisons gain no new entries.
+                    game.setup./~(_.at(f.prison)).foreach { u =>
                         val (prisonXOffset, prisonYOffset) = u.uclass match {
                             case Filth        => (8, -15)
                             case _            => (0, 0)

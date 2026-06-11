@@ -170,6 +170,25 @@ case class DCPlaceReservedAcolyteAction(self : Faction, r : Region)
         implicit g => r.toString)
     with PowerNeutral
 
+// ── HB Fix 104: forced IMMEDIATE Acolyte delivery on SB acquisition ─────────
+// HB Fix 104 (2026-06-10): per user — "every time [a SBR] is achieved, the
+// acolyte needs to prompt the DC player to place it immediately, not as an
+// unlimited action." Modeled on AN's immediate-grant SBR flow
+// (GiveWorstMonster…AskAction → Force(then) at FactionAN.scala), but pulling
+// the Acolyte from the DC FACTION-CARD reserve pool (DCFactionCardHold), not
+// the normal cultist pool. Game.scala's SpellbookAction core handler forces
+// this action (wrapping the downstream CheckSpellbooksAction continuation) the
+// moment DC earns a library SB whose reserved Acolyte is still on the card.
+// Forced (no Cancel): the placement is mandatory per spec. `sb` is the
+// just-earned Spellbook; `then` is the continuation to resume the SB/ES loop.
+case class DCDeliverReservedAcolyteForceAction(self : Faction, sb : Spellbook, then : ForcedAction)
+    extends ForcedAction with PowerNeutral
+case class DCDeliverReservedAcolytePlaceAction(self : Faction, sb : Spellbook, r : Region, then : ForcedAction)
+    extends BaseFactionAction(
+        "Place " + Acolyte.styled(DC) + " from Faction Card in",
+        implicit g => r.toString)
+    with PowerNeutral
+
 // ── Proselytize per-enemy drag (G11: self=enemyFaction for enemy-colored border) ─
 // Fix HB-79 (2026-06-06): Mirror DC Satiate/Lure per-faction chain. EVERY enemy
 // with an Acolyte in the source area is forced to give up one Acolyte to drag
@@ -548,13 +567,27 @@ object DCExpansion extends Expansion {
             }
             game.dcLastActionForTenebrosum match {
                 case Some((recordedAction, _, _)) =>
+                    // HB Fix 108 (2026-06-10): per user — "Tenebrosum is also
+                    // failing for movement - it would be one sin per unit moved,
+                    // right now it is one sin to move All units." A normal Move
+                    // Action moves any number of units (1 Power each), so the
+                    // total Power spent — and thus the Sin cost per §1.5.1 /
+                    // Fix 97.C — is 1 per unit moved, NOT a flat 1 for the whole
+                    // repeat. For a Move repeat we therefore SKIP the flat
+                    // upfront Sin debit here and instead charge 1 Sin per unit
+                    // in the MoveAction handler (Game.scala), stopping the move
+                    // loop when Sin is exhausted (MoveContinueAction). All other
+                    // action classes keep the single upfront flat debit.
+                    val isMoveRepeat = recordedAction.isInstanceOf[MoveAction]
                     if (self == SL) {
-                        game.slSin -= cost
+                        if (!isMoveRepeat) game.slSin -= cost
                         game.slTenebrosumUsedThisTurn = true
                     } else {
-                        game.dcSin -= cost
+                        if (!isMoveRepeat) game.dcSin -= cost
                         game.dcTenebrosumUsedThisTurn = true
                     }
+                    // Signal the move loop to charge Sin per unit moved.
+                    game.dcTenebrosumMovePerUnit = isMoveRepeat
                     game.dcTenebrosumGuard = true
                     // HB Fix 97.E (2026-06-07): per user "game log should show this
                     // as a tenebrosum action, and it should Not have the turn
@@ -583,7 +616,10 @@ object DCExpansion extends Expansion {
                     // is true (guarded inline in Game.scala) — so power is never
                     // touched and negative-power states cannot arise.
                     game.dcTenebrosumPrefixPending = true
-                    game.dcTenebrosumPrefixCost = cost
+                    // For a per-unit Move repeat, the first moved-unit log line
+                    // is tagged "(1 Sin)" (each unit costs 1 Sin); subsequent
+                    // units are charged + logged individually in the handler.
+                    game.dcTenebrosumPrefixCost = if (isMoveRepeat) 1 else cost
                     // Clear last-action so the SAME action isn't repeated as the "last" again
                     game.dcLastActionForTenebrosum = None
                     // Force the SAME chooser the recorded action came from. After
@@ -676,6 +712,43 @@ object DCExpansion extends Expansion {
             }
             // Unlimited action — return to MainAction so DC can take more turns.
             Force(MainAction(self))
+
+        // ── HB Fix 104: forced IMMEDIATE Acolyte delivery on SB acquisition ──
+        // Forced region picker (no Cancel). Pulls one Acolyte from the
+        // FACTION-CARD reserve pool (DCFactionCardHold) — NOT the standard pool.
+        // After placement, Force(then) resumes the SB/ES loop that issued us.
+        case DCDeliverReservedAcolyteForceAction(self, sb, then) =>
+            // Defensive: if (somehow) no card Acolyte remains, just continue.
+            val hasCardAcolyte = self.units.%(u => u.uclass == Acolyte && u.region == DCFactionCardHold(self)).any
+            if (!hasCardAcolyte)
+                Force(then)
+            else {
+                implicit val asking = Asking(self)
+                // Every Area on the map is a legal placement target (§1.6).
+                areas.foreach { r =>
+                    + DCDeliverReservedAcolytePlaceAction(self, sb, r, then)
+                }
+                asking
+            }
+
+        case DCDeliverReservedAcolytePlaceAction(self, sb, r, then) =>
+            val placed = self.units.%(u => u.uclass == Acolyte && u.region == DCFactionCardHold(self)).headOption
+            placed match {
+                case Some(u) =>
+                    u.region = r
+                    // Clear this specific SB's reserved-Acolyte marker and credit
+                    // the matching SBR in the log (per HB Fix 97.F convention).
+                    if (game.dcReservedSpellbookAcolytes.has(sb)) {
+                        game.dcReservedSpellbookAcolytes = game.dcReservedSpellbookAcolytes.but(sb)
+                        val sbr = dcSBRForSB(sb)
+                        self.log("placed", Acolyte.styled(DC), "for fulfilled SBR", sbr.text.styled(DC), "in", r)
+                    } else {
+                        self.log("placed", Acolyte.styled(DC), "from Faction Card in", r)
+                    }
+                case None =>
+                    self.log("no Faction Card Acolyte available to place")
+            }
+            Force(then)
 
         // ── Satiate (cost 2, capture from each faction in Y'Golonac's area) ──
         case DCSatiateMainAction(self) =>
@@ -1144,6 +1217,8 @@ object DCExpansion extends Expansion {
                 // some action path resolved without emitting any log line.
                 game.dcTenebrosumPrefixPending = false
                 game.dcTenebrosumPrefixCost = 0
+                // HB Fix 108: clear the per-unit Move-repeat marker.
+                game.dcTenebrosumMovePerUnit = false
             }
             UnknownContinue
 
@@ -1172,6 +1247,8 @@ object DCExpansion extends Expansion {
             game.dcTenebrosumGuard = false
             game.dcTenebrosumPrefixPending = false
             game.dcTenebrosumPrefixCost = 0
+            // HB Fix 108: belt-and-suspenders clear of the Move-repeat marker.
+            game.dcTenebrosumMovePerUnit = false
             UnknownContinue
 
         case _ => UnknownContinue
@@ -1226,56 +1303,65 @@ object DCExpansion extends Expansion {
     // summon Another mindless husk for 1 sin." The recorded cost is threaded
     // through so each affords check considers the refund.
     private def tenebrosumLegalToRepeat(self : Faction, a : Action, cost : Int, an : String)(implicit game : Game) : Boolean = {
-        // Post-refund affordability: same shape as self.affords(n)(r) =
-        // power >= taxIn(r) + n, but using (power + cost) since the recorded
-        // cost will be refunded before the chooser opens.
-        def affordsRefund(n : Int)(r : Region) : Boolean = self.power + cost >= self.taxIn(r) + n
+        // HB Fix 105 (2026-06-10): per user — "Tenebrosum doesn't seem to be
+        // prompted when the player has run out of power." Tenebrosum pays SIN in
+        // lieu of Power (§1.5.1), so the legality test must NOT require Power at
+        // all. Sin-sufficiency is already enforced at the offer site
+        // (game.dcSin >= cost). Previously these branches gated on post-refund
+        // power affordability (self.power + cost >= taxIn + n), which suppressed
+        // the offer whenever DC was at/near 0 power even though Sin could pay —
+        // the user-reported bug. The checks below now verify only STRUCTURAL
+        // legality (pool has the unit, a valid target/region exists), exactly
+        // mirroring how BG ghoul-summon-with-Thousand-Young and FB Call of the
+        // Faithful remain offered at 0 power. `cost`/`an` retained for signature
+        // compatibility with the public wrapper / SL borrow path.
         a match {
-            // MOVE — any of self's units still un-Moved. Power gate: post-refund
-            // (self.power + cost) > 0; since recorded Move costs are typically 1
-            // and refund restores them, this trivially holds for the same-region
-            // repeat case but a different region with higher tax could fail.
+            // MOVE — any of self's units still un-Moved. No power gate (Sin pays).
             case _ : MoveAction =>
-                self.units.nex.onMap.not(Moved).%(_.canMove).any && (self.power + cost) > 0
-            // BUILD GATE — any area without a gate where self has a gate-controller.
+                self.units.nex.onMap.not(Moved).%(_.canMove).any
+            // BUILD GATE — any gate-less area where self has a gate-controller.
+            // HB Fix 107 (2026-06-10): also covers the user-reported "Tenebrosum
+            // failing to allow the player to duplicate the create gate action"
+            // — Build/Create Gate IS repeatable; only Control/Abandon Gate are
+            // excluded (in recordTenebrosum). No power gate (Sin pays).
             case _ : BuildGateAction =>
-                areas.nex.%(affordsRefund(3 - self.has(UmrAtTawil).??(1))).%!(game.gates.has).%(r => self.at(r).%(_.canControlGate).any).any
-            // RECRUIT — pool has a cultist + at least one valid area (post-refund affords).
+                areas.nex.%!(game.gates.has).%(r => self.at(r).%(_.canControlGate).any).any
+            // RECRUIT — pool has a cultist + at least one Area present/legal.
             case RecruitAction(_, uc, _) =>
-                self.pool(uc).any && areas.%(self.present).some.|(areas).nex.%(r => affordsRefund(self.recruitCost(uc, r))(r)).any
-            // SUMMON — pool has the unit + at least one valid gate area (post-refund affords).
+                self.pool(uc).any && areas.%(self.present).some.|(areas).nex.any
+            // SUMMON — pool has the unit + at least one accessible gate area.
             case SummonAction(_, uc, _) =>
                 val summonAreas = areas ++ ((self == BB).??($(BB.moon)))
-                self.pool(uc).any && summonAreas.nex.%(r => affordsRefund(self.summonCost(uc, r))(r)).%(self.canAccessGate).any
+                self.pool(uc).any && summonAreas.nex.%(self.canAccessGate).any
             // CAPTURE — any area with an eligible enemy cultist target.
             case _ : CaptureAction =>
-                areas.nex.%(affordsRefund(1)).%(r => game.factionlike.but(self).%(self.canCapture(r)).any).any
+                areas.nex.%(r => game.factionlike.but(self).%(self.canCapture(r)).any).any
             // BATTLE — any region with a valid attack target that self HAS NOT
             // already battled in this turn (CW rules: 1 battle per region per turn).
             case _ : AttackAction =>
-                areas.nex.%(affordsRefund(1)).diff(self.battled).%(r => game.factionlike.but(self).exists(self.canAttack(r))).any
+                areas.nex.diff(self.battled).%(r => game.factionlike.but(self).exists(self.canAttack(r))).any
             // AWAKEN — pool has the GOO (e.g. Y'Golonac: only 1 in pool — if awoken, no offer).
             case AwakenAction(_, uc, _, _) =>
-                self.pool(uc).any && areas.nex.%(r => affordsRefund(self.awakenCost(uc, r).|(999))(r)).any
+                self.pool(uc).any && areas.nex.any
             // RITUAL — at least one gate to ritual at.
             case _ : RitualAction =>
                 self.allGates.any
-            // DC SB Satiate — needs Y'Golonac on map, post-refund 2 power, and
-            // at least one enemy cultist in Y'Golonac's area.
+            // DC SB Satiate — needs Y'Golonac on map + an enemy cultist in its
+            // area. No power gate (Sin pays).
             case _ : DCSatiateConfirmAction =>
-                self.can(Satiate) && (self.power + cost) >= 2 && self.allInPlay.%(_.uclass == YgolonacDC).any &&
+                self.can(Satiate) && self.allInPlay.%(_.uclass == YgolonacDC).any &&
                     self.allInPlay.%(_.uclass == YgolonacDC).exists(yg => game.factions.but(self).exists(e => e.at(yg.region).%(_.uclass.utype == Cultist).any))
-            // DC SB Lure — needs Y'Golonac on map, post-refund 1 power, and at
-            // least one adjacent enemy cultist eligible.
+            // DC SB Lure — needs Y'Golonac on map + an adjacent eligible enemy
+            // cultist. No power gate (Sin pays).
             case _ : DCLureConfirmAction =>
-                self.can(Lure) && (self.power + cost) >= 1 && self.allInPlay.%(_.uclass == YgolonacDC).any &&
+                self.can(Lure) && self.allInPlay.%(_.uclass == YgolonacDC).any &&
                     self.allInPlay.%(_.uclass == YgolonacDC).exists { yg =>
                         val adj = game.board.connected(yg.region)
                         game.factions.but(self).exists(e => adj./~(e.at).%(_.uclass.utype == Cultist).any)
                     }
-            // DC SB Pilgrimage — needs a Fallen Prophet on map, post-refund 1 power.
+            // DC SB Pilgrimage — needs a Fallen Prophet on map. No power gate (Sin pays).
             case _ : DCPilgrimageDestAction =>
-                self.can(Pilgrimage) && (self.power + cost) >= 1 && self.allInPlay.%(_.uclass == FallenProphet).any
+                self.can(Pilgrimage) && self.allInPlay.%(_.uclass == FallenProphet).any
             // DC SB Dark Bargain — Y'Golonac on map, not facedown this round.
             case _ : DCDarkBargainConfirmAction =>
                 self.can(DarkBargain) && self.allInPlay.%(_.uclass == YgolonacDC).any && !game.dcDarkBargainFacedown
@@ -1300,25 +1386,38 @@ object DCExpansion extends Expansion {
     // off to the canonical engine path. Sin is paid in lieu of power (debit
     // + refund handled in the DCTenebrosumRepeatAction case above).
     private def tenebrosumRepeatChooser(self : Faction, a : Action)(implicit game : Game) : Continue = a match {
+        // HB Fix 105/107 (2026-06-10): the region/target lists below are NO
+        // LONGER power-gated by self.affords(...). Tenebrosum pays Sin in lieu
+        // of Power, and the handlers skip the power debit under dcTenebrosumGuard
+        // (no refund is applied), so a self.affords(cost) filter at current power
+        // would wrongly empty the picker whenever DC is at/near 0 power — the
+        // user-reported "not prompted when out of power" (Fix 105) and "create
+        // gate fails to duplicate" (Fix 107) bugs. Structural legality only.
         case _ : MoveAction               => Force(MoveMainAction(self))
         case _ : BuildGateAction          =>
-            val l = areas.nex.%(self.affords(3 - self.has(UmrAtTawil).??(1))).%!(game.gates.has).%(r => self.at(r).%(_.canControlGate).any).some.|($)
+            val l = areas.nex.%!(game.gates.has).%(r => self.at(r).%(_.canControlGate).any).some.|($)
             Force(BuildGateMainAction(self, l))
         case RecruitAction(_, uc, _)      =>
-            val l = areas.%(self.present).some.|(areas).nex.%(r => self.affords(self.recruitCost(uc, r))(r)).some.|($)
+            val l = areas.%(self.present).some.|(areas).nex.some.|($)
             Force(RecruitMainAction(self, uc, l))
         case SummonAction(_, uc, _)       =>
+            // HB Fix 106 (2026-06-10): repeat is restricted to the EXACT same
+            // unit class just summoned — `uc` is threaded straight from the
+            // recorded SummonAction into SummonMainAction(self, uc, l), so the
+            // sub-menu offers only that unit's regions (e.g. a Mindless Husk
+            // repeat can only summon another Mindless Husk, never a Fallen
+            // Prophet). Region list no longer power-gated (Sin pays).
             val summonAreas = areas ++ ((self == BB).??($(BB.moon)))
-            val l = summonAreas.nex.%(r => self.affords(self.summonCost(uc, r))(r)).%(self.canAccessGate).some.|($)
+            val l = summonAreas.nex.%(self.canAccessGate).some.|($)
             Force(SummonMainAction(self, uc, l))
         case _ : CaptureAction            =>
-            val l = areas.nex.%(self.affords(1)).%(r => game.factionlike.but(self).%(self.canCapture(r)).any).some.|($)
+            val l = areas.nex.%(r => game.factionlike.but(self).%(self.canCapture(r)).any).some.|($)
             Force(CaptureMainAction(self, l, None))
         case _ : AttackAction             =>
-            val l = areas.nex.%(self.affords(1)).diff(self.battled).%(r => game.factionlike.but(self).exists(self.canAttack(r))).some.|($)
+            val l = areas.nex.diff(self.battled).%(r => game.factionlike.but(self).exists(self.canAttack(r))).some.|($)
             Force(AttackMainAction(self, l, None))
         case AwakenAction(_, uc, _, _)    =>
-            val l = areas.nex.%(r => self.affords(self.awakenCost(uc, r).|(999))(r)).some.|($)
+            val l = areas.nex.some.|($)
             Force(AwakenMainAction(self, uc, l))
         // RitualAction has no chooser — re-issue the recorded action directly.
         // Cost was refunded by caller; the RitualAction handler re-debits it.
@@ -1343,6 +1442,16 @@ object DCExpansion extends Expansion {
         val earnedSBsStillPending = game.dcReservedSpellbookAcolytes.%(sb => f.spellbooks.has(sb)).num
         acolytesInFactionCard > 0 && earnedSBsStillPending > 0
     }
+
+    // HB Fix 104 (2026-06-10): true when DC has just earned library spellbook
+    // `sb` and that SB's reserved Acolyte is still on the Faction Card — i.e.
+    // an immediate forced placement is owed. Called by Game.scala's core
+    // SpellbookAction handler to force DCDeliverReservedAcolyteForceAction
+    // before the SB/ES loop continues. Only DC library SBs gate Acolytes;
+    // Tenebrosum/Depravity (abilities) and neutral SBs never do.
+    def dcShouldDeliverOnAcquire(sb : Spellbook)(implicit game : Game) : Boolean =
+        game.dcReservedSpellbookAcolytes.has(sb) &&
+        DC.units.%(u => u.uclass == Acolyte && u.region == DCFactionCardHold(DC)).any
 
     // HB Fix 97.F (2026-06-07): Map a DC spellbook to its matching SBR so the
     // reserved-Acolyte placement log can credit the SPECIFIC requirement that
