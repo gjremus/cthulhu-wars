@@ -1144,6 +1144,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             val cost = u.uclass match {
                                 case AvatarThesis     => DS.azathothTrack
                                 case AvatarAntithesis => (8 - DS.azathothTrack).max(0)
+                                // Y'Golonac (DC) has a DYNAMIC awaken cost = number of
+                                // DC spellbooks on the sheet (sentinel uclass.cost is 0).
+                                // Harbinger must use the CURRENT cost so the half-cost
+                                // payout (ceil below) is computed from the live value,
+                                // mirroring the G18/Fix 77.C faction-card display
+                                // (overlay.scala: DC.spellbooks.num). Harbinger core
+                                // (the (cost + 1) / 2 ceil) is left untouched.
+                                case YgolonacDC       => DC.spellbooks.num
                                 case _                => u.uclass.cost
                             }
                             val n = (cost + 1) / 2
@@ -1429,6 +1437,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             val cost = u.uclass match {
                                 case AvatarThesis     => DS.azathothTrack
                                 case AvatarAntithesis => (8 - DS.azathothTrack).max(0)
+                                // Y'Golonac (DC) has a DYNAMIC awaken cost = number of
+                                // DC spellbooks on the sheet (sentinel uclass.cost is 0).
+                                // Harbinger must use the CURRENT cost so the half-cost
+                                // payout (ceil below) is computed from the live value,
+                                // mirroring the G18/Fix 77.C faction-card display
+                                // (overlay.scala: DC.spellbooks.num). Harbinger core
+                                // (the (cost + 1) / 2 ceil) is left untouched.
+                                case YgolonacDC       => DC.spellbooks.num
                                 case _                => u.uclass.cost
                             }
                             val n = (cost + 1) / 2
