@@ -2604,6 +2604,29 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             PlayOrderAction
 
         case SetupFactionsAction =>
+            // ── FACTION SETUP / PLACEMENT (SEATING) ORDER ────────────────────
+            // Setup placement order is NOT a hardcoded list. Each pass picks the
+            // still-unplaced faction with the FEWEST legal starting regions
+            // (`minBy(board.starting(_).num)`), so the most-constrained factions
+            // seat first and the least-constrained seat last. Because
+            // `board.starting(OW) == regions` (Opener of the Way may start in ANY
+            // region — see Map.scala), OW always has the most options and is
+            // therefore ALWAYS the last faction to place during setup.
+            //
+            // Canonical / intended setup-seating tail (newest homebrew factions
+            // included), placing in this left-to-right order, OW last:
+            //     … standard factions … -> Progenitus -> Faceless Blight (FBE) -> Opener of the Way (OW)
+            //
+            // Notes (per master-task owner decision 2026-06-10):
+            //   • Progenitus and Faceless Blight (FBE) are planned homebrew
+            //     factions that are NOT yet in this build. When added, FBE seats
+            //     immediately AFTER Progenitus and immediately BEFORE OW; only OW
+            //     ever places after FBE.
+            //   • Until Progenitus exists, FBE falls back to the second-to-last
+            //     seat (directly before OW).
+            //   • More factions may be inserted between Progenitus and FBE later;
+            //     OW remaining last is the only fixed invariant. Update this list
+            //     when new homebrew setup-seating factions are wired in.
             val unplaced = setup.%!(starting.contains).%(f => board.starting(f).any)
             if (unplaced.none)
                 return PlayOrderAction
