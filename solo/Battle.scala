@@ -1151,7 +1151,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                 // mirroring the G18/Fix 77.C faction-card display
                                 // (overlay.scala: DC.spellbooks.num). Harbinger core
                                 // (the (cost + 1) / 2 ceil) is left untouched.
-                                case YgolonacDC       => DC.spellbooks.num
+                                case YgolonacDC       => DC.library.num - DC.unfulfilled.num
                                 case _                => u.uclass.cost
                             }
                             val n = (cost + 1) / 2
@@ -1444,7 +1444,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                 // mirroring the G18/Fix 77.C faction-card display
                                 // (overlay.scala: DC.spellbooks.num). Harbinger core
                                 // (the (cost + 1) / 2 ceil) is left untouched.
-                                case YgolonacDC       => DC.spellbooks.num
+                                case YgolonacDC       => DC.library.num - DC.unfulfilled.num
                                 case _                => u.uclass.cost
                             }
                             val n = (cost + 1) / 2
