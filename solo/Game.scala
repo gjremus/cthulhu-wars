@@ -2066,6 +2066,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                                     case DarkYoung => 1
                                     case Acolyte => 2
                                     case HighPriest => 3
+                                    // HB Fix 114 (2026-06-13): default case so a
+                                    // gate-controlling GOO present in the region does
+                                    // not MatchError this partial-function sort. DC's
+                                    // Y'Golonac (Bacchanal) overrides canControlGate to
+                                    // true, so a region holding Y'Golonac AND a cultist
+                                    // reached this sort with no YgolonacDC case and
+                                    // crashed (scala.MatchError: Y'Golonac / YgolonacDC$).
+                                    // A cultist (1-3) is still preferred as the gate
+                                    // marker; the GOO sorts last but is handled.
+                                    case _ => 4
                                 }).starting.foreach { u =>
                                     self.gates :+= r
                                     u.onGate = true
