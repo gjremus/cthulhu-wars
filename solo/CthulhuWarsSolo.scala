@@ -4960,7 +4960,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             }
 
             def glyphSrc(f : Faction) : String =
-                "webp/images/" + f.short.toLowerCase + "-glyph.webp"
+                // FBE has no glyph art yet. Point the picker at the dc-glyph
+                // placeholder file (which exists on the VM) so it doesn't 404
+                // as a broken image. Replace with fbe-glyph.webp when art lands.
+                if (f == FBE) "webp/images/dc-glyph.webp"
+                else "webp/images/" + f.short.toLowerCase + "-glyph.webp"
             // [2026-06-02] §3.13.3 / §3.13.4: BB-alt picker entry uses the
             // homebrew glyph (bb-glyph-hb) so users can tell the two BB rows
             // apart at a glance. Standard BB keeps the regular glyph. Other
