@@ -5040,10 +5040,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         val glyph = dom.document.createElement("img").asInstanceOf[html.Image]
                         glyph.src = entryGlyphSrc(e)
                         glyph.alt = e.short
-                        glyph.style.cssText = "width:32px;height:32px;object-fit:contain;"
                         // FBE has no glyph art yet; green-tint the dc-glyph placeholder to the
                         // faction color (mirrors the in-game RoA "fbe" tint). Drop when real art lands.
-                        if (e.faction == FBE) glyph.style.filter = "sepia(1) hue-rotate(50deg) saturate(3) brightness(0.75)"
+                        glyph.style.cssText = "width:32px;height:32px;object-fit:contain;" +
+                            (if (e.faction == FBE) "filter:sepia(1) hue-rotate(50deg) saturate(3) brightness(0.75);" else "")
                         glyph.title = e.label
 
                         val cb = dom.document.createElement("input").asInstanceOf[html.Input]
@@ -5303,9 +5303,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     val labelTxt = if (f == BB && bbAlt) f.full + " (alt SBs)" else f.full
                     gImg.alt = labelTxt
                     gImg.title = labelTxt
-                    gImg.style.cssText = "width:64px;height:64px;object-fit:contain;"
                     // FBE placeholder glyph: green-tint to the faction color (mirrors the RoA "fbe" tint).
-                    if (f == FBE) gImg.style.filter = "sepia(1) hue-rotate(50deg) saturate(3) brightness(0.75)"
+                    gImg.style.cssText = "width:64px;height:64px;object-fit:contain;" +
+                        (if (f == FBE) "filter:sepia(1) hue-rotate(50deg) saturate(3) brightness(0.75);" else "")
                     block.appendChild(gImg)
                     box.appendChild(block)
                 }
