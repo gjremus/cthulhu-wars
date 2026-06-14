@@ -146,12 +146,28 @@ case class DCTenebrosumMainAction(self : Faction, cost : Int, actionName : Strin
 // the same shape as DCSatiateConfirmAction / DCLureConfirmAction /
 // DCDarkBargainConfirmAction so the confirm prompt shows
 // "Tenebrosum: Repeat <action> for N Sin"  +  "Confirm" option.
+// HB Fix 109.E (2026-06-11): removed Soft so this action is RECORDED for
+// undo replay. Without recording, undo replays the downstream action
+// (BuildGateAction etc.) without the Tenebrosum guard — causing Power to be
+// deducted instead of Sin and the log to lose its "used Tenebrosum to" prefix.
 case class DCTenebrosumRepeatAction(self : Faction, cost : Int, actionName : String)
     extends BaseFactionAction(
         Tenebrosum.styled(DC) + ": Repeat " + actionName.styled(self) +
             (if (cost > 0) " for " + cost.toString.styled("dc") + " Sin" else " (free)"),
         "Confirm".styled("power"))
-    with Soft with PowerNeutral
+    with PowerNeutral
+
+// ── Tenebrosum broadened Summon / Awaken choosers (HB Fix 113, 2026-06-13) ──
+// Per owner: a Sin-paid Tenebrosum SUMMON repeat may bring out a DIFFERENT unit
+// than the one just summoned, and a Sin-paid AWAKEN repeat may awaken a DIFFERENT
+// GOO / iGOO. These sub-menus reuse the canonical summon/awaken/independent menu
+// builders (which now bypass the Power-affordability filter under the Tenebrosum
+// guard) so every structurally-legal unit / GOO is offered, not just the recorded
+// one. This reverses the same-kind-only restriction added in Fix 106.
+case class DCTenebrosumSummonChooserAction(self : Faction)
+    extends OptionFactionAction(("Summon").styled(self)) with MainQuestion with Soft
+case class DCTenebrosumAwakenChooserAction(self : Faction)
+    extends OptionFactionAction(("Awaken").styled(self)) with MainQuestion with Soft
 
 // ── Reserved-Acolyte placement (conditional unlimited action — HB Fix 83) ──
 // HB Fix 83 (2026-06-07): Same-turn delivery via conditional UNLIMITED action.
@@ -425,6 +441,17 @@ object DCExpansion extends Expansion {
             // HB Fix 90 (2026-06-07): dcTenebrosumExtraTurn flag retired — Tenebrosum
             // now replays the SAME action class via the chooser (not a fresh main),
             // and post-acted unlimited menu fires naturally after the replay ends.
+            // HB Fix 109.E (2026-06-11): if the Tenebrosum guard is still set when
+            // we arrive at the post-acted menu, it means the user Cancel'd from the
+            // downstream chooser (the successful path clears the guard in EndAction).
+            // Clear the stale guard + refund Sin to prevent the next action from
+            // accidentally skipping its Power deduction.
+            if (game.dcTenebrosumGuard) {
+                game.dcTenebrosumGuard = false
+                game.dcTenebrosumPrefixPending = false
+                game.dcTenebrosumPrefixCost = 0
+                game.dcTenebrosumMovePerUnit = false
+            }
             implicit val asking = Asking(f)
             game.controls(f)
             if (f.hasAllSB)
@@ -451,6 +478,13 @@ object DCExpansion extends Expansion {
             asking
 
         case MainAction(f : DC.type) =>
+            // HB Fix 109.E (2026-06-11): stale guard cleanup (same as post-acted).
+            if (game.dcTenebrosumGuard) {
+                game.dcTenebrosumGuard = false
+                game.dcTenebrosumPrefixPending = false
+                game.dcTenebrosumPrefixCost = 0
+                game.dcTenebrosumMovePerUnit = false
+            }
             implicit val asking = Asking(f)
 
             // HB Fix 83 (2026-06-07): Reserved-Acolyte conditional unlimited
@@ -616,6 +650,7 @@ object DCExpansion extends Expansion {
                     // is true (guarded inline in Game.scala) — so power is never
                     // touched and negative-power states cannot arise.
                     game.dcTenebrosumPrefixPending = true
+                    game.dcTenebrosumPrefixFaction = self
                     // For a per-unit Move repeat, the first moved-unit log line
                     // is tagged "(1 Sin)" (each unit costs 1 Sin); subsequent
                     // units are charged + logged individually in the handler.
@@ -630,6 +665,32 @@ object DCExpansion extends Expansion {
                 case None =>
                     UnknownContinue
             }
+
+        // ── Tenebrosum broadened Summon chooser (HB Fix 113, 2026-06-13) ─────
+        // Offer EVERY structurally-summonable unit (not just the one just
+        // summoned). game.summons bypasses its Power-affordability filter under
+        // dcTenebrosumGuard (set by DCTenebrosumRepeatAction), and SummonAction
+        // skips the Power debit under the guard — so the Sin already paid covers
+        // the repeat, and the player may pick a DIFFERENT unit. Cancel routes
+        // back to MainAction, whose stale-guard cleanup (Fix 109.E) clears the
+        // guard if the player backs out.
+        case DCTenebrosumSummonChooserAction(self) =>
+            implicit val asking = Asking(self)
+            game.summons(self)
+            + CancelAction
+            asking
+
+        // ── Tenebrosum broadened Awaken chooser (HB Fix 113, 2026-06-13) ─────
+        // Offer EVERY awakenable faction GOO + iGOO (not just the one just
+        // awakened). game.awakens / game.independents bypass their affords
+        // filters under the guard, and AwakenAction / IndependentGOOAction skip
+        // the Power debit under the guard.
+        case DCTenebrosumAwakenChooserAction(self) =>
+            implicit val asking = Asking(self)
+            game.awakens(self)
+            game.independents(self)
+            + CancelAction
+            asking
 
         // ── DOOM ────────────────────────────────────────────────────────────
         case DoomAction(f : DC.type) =>
@@ -848,16 +909,35 @@ object DCExpansion extends Expansion {
                 val e = remaining.first
                 val adj = game.board.connected(area)
                 val eligible = adj./~{ r =>
-                    val hasEnemyGOO = game.factions.but(e).exists(o => o.at(r).%(_.uclass.utype == GOO).any)
-                    val hasTerror   = game.factions./~(_.at(r)).%(_.uclass.utype == Terror).any
-                    val hasFactionBuilding = game.factions./~(_.at(r)).%(_.uclass.utype == Building).any
+                    // HB Fix 113 (2026-06-13): per owner — Lure is blocked out of
+                    // any source Area where ANY enemy of DC (i.e. any faction other
+                    // than DC itself, self) has a Great Old One, an independent
+                    // Great Old One (iGOO), a Faction Building, or a Terror —
+                    // INCLUDING the Cultist's own faction. This matches the
+                    // verbatim card text ("Enemy Cultists in Areas containing an
+                    // enemy Great Old One, Terror or Faction Building are exempt"),
+                    // where "enemy" is from DC's perspective and so includes the
+                    // Cultist's owner. Examples: CC's Nyarlathotep blocks luring
+                    // CC's own Cultists out of that Area; AN's Cathedral (Building)
+                    // or Yothan (Terror) blocks AN's Cultists; a controlled neutral
+                    // Terror on map (Brown Jenkin, Dhole, ...) blocks the
+                    // controlling faction's Cultists. `isGOO` covers GOO, iGOO and
+                    // ElderGod (Bastet); controlled neutral Terrors are utype
+                    // Terror on the controlling faction's units.
+                    // (Prior code only checked factions OTHER than the Cultist owner
+                    //  for GOOs, and any faction — including DC — for Terror/Building,
+                    //  which both mis-scoped the exemption.)
+                    val enemiesOfDC = game.factions.but(self)
+                    val hasEnemyGOO        = enemiesOfDC.exists(o => o.at(r).%(_.uclass.isGOO).any)
+                    val hasEnemyTerror     = enemiesOfDC.exists(o => o.at(r).%(_.uclass.utype == Terror).any)
+                    val hasEnemyBuilding   = enemiesOfDC.exists(o => o.at(r).%(_.uclass.utype == Building).any)
                     // HB Fix 97.B (2026-06-07): per user "fix, this only applies to
                     // the Bubastis moon area". Prior code matched any region whose
                     // display name contained "Moon" (string match). Replaced with
                     // canonical BB.moon region equality — only the Bubastis Moon
                     // tile is exempted.
                     val isMoon = r == BB.moon
-                    if (hasEnemyGOO || hasTerror || hasFactionBuilding || isMoon) $()
+                    if (hasEnemyGOO || hasEnemyTerror || hasEnemyBuilding || isMoon) $()
                     else e.at(r).%(_.uclass.utype == Cultist)
                 }
                 if (eligible.num == 0) {
@@ -1329,10 +1409,14 @@ object DCExpansion extends Expansion {
             // RECRUIT — pool has a cultist + at least one Area present/legal.
             case RecruitAction(_, uc, _) =>
                 self.pool(uc).any && areas.%(self.present).some.|(areas).nex.any
-            // SUMMON — pool has the unit + at least one accessible gate area.
-            case SummonAction(_, uc, _) =>
+            // SUMMON — HB Fix 113 (2026-06-13): broadened repeat may bring out a
+            // DIFFERENT unit, so the offer appears whenever ANY summonable unit
+            // (faction monster or neutral loyalty-card monster in pool) has an
+            // accessible gate area — not only the exact unit just summoned.
+            case _ : SummonAction =>
                 val summonAreas = areas ++ ((self == BB).??($(BB.moon)))
-                self.pool(uc).any && summonAreas.nex.%(self.canAccessGate).any
+                summonAreas.nex.%(self.canAccessGate).any &&
+                    self.pool.monsterly./(_.uclass).distinct.%(_.canBeSummoned(self)).any
             // CAPTURE — any area with an eligible enemy cultist target.
             case _ : CaptureAction =>
                 areas.nex.%(r => game.factionlike.but(self).%(self.canCapture(r)).any).any
@@ -1340,9 +1424,18 @@ object DCExpansion extends Expansion {
             // already battled in this turn (CW rules: 1 battle per region per turn).
             case _ : AttackAction =>
                 areas.nex.diff(self.battled).%(r => game.factionlike.but(self).exists(self.canAttack(r))).any
-            // AWAKEN — pool has the GOO (e.g. Y'Golonac: only 1 in pool — if awoken, no offer).
-            case AwakenAction(_, uc, _, _) =>
-                self.pool(uc).any && areas.nex.any
+            // AWAKEN — HB Fix 113 (2026-06-13): broadened repeat may awaken a
+            // DIFFERENT GOO or iGOO, so the offer appears whenever ANY faction GOO
+            // remains in pool OR any iGOO loyalty card is held and awakenable —
+            // not only the exact GOO just awakened (e.g. after awakening Y'Golonac
+            // the player may use Tenebrosum to awaken a held iGOO).
+            case _ : AwakenAction =>
+                areas.nex.any && {
+                    val hasPoolGOO = self.pool.%(_.uclass.isGOO).any
+                    val hasIGOO    = game.loyaltyCards.of[IGOOLoyaltyCard].any ||
+                                     self.loyaltyCards.of[IGOOLoyaltyCard].any
+                    hasPoolGOO || hasIGOO
+                }
             // RITUAL — at least one gate to ritual at.
             case _ : RitualAction =>
                 self.allGates.any
@@ -1400,25 +1493,26 @@ object DCExpansion extends Expansion {
         case RecruitAction(_, uc, _)      =>
             val l = areas.%(self.present).some.|(areas).nex.some.|($)
             Force(RecruitMainAction(self, uc, l))
-        case SummonAction(_, uc, _)       =>
-            // HB Fix 106 (2026-06-10): repeat is restricted to the EXACT same
-            // unit class just summoned — `uc` is threaded straight from the
-            // recorded SummonAction into SummonMainAction(self, uc, l), so the
-            // sub-menu offers only that unit's regions (e.g. a Mindless Husk
-            // repeat can only summon another Mindless Husk, never a Fallen
-            // Prophet). Region list no longer power-gated (Sin pays).
-            val summonAreas = areas ++ ((self == BB).??($(BB.moon)))
-            val l = summonAreas.nex.%(self.canAccessGate).some.|($)
-            Force(SummonMainAction(self, uc, l))
+        case _ : SummonAction             =>
+            // HB Fix 113 (2026-06-13): per owner — a Sin-paid Summon repeat may
+            // summon a DIFFERENT unit than the one just summoned (reverses the
+            // Fix 106 same-kind-only restriction). Open a chooser that offers
+            // every structurally-summonable unit (faction monsters + any neutral
+            // loyalty-card monster in pool), not just the recorded `uc`.
+            Force(DCTenebrosumSummonChooserAction(self))
         case _ : CaptureAction            =>
             val l = areas.nex.%(r => game.factionlike.but(self).%(self.canCapture(r)).any).some.|($)
             Force(CaptureMainAction(self, l, None))
         case _ : AttackAction             =>
             val l = areas.nex.diff(self.battled).%(r => game.factionlike.but(self).exists(self.canAttack(r))).some.|($)
             Force(AttackMainAction(self, l, None))
-        case AwakenAction(_, uc, _, _)    =>
-            val l = areas.nex.some.|($)
-            Force(AwakenMainAction(self, uc, l))
+        case _ : AwakenAction             =>
+            // HB Fix 113 (2026-06-13): per owner — a Sin-paid Awaken repeat may
+            // awaken a DIFFERENT GOO or iGOO than the one just awakened (reverses
+            // the same-kind restriction). Open a chooser that offers every
+            // awakenable faction GOO + every awakenable iGOO, not just the
+            // recorded `uc`.
+            Force(DCTenebrosumAwakenChooserAction(self))
         // RitualAction has no chooser — re-issue the recorded action directly.
         // Cost was refunded by caller; the RitualAction handler re-debits it.
         case _ : RitualAction             => Force(a)
@@ -1471,9 +1565,20 @@ object DCExpansion extends Expansion {
 
 
 // Doom-phase SB-requirement opt-in actions
+// HB Fix 109.D (2026-06-11): dynamic computed values per user spec.
+// Proselytize: "SBR: +X Sin (2/ enemy GOO)"
+// Satiate: "SBR: +X Power, +Y Sin (1P/ claimed SB, 1S/ unclaimed SB)" where X+Y=6
 case class DCProselytizeReqOptInAction(self : Faction)
-    extends OptionFactionAction(("Take " + Proselytize.name).styled(DC) + ": +2 Sin per enemy GOO")
+    extends OptionFactionAction(implicit g => {
+        val enemyGOOs = g.factions.but(self)./~(_.allInPlay).%(_.uclass.utype == GOO).num
+        val total = 2 * enemyGOOs
+        "SBR".styled(DC) + ": " + ("+" + total + " Sin").styled("dc") + " (2/ enemy GOO)"
+    })
     with DoomQuestion
 case class DCSatiateReqOptInAction(self : Faction)
-    extends OptionFactionAction(("Take " + Satiate.name).styled(DC) + ": +1 Power per other SB, +1 Sin per pool SB")
+    extends OptionFactionAction(implicit g => {
+        val claimedSBs = self.spellbooks.num
+        val unclaimedSBs = 6 - claimedSBs
+        "SBR".styled(DC) + ": " + ("+" + claimedSBs + " Power").styled("power") + ", " + ("+" + unclaimedSBs + " Sin").styled("dc") + " (1P/ claimed SB, 1S/ unclaimed SB)"
+    })
     with DoomQuestion

@@ -1537,6 +1537,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // skips in each action handler (no power debit on a Tenebrosum repeat).
     var dcTenebrosumPrefixPending : Boolean = false
     var dcTenebrosumPrefixCost : Int = 0
+    // HB Fix 109.B (2026-06-11): track which faction is using Tenebrosum for
+    // the log prefix (DC vs SL via Ancient Sorcery).
+    var dcTenebrosumPrefixFaction : Faction = DC
     // HB Fix 108 (2026-06-10): set true while resolving a Tenebrosum-paid Move
     // repeat. When set, the MoveAction handler charges 1 Sin per unit moved
     // (DC: dcSin, SL: slSin) instead of the prior flat 1-Sin-for-all-units
@@ -1765,8 +1768,23 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         }
     }
 
-    def forNPowerWithTax(r : Region, f : Faction, n : Int) : String = { val p = n + f.taxIn(r) ; " for " + p.power }
-    def for1PowerWithTax(r : Region, f : Faction) : String = { val p = 1 + f.taxIn(r) ; if (p != 1) " for " + p.power else "" }
+    def forNPowerWithTax(r : Region, f : Faction, n : Int) : String = {
+        val p = n + f.taxIn(r)
+        // HB Fix 109 (2026-06-11): When rendering inside a Tenebrosum repeat
+        // (dcTenebrosumGuard), display cost as Sin (styled "dc") instead of Power.
+        // Tax is waived under Tenebrosum (payTax returns 0), so show raw n only.
+        if (dcTenebrosumGuard && (f == DC || f == SL))
+            " for " + n.toString.styled("dc") + " Sin"
+        else
+            " for " + p.power
+    }
+    def for1PowerWithTax(r : Region, f : Faction) : String = {
+        val p = 1 + f.taxIn(r)
+        if (dcTenebrosumGuard && (f == DC || f == SL))
+            " for " + 1.toString.styled("dc") + " Sin"
+        else if (p != 1) " for " + p.power
+        else ""
+    }
 
     def unit(ur : UnitRef) = {
         val matches = ur.faction.units.%(u => u.uclass == ur.uclass && u.index == ur.index)
@@ -1822,7 +1840,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         " (" + dcTenebrosumPrefixCost + " Sin)"
                     else
                         " (free repeat)"
-                    "Defilers Court used Tenebrosum to " + raw + sinTag
+                    // HB Fix 109.B (2026-06-11): strip the leading faction name
+                    // from raw to avoid "DC used Tenebrosum to DC built a gate..."
+                    // FactionEx.log prepends f (→ f.full) as the first arg; strip
+                    // that prefix so the final line reads e.g. "Defilers Court used
+                    // Tenebrosum to built a gate in Africa (3 Sin)".
+                    val tenFaction = dcTenebrosumPrefixFaction
+                    val factionPrefix = tenFaction.full + " "
+                    val stripped = if (raw.startsWith(factionPrefix)) raw.stripPrefix(factionPrefix) else raw
+                    tenFaction.full + " used Tenebrosum to " + stripped + sinTag
                 } else raw
 
             if (undoubled.has(line).not && pendingLine.any)
@@ -2225,8 +2251,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         val summonAreas = areas ++ ((f == BB).??($(BB.moon)))
 
+        // HB Fix 113 (2026-06-13): under a DC/SL Tenebrosum repeat (dcTenebrosumGuard),
+        // the action is paid in Sin, not Power — so the per-region power-affordability
+        // filter must be bypassed (downstream SummonAction already skips the Power
+        // debit under the guard). This lets a Sin-paid Summon repeat offer a DIFFERENT
+        // unit than the one just summoned, per owner spec (broadens Fix 106).
         f.pool.monsterly.sortP./(_.uclass).distinct.%(_.canBeSummoned(f)).%(uc => f.all(uc).num < f.units./(_.uclass).count(uc)).foreach { uc =>
-            summonAreas.nex.%(r => f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
+            summonAreas.nex.%(r => dcTenebrosumGuard || f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
                 + SummonMainAction(f, uc, l)
             }
         }
@@ -2259,21 +2290,26 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val poolMonsterClasses = f.pool.monsterly./(_.uclass).distinct
         val velvetFanMonsters = f.units.%(u => u.region.is[VelvetFanHold] && u.uclass.utype == Monster)
         velvetFanMonsters./(_.uclass).distinct.diff(poolMonsterClasses).foreach { uc =>
-            summonAreas.nex.%(r => f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
+            // HB Fix 113 (2026-06-13): Tenebrosum-repeat affords bypass (Sin-paid).
+            summonAreas.nex.%(r => dcTenebrosumGuard || f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
                 + SummonMainAction(f, uc, l)
             }
         }
     }
 
     def awakens(f : Faction)(implicit w : AskWrapper) {
+        // HB Fix 113 (2026-06-13): under a DC/SL Tenebrosum repeat (dcTenebrosumGuard),
+        // Awaken is paid in Sin, not Power — bypass the power-affordability filter so a
+        // Sin-paid Awaken repeat can offer a DIFFERENT GOO than the one just awakened
+        // (downstream AwakenAction already skips the Power debit under the guard).
         f.pool.goos.factionGOOs./(_.uclass).distinct.reverse.foreach { uc =>
-            areas.nex.%(r => f.affords(f.awakenCost(uc, r).|(999))(r)).some.foreach { l =>
+            areas.nex.%(r => dcTenebrosumGuard || f.affords(f.awakenCost(uc, r).|(999))(r)).some.foreach { l =>
                 + AwakenMainAction(f, uc, l)
             }
         }
         // ElderGod units (Bastet) use a custom awakenCost but are not in factionGOOs
         f.pool.%(_.uclass.utype == ElderGod)./(_.uclass).distinct.foreach { uc =>
-            areas.nex.%(r => f.affords(f.awakenCost(uc, r).|(999))(r)).some.foreach { l =>
+            areas.nex.%(r => dcTenebrosumGuard || f.affords(f.awakenCost(uc, r).|(999))(r)).some.foreach { l =>
                 + AwakenMainAction(f, uc, l)
             }
         }
@@ -2297,15 +2333,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // alongside the others. Ghatanothoa IGOO still excluded when FB is
         // in the game (FB uses Ghatanothoa as faction GOO); Glaaki IGOO
         // excluded when TS is in the game.
+        // HB Fix 113 (2026-06-13): under a DC/SL Tenebrosum repeat (dcTenebrosumGuard),
+        // iGOO awaken is paid in Sin — bypass the two power-affordability filters so a
+        // Sin-paid Awaken repeat can also offer a DIFFERENT iGOO (per owner spec).
         val availableStandardIGOOs = loyaltyCards.of[IGOOLoyaltyCard]
-            .%(igoo => igooCost(f, igoo) <= f.power)
+            .%(igoo => dcTenebrosumGuard || igooCost(f, igoo) <= f.power)
             .%(igoo => !(igoo == GhatanotoaIGOOCard && factions.has(FB)))
             .%(igoo => !(igoo == GlaakiIGOOCard && factions.has(TS)))
             .%(igoo => igoo != AzathothIGOOCard)
             .%(igoo => igoo != CthughaCard)
             .%(igoo => {
                 val cost = igooCost(f, igoo)
-                areas.nex.%(f.canAwakenIGOO).%(f.affords(cost)).any
+                areas.nex.%(f.canAwakenIGOO).%(r => dcTenebrosumGuard || f.affords(cost)(r)).any
             })
 
         // Cthugha: replace any non-Cthugha GOO at one of f's gates (cost = 6 - replaced.cost)
@@ -4443,7 +4482,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case SummonAction(self, uc, r) =>
             // Bloated Woman: units on VelvetFanHold count as available for summoning
             val hasVelvetFanUnit = self.units.%(u => u.uclass == uc && u.region.is[VelvetFanHold]).any
-            if ((self.pool(uc).none && !hasVelvetFanUnit) || self.affords(self.summonCost(uc, r))(r).not)
+            // HB Fix 109.C (2026-06-11): bypass the affords check when under
+            // Tenebrosum guard — Sin already paid, Power is irrelevant.
+            if ((self.pool(uc).none && !hasVelvetFanUnit) || (!dcTenebrosumGuard && self.affords(self.summonCost(uc, r))(r).not))
                 EndAction(self)
             else {
                 val cost = self.summonCost(uc, r)
@@ -4487,7 +4528,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Ask(self).some(locations)(r => self.awakenCost(uc, r)./(cost => AwakenAction(self, uc, r, cost))).cancel
 
         case AwakenAction(self, uc, r, cost) =>
-            if (self.pool(uc).none || self.affords(cost)(r).not)
+            // HB Fix 109.C (2026-06-11): bypass affords when under Tenebrosum
+            // guard — Sin already paid, Power is irrelevant.
+            if (self.pool(uc).none || (!dcTenebrosumGuard && self.affords(cost)(r).not))
                 EndAction(self)
             else {
                 // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip

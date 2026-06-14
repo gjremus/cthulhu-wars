@@ -770,13 +770,16 @@ object IGOOsExpansion extends Expansion {
             // through IndependentGOOMainAction; Azathoth and Cthugha — which
             // used to be top-level entries — now ride here too, sorted by
             // name alongside the others.
+            // HB Fix 113 (2026-06-13): bypass the iGOO power-affordability filters
+            // under a Tenebrosum repeat (Sin-paid) so a Sin-paid Awaken repeat can
+            // offer a DIFFERENT iGOO even when DC/SL has little/no Power left.
             val standardAvailable = game.loyaltyCards.of[IGOOLoyaltyCard]
-                .%(igoo => game.igooCost(self, igoo) <= self.power)
+                .%(igoo => game.dcTenebrosumGuard || game.igooCost(self, igoo) <= self.power)
                 .%(igoo => igoo != AzathothIGOOCard)
                 .%(igoo => igoo != CthughaCard)
                 .%(igoo => {
                     val cost = game.igooCost(self, igoo)
-                    areas.nex.%(self.canAwakenIGOO).%(self.affords(cost)).any
+                    areas.nex.%(self.canAwakenIGOO).%(r => game.dcTenebrosumGuard || self.affords(cost)(r)).any
                 })
 
             val cthughaAvailable = game.loyaltyCards.has(CthughaCard) && {
@@ -796,7 +799,8 @@ object IGOOsExpansion extends Expansion {
             case class IGOOEntry(name : String, action : Action)
             val standardEntries : $[IGOOEntry] = standardAvailable./(igoo => {
                 val cost = game.igooCost(self, igoo)
-                val gates = areas.nex.%(self.canAwakenIGOO).%(self.affords(cost))
+                // HB Fix 113 (2026-06-13): Tenebrosum-repeat affords bypass (Sin-paid).
+                val gates = areas.nex.%(self.canAwakenIGOO).%(r => game.dcTenebrosumGuard || self.affords(cost)(r))
                 IGOOEntry(igoo.name, IndependentGOOMainAction(self, igoo, gates))
             })
             val cthughaEntry : $[IGOOEntry] =
@@ -818,7 +822,13 @@ object IGOOsExpansion extends Expansion {
                 game.loyaltyCards :-= lc
             }
 
-            self.power -= cost
+            // HB Fix 113 (2026-06-13): under a DC/SL Tenebrosum repeat
+            // (dcTenebrosumGuard), the awaken is paid in Sin (already debited in
+            // DCTenebrosumRepeatAction) — skip the Power debit so a Sin-paid Awaken
+            // repeat can bring out a DIFFERENT iGOO without touching Power (mirrors
+            // the faction-GOO AwakenAction guard).
+            if (!game.dcTenebrosumGuard)
+                self.power -= cost
 
             self.log("awakened", lc.unit.name.styled("nt"), "in", r, "for", cost.power)
 
