@@ -319,6 +319,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // otherwise hit the CG hook again with the same Ghatanothoa/Revenant sources.
     var fbCyclopeanGazeFiredThisBattle : Boolean = false
 
+    // Faceless Blight (FBE): once-per-battle guard so the Distributed Death offer
+    // (Post-Kill-assignment, §3.14.3) is not re-presented when AllKillsAssignedPhase
+    // is re-entered after the player chooses N.
+    var fbeDistributedDeathOffered : Boolean = false
+
     def exempt(u : UnitFigure) {
         exempted :+= u
         sides.foreach(_.forces :-= u)
@@ -521,6 +526,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s == BB && s.can(Savagery) && !s.tag(Savagery) && s.forces.%(_.uclass == CatFromSaturn).any && s.power >= 1) {
             options :+= SavageryUseAction(s)
             options :+= SavagerySkipAction(s)
+        }
+
+        // Faceless Blight (FBE): Shapestealing (Pre-Battle, §1.10 SB3 / §3.14.2).
+        // Offer if FBE has the SB, has at least one card die to roll, and there is
+        // an enemy Monster present in the battle. FBEExpansion resolves the roll +
+        // control-swap; the ShapestealingResolveAction case below resumes proceed().
+        if (s == FBE && s.can(Shapestealing) && game.fbeCardDice.nonEmpty &&
+            s.opponent.forces.%(_.uclass.utype == Monster).any) {
+            options :+= ShapestealingPreBattleAction(FBE)
+            options :+= ShapestealingSkipAction(FBE)
         }
 
         Ask(s).list(options).add(PreBattleDoneAction(s, next))
@@ -1083,6 +1098,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 assignKills(attacker, AllKillsAssignedPhase)
 
             case AllKillsAssignedPhase =>
+                // Faceless Blight (FBE) — Changeling Adherents SBR (§3.12.1): a total
+                // of 3 Kills ROLLED (raw, before any prevention) in a Battle FBE
+                // participates in. Use the raw rolled-Kill faces on both sides.
+                if (factions.has(FBE) && sides.has(FBE)) {
+                    val killsRolled = attacker.rolls.count(_ == Kill) + defender.rolls.count(_ == Kill)
+                    FBE.satisfyIf(ChangelingAdherentsReq, ChangelingAdherentsReq.text, killsRolled >= 3)
+                }
+
+                // Faceless Blight (FBE) — Distributed Death (§3.14.3 / §4.6): if FBE
+                // has card dice and any Kill is assigned to an FBE Unit, offer to
+                // discard N dice to prevent N Kills (before EliminatePhase resolves).
+                if (factions.has(FBE) && sides.has(FBE) && !fbeDistributedDeathOffered && game.fbeCardDice.nonEmpty) {
+                    val fbeKilled = sides./~(fac => (if (fac == attacker) attackers else defenders).forces)
+                        .%(u => u.faction == FBE && u.health == Killed).num
+                    if (fbeKilled > 0) {
+                        fbeDistributedDeathOffered = true
+                        val maxN = math.min(fbeKilled, game.fbeCardDice.num)
+                        return Ask(FBE)
+                            .list((1 to maxN).toList./(n => DistributedDeathMainAction(FBE, n)))
+                            .add(DistributedDeathSkipAction(FBE))
+                    }
+                }
+
                 sides.foreach { s =>
                     if (s.tag(Emissary)) {
                         s.forces.%(_.health == Killed)(Nyarlathotep).foreach { u =>
@@ -1583,6 +1621,32 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // Faceless Blight (FBE) — Succor SBR (§3.12.5): "Byagoona Dies in
+                // Battle. Do not fulfill if the Kill/Elimination is prevented." If
+                // Byagoona was eliminated this battle and NOT saved by Distributed
+                // Death, satisfy the requirement.
+                if (factions.has(FBE) && sides.has(FBE) && FBE.needs(SuccorReq) &&
+                    eliminated.%(u => u.faction == FBE && u.uclass == Byagoona).any &&
+                    !game.fbeByagoonaKillPrevented) {
+                    FBE.satisfy(SuccorReq, SuccorReq.text)
+                }
+
+                // Faceless Blight (FBE) — Necromantic Spores (Post-Battle, §3.14.4):
+                // if FBE participated, has the SB, controls a Monster in the arena, and
+                // an enemy Unit was Killed, offer to Eliminate a controlled Monster and
+                // spawn 1 Fungal Thrall per enemy Killed. FBEExpansion resolves it.
+                if (factions.has(FBE) && FBE.can(NecromanticSpores) && sides.has(FBE) && !FBE.oncePerAction.has(NecromanticSpores)) {
+                    val enemy = if (attacker == FBE) defender else attacker
+                    val enemyKilled = eliminated.%(_.faction == enemy).num
+                    val fbeMonstersHere = FBE.at(arena).%(_.uclass.utype == Monster).any
+                    if (enemyKilled > 0 && fbeMonstersHere) {
+                        FBE.oncePerAction :+= NecromanticSpores
+                        return Ask(FBE)
+                            .add(NecromanticSporesMainAction(FBE, enemyKilled))
+                            .add(NecromanticSporesSkipAction(FBE))
+                    }
+                }
+
                 // Bubastis (BB) Carnivore (alt spellbook): BB gains 1 Doom for each enemy Monster
                 // killed or eliminated in this battle.
                 // Log-ordering convention (BB Implementation Guide §3.18.16): emit the log line
@@ -1718,6 +1782,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         }
                     }
                 }
+
+                // Faceless Blight (FBE): clear per-battle Shapestealing / Distributed
+                // Death state. Shapestolen Monsters were only moved between battle
+                // sides (ownership/region untouched), so control reverts naturally
+                // when the battle ends and forces are discarded (§1.10 SB3).
+                game.fbeShapestolen = $
+                game.fbeByagoonaKillPrevented = false
 
                 game.battle = None
 
@@ -2517,5 +2588,74 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case PredatorEnemyEliminateAction(self, _, _) =>
             proceed()
 
+        // ── FACELESS BLIGHT (FBE) battle-action resume cases ──────────────────
+        // FBEExpansion performs the FBE-side logic and returns UnknownContinue (or
+        // an Ask/Force for sub-menus). These cases resume the battle via proceed().
+        // For Shapestealing, the actual control swap is applied here (Battle owns
+        // the live forces lists): the resolved enemy Monster (recorded in
+        // game.fbeShapestolen) is moved into FBE's side for this Combat.
+        case ShapestealingPreBattleAction(self) =>
+            proceed()
+
+        case ShapestealingSkipAction(self) =>
+            proceed()
+
+        case ShapestealingTargetAction(self, _) =>
+            proceed()
+
+        case ShapestealingResolveAction(self, enemyMonster, _) =>
+            // Move any newly-shapestolen enemy Monster from its owner's side into
+            // FBE's side so it rolls and assigns hits as FBE this Combat (§1.10 SB3).
+            game.fbeShapestolen.foreach { ref =>
+                sides.foreach { fac =>
+                    val side = if (fac == attacker) attackers else defenders
+                    side.forces.%(_.ref == ref).foreach { u =>
+                        if (fac != FBE) {
+                            side.forces :-= u
+                            val fbeSide = if (attacker == FBE) attackers else defenders
+                            fbeSide.forces :+= u
+                            log(u.uclass.styled(u.faction), "fights for", FBE.full, "(Shapestealing)")
+                        }
+                    }
+                }
+            }
+            proceed()
+
+        case NecromanticSporesMainAction(self, _) =>
+            proceed()
+
+        case NecromanticSporesSkipAction(self) =>
+            proceed()
+
+        case NecromanticSporesEliminateAction(self, _, _, _) =>
+            proceed()
+
+        case DistributedDeathMainAction(self, n) =>
+            // Prevent n Kills assigned to FBE Units by discarding n card dice.
+            fbeDistributedDeath(n)
+            proceed()
+
+        case DistributedDeathSkipAction(self) =>
+            proceed()
+
+    }
+
+    // Faceless Blight (FBE) Distributed Death (§1.8 / §3.4.4): cancel n Kills
+    // currently assigned to FBE Units (set their health back to Alive) and discard
+    // n card dice (lowest values, deterministic for replay). If a cancelled Kill
+    // was on Byagoona, flag it so Succor's SBR is NOT satisfied (§3.12.5).
+    def fbeDistributedDeath(n : Int) {
+        if (n <= 0) return
+        val fbeKilled = sides./~(fac => (if (fac == attacker) attackers else defenders).forces)
+            .%(u => u.faction == FBE && u.health == Killed)
+        val toSave = fbeKilled.take(n)
+        toSave.foreach { u =>
+            u.health = Alive
+            if (u.uclass == Byagoona) game.fbeByagoonaKillPrevented = true
+            log(u.uclass.styled(FBE), "saved by", "Distributed Death".styled(FBE))
+        }
+        val discard = math.min(n, game.fbeCardDice.num)
+        game.fbeCardDice = game.fbeCardDice.sortBy(x => x).drop(discard)
+        log("Distributed Death".styled(FBE) + ": discarded", discard, (discard == 1).?("die").|("dice") + ", prevented", toSave.num, ("Kill".s(toSave.num)).styled("kill"))
     }
 }

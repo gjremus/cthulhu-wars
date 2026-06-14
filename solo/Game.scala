@@ -1403,6 +1403,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case BB => $(BBExpansion)
             // Defilers Court (DC): Homebrew faction
             case DC => $(DCExpansion)
+            // Faceless Blight (FBE): Homebrew faction
+            case FBE => $(FBEExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any).$(NeutralMonstersExpansion) ++
@@ -1460,7 +1462,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var lastDaolothRegion : |[Region] = None
     var tulzschaFlameTurn : Int = 1
     var neutralSpellbooks : $[Spellbook] = options.contains(NeutralSpellbooks).$(MaoCeremony, Recriminations, Shriveling, StarsAreRight, UmrAtTawil, Undimensioned)
-    var loyaltyCards : $[LoyaltyCard] = options.of[LoyaltyCardGameOption]./(_.lc)
+    // Faceless Blight (FBE) GLOBAL GHAST BAN (§1.6, creator-approved): when FBE is
+    // present in a game, Ghasts become unavailable to ALL factions. This is enforced
+    // ONCE at setup by dropping GhastCard from the loyalty-card list, so every FBE
+    // rule that refers to "Monster" applies uniformly to faction Monsters and
+    // controlled Neutral Monsters with no per-ability Ghast guard.
+    var loyaltyCards : $[LoyaltyCard] =
+        options.of[LoyaltyCardGameOption]./(_.lc).%(lc => !(setup.has(FBE) && lc == GhastCard))
 
     // Solution for keeping track of use cases for dematerialization, for the AN bot.
     var demCaseMap : Map[Region, Int] = areas.map(r => r -> 0).toMap
@@ -1476,6 +1484,25 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // doom phase via DoomDoneAction(BB).
     var bbAilurophobiaDone : Boolean = false
     var bbSyzygyDone       : Boolean = false
+
+    // Faceless Blight (FBE) state (§1.6 / §2.4 / §3.6) — kept on Game.scala for
+    // undo/replay safety (mirrors the DC dcSin pattern), NOT on FBEExpansion.
+    //  • fbeCardDice : Faction-Card dice pool, stored as pip values 1-6. The combat
+    //    FACE is derived (6=Kill, 4/5=Pain, else Miss). Byagoona's Combat = count of
+    //    pips >= 4; Shapestealing compares a pip directly to a Monster Cost.
+    //  • fbeSelfConsumingDeaths : Self Consuming per-Action death tally; one Boolean
+    //    per Unit that died this Action (true = the dying Unit was FBE-controlled).
+    //  • fbeShapestolen : enemy Monsters temporarily fighting for FBE this Battle.
+    var fbeCardDice : $[Int] = $
+    var fbeSelfConsumingDeaths : $[Boolean] = $
+    var fbeShapestolen : $[UnitRef] = $
+    // Set true when Distributed Death cancels a Kill assigned to Byagoona, so
+    // Succor's SBR ("Byagoona Dies … do not fulfill if the Kill is prevented") is
+    // NOT satisfied (§3.12.5). Reset per battle.
+    var fbeByagoonaKillPrevented : Boolean = false
+    // Changeling Adherents Gather-Power sentinel — prevents the roll-and-place from
+    // re-firing when AfterPowerGatherAction is re-entered. Reset each Gather Power.
+    var fbeChangelingDoneThisGather : Boolean = false
 
     // Defilers Court (DC) state — per guide G29 (CRIT): Sin pool lives on Game.scala
     // for undo safety (NOT on DCExpansion singleton). HB Fix 96 (2026-06-07):
@@ -2759,6 +2786,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                 // Reset Gla'aki IGOO SBR tracking for the new turn
                 reachedZeroPowerFirst = None
+
+                // Faceless Blight (FBE): re-arm Changeling Adherents for this Gather.
+                fbeChangelingDoneThisGather = false
 
                 factions.foreach { f =>
                     f.oncePerTurn = $

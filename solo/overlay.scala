@@ -1065,6 +1065,11 @@ object Overlays {
         case $("DC", Pilgrimage.name)  => spellbook(Pilgrimage.name,  "Action: Cost 1", "Choose a Fallen Prophet, then move any or all of your other Units from that Area to an adjacent Area for free.")
         case $("DC", DarkBargain.name) => spellbook(DarkBargain.name, "Action: Cost 0", "If Y'Golonac is in play, all enemies have 30 seconds to choose a number using a D6. You gain Sin equal to one of those numbers of your choice, then distribute an equal amount of Power as evenly as possible among all enemies. Flip this spellbook facedown until the Gather Power Phase.")
 
+        // ── FACELESS BLIGHT (FBE) — Homebrew faction overlays ───────────────
+        // Delegated to fbeOverlay(...) to keep the giant `info` match under the JVM
+        // 64KB method-size limit (the inline cases overflowed it).
+        case s2 if s2.headOption.exists(_ == "FBE") => fbeOverlay(s2)
+
         // Bubastis (BB): alternate spellbooks info overlay.
         // Help text shows the FULL rulebook text of both replacement spellbooks
         // (Syzygy and Carnivore), mirroring the DS Alternate Spellbooks help
@@ -1802,6 +1807,56 @@ object Overlays {
                 <div class=p>${cost("3)")} Place ${Bastet.name} in an Area containing no enemy Units.</div>
                 <div class=p>${combat} Add 1 Kill to your combat total (Bastet rolls no dice); the enemy must lower their Kill total by 1.</div>
                 <div class=p>${reference(BB, RequiresAttention)} ${cost("(Doom Phase):")} During the Doom Phase, if Bastet is in an Area containing an enemy Cultist, you may perform a Ritual of Annihilation. For you, this adds exactly 4 Doom plus: if Bastet’s Area has an Enemy-Controlled Gate, gain <span class=es>1 Elder Sign</span>; if Bastet’s Area has an Enemy Great Old One, gain <span class=es>2 Elder Sign</span>. These rewards are additive.</div>""")
+        ))
+    }
+
+    // Faceless Blight (FBE) — overlay dispatch helper (extracted from the giant
+    // `info` match so that method stays under the JVM 64KB limit). Handles the
+    // faction info card, the 6 spellbook-requirement panels, and the 7 spellbook /
+    // ability info cards (verbatim from card art, §1.9 / §1.10).
+    def fbeOverlay(s : $[Any]) : String = s match {
+        case $("FBE") => fbeFactionOverlay()
+
+        case $("FBE", ChangelingAdherentsReq.text) => requirement("A total of 3 Kills are Rolled in a Battle you Participate in.")
+        case $("FBE", NecromanticSporesReq.text)   => requirement("As an Action, Eliminate Two Fungal Thralls.")
+        case $("FBE", ShapestealingReq.text)        => requirement("Have 3 Units in an Enemy Start Area.")
+        case $("FBE", AnimatedRushReq.text)         => requirement("Have 3 Dice on your Faction Card.")
+        case $("FBE", SuccorReq.text)               => requirement("Byagoona Dies in Battle. Do not fulfill if the Kill/Elimination is prevented.")
+        case $("FBE", OverlordOfDeathReq.text)      => requirement("Awaken Byagoona.")
+
+        case $("FBE", SelfConsuming.name)        => spellbook(SelfConsuming.name,        "Ongoing (Faction Ability)", "Whenever two or more Units are Killed or Eliminated as part of the same Action, Gain 1 Power. If you controlled at least three of them, also gain 1 Doom.")
+        case $("FBE", ChangelingAdherents.name)  => spellbook(ChangelingAdherents.name,  "Gather Power", "Roll a die for each of your Acolytes controlling Gates and place them on your Faction Card.")
+        case $("FBE", NecromanticSpores.name)    => spellbook(NecromanticSpores.name,    "Post-Battle", "Eliminate a Monster Present to create a Fungal Thrall for each enemy Unit Killed.")
+        case $("FBE", Shapestealing.name)        => spellbook(Shapestealing.name,        "Pre-Battle", "Choose an Enemy Monster and roll a die from your Faction Card. If the value exceeds that Monster's Cost, it fights for you this Combat.")
+        case $("FBE", AnimatedRush.name)         => spellbook(AnimatedRush.name,         "Move", "When Byagoona Moves, discard dice from your Faction Card to move twice that many Units for free.")
+        case $("FBE", Succor.name)               => spellbook(Succor.name,               "Doom Phase", "Eliminate any number of your Units and roll that many dice. If the total value exceeds that of the Ritual Marker, gain an Elder Sign.")
+        case $("FBE", OverlordOfDeath.name)      => spellbook(OverlordOfDeath.name,      "Ongoing", "If Byagoona is in play, Eliminate Monsters to pay Costs as though they were Power. Each Monster Eliminated is worth 1 Power.")
+
+        case _ => ""
+    }
+
+    // Faceless Blight (FBE) — Homebrew faction info card (§G14). Unique ability:
+    // Self Consuming (Ongoing). Byagoona awakens via a Monster-sacrifice procedure;
+    // his Combat = the count of Kill/Pain faces on the Faction-Card dice pool.
+    def fbeFactionOverlay() = {
+        def fbeRef(sb : Spellbook) =
+            s"""<span class="ability-color pointer" onclick="onExternalClick('FBE', '${sb.name}')">${sb.name}</span>"""
+        faction(FBE, "info:fbe-background", SelfConsuming, "Ongoing",
+            "Whenever two or more Units are Killed or Eliminated as part of the same Action, Gain 1 Power. If you controlled at least three of them, also gain 1 Doom.",
+            $(ChangelingAdherents, NecromanticSpores, Shapestealing, AnimatedRush, Succor, OverlordOfDeath), $(
+            (Acolyte,      6, "1", "0", s"""<div class=p>Setup: 6 Acolytes + a Controlled Gate in an empty area not adjacent to another faction's start area. Spellbook: ${fbeRef(ChangelingAdherents)}</div>"""),
+            (FungalThrall, 10, "2", "2", s"""<div class=p>Spellbooks: ${fbeRef(NecromanticSpores)}, ${fbeRef(Succor)}</div>"""),
+            (Byagoona,     1, "?", "?", s"""
+                <div class=p>${cost(s"How to Awaken ${Byagoona.name}:")}</div>
+                <div class=p>${cost("1)")} Eliminate one or more of your Monsters in a single area and roll that many dice.</div>
+                <div class=p>${cost("2)")} Set all of the dice on your Faction Card.</div>
+                <div class=p>${cost("3)")} Pay Power equal to the difference between the total Cost of Monsters Eliminated and 10 (floored at 0).</div>
+                <div class=p>${cost("4)")} Byagoona appears in the Area.</div>
+                <div class=p>${combat} Equal to the number of Results (Kills and Pains) on dice on your Faction Card.</div>
+                <div class=p>${ref(Shapestealing)} ${cost("(Pre-Battle):")} Choose an Enemy Monster and roll a die from your Faction Card. If the value exceeds that Monster's Cost, it fights for you this Combat.</div>
+                <div class=p>${ref(AnimatedRush)} ${cost("(Move):")} When Byagoona Moves, discard dice from your Faction Card to move twice that many Units for free.</div>
+                <div class=p>Distributed Death ${cost("(Post-Battle):")} Prevent any number of Kills assigned to your Units by discarding that many Dice from your Faction Card.</div>
+                <div class=p>Spellbooks: ${fbeRef(OverlordOfDeath)}</div>""")
         ))
     }
 

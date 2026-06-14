@@ -88,6 +88,9 @@ object EarthMap3 extends Board {
         case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
         // Defilers Court (DC): no map starting area — Start Area is set by Y'Golonac's first awaken (handled in DCExpansion)
         case DC => $()
+        // Faceless Blight (FBE): empty non-faction areas (not adjacent to printed
+        // faction starts); fewer options than OW so FBE seats just before OW (§1.6).
+        case FBE => nonFactionRegions
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -198,6 +201,9 @@ object EarthMap4v35 extends Board {
         case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
         // Defilers Court (DC): no map starting area — Start Area is set by Y'Golonac's first awaken (handled in DCExpansion)
         case DC => $()
+        // Faceless Blight (FBE): empty non-faction areas (not adjacent to printed
+        // faction starts); fewer options than OW so FBE seats just before OW (§1.6).
+        case FBE => nonFactionRegions
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -312,6 +318,9 @@ object EarthMap4v53 extends Board {
         case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
         // Defilers Court (DC): no map starting area — Start Area is set by Y'Golonac's first awaken (handled in DCExpansion)
         case DC => $()
+        // Faceless Blight (FBE): empty non-faction areas (not adjacent to printed
+        // faction starts); fewer options than OW so FBE seats just before OW (§1.6).
+        case FBE => nonFactionRegions
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -434,6 +443,9 @@ object EarthMap5 extends Board {
         case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
         // Defilers Court (DC): no map starting area — Start Area is set by Y'Golonac's first awaken (handled in DCExpansion)
         case DC => $()
+        // Faceless Blight (FBE): empty non-faction areas (not adjacent to printed
+        // faction starts); fewer options than OW so FBE seats just before OW (§1.6).
+        case FBE => nonFactionRegions
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -566,6 +578,9 @@ object EarthMap6 extends Board {
         case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
         // Defilers Court (DC): no map starting area — Start Area is set by Y'Golonac's first awaken (handled in DCExpansion)
         case DC => $()
+        // Faceless Blight (FBE): empty non-faction areas (not adjacent to printed
+        // faction starts); fewer options than OW so FBE seats just before OW (§1.6).
+        case FBE => nonFactionRegions
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -820,6 +835,9 @@ object LibraryCelaeno55 extends Board {
         case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
         // Defilers Court (DC): no map starting area — Start Area is set by Y'Golonac's first awaken (handled in DCExpansion)
         case DC => $()
+        // Faceless Blight (FBE): empty non-faction areas (not adjacent to printed
+        // faction starts); fewer options than OW so FBE seats just before OW (§1.6).
+        case FBE => nonFactionRegions
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -929,7 +947,7 @@ object LibraryCelaeno33 extends Board {
         case GC => $(Hyperquarium); case CC => $(BlueHall); case BG => $(Fountain); case YS => $(FloatingTower)
         case SL => $(ChamberOfSngac); case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => nonFactionRegions
         case _ => regions
     }
 
@@ -1008,7 +1026,7 @@ object LibraryCelaeno53 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => nonFactionRegions
         case _ => regions
     }
 
@@ -1108,7 +1126,7 @@ object LibraryCelaeno35 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => nonFactionRegions
         case _ => regions
     }
 

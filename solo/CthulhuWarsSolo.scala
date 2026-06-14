@@ -716,6 +716,8 @@ object CthulhuWarsSolo {
                                         case BB => BotBB   .ask(actions, 0.2)(game)
                                         // Defilers Court (DC): bot dispatch (Easy)
                                         case DC => BotDC   .ask(actions, 0.2)(game)
+                                        // Faceless Blight (FBE): bot dispatch (Easy)
+                                        case FBE => BotFBE  .ask(actions, 0.2)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -738,6 +740,8 @@ object CthulhuWarsSolo {
                                         case BB => BotBB   .ask(actions, 0.03)(game)
                                         // Defilers Court (DC): bot dispatch (Normal)
                                         case DC => BotDC   .ask(actions, 0.03)(game)
+                                        // Faceless Blight (FBE): bot dispatch (Normal)
+                                        case FBE => BotFBE  .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -764,6 +768,8 @@ object CthulhuWarsSolo {
                                         case BB => Bot3(BB).ask(as, 0.03)(game)
                                         // Defilers Court (DC): bot dispatch (AllVsHuman)
                                         case DC => BotDC   .ask(as, 0.03)(game)
+                                        // Faceless Blight (FBE): bot dispatch (AllVsHuman)
+                                        case FBE => BotFBE  .ask(as, 0.03)(game)
                                     })
 
 
@@ -948,6 +954,8 @@ object CthulhuWarsSolo {
                     case BB => Processing(|("#c8a84b"), |("#333333"), None)
                     // Defilers Court (DC): gold tone per glyph
                     case DC => Processing(|("#F0EDA8"), |("#333333"), None)
+                    // Faceless Blight (FBE): deep mossy green #3d5f1c
+                    case FBE => Processing(|("#3d5f1c"), |("#333333"), None)
                     // Library map units: no tint (use original icon images)
                     case LibraryFaction => defaultProcessing
                     case _  => defaultProcessing
@@ -976,6 +984,10 @@ object CthulhuWarsSolo {
                         case BB => DrawRect("bb-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Defilers Court (DC): acolyte unit sprite
                         case DC => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        // Faceless Blight (FBE): no acolyte art yet — reuse DC acolyte sprite
+                        // tinted FBE green (placeholder per §A.v / §3.17). Replace with
+                        // fbe-acolyte.webp when art lands.
+                        case FBE => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -1033,6 +1045,10 @@ object CthulhuWarsSolo {
                         case BB => DrawRect("bb-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // Defilers Court (DC): faction glyph sprite
                         case DC => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
+                        // Faceless Blight (FBE): no glyph art yet — reuse dc-glyph tinted
+                        // FBE green (placeholder per §A.v / §3.17.2). Replace with
+                        // fbe-glyph.webp when art lands.
+                        case FBE => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
                         case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
@@ -1239,10 +1255,20 @@ object CthulhuWarsSolo {
                     // no fixed printed glyph; the start area is set in FactionDC.scala on the
                     // AwakenedAction(YgolonacDC) handler.
                     case StartingGlyph if faction == DC => DrawRect("dc-glyph", None, x - 33, y - 33, 66, 66)
+                    // Faceless Blight (FBE): start area is chosen at setup; render its
+                    // (placeholder dc-) glyph on the chosen start region, like FB/DC.
+                    case StartingGlyph if faction == FBE => DrawRect("dc-glyph", None, x - 33, y - 33, 66, 66)
 
                     // Library map units — larger than monsters, smaller than GOOs
                     case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 52, y - 104, 104, 104)
                     case TheLibrarian => DrawRect("librarian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 47, y - 146, 94, 146)
+
+                    // Faceless Blight (FBE): unit art not yet ready (§A.v / §3.17.3).
+                    // Placeholder sprites: Dimensional Shambler for Fungal Thrall, King
+                    // in Yellow for Byagoona, both tinted FBE green. Swap to
+                    // fbe-fungal-thrall.webp / fbe-byagoona.webp when art lands.
+                    case FungalThrall => DrawRect("n-dimensional-shambler", |(tint), x - 35, y - 75, 70, 85)
+                    case Byagoona     => DrawRect("ys-king-in-yellow", |(tint), x - 44, y - 111, 85, 116)
 
                     case _ => null
                 }
@@ -4613,7 +4639,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
         // Master faction list — drives existing faction picker, replay parsing, and expansion dispatch order.
         // Order: GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC)
+        // Faceless Blight (FBE): Homebrew faction appended (§3.13.1)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE)
 
         // Alt picker display order (may differ from allFactions).
         // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB, DC.
@@ -4635,7 +4662,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // picker. Click handler / selection flow are reused as-is via the
         // standard PickerEntry pipeline — glyphSrc resolves to dc-glyph.webp
         // from DC.short.toLowerCase, matching every other faction.
-        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC)
+        // Faceless Blight (FBE): Homebrew faction appended to the alt picker (§3.13.1)
+        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE)
         val altPickerEntries : $[PickerEntry] =
             altPickerFactions./(f => PickerEntry(f, false)).flatMap {
                 // Insert the BB-alt entry immediately after standard BB.
