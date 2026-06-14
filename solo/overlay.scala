@@ -359,6 +359,24 @@ object MoonPlacement {
     }
 }
 
+// Faceless Blight (FBE) — Faction-Card dice-pool detail overlay state (Task 3.11.9 / §4.0.7).
+// FBE's pseudo-currency is the list of dice on its Faction Card (§1.6/§2.4), stored as
+// pip values 1-6 on game.fbeCardDice. This object mirrors the Cursed-Tomes / dynamic-overlay
+// pattern (TSCursedTomesOverlay): the main render loop in CthulhuWarsSolo.scala copies the
+// live dice into FBEFactionCardOverlay.dice each tick, and info("FBE","FactionCard") renders
+// the detail panel. Faces follow FBEExpansion.face: pip 6 = Kill, 4-5 = Pain, 1-3 = Miss.
+// Byagoona's combat = the count of Kill+Pain faces (pip >= 4). All mutations to the underlying
+// list flow through Hard actions only (Task 3.11.2); this object is render-only state.
+object FBEFactionCardOverlay {
+    // Pip values (1-6) currently on the FBE Faction Card, copied from displayGame each tick.
+    var dice : $[Int] = $
+    // Whether FBE is in the current game (drives whether the strip/overlay renders at all).
+    var inGame : Boolean = false
+    // True once any dice source is acquired (Awaken / Changeling Adherents), so the strip can
+    // show "0" rather than hide entirely, per FCG learning #9.
+    var sourceAcquired : Boolean = false
+}
+
 object Overlays {
     val overlay = new InfoOverlay(dom.document.getElementById("overlay").asInstanceOf[html.Element])
     var temp = false
@@ -1343,6 +1361,10 @@ object Overlays {
                         case "fb" => "sepia(1) hue-rotate(295deg) saturate(4) brightness(1.0)"
                         // Defilers Court (DC): gold tint per glyph (#F0EDA8); audit 2026-06-06 G13
                         case "dc" => "sepia(1) hue-rotate(20deg) saturate(2) brightness(1.4)"
+                        // Faceless Blight (FBE): deep mossy green #3d5f1c (Task 3.11.5 / §4.0.3).
+                        // Sepia base (~hue 40°) hue-rotated to olive-green and darkened so the
+                        // RoA ceremony glyph reads FBE green, NOT the default sepia.
+                        case "fbe" => "sepia(1) hue-rotate(50deg) saturate(3) brightness(0.75)"
                         case _    => "sepia(1)"
                     }
                     s"""<img src="${imageSource("n-tulzscha")}"
@@ -1817,6 +1839,24 @@ object Overlays {
     def fbeOverlay(s : $[Any]) : String = s match {
         case $("FBE") => fbeFactionOverlay()
 
+        // Task 3.11.9 / §4.0.7 — Faction-Card dice-pool detail overlay (custom,
+        // Cursed-Tomes dynamic pattern). Opened by clicking the HUD dice strip
+        // (Task 3.11.1). Renders each card die by face icon (Kill crimson / Pain
+        // orange / Miss dim grey) plus the live Byagoona-combat subtotal = count of
+        // Kill+Pain faces (pip >= 4). State is populated from displayGame each tick
+        // into FBEFactionCardOverlay (CthulhuWarsSolo.scala). Shows "0" once any
+        // dice source is acquired; an empty list still renders the panel with a
+        // "(no dice)" note (the strip itself hides when empty, per §4.0.7).
+        case $("FBE", "FactionCard") => fbeFactionCardOverlay()
+
+        // Task 3.11.6 / §4.0.4 — Byagoona awaken-selector "?" detail overlay.
+        // Opened from the clickable "?" on Byagoona's faction-card GOO slot while he
+        // is OFF the map and FBE controls >= 1 Monster. Explains the self-sacrifice
+        // Awaken procedure and the live Power-cost preview "max(0, 10 - SCost)". The
+        // actual Awaken is performed through FBE's MainAction menu
+        // (ByagoonaAwakenMainAction); this is the informational overlay only.
+        case $("FBE", "ByagoonaAwaken") => fbeByagoonaAwakenOverlay()
+
         case $("FBE", ChangelingAdherentsReq.text) => requirement("A total of 3 Kills are Rolled in a Battle you Participate in.")
         case $("FBE", NecromanticSporesReq.text)   => requirement("As an Action, Eliminate Two Fungal Thralls.")
         case $("FBE", ShapestealingReq.text)        => requirement("Have 3 Units in an Enemy Start Area.")
@@ -1833,6 +1873,53 @@ object Overlays {
         case $("FBE", OverlordOfDeath.name)      => spellbook(OverlordOfDeath.name,      "Ongoing", "If Byagoona is in play, Eliminate Monsters to pay Costs as though they were Power. Each Monster Eliminated is worth 1 Power.")
 
         case _ => ""
+    }
+
+    // Faceless Blight (FBE) — Faction-Card dice-pool detail overlay (Task 3.11.9 / §4.0.7).
+    // Renders the dice currently on the FBE Faction Card (FBEFactionCardOverlay.dice — pip
+    // values 1-6) as a row of face icons and reports Byagoona's live combat-dice subtotal
+    // (count of Kill+Pain faces, pip >= 4). Faces per FBEExpansion.face: 6 = Kill (crimson),
+    // 4-5 = Pain (orange), 1-3 = Miss (dim grey). Styled per the §4.0 KEY on the shared
+    // spellbook parchment background.
+    def fbeFactionCardOverlay() = {
+        val dice = FBEFactionCardOverlay.dice
+        // Per-die face cell: large pip value coloured by face class, with a face label.
+        val cells = dice.sortBy(x => x)./{ pip =>
+            val (cls, label) =
+                if (pip >= 6) ("str", "Kill")
+                else if (pip >= 4) ("pain", "Pain")
+                else ("nt", "Miss")
+            s"""<td style="padding:6px 14px;text-align:center;vertical-align:middle;">
+                    <div class="$cls" style="font-size:200%;font-weight:bold;line-height:1;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">${pip}</div>
+                    <div class="$cls" style="font-size:80%;">${label}</div>
+                </td>"""
+        }.mkString("")
+        val combat = dice.count(_ >= 4)
+        val diceRow =
+            if (dice.any) s"""<tr>$cells</tr>"""
+            else s"""<tr><td style="padding:8px 14px;color:#bbbbbb;font-style:italic;">(no dice on Faction Card)</td></tr>"""
+        val header =
+            s"""<tr><td colspan="${math.max(1, dice.num)}" style="padding:6px 14px;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">""" +
+            s"""<span class="ability-color">Faceless Blight</span> <span class="cost-color">Faction Card</span></td></tr>"""
+        val footer =
+            s"""<tr><td colspan="${math.max(1, dice.num)}" style="padding:8px 14px;border-top:1px solid grey;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">""" +
+            s"""<span class="ability-color">${Byagoona.name}</span> combat = <span class="str">${combat}</span> """ +
+            s"""<span class="nt">(Kill + Pain faces)</span></td></tr>"""
+        s"""<table class="spellbook-table"><tbody>$header$diceRow$footer</tbody></table>"""
+    }
+
+    // Faceless Blight (FBE) — Byagoona awaken-selector "?" detail overlay (Task 3.11.6 / §4.0.4).
+    // Informational panel for the clickable "?" on Byagoona's GOO card slot: it explains the
+    // self-sacrifice Awaken procedure (§1.8) and shows the live Power-cost preview. The actual
+    // Awaken is offered through FBE's MainAction menu (ByagoonaAwakenMainAction).
+    def fbeByagoonaAwakenOverlay() = {
+        spellbook("Awaken " + Byagoona.name, "Action",
+            s"""<div class=p>${cost("How to Awaken " + Byagoona.name + ":")}</div>
+                <div class=p>${cost("1)")} Eliminate one or more of your Monsters in a single Area and roll that many dice.</div>
+                <div class=p>${cost("2)")} Set all of the dice on your Faction Card.</div>
+                <div class=p>${cost("3)")} Pay Power equal to <span class=cost-color>max(0, 10 - the total Cost of Monsters Eliminated)</span>.</div>
+                <div class=p>${cost("4)")} ${Byagoona.name} appears in the Area.</div>
+                <div class=p>${combat} Equal to the number of Results (Kills and Pains) on dice on your Faction Card.</div>""")
     }
 
     // Faceless Blight (FBE) — Homebrew faction info card (§G14). Unique ability:

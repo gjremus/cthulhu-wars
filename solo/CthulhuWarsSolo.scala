@@ -2444,9 +2444,48 @@ object CthulhuWarsSolo {
                 val dcSinStr  = (f == DC).?(" | " + (game.dcSin.toString + " / " + game.dcSinCap.toString + " Sin").styled(DC)).|("")
                 val dcSinMStr = (f == DC).?(" | " + (game.dcSin.toString + "/" + game.dcSinCap.toString + "S").styled(DC)).|("")
                 val dcSinSStr = (f == DC).?(" " + (game.dcSin.toString + "/" + game.dcSinCap.toString + "S").styled(DC)).|("")
-                val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr + dcSinStr)
-                val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr + dcSinMStr)
-                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr + dcSinSStr)
+                // Faceless Blight (FBE): Faction-Card dice-pool strip + Byagoona awaken-selector
+                // (Tasks 3.11.1 / 3.11.6 / 3.11.9; §4.0.4 / §4.0.7). The dice pool is FBE's
+                // pseudo-currency — render a clickable strip of face icons (Kill crimson / Pain
+                // orange / Miss dim grey) under the Power/Doom line, mirroring the DC Sin counter.
+                // The strip opens the dice-pool detail overlay onExternalClick("FBE","FactionCard").
+                // While Byagoona is OFF the map AND FBE controls >= 1 Monster, his GOO slot shows a
+                // clickable "?" (live cost preview) that opens the awaken-selector overlay; once he
+                // is on the map the "?" is replaced by his live combat readout [K+P] in crimson.
+                // The strip appears as soon as any dice source is acquired (shows "0"); hidden
+                // entirely before then (FCG #9).
+                val fbeDiceStr = if (f == FBE) {
+                    val dice = game.fbeCardDice
+                    val srcAcquired = dice.any || f.can(ChangelingAdherents) || f.all(Byagoona).%(_.region.onMap).any
+                    if (!srcAcquired) ""
+                    else {
+                        val faces = dice.sortBy(x => x)./{ pip =>
+                            if (pip >= 6) "K".styled("str")
+                            else if (pip >= 4) "P".styled("pain")
+                            else "-".styled("nt")
+                        }.mkString("")
+                        val facesShown = if (dice.any) faces else "0".styled(FBE)
+                        " | " + s"""<span onclick='event.stopPropagation(); onExternalClick("FBE","FactionCard")' onpointerover='event.stopPropagation(); onExternalOver("FBE","FactionCard")' onpointerout='event.stopPropagation(); onExternalOut("FBE","FactionCard")' style='cursor:pointer'>""" +
+                            "Card ".styled(FBE) + facesShown + "</span>"
+                    }
+                } else ""
+                // Byagoona awaken-selector "?" / live combat readout (§4.0.4).
+                val fbeByagoonaStr = if (f == FBE) {
+                    val byagoonaUp = f.all(Byagoona).%(_.region.onMap).any
+                    if (byagoonaUp) {
+                        val combat = game.fbeCardDice.count(_ >= 4)
+                        " | " + ("[" + combat + "]").styled("str")
+                    } else {
+                        val monsterCount = f.units.%(u => u.region.onMap && u.uclass.utype == Monster).num
+                        if (monsterCount >= 1)
+                            " | " + s"""<span onclick='event.stopPropagation(); onExternalClick("FBE","ByagoonaAwaken")' onpointerover='event.stopPropagation(); onExternalOver("FBE","ByagoonaAwaken")' onpointerout='event.stopPropagation(); onExternalOut("FBE","ByagoonaAwaken")' style='cursor:pointer'>""" +
+                                Byagoona.name.styled(FBE) + " " + "?".styled("highlight") + "</span>"
+                        else ""
+                    }
+                } else ""
+                val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr + dcSinStr + fbeDiceStr + fbeByagoonaStr)
+                val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr + dcSinMStr + fbeDiceStr + fbeByagoonaStr)
+                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr + dcSinSStr + fbeDiceStr + fbeByagoonaStr)
                 // Firstborn (FB): read Infernal Pact discount and stored Augury kills for the faction panel display
                 val fbIPDiscount = if (f == FB) game.fbInfernalPactDiscount else 0
                 val fbAugury = if (f == FB) game.fbAuguryKills else 0
@@ -3244,6 +3283,24 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 // Tombstalker (TS): populate Cursed Tomes overlay with per-faction tome ownership and stack state
                 TSCursedTomesOverlay.factionTomes = displayGame.cursedTomesOwned.map { case (f, tomes) => f.style -> tomes }
                 TSCursedTomesOverlay.tomesOnCard = displayGame.tsTomesOnCard
+
+                // Faceless Blight (FBE): populate the Faction-Card dice-pool overlay state
+                // (Task 3.11.9 / §4.0.7) from the live game each tick, mirroring the TS
+                // Cursed-Tomes dynamic-overlay pattern above. FBE's dice are stored as pip
+                // values 1-6 on displayGame.fbeCardDice. The "source acquired" flag drives the
+                // show-"0"-rather-than-hide rule (FCG #9): a dice source exists once FBE has
+                // played any dice OR acquired Changeling Adherents OR awakened Byagoona.
+                FBEFactionCardOverlay.inGame = displayGame.setup.has(FBE)
+                if (FBEFactionCardOverlay.inGame) {
+                    implicit val fbeG : Game = displayGame
+                    FBEFactionCardOverlay.dice = displayGame.fbeCardDice
+                    val byagoonaUp = FBE.units.%(u => u.uclass == Byagoona && u.region.onMap).any
+                    FBEFactionCardOverlay.sourceAcquired =
+                        displayGame.fbeCardDice.any || FBE.can(ChangelingAdherents) || byagoonaUp
+                } else {
+                    FBEFactionCardOverlay.dice = $
+                    FBEFactionCardOverlay.sourceAcquired = false
+                }
 
                 dom.document.getElementById("roa-cost-num").?.foreach(_.innerHTML = displayGame.ritualCost.toString)
 

@@ -1010,6 +1010,20 @@
         <img class="asset" id="bb-moon-place"      src="webp/images/bb-moon-place.webp" />
         <img class="asset" id="bb-moon-h-place"    src="webp/images/bb-moon-h-place.webp" />
 
+        <!-- Faceless Blight (FBE): map/RoA assets (Task 3.11.10 / §4.0.2-§4.0.3).
+             PLACEHOLDER art until real fbe-glyph.webp lands (§A.v / §3.17.2): the
+             RoA ceremony-track glyph render (overlay.scala) resolves its image by
+             id "fbe-glyph" and tints it FBE green via the tintFilter "fbe" case,
+             so this id MUST resolve or the RoA track crashes ("Cannot read width").
+             It points at the same dc-glyph art the map DrawRect placeholder uses,
+             preserving the glyph→dc-glyph placeholder mapping. The six FBE SB
+             icons are NOT registered as <img> assets: this build renders spellbook
+             names as clickable text spans (like DC), not per-SB icon images, so no
+             fbe-sb-* DOM nodes are referenced anywhere — adding them would be dead
+             entries. Add real fbe-sb-* assets only if/when the tray switches to
+             icon rendering. -->
+        <img class="asset" id="fbe-glyph"         src="webp/images/dc-glyph.webp" />
+
         <img class="asset" id="ds-glyph"          src="webp/images/ds-glyph.webp" />
         <img class="asset" id="ds-acolyte"        src="webp/images/ds-acolyte.webp" />
         <img class="asset" id="ds-high-priest"    src="webp/images/ds-high-priest.webp" />
