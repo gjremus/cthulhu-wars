@@ -55,7 +55,7 @@ case object ChangelingAdherentsReq extends Requirement("A total of 3 Kills are R
 case object NecromanticSporesReq   extends Requirement("As an Action, Eliminate Two Fungal Thralls")
 case object ShapestealingReq        extends Requirement("Have 3 Units in an Enemy Start Area")
 case object AnimatedRushReq         extends Requirement("Have 3 Dice on your Faction Card")
-case object SuccorReq               extends Requirement("Byagoona Dies in Battle")
+case object SuccorReq               extends Requirement("Byagoona Dies in Battle. Do not fulfill if the Kill/Elimination is prevented")
 case object OverlordOfDeathReq      extends Requirement("Awaken Byagoona")
 
 
@@ -111,7 +111,14 @@ case class ByagoonaAwakenMainAction(self : Faction)
 case class ByagoonaAwakenAreaAction(self : Faction, r : Region)
     extends BaseFactionAction(("Awaken " + Byagoona.name).styled(FBE) + " in", r) with Soft
 case class ByagoonaAwakenPickAction(self : Faction, r : Region, picked : $[UnitRef], remaining : $[UnitRef])
-    extends ForcedAction with PowerNeutral with Soft
+    extends ForcedAction with PowerNeutral with Soft {
+    // §4.6 live cost preview: "Cost so far: C; Power needed: max(0, 10 - C)".
+    override def question(implicit game : Game) = {
+        val c = picked./(ur => game.unit(ur).uclass.cost).sum
+        ("Awaken " + Byagoona.name).styled(FBE) + ": choose Monsters to Eliminate in " + game.desc(r) +
+            " (Cost so far: " + c + "; Power needed: " + math.max(0, 10 - c).power + ")"
+    }
+}
 case class ByagoonaAwakenDoneAction(self : Faction, r : Region, picked : $[UnitRef])
     extends BaseFactionAction(("Awaken " + Byagoona.name).styled(FBE), "Done".styled("power"))
 // Replay-safe roll capture: the N rolled dice (pip values) are baked into this action.
@@ -149,7 +156,11 @@ case class AnimatedRushMainAction(self : Faction, source : Region, dest : Region
 case class AnimatedRushSkipAction(self : Faction)
     extends OptionFactionAction("Animated Rush".styled(FBE) + ": skip") { override def question(implicit game : Game) = "Animated Rush".styled(FBE) }
 case class AnimatedRushPickAction(self : Faction, source : Region, dest : Region, k : Int, picked : $[UnitRef], remaining : $[UnitRef])
-    extends ForcedAction with PowerNeutral with Soft
+    extends ForcedAction with PowerNeutral with Soft {
+    // §4.4.4 prompt: "Animated Rush: choose <2K> Units to carry".
+    override def question(implicit game : Game) =
+        "Animated Rush".styled(FBE) + ": choose " + (2 * k) + " " + ("Unit".s(2 * k)).styled(FBE) + " to carry"
+}
 case class AnimatedRushDoneAction(self : Faction, source : Region, dest : Region, k : Int, picked : $[UnitRef])
     extends BaseFactionAction("Animated Rush".styled(FBE), "Done".styled("power"))
 
@@ -159,7 +170,11 @@ case class SuccorMainAction(self : Faction)
 case class SuccorSkipAction(self : Faction)
     extends OptionFactionAction(("Skip " + Succor.name).styled(FBE)) with DoomQuestion with Soft
 case class SuccorPickAction(self : Faction, picked : $[UnitRef], remaining : $[UnitRef])
-    extends ForcedAction with PowerNeutral with Soft
+    extends ForcedAction with PowerNeutral with Soft {
+    // §4.4.5 prompt: "Succor: choose Units to Eliminate" (vs current Ritual Marker R).
+    override def question(implicit game : Game) =
+        Succor.styled(FBE) + ": choose Units to Eliminate (roll vs Ritual Marker " + game.ritualCost + ")"
+}
 case class SuccorRollAction(self : Faction, picked : $[UnitRef], rolls : $[Int])
     extends ForcedAction
 
@@ -433,9 +448,11 @@ object FBEExpansion extends Expansion {
             UnknownContinue
 
         // ── SHAPESTEALING (§1.10 SB3 / §3.10.3) ──────────────────────────────
-        // FBE picks an enemy Monster (Soft), then rolls one die FROM the card
-        // (RollD6, replay-safe) → the terminal resolve action carries the pip.
-        // The actual battle resume is driven by Battle.scala's matching cases.
+        // FBE picks an enemy Monster (Soft), then takes one die FROM the card and
+        // DISCARDS it. The card dice are FIXED once placed (§1.8) — they are NOT
+        // re-rolled — so the compared value is the EXISTING die's stored pip value
+        // (1-6), not a fresh d6. The terminal resolve action bakes in that pip for
+        // replay safety. Battle.scala's matching cases resume the battle.
         case ShapestealingPreBattleAction(self) =>
             game.battle match {
                 case Some(b) =>
@@ -446,14 +463,20 @@ object FBEExpansion extends Expansion {
             }
 
         case ShapestealingTargetAction(self, enemyMonster) =>
-            RollD6(_ => Shapestealing.styled(FBE) + ": roll a die from your Faction Card",
-                pip => ShapestealingResolveAction(self, enemyMonster, pip))
+            // Take the HIGHEST-value card die (best chance to beat the Monster's
+            // Cost — best-play, deterministic for replay) and bake its pip into the
+            // resolve action. Its value is the FIXED stored pip (§1.8), not a re-roll.
+            val chosen = game.fbeCardDice.maxOr(0)
+            Force(ShapestealingResolveAction(self, enemyMonster, chosen))
 
         case ShapestealingResolveAction(self, enemyMonster, roll) =>
-            // Discard one card die (the lowest-value die, deterministic for replay)
-            // — a card die IS consumed (§1.10 SB3 Resolved).
-            if (game.fbeCardDice.any)
-                game.fbeCardDice = game.fbeCardDice.sortBy(x => x).drop(1)
+            // Discard the chosen card die (the one whose value `roll` was read) —
+            // a card die IS consumed (§1.10 SB3 Resolved). Card dice are fixed, so
+            // remove exactly one die equal to the value used.
+            game.fbeCardDice = (game.fbeCardDice.indexOf(roll) match {
+                case -1 => game.fbeCardDice
+                case i  => game.fbeCardDice.patch(i, Nil, 1)
+            })
             val mon = game.unit(enemyMonster)
             val cost = mon.uclass.cost
             if (roll > cost) {

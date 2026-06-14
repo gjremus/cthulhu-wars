@@ -1257,7 +1257,9 @@ object CthulhuWarsSolo {
                     case StartingGlyph if faction == DC => DrawRect("dc-glyph", None, x - 33, y - 33, 66, 66)
                     // Faceless Blight (FBE): start area is chosen at setup; render its
                     // (placeholder dc-) glyph on the chosen start region, like FB/DC.
-                    case StartingGlyph if faction == FBE => DrawRect("dc-glyph", None, x - 33, y - 33, 66, 66)
+                    // Tinted FBE green (#3d5f1c) per §4.0.2 since dc-glyph is a placeholder
+                    // (real fbe-glyph art is already faction-green and would use None).
+                    case StartingGlyph if faction == FBE => DrawRect("dc-glyph", |(tint), x - 33, y - 33, 66, 66)
 
                     // Library map units — larger than monsters, smaller than GOOs
                     case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 52, y - 104, 104, 104)
@@ -1938,6 +1940,11 @@ object CthulhuWarsSolo {
                     // FactionDC.scala — before first awaken it points to the reserve sentinel
                     // (no map region match), after first awaken it points to the real region.
                     placeGlyph(DC)
+                    // Faceless Blight (FBE): dynamic-start faction (picks any empty,
+                    // non-adjacent area at setup, §1.6 / Task 3.11.4). Draw its glyph
+                    // at runtime keyed on game.starting(FBE) so it appears the instant
+                    // FBE picks its start area and never shifts as units stack.
+                    placeGlyph(FBE)
 
                     if (game.setup.%(_.iceAge.?(_ == r)).any)
                         all +:= DrawItem(r, null, IceAgeToken, Alive, $, 0, 0)
@@ -2462,7 +2469,7 @@ object CthulhuWarsSolo {
                         val faces = dice.sortBy(x => x)./{ pip =>
                             if (pip >= 6) "K".styled("str")
                             else if (pip >= 4) "P".styled("pain")
-                            else "-".styled("nt")
+                            else "-".styled("halfhigh")   // Miss = dim grey per §4.0.7 / §4 KEY
                         }.mkString("")
                         val facesShown = if (dice.any) faces else "0".styled(FBE)
                         " | " + s"""<span onclick='event.stopPropagation(); onExternalClick("FBE","FactionCard")' onpointerover='event.stopPropagation(); onExternalOver("FBE","FactionCard")' onpointerout='event.stopPropagation(); onExternalOut("FBE","FactionCard")' style='cursor:pointer'>""" +
@@ -2478,8 +2485,11 @@ object CthulhuWarsSolo {
                     } else {
                         val monsterCount = f.units.%(u => u.region.onMap && u.uclass.utype == Monster).num
                         if (monsterCount >= 1)
+                            // §4.0.4: "?" in FBE green with a small white sub-label
+                            // showing the live Power-cost preview (max(0, 10 − ΣCost)).
                             " | " + s"""<span onclick='event.stopPropagation(); onExternalClick("FBE","ByagoonaAwaken")' onpointerover='event.stopPropagation(); onExternalOver("FBE","ByagoonaAwaken")' onpointerout='event.stopPropagation(); onExternalOut("FBE","ByagoonaAwaken")' style='cursor:pointer'>""" +
-                                Byagoona.name.styled(FBE) + " " + "?".styled("highlight") + "</span>"
+                                Byagoona.name.styled(FBE) + " " + "?".styled(FBE) + " " +
+                                "Power needed: max(0, 10 − ΣCost)".styled("power") + "</span>"
                         else ""
                     }
                 } else ""
@@ -3907,6 +3917,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         // FB games. Without this, opening the debug menu for an FB action
                                         // would throw a MatchError at runtime.
                                         case FB => BotFB
+                                        // Faceless Blight (FBE): debug action-sort dispatch (Bug 65a
+                                        // pattern, §2.9/§3.13). Without this the debug menu throws a
+                                        // MatchError for FBE games.
+                                        case FBE => BotFBE
                                     })
                                     bot.eval(g, aa).sortWith(bot.compare)
                                 }

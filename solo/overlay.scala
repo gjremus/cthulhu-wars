@@ -1888,7 +1888,7 @@ object Overlays {
             val (cls, label) =
                 if (pip >= 6) ("str", "Kill")
                 else if (pip >= 4) ("pain", "Pain")
-                else ("nt", "Miss")
+                else ("halfhigh", "Miss")   // Miss = dim grey per §4.0.7 / §4 KEY
             s"""<td style="padding:6px 14px;text-align:center;vertical-align:middle;">
                     <div class="$cls" style="font-size:200%;font-weight:bold;line-height:1;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">${pip}</div>
                     <div class="$cls" style="font-size:80%;">${label}</div>
