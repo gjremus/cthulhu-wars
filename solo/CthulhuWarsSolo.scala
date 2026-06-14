@@ -536,7 +536,12 @@ object CthulhuWarsSolo {
 
             statuses.lazyZip(setup.seating).foreach { (s, f) =>
                 // s.as[html.Element].get.style.backgroundImage = "url(info/" + f.style + "-header.png)"
-                s.as[html.Element].get.style.backgroundImage = "url(" + Overlays.imageSource("info:" + f.style + "-background") + ")"
+                // Faceless Blight (FBE): its "info:fbe-background" asset is the DC
+                // placeholder; recolor to FBE green via Overlays.fbeTintedBackground
+                // (tints the BACKGROUND IMAGE only — see fbeTintedBackground comment).
+                // Other factions use their real background art unchanged.
+                val bgUrl = if (f == FBE) Overlays.fbeTintedBackground() else Overlays.imageSource("info:" + f.style + "-background")
+                s.as[html.Element].get.style.backgroundImage = "url(" + bgUrl + ")"
                 s.as[html.Element].get.style.backgroundSize = "cover"
             }
 

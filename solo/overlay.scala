@@ -443,6 +443,31 @@ object Overlays {
 
     def imageSource(id : String) = hrf.web.getElem(id).as[dom.html.Image]./(_.src).|!("unknown image source " + id)
 
+    // Faceless Blight (FBE) — PLACEHOLDER faction-card background.
+    // FBE has no real `fbe-background.webp` art yet, so the asset id
+    // "info:fbe-background" is wired to the DC placeholder (dc-background.webp),
+    // which is DC-colored. Every other faction's card/overlay shows its own
+    // faction-colored background art, so we recolor the placeholder to FBE green
+    // (#3d5f1c) here using the SAME image-tint mechanism the map uses for FBE unit
+    // sprites (CthulhuWarsSolo.getTintedAsset -> data URL; "color" composite keeps
+    // the source luminance and only shifts hue). This tints the BACKGROUND IMAGE
+    // ONLY (it returns a data URL fed to CSS background-image) — the unit /
+    // spellbook / ability TEXT drawn on top of the table is never inside a tinted
+    // container and stays fully readable.
+    // TODO: when real fbe-background.webp art (already FBE green) is supplied,
+    //       drop this tint and point "info:fbe-background" at the real asset.
+    private var fbeBackgroundCache : String = null
+    def fbeTintedBackground() : String = {
+        if (fbeBackgroundCache == null)
+            // Same Processing FBE map sprites use (CthulhuWarsSolo line ~958):
+            // tint #3d5f1c (FBE green) + a light grey screen to lift the darks.
+            fbeBackgroundCache = CthulhuWarsSolo.getTintedAsset(
+                "info:fbe-background",
+                CthulhuWarsSolo.Processing(|("#3d5f1c"), |("#333333"), None)
+            ).toDataURL("image/png")
+        fbeBackgroundCache
+    }
+
     // Fix HB-77 (2026-06-06): Y'Golonac dynamic awaken-cost display reads the
     // current DC spellbook count from the live Game. Set by the main render
     // loop on each draw (CthulhuWarsSolo.scala uses displayGame).
@@ -1928,7 +1953,10 @@ object Overlays {
     def fbeFactionOverlay() = {
         def fbeRef(sb : Spellbook) =
             s"""<span class="ability-color pointer" onclick="onExternalClick('FBE', '${sb.name}')">${sb.name}</span>"""
-        faction(FBE, "info:fbe-background", SelfConsuming, "Ongoing",
+        // FBE green-tinted placeholder background (see fbeTintedBackground); passed
+        // as a resolved data URL rather than the raw "info:fbe-background" asset id
+        // so the card no longer shows DC coloring.
+        faction(FBE, fbeTintedBackground(), SelfConsuming, "Ongoing",
             "Whenever two or more Units are Killed or Eliminated as part of the same Action, Gain 1 Power. If you controlled at least three of them, also gain 1 Doom.",
             $(ChangelingAdherents, NecromanticSpores, Shapestealing, AnimatedRush, Succor, OverlordOfDeath), $(
             (Acolyte,      6, "1", "0", s"""<div class=p>Setup: 6 Acolytes + a Controlled Gate in an empty area not adjacent to another faction's start area. Spellbook: ${fbeRef(ChangelingAdherents)}</div>"""),
@@ -1974,8 +2002,13 @@ object Overlays {
         ))
     }
 
-    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)]) = s"""
-        <table class="faction-table" style="background-image:url(${imageSource(background)})">
+    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)]) = {
+        // `background` is normally an asset id resolved via imageSource(...). FBE
+        // passes an already-resolved data URL (its tinted placeholder, see
+        // fbeTintedBackground) — use such pre-resolved URLs verbatim.
+        val backgroundUrl = if (background.startsWith("data:")) background else imageSource(background)
+        s"""
+        <table class="faction-table" style="background-image:url(${backgroundUrl})">
             <thead>
                 <tr>
                     <th style=width:9%>
@@ -2083,5 +2116,6 @@ object Overlays {
                 }
             </tbody>
         </table>"""
+    }
 
 }
