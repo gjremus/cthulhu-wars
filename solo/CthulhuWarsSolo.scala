@@ -2891,6 +2891,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
             def processUI(t : Double) {
                 if (t == token) {
+                    try {
                     updateUI() match {
                         case Some((s, n)) =>
                             if (s) {
@@ -2901,6 +2902,19 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                             setTimeout(n * delay) { processUI(t) }
                         case None =>
+                    }
+                    } catch { case e : Throwable =>
+                        val msg = "CRASH at action " + actions.num + ": " + e.getClass.getName + ": " + e.getMessage
+                        println(msg)
+                        if (hash != "")
+                            hrf.web.postF(server + "error/" + hash, msg) { _ => () } { () }
+                        val err = dom.document.createElement("div")
+                        err.asInstanceOf[html.Element].setAttribute("style",
+                            "position:fixed; top:20px; left:20px; right:20px; padding:20px; " +
+                            "background:#2a1f1f; border:2px solid #cc5555; color:#ffd6d6; " +
+                            "font-family:monospace; font-size:11pt; z-index:9999; max-width:800px;")
+                        err.innerHTML = "<b>Game crashed.</b><br/>" + msg.replace("\n", "<br/>").replace("<", "&lt;")
+                        dom.document.body.appendChild(err)
                     }
                 }
             }
@@ -3118,6 +3132,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                 val initial = actions.none
 
+                                try {
                                 recorded.indexed./ { (a, n) =>
                                     actions +:= a
 
@@ -3148,6 +3163,20 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 queue :+= askFaction(cc.get)(game)
 
                                 Some((true, 0))
+                                } catch { case e : Throwable =>
+                                    val msg = "CRASH at action " + actions.num + ": " + e.getClass.getName + ": " + e.getMessage
+                                    println(msg)
+                                    if (hash != "")
+                                        hrf.web.postF(server + "error/" + hash, msg) { _ => () } { () }
+                                    val err = dom.document.createElement("div")
+                                    err.asInstanceOf[html.Element].setAttribute("style",
+                                        "position:fixed; top:20px; left:20px; right:20px; padding:20px; " +
+                                        "background:#2a1f1f; border:2px solid #cc5555; color:#ffd6d6; " +
+                                        "font-family:monospace; font-size:11pt; z-index:9999; max-width:800px;")
+                                    err.innerHTML = "<b>Game crashed during replay.</b><br/>" + msg.replace("\n", "<br/>").replace("<", "&lt;")
+                                    dom.document.body.appendChild(err)
+                                    None
+                                }
                             }
 
                             case UIPerform(g, action) if action.isVoid =>
