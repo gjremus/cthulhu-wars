@@ -1795,10 +1795,10 @@ object Overlays {
         val variantSpellbook = if (altSB) Syzygy else Catabolism
         faction(BB, "info:bb-background", Lunacy, lunacyPhase, lunacyText,
             $(variantSpellbook), $(
-            (EarthCat,      6, "1",  "1",  s"""<div class=p>Spellbook: ${reference(BB, variantSpellbook)}</div>"""),
-            (CatFromMars,   2, "2",  "2",  s"""<div class=p>Spellbook: ${reference(BB, Zagazig)}</div>"""),
-            (CatFromSaturn, 2, "3",  "3",  s"""<div class=p>Spellbook: ${reference(BB, Savagery)}</div>"""),
-            (CatFromUranus, 2, "4",  "4",  s"""<div class=p>Spellbook: ${reference(BB, Predator)}</div>"""),
+            (EarthCat,      6, "1",  "0",  s"""<div class=p>Spellbook: ${reference(BB, variantSpellbook)}</div>"""),
+            (CatFromMars,   2, "2",  "1",  s"""<div class=p>Spellbook: ${reference(BB, Zagazig)}</div>"""),
+            (CatFromSaturn, 2, "3",  "2",  s"""<div class=p>Spellbook: ${reference(BB, Savagery)}</div>"""),
+            (CatFromUranus, 2, "4",  "3",  s"""<div class=p>Spellbook: ${reference(BB, Predator)}</div>"""),
             (Bastet,        1, "6",  "1 Kill",  s"""
                 <div class=p>${cost(s"How to Awaken ${Bastet.name}:")}</div>
                 <div class=p>${cost("1)")} All your Cat varieties are in play.</div>

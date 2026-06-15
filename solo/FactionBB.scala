@@ -114,7 +114,15 @@ case object BB extends Faction { f =>
         // Bastet does not roll dice — her combat contribution is handled via Battle.scala
         // hook (Task 3.4.2). Here we count every non-Bastet unit normally.
         // V8 audit cleanup: removed unused bastetCount/bastetStr locals — Bastet contribution lives in the Battle hook.
-        units.%(_.uclass != Bastet).not(Zeroed)./(_.uclass.cost).sum +
+        // Combat values: EarthCat 0, CatFromMars 1, CatFromSaturn 2, CatFromUranus 3
+        // (each is 1 less than their summon cost).
+        units.%(_.uclass != Bastet).not(Zeroed)./{ u => u.uclass match {
+            case EarthCat      => 0
+            case CatFromMars   => 1
+            case CatFromSaturn => 2
+            case CatFromUranus => 3
+            case _             => 0
+        }}.sum +
         neutralStrength(units, opponent)
     }
 }
