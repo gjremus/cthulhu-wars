@@ -92,7 +92,7 @@ case class GameOverAction(winners : $[Faction], msg : String) extends Action wit
 object CthulhuWarsSolo {
     val original = dom.document.documentElement.outerHTML
 
-    // [2026-05-31] Random Neutrals (alt faction picker). Picker arms this
+    // [2026-06-15] Random Neutrals (alt faction picker). Picker arms this
     // closure; startSetup and startOnlineSetup invoke + clear it immediately
     // after creating their local Setup so the picked Use* options are added
     // before the Variants menu renders.
@@ -1086,21 +1086,14 @@ object CthulhuWarsSolo {
                     case ProtoShoggoth   => DrawRect("tt-proto-shoggoth", |(tint), x - 30, y - 108, 60, 108)
                     case UbboSathla      => DrawRect("tt-ubbo-sathla",    |(tint), x - 48, y - 107, 96, 107)
 
-                    // Bubastis (BB): unit sprites (task 3.9.1)
-                    // Sizing calibrated against GC reference sprites (Cultist 60h, DeepOne 31h, Shoggoth 69h,
-                    // StarSpawn 70h, Cthulhu 225h) and Tsathoggua (146h). Real-world figure heights inform but
-                    // do not dictate exact pixel sizes — the goal is correct relative-scale on the game map.
-                    // Fix 32 (v2.4.4): bumped all BB sprites taller — Earth Cat must read as taller than
-                    // Cultist on the map. Aspect ratios preserved from prior pass.
-                    // EarthCat (real 35mm): strictly taller than Cultist (60) — h=70.
-                    // CatFromMars (real 70mm): well above StarSpawn (70) / Shoggoth (69) — h=118.
-                    // CatFromSaturn (real 70mm): slightly larger than Mars per art proportions — h=135.
-                    // CatFromUranus (real 80mm): just below Tsathoggua (146) — h=142.
-                    // Bastet (real 110mm): strictly larger than Tsathoggua (146), still below Cthulhu (225) — h=210.
+                    // Bubastis (BB): unit sprites — strength-readable scaling (v2.4.32).
+                    // Formula: x = Bastet - EarthCat (140); y = EarthCat (70).
+                    // Mars = y + 0.25x = 105; Saturn = y + 0.5x = 140; Uranus = y + 0.75x = 175.
+                    // Bastet (210) and EarthCat (70) anchor the scale; widths scale with height to preserve aspect.
                     case EarthCat      => DrawRect("bb-earth-cat",      |(tint), x - 33, y - 70,  65,  70)
-                    case CatFromMars   => DrawRect("bb-cat-from-mars",  |(tint), x - 46, y - 118, 92, 118)
-                    case CatFromSaturn => DrawRect("bb-cat-from-saturn",|(tint), x - 51, y - 135, 101, 135)
-                    case CatFromUranus => DrawRect("bb-cat-from-uranus",|(tint), x - 58, y - 142, 115, 142)
+                    case CatFromMars   => DrawRect("bb-cat-from-mars",  |(tint), x - 41, y - 105, 82, 105)
+                    case CatFromSaturn => DrawRect("bb-cat-from-saturn",|(tint), x - 53, y - 140, 105, 140)
+                    case CatFromUranus => DrawRect("bb-cat-from-uranus",|(tint), x - 71, y - 175, 142, 175)
                     case Bastet        => DrawRect("bb-bastet",         |(tint), x - 64, y - 210, 128, 210)
 
                     case DesecrationToken => DrawRect("ys-desecration", None, x - 20, y - 20, 41, 40)
@@ -3894,7 +3887,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             if (bbAlt && factions.has(BB))
                 setup.options :+= BBAlternateSpellbooks
 
-            // [2026-05-31] Apply any pending Random Neutrals selection from the
+            // [2026-06-15] Apply any pending Random Neutrals selection from the
             // alt faction picker, then clear so it doesn't leak to a later setup.
             pendingRandomNeutrals.foreach(_(setup))
             pendingRandomNeutrals = None
@@ -4229,7 +4222,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             if (bbAlt && factions.has(BB))
                 setup.options :+= BBAlternateSpellbooks
 
-            // [2026-05-31] Apply any pending Random Neutrals selection from the
+            // [2026-06-15] Apply any pending Random Neutrals selection from the
             // alt faction picker, then clear so it doesn't leak to a later setup.
             pendingRandomNeutrals.foreach(_(setup))
             pendingRandomNeutrals = None
@@ -4625,7 +4618,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             def enabledFactionsFor(i : Int) : Set[Faction] = enabledEntries(i).iterator.map(_.faction).toSet
             var randomizeOrder = false
 
-            // [2026-05-31] Random Neutrals: optional random subset of Monsters /
+            // [2026-06-15] Random Neutrals: optional random subset of Monsters /
             // Terrors / iGOOs to include in the game. Each category has an
             // enable checkbox and a count; on Continue we shuffle that
             // category's Use* option list, take the first N, add the umbrella
@@ -4649,18 +4642,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             var randMonsters = false
             var randTerrors = false
             var randIGOOs = false
-            // [2026-06-03] Auto-populate count fields based on player count
-            // (pn). Previously hard-coded as 4/2/4 regardless of pn, which the
-            // user noticed for pn=3 (got 4/4/2 — first two categories at 4,
-            // third at 2 from the iGOO default the user remembered backwards).
-            // [2026-06-07] Terrors default updated from max(1, pn-1) to pn so
-            // all three categories match the player count (per user spec).
-            // New formula:
-            //   Monsters: pn       (one fresh monster per player)
-            //   Terrors:  pn       (one fresh terror per player)
-            //   iGOOs:    pn       (one fresh iGOO per player)
-            // Floor at 1 so a 1-player setup still has a runnable default;
-            // pool-cap clamping happens at Generate time, not here.
             var randMonsterCount = math.max(1, pn)
             var randTerrorCount = math.max(1, pn)
             var randIGOOCount = math.max(1, pn)
@@ -4916,13 +4897,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     root.appendChild(row)
                 }
 
-                // [2026-05-31] Random Neutrals section. Three checkbox+count
+                // [2026-06-15] Random Neutrals section. Three checkbox+count
                 // rows under a small heading, one each for Monsters / Terrors /
-                // iGOOs. Validation per row:
-                //   count <= 0        → forcibly un-check that category
-                //   count >  pool     → red "all units picked, will not be random"
-                //   count >= pool     → red "Only X units available, choose less"
-                //                         + disable Continue (rnHardBlock)
+                // iGOOs.
                 var rnHardBlock = false
                 val rnHeading = dom.document.createElement("div").asInstanceOf[html.Div]
                 rnHeading.style.cssText = "margin-top:14px;font-size:12pt;font-weight:600;color:#fff;border-top:1px solid #2a2e36;padding-top:10px;"
@@ -4949,18 +4926,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     lbl.onclick = (_) => { cb.checked = !cb.checked; setEnabled(cb.checked); render() }
                     cb.onchange = (_) => { setEnabled(cb.checked); render() }
 
-                    // [2026-06-03] Stepper control replaces the previous
-                    // free-text number input. Why: a free-text <input
-                    // type="number"> here triggered render() on every
-                    // keystroke (oninput), which clears `root` and rebuilds
-                    // it — so the input lost focus after every digit. The
-                    // user perceived this as "the page steals focus back to
-                    // the canvas." Switching to explicit ▼ / ▲ buttons
-                    // eliminates the typing path entirely: clicks don't
-                    // need the input to retain focus, and there is no
-                    // canvas-vs-input focus race. The value readout in the
-                    // middle is a non-interactive <span>, not an editable
-                    // input, so there's nothing left to steal focus from.
                     val stepWrap = dom.document.createElement("div").asInstanceOf[html.Div]
                     stepWrap.style.cssText = "display:inline-flex;align-items:center;gap:0;border:1px solid #30363d;border-radius:5px;background:#0d1117;overflow:hidden;"
 
@@ -4971,7 +4936,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                     val downBtn = dom.document.createElement("button").asInstanceOf[html.Button]
                     downBtn.`type` = "button"
-                    downBtn.innerHTML = "&#9660;"  // ▼
+                    downBtn.innerHTML = "&#9660;"  // down arrow
                     downBtn.style.cssText = btnStyle
                     downBtn.title = "Decrease"
                     downBtn.onclick = (_) => {
@@ -4987,16 +4952,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                     val upBtn = dom.document.createElement("button").asInstanceOf[html.Button]
                     upBtn.`type` = "button"
-                    upBtn.innerHTML = "&#9650;"  // ▲
+                    upBtn.innerHTML = "&#9650;"  // up arrow
                     upBtn.style.cssText = btnStyle
                     upBtn.title = "Increase"
                     upBtn.onclick = (_) => {
-                        // Cap at poolSize — going over only produces a red
-                        // warning, never useful values, so block at the
-                        // ceiling for cleaner UX. Validation messages below
-                        // still cover the legacy out-of-range cases (in case
-                        // pn-derived defaults exceed the pool for very small
-                        // pools).
                         val n = math.min(poolSize, getCount() + 1)
                         setCount(n)
                         render()
@@ -5017,12 +4976,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             warn.innerHTML = "Only " + poolSize + " units available, choose a number less than " + poolSize
                             r.appendChild(warn)
                             rnHardBlock = true
-                        }
-                        else if (n > poolSize) {
-                            val warn = dom.document.createElement("span").asInstanceOf[html.Span]
-                            warn.style.cssText = "color:#f85149;font-size:10pt;font-weight:600;"
-                            warn.innerHTML = "all units picked, will not be random"
-                            r.appendChild(warn)
                         }
                     }
                     root.appendChild(r)
@@ -5152,7 +5105,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 cont.onclick = (_) => {
                     restoreOtherSections()
                     clear(actionDiv)
-                    // [2026-05-31] Arm Random Neutrals closure (consumed by
+                    // [2026-06-15] Arm Random Neutrals closure (consumed by
                     // startSetup / startOnlineSetup right after they create
                     // their local Setup). For each enabled category, shuffle
                     // the pool, take the requested count, add umbrella +
