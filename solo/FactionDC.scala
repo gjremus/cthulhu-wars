@@ -136,8 +136,16 @@ case class DCTenebrosumMainAction(self : Faction, cost : Int, actionName : Strin
     extends OptionFactionAction(
         // HB Fix 84 (2026-06-07): cost==0 (e.g. Dark Bargain) renders as a
         // "free repeat" per user spec; cost>0 renders the Sin price.
-        Tenebrosum.styled(DC) + ": Repeat " + actionName.styled(self) +
-            (if (cost > 0) " for " + cost.toString.styled("dc") + " Sin" else " (free)"))
+        // HB Fix 117 (2026-06-15): a Summon repeat may now pick ANY summonable
+        // unit (Fix 113 broadened chooser), so the Sin cost is the PICKED unit's
+        // power cost — not the recorded unit's. The menu can no longer show a
+        // single fixed price, so it renders "(Sin = unit's cost)" for Summon.
+        // All other action types keep the fixed recorded-cost label.
+        Tenebrosum.styled(DC) + ": Repeat " + actionName.styled(self) + {
+            if (cost == 0) " (free)"
+            else if (actionName == "Summon") " (Sin = unit's cost)"
+            else " for " + cost.toString.styled("dc") + " Sin"
+        })
     with MainQuestion with Soft with PowerNeutral
 // HB Fix 95 (2026-06-07): was a bare ForcedAction, which made the post-
 // Tenebrosum confirm step render with title "N/A" and option "N/A" (the
@@ -613,11 +621,25 @@ object DCExpansion extends Expansion {
                     // loop when Sin is exhausted (MoveContinueAction). All other
                     // action classes keep the single upfront flat debit.
                     val isMoveRepeat = recordedAction.isInstanceOf[MoveAction]
+                    // HB Fix 117 (2026-06-15): per owner — a Sin-paid Summon
+                    // repeat must cost Sin equal to the POWER cost of the unit
+                    // actually summoned (e.g. Fallen Prophet = 3 Sin), not the
+                    // flat recorded `cost` of the unit summoned before. Because
+                    // the broadened chooser (Fix 113) lets the player pick a
+                    // DIFFERENT unit, the upfront flat debit here is wrong — it
+                    // would charge the old unit's cost. So, exactly like a Move
+                    // repeat, SKIP the upfront Sin debit for a Summon repeat and
+                    // let the SummonAction handler (Game.scala) debit Sin at the
+                    // picked unit's actual summonCost. All other action classes
+                    // (Battle/Capture/Build/Recruit/Awaken/Ritual/SB) keep the
+                    // single upfront flat debit unchanged.
+                    val isSummonRepeat = recordedAction.isInstanceOf[SummonAction]
+                    val skipUpfront = isMoveRepeat || isSummonRepeat
                     if (self == SL) {
-                        if (!isMoveRepeat) game.slSin -= cost
+                        if (!skipUpfront) game.slSin -= cost
                         game.slTenebrosumUsedThisTurn = true
                     } else {
-                        if (!isMoveRepeat) game.dcSin -= cost
+                        if (!skipUpfront) game.dcSin -= cost
                         game.dcTenebrosumUsedThisTurn = true
                     }
                     // Signal the move loop to charge Sin per unit moved.
@@ -654,7 +676,15 @@ object DCExpansion extends Expansion {
                     // For a per-unit Move repeat, the first moved-unit log line
                     // is tagged "(1 Sin)" (each unit costs 1 Sin); subsequent
                     // units are charged + logged individually in the handler.
-                    game.dcTenebrosumPrefixCost = if (isMoveRepeat) 1 else cost
+                    // HB Fix 117 (2026-06-15): for a Summon repeat the real Sin
+                    // cost depends on the unit the player picks, so seed the
+                    // prefix cost to 0 here; the SummonAction handler overwrites
+                    // it with the picked unit's actual summonCost before it logs,
+                    // so the log line shows the correct Sin amount.
+                    game.dcTenebrosumPrefixCost =
+                        if (isMoveRepeat) 1
+                        else if (isSummonRepeat) 0
+                        else cost
                     // Clear last-action so the SAME action isn't repeated as the "last" again
                     game.dcLastActionForTenebrosum = None
                     // Force the SAME chooser the recorded action came from. After

@@ -2294,7 +2294,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // debit under the guard). This lets a Sin-paid Summon repeat offer a DIFFERENT
         // unit than the one just summoned, per owner spec (broadens Fix 106).
         f.pool.monsterly.sortP./(_.uclass).distinct.%(_.canBeSummoned(f)).%(uc => f.all(uc).num < f.units./(_.uclass).count(uc)).foreach { uc =>
-            summonAreas.nex.%(r => dcTenebrosumGuard || f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
+            // HB Fix 117 (2026-06-15): under a Sin-paid Summon repeat, gate on
+            // whether the caster has enough SIN for the picked unit's cost (Sin =
+            // the unit's power cost) rather than bypassing the affordability check
+            // entirely — so a unit the caster can't pay for isn't offered.
+            summonAreas.nex.%(r => (if (dcTenebrosumGuard) (if (f == SL) slSin else dcSin) >= f.summonCost(uc, r) else f.affords(f.summonCost(uc, r))(r))).%(f.canAccessGate).some.foreach { l =>
                 + SummonMainAction(f, uc, l)
             }
         }
@@ -2328,7 +2332,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val velvetFanMonsters = f.units.%(u => u.region.is[VelvetFanHold] && u.uclass.utype == Monster)
         velvetFanMonsters./(_.uclass).distinct.diff(poolMonsterClasses).foreach { uc =>
             // HB Fix 113 (2026-06-13): Tenebrosum-repeat affords bypass (Sin-paid).
-            summonAreas.nex.%(r => dcTenebrosumGuard || f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
+            // HB Fix 117 (2026-06-15): gate on SIN affordability under the guard.
+            summonAreas.nex.%(r => (if (dcTenebrosumGuard) (if (f == SL) slSin else dcSin) >= f.summonCost(uc, r) else f.affords(f.summonCost(uc, r))(r))).%(f.canAccessGate).some.foreach { l =>
                 + SummonMainAction(f, uc, l)
             }
         }
@@ -4522,16 +4527,32 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case SummonAction(self, uc, r) =>
             // Bloated Woman: units on VelvetFanHold count as available for summoning
             val hasVelvetFanUnit = self.units.%(u => u.uclass == uc && u.region.is[VelvetFanHold]).any
-            // HB Fix 109.C (2026-06-11): bypass the affords check when under
-            // Tenebrosum guard — Sin already paid, Power is irrelevant.
-            if ((self.pool(uc).none && !hasVelvetFanUnit) || (!dcTenebrosumGuard && self.affords(self.summonCost(uc, r))(r).not))
+            // HB Fix 109.C (2026-06-11): bypass the affords (Power) check when
+            // under Tenebrosum guard — the repeat is paid in Sin, not Power.
+            // HB Fix 117 (2026-06-15): under the guard, a Summon repeat now costs
+            // Sin equal to the picked unit's power cost, so gate on whether the
+            // caster has enough SIN (not Power). If it can't afford the Sin, fall
+            // through to EndAction so the unit isn't summoned for free.
+            val sinForGuard = self.summonCost(uc, r)
+            val sinPool = if (self == SL) slSin else dcSin
+            val cannotAfford =
+                if (dcTenebrosumGuard) sinPool < sinForGuard
+                else self.affords(self.summonCost(uc, r))(r).not
+            if ((self.pool(uc).none && !hasVelvetFanUnit) || cannotAfford)
                 EndAction(self)
             else {
                 val cost = self.summonCost(uc, r)
                 // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
-                // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+                // the power debit. HB Fix 117 (2026-06-15): instead of relying on
+                // a flat upfront debit (which used the WRONG, recorded unit's
+                // cost), debit Sin HERE at the actual picked unit's cost and set
+                // the log-prefix cost so the one-line log shows the real Sin spent.
                 if (!dcTenebrosumGuard)
                     self.power -= cost
+                else {
+                    if (self == SL) slSin -= cost else dcSin -= cost
+                    dcTenebrosumPrefixCost = cost
+                }
                 self.payTax(r)
                 // Bloated Woman: check if unit is on a VelvetFanHold — pay BW owner instead
                 val onCard = self.units.%(u => u.uclass == uc && u.region.is[VelvetFanHold])
