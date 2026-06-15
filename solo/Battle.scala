@@ -698,7 +698,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (refugees.none)
             return proceed()
 
-        val moonDest = (s == BB).??($(BB.moon))
+        val moonDest = (s == BB && arena != BB.moon).??($(BB.moon))
         val destinations = (arena.connectedForRetreat.%(r => s.opponent.at(r).none) ++ moonDest).distinct
 
         val chooser : Faction = retreater(s)
@@ -1791,6 +1791,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 game.fbeByagoonaKillPrevented = false
 
                 game.battle = None
+
+                // Fix: refresh CG snapshot after battle. Retreats/pains moved units
+                // to new regions — those arrivals are NOT actions and must not trigger CG.
+                if (game.factions.has(FB) && game.fbHasCGActive) {
+                    val gazeRegions = game.board.regions.%(r => FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any)
+                    game.factions.but(FB).foreach { f =>
+                        gazeRegions.foreach { r =>
+                            game.fbCyclopeanGazeSnapshot += (f, r) -> f.at(r).%(_.uclass.utype != Building).num
+                        }
+                    }
+                }
 
                 if (game.queue.starting.?(_.effect.has(FromBelow)))
                     ProceedBattlesAction

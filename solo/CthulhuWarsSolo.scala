@@ -3773,6 +3773,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 if (a.isRecorded)
                                     actions +:= a
 
+                                try {
                                 val (l, c) = g.perform(a.unwrap)
 
                                 l.foreach { s =>
@@ -3795,6 +3796,20 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     queue :+= askFaction(c)(game)
 
                                 Some((true, t))
+                                } catch { case e : Throwable =>
+                                    val msg = "CRASH at action " + actions.num + ": " + e.getClass.getName + ": " + e.getMessage + "\nAction: " + serializer.write(a.unwrap)
+                                    println(msg)
+                                    if (hash != "")
+                                        hrf.web.postF(server + "error/" + hash, msg) { _ => () } { () }
+                                    val err = dom.document.createElement("div")
+                                    err.asInstanceOf[html.Element].setAttribute("style",
+                                        "position:fixed; top:20px; left:20px; right:20px; padding:20px; " +
+                                        "background:#2a1f1f; border:2px solid #cc5555; color:#ffd6d6; " +
+                                        "font-family:monospace; font-size:11pt; z-index:9999; max-width:800px;")
+                                    err.innerHTML = "<b>Game crashed during replay.</b><br/>" + msg.replace("\n", "<br/>")
+                                    dom.document.body.appendChild(err)
+                                    None
+                                }
                             }
                             case UIRollD6(g, q, roll) => {
                                 ask(q(g), (1::2::3::4::5::6)./("[" + _.styled("power") + "]"), x => perform(roll(x)))
