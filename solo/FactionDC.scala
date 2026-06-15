@@ -1287,6 +1287,16 @@ object DCExpansion extends Expansion {
         case AwakenAction(self, uc, r, _) if tenebrosumEligible(self) =>
             self.awakenCost(uc, r).foreach(c => recordTenebrosum(action, c, "Awaken"))
             UnknownContinue
+        // HB Fix 115 (2026-06-14): awakening an INDEPENDENT GOO does not produce an
+        // AwakenAction (it produces IndependentGOOAction / CthughaAwakenAction), so
+        // Tenebrosum was never recorded and the "Repeat Awaken" button never appeared
+        // after an iGOO awaken. Record these the same way (they carry their own cost).
+        case IndependentGOOAction(self, _, _, cost) if tenebrosumEligible(self) =>
+            recordTenebrosum(action, cost, "Awaken")
+            UnknownContinue
+        case CthughaAwakenAction(self, _, _, cost) if tenebrosumEligible(self) =>
+            recordTenebrosum(action, cost, "Awaken")
+            UnknownContinue
 
         case EndAction(self) if tenebrosumEligible(self) =>
             // Clear the guard flag if we were in a Tenebrosum repeat (one-shot).
@@ -1429,7 +1439,7 @@ object DCExpansion extends Expansion {
             // remains in pool OR any iGOO loyalty card is held and awakenable —
             // not only the exact GOO just awakened (e.g. after awakening Y'Golonac
             // the player may use Tenebrosum to awaken a held iGOO).
-            case _ : AwakenAction =>
+            case _ : AwakenAction | _ : IndependentGOOAction | _ : CthughaAwakenAction =>
                 areas.nex.any && {
                     val hasPoolGOO = self.pool.%(_.uclass.isGOO).any
                     val hasIGOO    = game.loyaltyCards.of[IGOOLoyaltyCard].any ||
@@ -1506,7 +1516,7 @@ object DCExpansion extends Expansion {
         case _ : AttackAction             =>
             val l = areas.nex.diff(self.battled).%(r => game.factionlike.but(self).exists(self.canAttack(r))).some.|($)
             Force(AttackMainAction(self, l, None))
-        case _ : AwakenAction             =>
+        case _ : AwakenAction | _ : IndependentGOOAction | _ : CthughaAwakenAction =>
             // HB Fix 113 (2026-06-13): per owner — a Sin-paid Awaken repeat may
             // awaken a DIFFERENT GOO or iGOO than the one just awakened (reverses
             // the same-kind restriction). Open a chooser that offers every
