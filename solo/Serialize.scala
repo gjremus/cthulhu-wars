@@ -162,6 +162,14 @@ class Serialize(val game : Game) {
         case EApply("FBCyclopeanGazeSource", ps) => FBCyclopeanGazeSource(parseExpr(ps(0)).asInstanceOf[Region], parseExpr(ps(1)).asInstanceOf[UnitClass])
         case EApply("FBWritheKillEntry", ps) => FBWritheKillEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[UnitClass], parseExpr(ps(3)).asInstanceOf[|[UnitRef]])
         case EApply("FBWrithePainEntry", ps) => FBWrithePainEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Region])
+        // [LEGACY REPLAY] The abandoned MNU v2.0.1 engine (commit a779f68) logged a 5-param
+        // TSPlaceTomeUnitAction(self=TS, uc, r, tomeNum, flipper) where the 5th param is the faction
+        // that used the Cursed Tome and whose turn must end. Canonical v2.5 reverted to 4-param. Map
+        // the 4-param form to the current action (catch-all also handles it), and the 5-param form to
+        // TSPlaceTomeUnitActionLegacy5 so the flipper's turn ends (EndAction(flipper)) — dropping the
+        // 5th param would do EndAction(TS) and desync replays such as game 454.
+        case EApply("TSPlaceTomeUnitAction", ps) if ps.num == 4 => TSPlaceTomeUnitAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitClass], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int])
+        case EApply("TSPlaceTomeUnitAction", ps) if ps.num == 5 => TSPlaceTomeUnitActionLegacy5(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitClass], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[Faction])
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 

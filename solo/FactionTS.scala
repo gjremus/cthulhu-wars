@@ -115,6 +115,16 @@ case class TSSkipRemoveTomeAction(self : Faction) extends OptionFactionAction("K
 // [2026-04-04] TOME UNIT PLACEMENT — TS chooses which gate to place TH/Tendril from tomes 1-4
 case class TSPlaceTomeUnitAction(self : Faction, uc : UnitClass, r : Region, tomeNum : Int) extends BaseFactionAction("Place " + uc.styled(TS) + " from Tome " + tomeNumToRoman(tomeNum) + " at", r)
 
+// [LEGACY REPLAY] Backward-compat for the abandoned MNU v2.0.1 engine (commit a779f68), which
+// recorded a 5-param TSPlaceTomeUnitAction(self=TS, uc, r, tomeNum, flipper). The 5th "flipper"
+// field is the faction that USED the Cursed Tome (e.g. SL via Eleven Revelations), and the old
+// perform ended THAT faction's turn (EndAction(flipper)). Canonical v2.5 reverted to the 4-param
+// form whose perform hardcodes position-0 (TS) and does EndAction(self=TS) — which would mark the
+// WRONG faction as having acted (acted=true) and DESYNC replays of games (like game 454) where a
+// non-TS faction placed a tome unit. This legacy class exists ONLY so the serializer can faithfully
+// replay such old logs; it is never produced by live dispatch.
+case class TSPlaceTomeUnitActionLegacy5(self : Faction, uc : UnitClass, r : Region, tomeNum : Int, flipper : Faction) extends BaseFactionAction("Place " + uc.styled(TS) + " from Tome " + tomeNumToRoman(tomeNum) + " at", r)
+
 // UNDULATE (carry chain: moved unit can carry lesser-cost units for free)
 case class TSUndulateCarryPhaseAction(self : Faction, from : Region, to : Region, carrierCost : Int) extends ForcedAction with PowerNeutral
 case class TSUndulateCarryAction(self : Faction, u : UnitRef, from : Region, to : Region, newCarrierCost : Int) extends BaseFactionAction(
@@ -505,6 +515,13 @@ object TSExpansion extends Expansion {
             self.place(uc, r)
             self.log("placed", uc.styled(TS), "at", r, "from Tome", tomeNumToRoman(tomeNum))
             EndAction(self)
+
+        // [LEGACY REPLAY] Old MNU v2.0.1 (a779f68) 5-param form: places the unit (always a TS unit)
+        // but ends the FLIPPER's turn (the faction that used the tome), matching the old EndAction(flipper).
+        case TSPlaceTomeUnitActionLegacy5(self, uc, r, tomeNum, flipper) =>
+            self.place(uc, r)
+            self.log("placed", uc.styled(TS), "at", r, "from Tome", tomeNumToRoman(tomeNum))
+            EndAction(flipper)
 
         // CURSED TOME - ritual removal
         case TSRemoveTomeAction(self, tomeNum) =>
