@@ -16,7 +16,7 @@
 set -euo pipefail
 
 BB_ROOT="/Users/gremus/Claude-Projects/cthulhu-wars-Bubastis"
-SSH_KEY="/Users/gremus/Google Drive/My Drive/Personal/Games/Cthulhu Wars/Library at Celaeno/Server Deployment/oracle_cw_ed25519"
+SSH_KEY="/Users/gremus/Library/CloudStorage/GoogleDrive-gremus@salesforce.com/My Drive/Personal/Games/Cthulhu Wars/Library at Celaeno/Server Deployment/oracle_cw_ed25519"
 HOST="oracle-cw-server@35.255.125.91"
 REMOTE_ROOT="/opt/cwo/bb"
 
@@ -39,7 +39,7 @@ fi
 MAIN_JS="$BB_ROOT/solo/target/scala-2.13/cthulhu-wars-solo-hrf-opt/main.js"
 if $DO_BUILD || [ ! -f "$MAIN_JS" ]; then
     echo "==> [build] sbt fullOptJS (Bubastis) ..."
-    export JAVA_HOME=/tmp/zulu-jdk/zulu21.50.19-ca-jdk21.0.11-macosx_aarch64/Contents/Home
+    export JAVA_HOME=/Users/gremus/.local/jdk/zulu21.50.19-ca-jdk21.0.11-macosx_aarch64/Contents/Home
     export PATH="$JAVA_HOME/bin:$HOME/.local/bin:$PATH"
     (cd "$BB_ROOT/solo" && sbt fullOptJS 2>&1 | tail -5)
 fi
