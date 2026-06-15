@@ -162,6 +162,10 @@ class Serialize(val game : Game) {
         case EApply("FBCyclopeanGazeSource", ps) => FBCyclopeanGazeSource(parseExpr(ps(0)).asInstanceOf[Region], parseExpr(ps(1)).asInstanceOf[UnitClass])
         case EApply("FBWritheKillEntry", ps) => FBWritheKillEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[UnitClass], parseExpr(ps(3)).asInstanceOf[|[UnitRef]])
         case EApply("FBWrithePainEntry", ps) => FBWrithePainEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Region])
+        // [2026-06-15] Backwards compat: old saved games have 4-param TSPlaceTomeUnitAction (no flipper).
+        // Default the 5th param (flipper) to self (param 0) so old replays still load.
+        case EApply("TSPlaceTomeUnitAction", ps) if ps.length == 4 =>
+            TSPlaceTomeUnitAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitClass], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(0)).asInstanceOf[Faction])
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 
@@ -171,7 +175,11 @@ class Serialize(val game : Game) {
 object Serialize {
     val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS) ++ $(NeutralAbhoth, LibraryFaction)
 
-    val loyaltyCards = $(GhastCard, GugCard, ShantakCard, StarVampireCard, VoonithCard, DimensionalShamblerCard, HighPriestCard, ByatisCard, AbhothCard, DaolothCard, NyogthaCard, TulzschaCard, GnorriCard, YgolonacCard)
+    val loyaltyCards = $(
+        HighPriestCard,
+        GhastCard, GugCard, ShantakCard, StarVampireCard, VoonithCard, DimensionalShamblerCard, GnorriCard,
+        ByatisCard, AbhothCard, DaolothCard, NyogthaCard, TulzschaCard, YgolonacCard,
+    )
 
     def parseFaction(s : String) : |[Faction] = factions.%(_.short == s).single
 
