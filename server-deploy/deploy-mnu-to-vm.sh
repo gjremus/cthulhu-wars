@@ -59,11 +59,17 @@ echo "==> [stage] cache tag = $CACHE_TAG"
 
 # Stage a patched index.html in /tmp: same patches the Library publish-pages.sh
 # applies (### SERVER URL substitution + main.js path rewrite + cache-tag bump).
+# The main.js path rewrite makes the script src root-absolute (/mnu/target/...)
+# instead of relative (./target/...). On a game-link URL like /mnu/play/<id> the
+# browser resolves the relative form against /mnu/play/, landing at
+# /mnu/play/target/main.js — one folder too high. The akka route quietly catches
+# that spelling too, so nothing breaks today; the absolute path just points it at
+# the real /mnu/target/ folder. (Previously this sed rewrote the path to itself.)
 TMP_INDEX="$(mktemp -t mnu-index.XXXXXX).html"
 cp "$MNU_ROOT/solo/index.html" "$TMP_INDEX"
 sed -i '' \
     -e 's|###SERVER-URL###|https://cwo.freeddns.org/mnu/|g' \
-    -e 's|./target/scala-2.13/cthulhu-wars-solo-hrf-opt/main.js|./target/scala-2.13/cthulhu-wars-solo-hrf-opt/main.js|g' \
+    -e 's|\./target/scala-2.13/cthulhu-wars-solo-hrf-opt/main.js|/mnu/target/scala-2.13/cthulhu-wars-solo-hrf-opt/main.js|g' \
     -e "s|main\\.js?v=[A-Za-z0-9-]*|main.js?v=$CACHE_TAG|g" \
     "$TMP_INDEX"
 
