@@ -183,6 +183,7 @@ object TomePlacement {
 case class SpendOnCustodianAction(self : Faction) extends OptionFactionAction(implicit g => "Activate " + "Custodian".styled("lb")) with MainQuestion
 case class CustodianMoveAction(self : Faction, r : Region) extends BaseFactionAction(implicit g => "Move " + "Custodian".styled("lb") + " to", r)
 case class CustodianStayAction(self : Faction, r : Region) extends BaseFactionAction(implicit g => "Custodian".styled("lb") + " stays in", implicit g => r.toString + " " + "(+1 to Agony roll)".styled("power"))
+case class CustodianAgonyRolledAction(self : Faction, r : Region, rolled : Int, staying : Boolean) extends ForcedAction
 case class CustodianAssignAgonyAction(self : Faction, r : Region, remaining : Int, assigned : $[Offer]) extends ForcedAction
 case class CustodianAssignToFactionAction(self : Faction, r : Region, remaining : Int, assigned : $[Offer], target : Faction) extends BaseFactionAction(implicit g => "Assign 1 " + "Agony".styled("lb") + " to", implicit g => target.full + " (" + remaining + " remaining)")
 case class CustodianResolveAgonyAction(self : Faction, r : Region, assigned : $[Offer]) extends ForcedAction
@@ -198,6 +199,7 @@ case class LibrarianStayAction(self : Faction, r : Region) extends BaseFactionAc
 // `remaining` is the unassigned amount; `assigned` maps faction → count assigned;
 // `order` preserves the activator's selection sequence so resolution walks in
 // the same order the activator chose.
+case class LibrarianAgonyRolledAction(self : Faction, r : Region, rolled : Int, staying : Boolean) extends ForcedAction
 case class LibrarianAssignAgonyAction(self : Faction, r : Region, total : Int, remaining : Int, assigned : $[Offer], order : $[Faction]) extends ForcedAction
 case class LibrarianAssignToFactionAction(self : Faction, r : Region, total : Int, remaining : Int, assigned : $[Offer], order : $[Faction], target : Faction) extends BaseFactionAction(
     implicit g => self.full + " — choose a faction to assign up to " + remaining + " " + "Agony".styled("lb") + " to",
@@ -318,13 +320,24 @@ object LibraryExpansion extends Expansion {
         case CustodianMoveAction(self, r) =>
             game.custodianRegion = |(r)
             self.log("moved", "Custodian".styled("lb"), "to", r)
-            RollAgony(_ => "Roll Agony die for Custodian", x => { log("Agony Die".styled("lb"), "rolled", x.toString.styled("power")); CustodianAssignAgonyAction(self, r, x, $) })
+            RollAgony(_ => "Roll Agony die for Custodian", x => CustodianAgonyRolledAction(self, r, x, false))
 
         case CustodianStayAction(self, r) =>
             self.log("Custodian".styled("lb"), "stays in", r, "(+1 to Agony roll)")
-            RollAgony(_ => "Roll Agony die for Custodian (+1 for staying)", x => { log("Agony Die".styled("lb"), "rolled", x.toString.styled("power"), "+ 1 for staying =", (x + 1).toString.styled("power"), "total"); CustodianAssignAgonyAction(self, r, x + 1, $) })
+            RollAgony(_ => "Roll Agony die for Custodian (+1 for staying)", x => CustodianAgonyRolledAction(self, r, x, true))
 
         // ── CUSTODIAN AGONY DISTRIBUTION ──
+        // ── CUSTODIAN AGONY ROLL (recorded so replay/online shows the roll) ──
+        case CustodianAgonyRolledAction(self, r, rolled, staying) =>
+            if (staying) {
+                log("Agony Die".styled("lb"), "rolled", rolled.toString.styled("power"), "+ 1 for staying =", (rolled + 1).toString.styled("power"), "total")
+                Force(CustodianAssignAgonyAction(self, r, rolled + 1, $))
+            }
+            else {
+                log("Agony Die".styled("lb"), "rolled", rolled.toString.styled("power"))
+                Force(CustodianAssignAgonyAction(self, r, rolled, $))
+            }
+
         case CustodianAssignAgonyAction(self, r, remaining, assigned) =>
             val present = factions.%(_.at(r).%(u => u.uclass.utype != MapUnit).any)
             val totalUnitsPresent = present./~(_.at(r).%(u => u.uclass.utype != MapUnit)).num
@@ -395,11 +408,11 @@ object LibraryExpansion extends Expansion {
         case LibrarianMoveAction(self, r) =>
             game.librarianRegion = |(r)
             self.log("moved", "Librarian".styled("lb"), "to", r)
-            RollAgony(_ => "Roll Agony die for Librarian", x => { log("Agony Die".styled("lb"), "rolled", x.toString.styled("power")); LibrarianAssignAgonyAction(self, r, x, x, $, $) })
+            RollAgony(_ => "Roll Agony die for Librarian", x => LibrarianAgonyRolledAction(self, r, x, false))
 
         case LibrarianStayAction(self, r) =>
             self.log("Librarian".styled("lb"), "stays in", r, "(+1 to Agony roll)")
-            RollAgony(_ => "Roll Agony die for Librarian (+1 for staying)", x => { val total = x + 1; log("Agony Die".styled("lb"), "rolled", x.toString.styled("power"), "+ 1 for staying =", total.toString.styled("power"), "total"); LibrarianAssignAgonyAction(self, r, total, total, $, $) })
+            RollAgony(_ => "Roll Agony die for Librarian (+1 for staying)", x => LibrarianAgonyRolledAction(self, r, x, true))
 
         // ── LIBRARIAN AGONY DISTRIBUTION ──
         // Step 1: pick a faction (or reset). Eligible = ANY other faction with
@@ -408,6 +421,18 @@ object LibraryExpansion extends Expansion {
         // satisfies the agony however they can — eliminate units, lose doom, OR
         // return an overdue tome if they hold one). If only one faction is
         // eligible AND nothing is assigned yet, skip the chooser.
+        // ── LIBRARIAN AGONY ROLL (recorded so replay/online shows the roll) ──
+        case LibrarianAgonyRolledAction(self, r, rolled, staying) =>
+            if (staying) {
+                val total = rolled + 1
+                log("Agony Die".styled("lb"), "rolled", rolled.toString.styled("power"), "+ 1 for staying =", total.toString.styled("power"), "total")
+                Force(LibrarianAssignAgonyAction(self, r, total, total, $, $))
+            }
+            else {
+                log("Agony Die".styled("lb"), "rolled", rolled.toString.styled("power"))
+                Force(LibrarianAssignAgonyAction(self, r, rolled, rolled, $, $))
+            }
+
         case LibrarianAssignAgonyAction(self, r, total, remaining, assigned, order) =>
             val eligibleTargets = factions.but(self).%(f =>
                 f.at(r).%(u => u.uclass.utype != MapUnit).any)
