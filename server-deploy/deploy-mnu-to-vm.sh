@@ -21,8 +21,8 @@
 
 set -euo pipefail
 
-MNU_ROOT="/Users/gremus/claude-projects/cthulhu-wars More Neutral Units"
-SSH_KEY="/Users/gremus/My Drive/Personal/Games/Cthulhu Wars/Library at Celaeno/Server Deployment/oracle_cw_ed25519"
+MNU_ROOT="/Users/gremus/claude-projects/cthulhu-wars-mnu"
+SSH_KEY="/Users/gremus/Library/CloudStorage/GoogleDrive-gremus@salesforce.com/My Drive/Personal/Games/Cthulhu Wars/Library at Celaeno/Server Deployment/oracle_cw_ed25519"
 HOST="oracle-cw-server@35.255.125.91"
 REMOTE_ROOT="/opt/cwo/mnu"
 
@@ -45,6 +45,8 @@ fi
 MAIN_JS="$MNU_ROOT/solo/target/scala-2.13/cthulhu-wars-solo-hrf-opt/main.js"
 if $DO_BUILD || [ ! -f "$MAIN_JS" ]; then
     echo "==> [build] sbt fullLinkJS (MNU) ..."
+    export JAVA_HOME="${JAVA_HOME:-/Users/gremus/.local/jdk/zulu21.50.19-ca-jdk21.0.11-macosx_aarch64/Contents/Home}"
+    export PATH="$JAVA_HOME/bin:$HOME/.local/bin:$PATH"
     (cd "$MNU_ROOT/solo" && sbt fullLinkJS 2>&1 | tail -3)
 fi
 if [ ! -f "$MAIN_JS" ]; then
