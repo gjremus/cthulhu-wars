@@ -698,7 +698,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (refugees.none)
             return proceed()
 
-        val moonDest = (s == BB).??($(BB.moon))
+        val moonDest = (s == BB && arena != BB.moon).??($(BB.moon))
         // Fix 55 (v2.4.21): pain retreat from a Moon battle.
         // Per Game 499 user report: "Units dealt pains on the moon can retreat
         // to literally any area on the map. But all pained units from a battle

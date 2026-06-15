@@ -1910,7 +1910,7 @@ object FBExpansion extends Expansion {
             // BB Implementation Guide §Task 3.2.4 / §2.6c "Moon adjacent to all
             // regions"). Mirrors the Battle.scala retreat() pattern (moonDest).
             // Non-BB units retain the existing on-map-only filter.
-            val moonDest = (u.faction == BB).??($(BB.moon))
+            val moonDest = (u.faction == BB && u.region != BB.moon).??($(BB.moon))
             val destinations = (game.board.connectedForRetreat(u.region).%(_.glyph.onMap).%(d => FB.at(d).%(_.uclass.utype != Building).none) ++ moonDest).distinct
             if (destinations.any)
                 Ask(FB).each(destinations)(dest => FBCyclopeanGazeDestinationAction(FB, uRef, dest, sourceUnit, sourcesPending, actor, fromBattle))
