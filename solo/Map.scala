@@ -136,7 +136,7 @@ object EarthMap4v35 extends Board {
     val Australia = Area("Australia", GlyphAA)
 
     val regions = $(ArcticOcean, NorthAtlantic, SouthAtlantic, NorthPacific, IndianOcean, SouthPacific, Scandinavia, Europe, NorthAsia, SouthAsia, Arabia, WestAfrica, EastAfrica, NorthAmerica, SouthAmerica, Australia, Antarctica)
-    val nonFactionRegions = $(NorthAtlantic, SouthAtlantic, NorthPacific, IndianOcean, Scandinavia, NorthAsia, Arabia, EastAfrica, SouthAmerica, Australia)
+    val nonFactionRegions = $(NorthAtlantic, SouthAtlantic, NorthPacific, IndianOcean, Scandinavia, NorthAsia, SouthAsia, EastAfrica, SouthAmerica, Australia) // Arabia is CC's printed starting region on the Earth board (see board.starting(CC) below).
     val west = $(ArcticOcean, NorthPacific, NorthAmerica, NorthAtlantic, Australia, SouthPacific, SouthAmerica, SouthAtlantic, Antarctica)
     val east = $(Scandinavia, Europe, NorthAsia, SouthAsia, Arabia, WestAfrica, EastAfrica, IndianOcean)
 
@@ -179,7 +179,7 @@ object EarthMap4v35 extends Board {
 
     def starting(faction : Faction) = faction match {
         case GC => $(SouthPacific)
-        case CC => $(SouthAsia)
+        case CC => $(Arabia)
         case BG => $(WestAfrica)
         case YS => $(Europe)
         case SL => $(NorthAmerica)
@@ -378,7 +378,7 @@ object EarthMap5 extends Board {
     val NewZealand = Area("New Zealand", GlyphAA)
 
     val regions = $(ArcticOcean, NorthAtlantic, SouthAtlantic, NorthPacific, IndianOcean, SouthPacific, Scandinavia, Europe, NorthAsia, SouthAsia, Arabia, WestAfrica, EastAfrica, NorthAmericaWest, NorthAmericaEast, CentralAmerica, SouthAmericaWest, SouthAmericaEast, Australia, NewZealand, Antarctica)
-    val nonFactionRegions = $(NorthAtlantic, SouthAtlantic, NorthPacific, IndianOcean, Scandinavia, NorthAsia, Arabia, EastAfrica, NorthAmericaEast, CentralAmerica, SouthAmericaWest, SouthAmericaEast, Australia, NewZealand)
+    val nonFactionRegions = $(NorthAtlantic, SouthAtlantic, NorthPacific, IndianOcean, Scandinavia, NorthAsia, SouthAsia, EastAfrica, NorthAmericaEast, CentralAmerica, SouthAmericaWest, SouthAmericaEast, Australia, NewZealand) // Arabia is CC's printed starting region on the Earth board (see board.starting(CC) below).
     val west = $(ArcticOcean, NorthPacific, NorthAmericaWest, NorthAmericaEast, CentralAmerica, NorthAtlantic, Australia, NewZealand, SouthPacific, SouthAmericaWest, SouthAmericaEast, SouthAtlantic, Antarctica)
     val east = $(Scandinavia, Europe, NorthAsia, SouthAsia, Arabia, WestAfrica, EastAfrica, IndianOcean)
 
@@ -425,7 +425,7 @@ object EarthMap5 extends Board {
 
     def starting(faction : Faction) = faction match {
         case GC => $(SouthPacific)
-        case CC => $(SouthAsia)
+        case CC => $(Arabia)
         case BG => $(WestAfrica)
         case YS => $(Europe)
         case SL => $(NorthAmericaWest)
@@ -512,7 +512,7 @@ object EarthMap6 extends Board {
     val NewZealand = Area("New Zealand", GlyphAA)
 
     val regions = $(BeringSea, ArcticOcean, NorthAtlantic, MediterraneanSea, SouthAtlantic, NorthPacific, IndianOcean, SouthPacific, Scandinavia, Europe, NorthAsia, SouthAsia, Arabia, WestAfrica, EastAfrica, NorthAmericaWest, NorthAmericaEast, CentralAmerica, SouthAmericaWest, SouthAmericaEast, Australia, NewZealand, Antarctica, MountainsOfMadness)
-    val nonFactionRegions = $(BeringSea, NorthAtlantic, MediterraneanSea, SouthAtlantic, NorthPacific, IndianOcean, Scandinavia, NorthAsia, Arabia, EastAfrica, NorthAmericaEast, CentralAmerica, SouthAmericaWest, SouthAmericaEast, Australia, NewZealand, Antarctica)
+    val nonFactionRegions = $(BeringSea, NorthAtlantic, MediterraneanSea, SouthAtlantic, NorthPacific, IndianOcean, Scandinavia, NorthAsia, SouthAsia, EastAfrica, NorthAmericaEast, CentralAmerica, SouthAmericaWest, SouthAmericaEast, Australia, NewZealand, Antarctica) // Arabia is CC's printed starting region on the Earth board (see board.starting(CC) below).
     val west = $(BeringSea, ArcticOcean, NorthPacific, NorthAmericaWest, NorthAmericaEast, CentralAmerica, NorthAtlantic, MediterraneanSea, Australia, NewZealand, SouthPacific, SouthAmericaWest, SouthAmericaEast, SouthAtlantic, Antarctica)
     val east = $(Scandinavia, Europe, NorthAsia, SouthAsia, Arabia, WestAfrica, EastAfrica, IndianOcean, MountainsOfMadness)
 
@@ -562,7 +562,7 @@ object EarthMap6 extends Board {
 
     def starting(faction : Faction) = faction match {
         case GC => $(SouthPacific)
-        case CC => $(SouthAsia)
+        case CC => $(Arabia)
         case BG => $(WestAfrica)
         case YS => $(Europe)
         case SL => $(NorthAmericaWest)
