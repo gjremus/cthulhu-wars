@@ -4243,9 +4243,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             "Back"
                         ), { _ => topMenu() })
                     case 6 =>
-                        // "Beta builds" — links to the More Neutral Units beta at /mnu/.
+                        // "Beta builds" — links to MNU, TchoTcho, and Bubastis betas.
                         ask("Beta builds", $(
                             "<a href='/mnu/' target='_blank'><div>More Neutral Units</div></a>",
+                            "<a href='/TchoTcho/' target='_blank'><div>Tcho-Tcho</div></a>",
+                            "<a href='/BB/' target='_blank'><div>Bubastis</div></a>",
                             "Cancel"
                         ), { _ => topMenu() })
                     case 5 =>
