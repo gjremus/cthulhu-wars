@@ -263,6 +263,8 @@ object BBExpansion extends Expansion {
 
             game.highPriests(f)
 
+            game.hires(f)
+
             + DoomDoneAction(f)
 
             asking
