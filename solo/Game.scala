@@ -2733,15 +2733,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
             */
 
-            // FBE setup area restriction (§1.6): non-faction areas NOT adjacent to
-            // any enemy start area. Other factions use their board.starting directly.
+            // FBE setup area restriction (§1.6): any area NOT adjacent to any enemy
+            // start area (includes faction-glyph areas of absent factions).
             val legalAreas = if (f == FBE) {
                 val enemyStarts = starting.values.$
                 val adjacentToEnemy = enemyStarts./~(board.connected).distinct
-                val filtered = board.nonFactionRegions.diff(enemyStarts).diff(adjacentToEnemy)
-                // Fallback (§2.0a): if all non-faction areas are adjacent to enemy
-                // starts, fall back to non-faction areas minus already-taken.
-                if (filtered.any) filtered else board.nonFactionRegions.diff(enemyStarts)
+                val allAreas = board.regions.diff(enemyStarts).diff(adjacentToEnemy)
+                // Fallback (§2.0a): if no area qualifies, use all regions minus taken.
+                if (allAreas.any) allAreas else board.regions.diff(enemyStarts)
             }
             else
                 board.starting(f).diff(starting.values.$)
