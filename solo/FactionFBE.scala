@@ -236,9 +236,7 @@ object FBEExpansion extends Expansion {
         f.satisfyIf(ShapestealingReq, ShapestealingReq.text,
             f.enemies.exists(e => game.starting.get(e).exists(r => f.at(r).num >= 3)))
         // SBR 4 — Animated Rush: 3 dice on the Faction Card (§3.12.4).
-        // Only check during Gather Power — mid-action dice additions (Byagoona Awaken) must not trigger this.
-        if (game.gatherPowerPhase)
-            f.satisfyIf(AnimatedRushReq, AnimatedRushReq.text, game.fbeCardDice.num >= 3)
+        f.satisfyIf(AnimatedRushReq, AnimatedRushReq.text, game.fbeCardDice.num >= 3)
     }
 
     // Eligible Monsters FBE controls = Fungal Thralls + any controlled Neutral
@@ -567,6 +565,8 @@ object FBEExpansion extends Expansion {
                     pip => SuccorRollAction(self, picked, rolls :+ pip))
             else {
                 picked.foreach(ur => game.eliminate(game.unit(ur)))
+                // Doom Phase eliminations do NOT trigger Self-Consuming (Actions only).
+                game.fbeSelfConsumingDeaths = $
                 val sum = rolls.sum
                 val ritual = game.ritualCost
                 if (sum > ritual) {
