@@ -16,7 +16,7 @@
 set -euo pipefail
 
 TT_ROOT="/Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth"
-SSH_KEY="/Users/gremus/Google Drive/My Drive/Personal/Games/Cthulhu Wars/Library at Celaeno/Server Deployment/oracle_cw_ed25519"
+SSH_KEY="/Users/gremus/Library/CloudStorage/GoogleDrive-gremus@salesforce.com/My Drive/Personal/Games/Cthulhu Wars/Library at Celaeno/Server Deployment/oracle_cw_ed25519"
 HOST="oracle-cw-server@35.255.125.91"
 REMOTE_ROOT="/opt/cwo/tt"
 
