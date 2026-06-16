@@ -236,7 +236,9 @@ object FBEExpansion extends Expansion {
         f.satisfyIf(ShapestealingReq, ShapestealingReq.text,
             f.enemies.exists(e => game.starting.get(e).exists(r => f.at(r).num >= 3)))
         // SBR 4 — Animated Rush: 3 dice on the Faction Card (§3.12.4).
-        f.satisfyIf(AnimatedRushReq, AnimatedRushReq.text, game.fbeCardDice.num >= 3)
+        // Only check during Gather Power — mid-action dice additions (Byagoona Awaken) must not trigger this.
+        if (game.gatherPowerPhase)
+            f.satisfyIf(AnimatedRushReq, AnimatedRushReq.text, game.fbeCardDice.num >= 3)
     }
 
     // Eligible Monsters FBE controls = Fungal Thralls + any controlled Neutral
