@@ -292,7 +292,7 @@ object FBEExpansion extends Expansion {
             game.highPriests(f)
 
             // Succor — offer once per Doom phase if acquired and FBE has any unit.
-            if (f.can(Succor) && f.units.%(_.region.onMap).any)
+            if (f.can(Succor) && f.units.%(_.region.onMap).any && !f.oncePerAction.has(Succor))
                 + SuccorMainAction(f)
 
             + DoomDoneAction(f)
@@ -591,6 +591,7 @@ object FBEExpansion extends Expansion {
                 else
                     self.log(Succor.styled(FBE) + ": Eliminated", y, "Units, rolled", sum.toString,
                         "vs Ritual Marker", ritual.toString + " — no Elder Sign")
+                FBE.oncePerAction :+= Succor
                 Force(DoomAction(FBE))
             }
 
