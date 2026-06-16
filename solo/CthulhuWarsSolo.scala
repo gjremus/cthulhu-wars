@@ -5438,10 +5438,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             "Back"
                         ), { _ => topMenu() })
                     case 6 =>
-                        // "Beta builds" — links to the other builds.
+                        // "Beta builds" — links to all other builds.
                         ask("Beta builds", $(
                             "<a href='/' target='_blank'><div>Library at Celaeno (main)</div></a>",
                             "<a href='/mnu/' target='_blank'><div>More Neutral Units (MNU)</div></a>",
+                            "<a href='/TchoTcho/' target='_blank'><div>TchoTcho</div></a>",
+                            "<a href='/HB/' target='_blank'><div>Homebrew</div></a>",
                             "Cancel"
                         ), { _ => topMenu() })
                     case 5 =>
