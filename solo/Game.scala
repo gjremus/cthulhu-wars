@@ -2717,7 +2717,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val unplaced = setup.%!(starting.contains).%(f => board.starting(f).any)
             if (unplaced.none)
                 return PlayOrderAction
-            val f = unplaced.minBy(board.starting(_).num)
+            // OW always seats last; FBE always seats second-to-last (§1.6).
+            val f = unplaced.minBy(f => if (f == OW) Int.MaxValue else if (f == FBE) Int.MaxValue - 1 else board.starting(f).num)
 
             /*
             if (f == CC)
@@ -2732,7 +2733,20 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
             */
 
-            Ask(f).each(board.starting(f).diff(starting.values.$))(r => StartingRegionAction(f, r).as(r)(f, "starts in"))
+            // FBE setup area restriction (§1.6): non-faction areas NOT adjacent to
+            // any enemy start area. Other factions use their board.starting directly.
+            val legalAreas = if (f == FBE) {
+                val enemyStarts = starting.values.$
+                val adjacentToEnemy = enemyStarts./~(board.connected).distinct
+                val filtered = board.nonFactionRegions.diff(enemyStarts).diff(adjacentToEnemy)
+                // Fallback (§2.0a): if all non-faction areas are adjacent to enemy
+                // starts, fall back to non-faction areas minus already-taken.
+                if (filtered.any) filtered else board.nonFactionRegions.diff(enemyStarts)
+            }
+            else
+                board.starting(f).diff(starting.values.$)
+
+            Ask(f).each(legalAreas)(r => StartingRegionAction(f, r).as(r)(f, "starts in"))
 
         case StartingRegionAction(f, r) =>
             starting += f -> r

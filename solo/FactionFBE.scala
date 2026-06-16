@@ -254,14 +254,9 @@ object FBEExpansion extends Expansion {
         // the 6 Acolytes + 1 Controlled Gate. Starting Power 8 arises naturally
         // from the first Gather Power (1 Gate = 2 + 6 Cultists = 8). The only
         // FBE-specific setup state is the empty Faction-Card dice pool.
-        case SetupFactionsAction if game.setup.has(FBE) && !game.starting.contains(FBE) && game.board.starting(FBE).none =>
-            // Fallback only — if no legal empty/non-adjacent area exists, seat FBE
-            // with a placeholder so the setup loop unblocks (per §2.0a).
-            val taken = game.starting.values.$
-            val placeholder = areas.%(r => !taken.has(r)).headOption.|(areas.last)
-            game.starting = game.starting + (FBE -> placeholder)
-            FBE.log("INPUT NEEDED: no empty non-adjacent start area; placed at", placeholder)
-            Force(SetupFactionsAction)
+        // NOTE: FBE setup area filtering (§1.6) is now handled entirely in
+        // Game.scala SetupFactionsAction. board.starting(FBE) returns regions
+        // (never empty) so this faction-side fallback is no longer needed.
 
         // ── CHANGELING ADHERENTS — Gather Power (§1.10 SB1 / §3.8.3) ──────────
         // After Power is gathered (and raised to half), roll one Combat die per FBE
@@ -328,8 +323,9 @@ object FBEExpansion extends Expansion {
             game.independents(f)
 
             // Byagoona custom Awaken (§1.8): offer if Byagoona is in the pool and
-            // FBE controls at least one Monster to sacrifice.
-            if (f.pool.%(_.uclass == Byagoona).any && controlledMonstersAnywhere.any)
+            // there exists an area where (sum of monster costs) + current power >= 10.
+            if (f.pool.%(_.uclass == Byagoona).any && controlledMonstersAnywhere./(_.region).distinct.exists(r =>
+                controlledMonsters(r)./(_.uclass.cost).sum + f.power >= 10))
                 + ByagoonaAwakenMainAction(f)
 
             // Necromantic Spores requirement — Eliminate Two Fungal Thralls (§3.12.2).
@@ -351,8 +347,10 @@ object FBEExpansion extends Expansion {
 
         // ── BYAGOONA AWAKEN (§1.8 / §3.4.1) ──────────────────────────────────
         case ByagoonaAwakenMainAction(self) =>
-            val areasWithMonsters = controlledMonstersAnywhere./(_.region).distinct
-            Ask(self).each(areasWithMonsters)(r => ByagoonaAwakenAreaAction(self, r)).cancel
+            // Only show areas where (sum of monster costs) + current power >= 10 (§1.8).
+            val eligibleAreas = controlledMonstersAnywhere./(_.region).distinct.%(r =>
+                controlledMonsters(r)./(_.uclass.cost).sum + self.power >= 10)
+            Ask(self).each(eligibleAreas)(r => ByagoonaAwakenAreaAction(self, r)).cancel
 
         case ByagoonaAwakenAreaAction(self, r) =>
             // Begin a multi-select of Monsters in this area to Eliminate (1+).
