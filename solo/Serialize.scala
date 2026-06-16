@@ -162,6 +162,8 @@ class Serialize(val game : Game) {
         case EApply("FBCyclopeanGazeSource", ps) => FBCyclopeanGazeSource(parseExpr(ps(0)).asInstanceOf[Region], parseExpr(ps(1)).asInstanceOf[UnitClass])
         case EApply("FBWritheKillEntry", ps) => FBWritheKillEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[UnitClass], parseExpr(ps(3)).asInstanceOf[|[UnitRef]])
         case EApply("FBWrithePainEntry", ps) => FBWrithePainEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Region])
+        case EApply("TSPlaceTomeUnitAction", ps) if ps.length == 4 =>
+            TSPlaceTomeUnitAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitClass], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(0)).asInstanceOf[Faction])
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 

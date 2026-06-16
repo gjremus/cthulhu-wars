@@ -113,7 +113,7 @@ case class TSSkipRemoveTomeAction(self : Faction) extends OptionFactionAction("K
 }
 
 // [2026-04-04] TOME UNIT PLACEMENT — TS chooses which gate to place TH/Tendril from tomes 1-4
-case class TSPlaceTomeUnitAction(self : Faction, uc : UnitClass, r : Region, tomeNum : Int) extends BaseFactionAction("Place " + uc.styled(TS) + " from Tome " + tomeNumToRoman(tomeNum) + " at", r)
+case class TSPlaceTomeUnitAction(self : Faction, uc : UnitClass, r : Region, tomeNum : Int, flipper : Faction) extends BaseFactionAction("Place " + uc.styled(TS) + " from Tome " + tomeNumToRoman(tomeNum) + " at", r)
 
 // UNDULATE (carry chain: moved unit can carry lesser-cost units for free)
 case class TSUndulateCarryPhaseAction(self : Faction, from : Region, to : Region, carrierCost : Int) extends ForcedAction with PowerNeutral
@@ -468,14 +468,14 @@ object TSExpansion extends Expansion {
                     // [2026-04-04] TS chooses which gate to place Tomb-Herd
                     val gates = ts.gates.onMap.distinct
                     if (ts.pool(TombHerd).any && gates.any)
-                        Ask(ts).each(gates)(r => TSPlaceTomeUnitAction(ts, TombHerd, r, tomeNum))
+                        Ask(ts).each(gates)(r => TSPlaceTomeUnitAction(ts, TombHerd, r, tomeNum, self))
                     else
                         Force(EndAction(self))
                 case 3 | 4 =>
                     // [2026-04-04] TS chooses which gate to place Deep Tendril
                     val gates = ts.gates.onMap.distinct
                     if (ts.pool(DeepTendril).any && gates.any)
-                        Ask(ts).each(gates)(r => TSPlaceTomeUnitAction(ts, DeepTendril, r, tomeNum))
+                        Ask(ts).each(gates)(r => TSPlaceTomeUnitAction(ts, DeepTendril, r, tomeNum, self))
                     else
                         Force(EndAction(self))
                 case 5 | 6 =>
@@ -501,10 +501,10 @@ object TSExpansion extends Expansion {
             }
 
         // [2026-04-04] Handle TS's choice of gate for tome unit placement
-        case TSPlaceTomeUnitAction(self, uc, r, tomeNum) =>
+        case TSPlaceTomeUnitAction(self, uc, r, tomeNum, flipper) =>
             self.place(uc, r)
             self.log("placed", uc.styled(TS), "at", r, "from Tome", tomeNumToRoman(tomeNum))
-            EndAction(self)
+            EndAction(flipper)
 
         // CURSED TOME - ritual removal
         case TSRemoveTomeAction(self, tomeNum) =>
