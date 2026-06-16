@@ -350,7 +350,7 @@ trait Faction { f =>
     def summonCost(u : UnitClass, r : Region)(implicit game : Game) = u.cost
     def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = None
     def awakenDesc(u : UnitClass) : |[String] = None
-    def canAwakenIGOO(r : Region)(implicit game : Game) : Boolean = f.gates.has(r) && f.at(r, GOO).any
+    def canAwakenIGOO(r : Region)(implicit game : Game) : Boolean = f.gates.has(r) && f.at(r, GOO, ElderGod).any
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int
     def neutralStrength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) =
         units(Ghast).num * 0 +
