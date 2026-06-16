@@ -152,17 +152,14 @@ case class ShapestealingResolveAction(self : Faction, enemyMonster : UnitRef, ro
 
 // ── ANIMATED RUSH (Move, §1.10 SB4 / §3.10.4 / §4.4.4) ───────────────────────
 case class AnimatedRushMainAction(self : Faction, source : Region, dest : Region, n : Int)
-    extends OptionFactionAction(implicit g => ("Animated Rush".styled(FBE) + ": discard " + n + " dice, carry " + (2 * n) + " " + ("Unit".s(2 * n)).styled(FBE))) { override def question(implicit game : Game) = "Animated Rush".styled(FBE) }
+    extends OptionFactionAction(implicit g => ("Animated Rush".styled(FBE) + ": discard " + n + " " + (n == 1).?("die").|("dice") + ", move " + (2 * n) + " Units")) { override def question(implicit game : Game) = "Animated Rush".styled(FBE) }
 case class AnimatedRushSkipAction(self : Faction)
     extends OptionFactionAction("Animated Rush".styled(FBE) + ": skip") { override def question(implicit game : Game) = "Animated Rush".styled(FBE) }
-case class AnimatedRushPickAction(self : Faction, source : Region, dest : Region, k : Int, picked : $[UnitRef], remaining : $[UnitRef])
-    extends ForcedAction with PowerNeutral with Soft {
-    // §4.4.4 prompt: "Animated Rush: choose <2K> Units to carry".
-    override def question(implicit game : Game) =
-        "Animated Rush".styled(FBE) + ": choose " + (2 * k) + " " + ("Unit".s(2 * k)).styled(FBE) + " to carry"
-}
-case class AnimatedRushDoneAction(self : Faction, source : Region, dest : Region, k : Int, picked : $[UnitRef])
-    extends BaseFactionAction("Animated Rush".styled(FBE), "Done".styled("power"))
+case class AnimatedRushUnitPickAction(self : Faction, movesLeft : Int, moved : $[UnitRef]) extends ForcedAction with PowerNeutral
+case class AnimatedRushDestPickAction(self : Faction, unitRef : UnitRef, movesLeft : Int, moved : $[UnitRef])
+    extends ForcedAction with PowerNeutral with Soft { override def question(implicit game : Game) = "Animated Rush".styled(FBE) + ": move " + game.unit(unitRef).uclass.styled(FBE) + " to" }
+case class AnimatedRushMoveAction(self : Faction, unitRef : UnitRef, dest : Region, movesLeft : Int, moved : $[UnitRef]) extends ForcedAction with PowerNeutral
+case class AnimatedRushDoneEarlyAction(self : Faction) extends OptionFactionAction("Done") with PowerNeutral { override def question(implicit game : Game) = "Animated Rush".styled(FBE) }
 
 // ── SUCCOR (Doom Phase, §1.10 SB5 / §3.10.5 / §4.4.5) ────────────────────────
 case class SuccorMainAction(self : Faction)
@@ -184,7 +181,7 @@ case class SuccorRollAction(self : Faction, picked : $[UnitRef], rolls : $[Int])
 case class OverlordOfDeathMainAction(self : Faction)
     extends OptionFactionAction(OverlordOfDeath.styled(FBE) + ": Eliminate a Monster for " + 1.power) with MainQuestion
 case class OverlordOfDeathEliminateAction(self : Faction, monster : UnitRef)
-    extends BaseFactionAction(OverlordOfDeath.styled(FBE) + ": Eliminate", implicit g => g.unit(monster).uclass.styled(FBE))
+    extends BaseFactionAction(OverlordOfDeath.styled(FBE) + ": Eliminate", implicit g => g.unit(monster).uclass.styled(FBE) + " in " + g.unit(monster).region)
 
 // ── NECROMANTIC SPORES REQUIREMENT — Eliminate Two Fungal Thralls (§3.12.2) ──
 // 0 Power Common Action; the two Eliminations DO trigger Self Consuming (+1 Power).
@@ -492,42 +489,59 @@ object FBEExpansion extends Expansion {
             UnknownContinue
 
         // ── ANIMATED RUSH (§1.10 SB4 / §3.10.4) ──────────────────────────────
-        // Animated Rush triggers after Byagoona performs a (Common-Action) Move.
+        // After Byagoona moves: discard dice to move 2 non-Byagoona units per die,
+        // each from any area to any adjacent area (independent, not a carry).
         case MovedAction(self : FBE.type, u, from, to)
             if game.unit(u).uclass == Byagoona && self.can(AnimatedRush) && game.fbeCardDice.nonEmpty
-               && self.at(from).%(_.uclass != Byagoona).any =>
+               && self.units.%(_.region.onMap).%(_.uclass != Byagoona).any =>
             implicit val asking = Asking(self)
-            val maxK = math.min(game.fbeCardDice.num, self.at(from).%(_.uclass != Byagoona).num / 2)
+            val maxK = math.min(game.fbeCardDice.num, self.units.%(_.region.onMap).%(_.uclass != Byagoona).num / 2)
             (1 to maxK).foreach(k => + AnimatedRushMainAction(self, from, to, k))
             + AnimatedRushSkipAction(self)
             asking
 
         case AnimatedRushMainAction(self, source, dest, n) =>
-            Force(AnimatedRushPickAction(self, source, dest, n, $, self.at(source).%(_.uclass != Byagoona)./(_.ref)))
+            game.fbeCardDice = game.fbeCardDice.sortBy(x => x).drop(n)
+            self.log("Animated Rush".styled(FBE) + ": discarded", n, (n == 1).?("die").|("dice"),
+                "— moving", 2 * n, "Units")
+            Force(AnimatedRushUnitPickAction(self, 2 * n, $))
 
         case AnimatedRushSkipAction(self) =>
             self.log("Animated Rush".styled(FBE) + ": declined")
             Force(MoveContinueAction(self, true))
 
-        case AnimatedRushPickAction(self, source, dest, k, picked, remaining) =>
-            implicit val asking = Asking(self)
-            val need = 2 * k
-            if (picked.num < need)
-                remaining.foreach { ur =>
-                    + AnimatedRushPickAction(self, source, dest, k, picked :+ ur, remaining.but(ur))
-                        .as("Add " + game.unit(ur).uclass.styled(FBE))
+        case AnimatedRushUnitPickAction(self, movesLeft, moved) =>
+            if (movesLeft <= 0)
+                Force(MoveContinueAction(self, true))
+            else {
+                implicit val asking = Asking(self)
+                self.units.%(_.region.onMap).%(_.uclass != Byagoona).%(u => !moved.has(u.ref)).%(u => game.board.connected(u.region).any).foreach { u =>
+                    + AnimatedRushDestPickAction(self, u.ref, movesLeft, moved)
+                        .as(u.uclass.styled(FBE) + " in " + u.region)
                 }
-            if (picked.num == need)
-                + AnimatedRushDoneAction(self, source, dest, k, picked)
+                + AnimatedRushDoneEarlyAction(self)
+                asking
+            }
+
+        case AnimatedRushDestPickAction(self, unitRef, movesLeft, moved) =>
+            implicit val asking = Asking(self)
+            val u = game.unit(unitRef)
+            game.board.connected(u.region).foreach { dest =>
+                + AnimatedRushMoveAction(self, unitRef, dest, movesLeft, moved)
+                    .as(dest)
+            }
             + CancelAction
             asking
 
-        case AnimatedRushDoneAction(self, source, dest, k, picked) =>
-            // Discard k dice (lowest values, deterministic) from the Faction Card.
-            game.fbeCardDice = game.fbeCardDice.sortBy(x => x).drop(k)
-            picked.foreach(ur => game.unit(ur).region = dest)
-            self.log("Animated Rush".styled(FBE) + ": discarded", k, (k == 1).?("die").|("dice"),
-                "carried", picked.num, ("Unit".s(picked.num)).styled(FBE), "to", dest)
+        case AnimatedRushMoveAction(self, unitRef, dest, movesLeft, moved) =>
+            val u = game.unit(unitRef)
+            val from = u.region
+            u.region = dest
+            self.log("Animated Rush".styled(FBE) + ":", u.uclass.styled(FBE), from, "→", dest)
+            Force(AnimatedRushUnitPickAction(self, movesLeft - 1, moved :+ unitRef))
+
+        case AnimatedRushDoneEarlyAction(self) =>
+            self.log("Animated Rush".styled(FBE) + ": done early")
             Force(MoveContinueAction(self, true))
 
         // ── SUCCOR (§1.10 SB5 / §3.10.5) ─────────────────────────────────────
@@ -541,7 +555,7 @@ object FBEExpansion extends Expansion {
             implicit val asking = Asking(self)
             remaining.foreach { ur =>
                 + SuccorPickAction(self, picked :+ ur, remaining.but(ur))
-                    .as("Add " + game.unit(ur).uclass.styled(FBE))
+                    .as("Add " + game.unit(ur).uclass.styled(FBE) + " in " + game.unit(ur).region)
             }
             if (picked.any) {
                 // Roll Y d6 (replay-safe) then resolve.
@@ -577,7 +591,7 @@ object FBEExpansion extends Expansion {
                 else
                     self.log(Succor.styled(FBE) + ": Eliminated", y, "Units, rolled", sum.toString,
                         "vs Ritual Marker", ritual.toString + " — no Elder Sign")
-                EndAction(self)
+                Force(DoomAction(FBE))
             }
 
         // ── OVERLORD OF DEATH (§1.10 SB6 / §3.10.6) ──────────────────────────

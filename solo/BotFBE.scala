@@ -112,11 +112,12 @@ class GameEvaluationFBE(implicit game : Game) extends GameEvaluation(FBE)(game) 
                     true                                         |=> (100 * n) -> "animated rush carry"
                 case AnimatedRushSkipAction(f) =>
                     true                                         |=> 50   -> "skip animated rush"
-                case AnimatedRushPickAction(f, _, _, _, picked, remaining) =>
-                    remaining.any                                |=> 100  -> "pick carry unit"
-                    picked.any                                   |=> 50   -> "carry units picked"
-                case AnimatedRushDoneAction(f, _, _, _, _) =>
-                    true                                         |=> 50   -> "animated rush done"
+                case AnimatedRushDestPickAction(f, _, _, _) =>
+                    true                                         |=> 100  -> "pick rush destination"
+                case AnimatedRushMoveAction(f, _, _, _, _) =>
+                    true                                         |=> 100  -> "rush move unit"
+                case AnimatedRushDoneEarlyAction(f) =>
+                    true                                         |=> 50   -> "animated rush done early"
 
                 // Succor — opt in if FBE has spare low-value units.
                 case SuccorMainAction(f) =>
