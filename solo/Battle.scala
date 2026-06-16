@@ -1109,7 +1109,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Faceless Blight (FBE) — Distributed Death (§3.14.3 / §4.6): if FBE
                 // has card dice and any Kill is assigned to an FBE Unit, offer to
                 // discard N dice to prevent N Kills (before EliminatePhase resolves).
-                if (factions.has(FBE) && sides.has(FBE) && !fbeDistributedDeathOffered && game.fbeCardDice.nonEmpty) {
+                if (factions.has(FBE) && sides.has(FBE) && !fbeDistributedDeathOffered && game.fbeCardDice.nonEmpty && FBE.onMap(Byagoona).any) {
                     val fbeKilled = sides./~(fac => (if (fac == attacker) attackers else defenders).forces)
                         .%(u => u.faction == FBE && u.health == Killed).num
                     if (fbeKilled > 0) {
