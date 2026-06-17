@@ -1011,8 +1011,7 @@ object CthulhuWarsSolo {
                         case FBE => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                        // The Burrowers Beneath (TB): placeholder acolyte sprite (reuse dc-acolyte tinted)
-                        case TB => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        case TB => DrawRect("tb-cadavolyte", |(tint), x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -1041,6 +1040,7 @@ object CthulhuWarsSolo {
                         // Tombstalker (TS): high priest unit sprite
                         case TS => DrawRect("ts-high-priest", |(tint), x - 35, y - 60, 70, 66)
                         case TT => DrawRect("tt-high-priest", |(tint), x - 35, y - 60, 70, 68)
+                        case TB => DrawRect("tb-high-priest", |(tint), x - 35, y - 60, 70, 67)
                         case _ => DrawRect("gc-high-priest", |(tint), x - 35, y - 60, 70, 66)
                     }
 
@@ -1076,8 +1076,7 @@ object CthulhuWarsSolo {
                         case FBE => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // Xyrious Storm (XSS): placeholder glyph (reuse dc-glyph tinted XSS blue-grey)
                         case XSS => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
-                        // The Burrowers Beneath (TB): placeholder glyph (reuse dc-glyph tinted TB brown)
-                        case TB => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
+                        case TB => DrawRect("tb-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
                         case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
@@ -1308,14 +1307,11 @@ object CthulhuWarsSolo {
                     case EyeOfTheStorm    => DrawRect("n-star-vampire", |(tint), x - 35, y - 75, 70, 85)
                     case Petrichor        => DrawRect("gc-cthulhu", |(tint), x - 66, y - 158, 131, 175)
 
-                    // The Burrowers Beneath (TB): placeholder sprites (no art yet).
-                    // Cadavolyte = Acolyte-sized, Tentacle = Acolyte-sized, Chthonian = Gnorri,
-                    // ShuddeMellHead = Cthulhu-sized, ShuddeMellSegment = Monster-sized.
-                    case Cadavolyte        => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                    case Tentacle          => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                    case Chthonian         => DrawRect("n-gnorri", |(tint), x - 17, y - 53, 35, 59)
-                    case ShuddeMellHead    => DrawRect("gc-cthulhu", |(tint), x - 66, y - 158, 131, 175)
-                    case ShuddeMellSegment => DrawRect("n-dimensional-shambler", |(tint), x - 35, y - 75, 70, 85)
+                    case Cadavolyte        => DrawRect("tb-cadavolyte", |(tint), x - 17, y - 54, 39, 60)
+                    case Tentacle          => DrawRect("tb-tentacle", |(tint), x - 17, y - 54, 39, 60)
+                    case Chthonian         => DrawRect("tb-chthonian", |(tint), x - 30, y - 60, 60, 63)
+                    case ShuddeMellHead    => DrawRect("tb-shudde-mell-head", |(tint), x - 66, y - 158, 131, 158)
+                    case ShuddeMellSegment => DrawRect("tb-shudde-mell-segment", |(tint), x - 45, y - 40, 90, 40)
 
                     case _ => null
                 }
@@ -5713,11 +5709,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         ), { _ => topMenu() })
                     case 6 =>
                         // "Beta builds" — links to all other builds.
+                        // Colors: TT=faction pink, BB=faction gold, MNU=light grey, HB=rainbow per-letter
                         ask("Beta builds", $(
                             "<a href='/' target='_blank'><div>Library at Celaeno (main)</div></a>",
-                            "<a href='/mnu/' target='_blank'><div>More Neutral Units (MNU)</div></a>",
-                            "<a href='/TchoTcho/' target='_blank'><div>TchoTcho</div></a>",
-                            "<a href='/BB/' target='_blank'><div>Bubastis</div></a>",
+                            "<a href='/mnu/' target='_blank'><div><span style='color:#b8b8b8'>More Neutral Units (MNU)</span></div></a>",
+                            "<a href='/TchoTcho/' target='_blank'><div><span style='color:#fc9ca0'>TchoTcho</span></div></a>",
+                            "<a href='/BB/' target='_blank'><div><span style='color:#c8a84b'>Bubastis</span></div></a>",
                             "Cancel"
                         ), { _ => topMenu() })
                     case 5 =>
