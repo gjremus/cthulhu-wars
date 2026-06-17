@@ -175,13 +175,22 @@ case class SuccorPickAction(self : Faction, picked : $[UnitRef], remaining : $[U
 case class SuccorRollAction(self : Faction, picked : $[UnitRef], rolls : $[Int])
     extends ForcedAction
 
-// ── OVERLORD OF DEATH (Ongoing pay-cost substitution, §1.10 SB6 / §3.10.6) ───
-// Handled inline by the Necromantic-Spores requirement / Awaken flows that need a
-// cost; a dedicated MainAction lets FBE proactively convert Monsters → Power.
+// ── OVERLORD OF DEATH (Infernal-Pact-style cost discount, §1.10 SB6 / §3.10.6) ─
+// HB Fix 127: redesigned from a standalone free action into a cost discount.
+// Multi-select monsters to eliminate; each reduces the Power cost of the NEXT action by 1.
 case class OverlordOfDeathMainAction(self : Faction)
-    extends OptionFactionAction(OverlordOfDeath.styled(FBE) + ": Eliminate a Monster for " + 1.power) with MainQuestion
-case class OverlordOfDeathEliminateAction(self : Faction, monster : UnitRef)
-    extends BaseFactionAction(OverlordOfDeath.styled(FBE) + ": Eliminate", implicit g => g.unit(monster).uclass.styled(FBE) + " in " + g.unit(monster).region)
+    extends OptionFactionAction("Discount with " + OverlordOfDeath.styled(FBE)) with MainQuestion with Soft with PowerNeutral
+case class OverlordOfDeathPickAction(self : Faction, picked : $[UnitRef], remaining : $[UnitRef])
+    extends ForcedAction with PowerNeutral with Soft {
+    override def question(implicit game : Game) =
+        OverlordOfDeath.styled(FBE) + ": choose Monsters to Eliminate (discount so far: " + picked.num.power + ")"
+}
+case class OverlordOfDeathDoneAction(self : Faction, picked : $[UnitRef])
+    extends OptionFactionAction("Done".styled("power")) with Soft with PowerNeutral { def question(implicit game : Game) = OverlordOfDeath.styled(FBE) }
+case class OverlordOfDeathCancelAction(self : Faction)
+    extends OptionFactionAction("Cancel " + OverlordOfDeath.styled(FBE)) with PowerNeutral { def question(implicit game : Game) = OverlordOfDeath.styled(FBE) }
+case class OverlordOfDeathCancelMainAction(self : Faction)
+    extends OptionFactionAction("Cancel " + OverlordOfDeath.styled(FBE)) with MainQuestion with PowerNeutral
 
 // ── NECROMANTIC SPORES REQUIREMENT — Eliminate Two Fungal Thralls (§3.12.2) ──
 // 0 Power Common Action; the two Eliminations DO trigger Self Consuming (+1 Power).
@@ -223,6 +232,12 @@ object FBEExpansion extends Expansion {
             }
         }
         game.fbeSelfConsumingDeaths = $
+        // HB Fix 127: Overlord of Death discount applies to the NEXT action only.
+        // Reset after the discounted action resolves (afterAction fires via EndAction).
+        if (game.fbeOverlordDiscount > 0) {
+            FBE.log(OverlordOfDeath.styled(FBE) + ": unused discount expired")
+            game.fbeOverlordDiscount = 0
+        }
     }
 
     // ── CONTINUOUS / CONDITION-BASED SBR evaluation (§3.12) ──────────────────
@@ -309,6 +324,25 @@ object FBEExpansion extends Expansion {
         case MainAction(f : FBE.type) =>
             implicit val asking = Asking(f)
 
+            // HB Fix 127: Cancel Overlord of Death if discount is active
+            if (game.fbeOverlordDiscount > 0)
+                + OverlordOfDeathCancelMainAction(f)
+
+            // HB Fix 127: Overlord of Death discount — offer when Byagoona is on map,
+            // FBE has the spellbook, FBE has monsters to eliminate, and no discount
+            // is currently active (must pick action before discounting again).
+            if (f.can(OverlordOfDeath) && f.all(Byagoona).any && controlledMonstersAnywhere.any && game.fbeOverlordDiscount == 0)
+                + OverlordOfDeathMainAction(f)
+
+            // HB Fix 127: Transient power boost for offer checks (same pattern as
+            // FB Infernal Pact). OoD discount is a separate pool; game.moves/captures/
+            // recruits/etc. check f.power >= cost directly and don't know about the
+            // discount. Temporarily add the discount to f.power so offer checks see
+            // effective purchasing power, then restore at the end of the block.
+            val oodBoost = game.fbeOverlordDiscount
+            if (oodBoost > 0)
+                f.power += oodBoost
+
             game.moves(f)
             game.captures(f)
             game.recruits(f)
@@ -329,16 +363,16 @@ object FBEExpansion extends Expansion {
             if (f.needs(NecromanticSporesReq) && f.onMap(FungalThrall).num >= 2)
                 + EliminateTwoFungalThrallsMainAction(f)
 
-            // Overlord of Death (§1.10 SB6): proactively convert a Monster → 1 Power.
-            if (f.can(OverlordOfDeath) && f.all(Byagoona).any && controlledMonstersAnywhere.any)
-                + OverlordOfDeathMainAction(f)
-
             game.neutralSpellbooks(f)
             game.libraryActions(f)
             game.highPriests(f)
             game.reveals(f)
 
             game.endTurn(f)(f.battled.any || game.nexed.any)
+
+            // HB Fix 127: restore the transient OoD boost after menu building
+            if (oodBoost > 0)
+                f.power -= oodBoost
 
             asking
 
@@ -595,16 +629,44 @@ object FBEExpansion extends Expansion {
                 Force(DoomAction(FBE))
             }
 
-        // ── OVERLORD OF DEATH (§1.10 SB6 / §3.10.6) ──────────────────────────
+        // ── OVERLORD OF DEATH (§1.10 SB6 / §3.10.6) — HB Fix 127 ────────────
+        // Redesigned as Infernal-Pact-style cost discount. Multi-select monsters
+        // to eliminate; each = 1 Power discount on the NEXT action.
         case OverlordOfDeathMainAction(self) =>
-            Ask(self).each(controlledMonstersAnywhere)(u =>
-                OverlordOfDeathEliminateAction(self, u.ref)).cancel
+            Force(OverlordOfDeathPickAction(self, $, controlledMonstersAnywhere./(_.ref)))
 
-        case OverlordOfDeathEliminateAction(self, monster) =>
-            game.eliminate(game.unit(monster))
-            self.power += 1
-            self.log(OverlordOfDeath.styled(FBE) + ": Eliminated a Monster for", 1.power)
-            EndAction(self)
+        case OverlordOfDeathPickAction(self, picked, remaining) =>
+            implicit val asking = Asking(self)
+            remaining.foreach { ur =>
+                val u = game.unit(ur)
+                + OverlordOfDeathPickAction(self, picked :+ ur, remaining.but(ur))
+                    .as(u.uclass.styled(FBE) + " in " + u.region + " (Cost " + u.uclass.cost + ")")
+            }
+            if (picked.any)
+                + OverlordOfDeathDoneAction(self, picked)
+            + OverlordOfDeathCancelAction(self)
+            asking
+
+        case OverlordOfDeathDoneAction(self, picked) =>
+            // Eliminate the selected monsters and set the discount
+            picked.foreach(ur => game.eliminate(game.unit(ur)))
+            // OoD eliminations must NOT trigger Self-Consuming (same pattern as Succor Fix 122)
+            game.fbeSelfConsumingDeaths = $
+            game.fbeOverlordDiscount = picked.num
+            self.log(OverlordOfDeath.styled(FBE) + ": Eliminated", picked.num, "Monster" + (picked.num > 1).??("s") +
+                ", next action discounted by", picked.num.power)
+            Force(MainAction(self))
+
+        case OverlordOfDeathCancelAction(self) =>
+            Force(MainAction(self))
+
+        case OverlordOfDeathCancelMainAction(self) =>
+            // Cancel an active discount — no monsters are restored (they were eliminated),
+            // but the discount is forfeited. This enables undo to work: undoing past
+            // this point restores the monsters via the undo system.
+            game.fbeOverlordDiscount = 0
+            self.log(OverlordOfDeath.styled(FBE) + ": discount cancelled")
+            Force(MainAction(self))
 
         // ── NECROMANTIC SPORES REQUIREMENT (§3.12.2) ─────────────────────────
         case EliminateTwoFungalThrallsMainAction(self) =>
@@ -628,6 +690,79 @@ object FBEExpansion extends Expansion {
             self.log(("Eliminated two " + FungalThrall.name + "s").styled(FBE))
             self.satisfy(NecromanticSporesReq, NecromanticSporesReq.text)
             EndAction(self)
+
+        // ── OVERLORD OF DEATH — turn-end cleanup (HB Fix 127) ────────────────
+        // If the discount is still active when the turn ends without having
+        // gone through EndAction (which fires afterAction → reset), forfeit it.
+        case EndTurnAction(f) if f == FBE && game.fbeOverlordDiscount > 0 =>
+            FBE.log(OverlordOfDeath.styled(FBE) + ": unused discount expired")
+            game.fbeOverlordDiscount = 0
+            UnknownContinue
+
+        // ── OVERLORD OF DEATH — cost discount intercepts (HB Fix 127) ─────────
+        // Same pattern as FB Infernal Pact: pre-consume OoD discount, pre-add
+        // the consumed amount to f.power, return UnknownContinue so the base
+        // handler's `self.power -= cost` runs against the boosted value.
+        // Net result: real power loses (cost - consumed); OoD pool loses consumed.
+        case RitualAction(f, cost, k) if f == FBE && game.fbeOverlordDiscount > 0 =>
+            val consumed = min(game.fbeOverlordDiscount, cost)
+            game.fbeOverlordDiscount -= consumed
+            f.power += consumed
+            FBE.log(OverlordOfDeath.styled(FBE), "discounted", consumed.power, "on ritual")
+            UnknownContinue
+
+        case BuildGateAction(f, r) if f == FBE && game.fbeOverlordDiscount > 0 =>
+            val baseCost = 3 - f.has(UmrAtTawil).??(1)
+            val consumed = min(game.fbeOverlordDiscount, baseCost)
+            game.fbeOverlordDiscount -= consumed
+            f.power += consumed
+            FBE.log(OverlordOfDeath.styled(FBE), "discounted", consumed.power, "on build gate")
+            UnknownContinue
+
+        case RecruitAction(f, uc, r) if f == FBE && game.fbeOverlordDiscount > 0 =>
+            val baseCost = f.recruitCost(uc, r)
+            val consumed = min(game.fbeOverlordDiscount, baseCost)
+            game.fbeOverlordDiscount -= consumed
+            f.power += consumed
+            FBE.log(OverlordOfDeath.styled(FBE), "discounted", consumed.power, "on recruit")
+            UnknownContinue
+
+        case SummonAction(f, uc, r) if f == FBE && game.fbeOverlordDiscount > 0 =>
+            val baseCost = f.summonCost(uc, r)
+            val consumed = min(game.fbeOverlordDiscount, baseCost)
+            game.fbeOverlordDiscount -= consumed
+            f.power += consumed
+            FBE.log(OverlordOfDeath.styled(FBE), "discounted", consumed.power, "on summon")
+            UnknownContinue
+
+        case MoveAction(f, u, from, to, cost) if f == FBE && game.fbeOverlordDiscount > 0 =>
+            val consumed = min(game.fbeOverlordDiscount, cost)
+            game.fbeOverlordDiscount -= consumed
+            f.power += consumed
+            if (consumed > 0)
+                FBE.log(OverlordOfDeath.styled(FBE), "discounted", consumed.power, "on move")
+            UnknownContinue
+
+        case AttackAction(f, r, fe, effect) if f == FBE && game.fbeOverlordDiscount > 0 && effect.has(FromBelow).not =>
+            val consumed = min(game.fbeOverlordDiscount, 1)
+            game.fbeOverlordDiscount -= consumed
+            f.power += consumed
+            FBE.log(OverlordOfDeath.styled(FBE), "discounted", consumed.power, "on attack")
+            UnknownContinue
+
+        case CaptureAction(f, r, fe, effect) if f == FBE && game.fbeOverlordDiscount > 0 && effect.has(FromBelow).not =>
+            val consumed = min(game.fbeOverlordDiscount, 1)
+            game.fbeOverlordDiscount -= consumed
+            f.power += consumed
+            FBE.log(OverlordOfDeath.styled(FBE), "discounted", consumed.power, "on capture")
+            UnknownContinue
+
+        case IndependentGOOAction(f, lc, r, _) if f == FBE && game.fbeOverlordDiscount > 0 =>
+            val consumed = min(game.fbeOverlordDiscount, lc.power)
+            game.fbeOverlordDiscount -= consumed
+            f.power += consumed
+            FBE.log(OverlordOfDeath.styled(FBE), "discounted", consumed.power, "on awaken")
+            UnknownContinue
 
         case _ => UnknownContinue
     }

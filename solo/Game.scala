@@ -1302,9 +1302,11 @@ case class AbandonGateAction(self : Faction, r : Region, then : ForcedAction) ex
 
 case class RitualAction(self : Faction, cost : Int, k : Int) extends OptionFactionAction(implicit g => {
     val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, cost) else 0
-    val effectiveCost = cost - ipDiscount
+    val oodDiscount = if (self == FBE) min(g.fbeOverlordDiscount, cost) else 0
+    val effectiveCost = cost - ipDiscount - oodDiscount
     val base = "Perform " + "Ritual of Annihilation".styled("doom") + " for " + effectiveCost.power +
-        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")")
+        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")") +
+        (oodDiscount > 0).??(" (" + "OoD discounted".styled(FBE.style) + ")")
     // TT Tablets of the Gods: show bonus ES count and HP elimination warning
     val tabletsExtra = (self == TT && self.can(TabletsOfTheGods)).??{
         val bonus = self.gates.count(r => self.at(r, HighPriest).any)
@@ -1503,6 +1505,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Changeling Adherents Gather-Power sentinel — prevents the roll-and-place from
     // re-firing when AfterPowerGatherAction is re-entered. Reset each Gather Power.
     var fbeChangelingDoneThisGather : Boolean = false
+    // HB Fix 127: Overlord of Death redesigned as Infernal-Pact-style cost discount.
+    // Stores the current discount (number of Monsters eliminated this session).
+    // Applied to the NEXT power-spending action, then reset to 0 in afterAction.
+    var fbeOverlordDiscount : Int = 0
 
     // Defilers Court (DC) state — per guide G29 (CRIT): Sin pool lives on Game.scala
     // for undo safety (NOT on DCExpansion singleton). HB Fix 96 (2026-06-07):

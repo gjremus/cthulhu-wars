@@ -100,12 +100,21 @@ class GameEvaluationFBE(implicit game : Game) extends GameEvaluation(FBE)(game) 
                 case EliminateTwoFungalThrallsDoneAction(f, picked) =>
                     true                                         |=> 200  -> "done two thralls"
 
-                // Overlord of Death — only when Power is scarce and Thralls abundant.
+                // Overlord of Death — discount the next action by eliminating Monsters.
+                // Prefer when power is tight and a high-cost action is affordable with discount.
                 case OverlordOfDeathMainAction(f) =>
-                    (self.power <= 1 && self.onMap(FungalThrall).num >= 3) |=> 300 -> "convert thrall to power"
-                    true                                         |=> -200 -> "hold monsters"
-                case OverlordOfDeathEliminateAction(f, _) =>
-                    true                                         |=> 100  -> "overlord eliminate"
+                    (self.power <= 3 && self.onMap(FungalThrall).num >= 2) |=> 250 -> "discount with overlord"
+                    true                                         |=> -100 -> "hold monsters"
+                case OverlordOfDeathPickAction(f, picked, remaining) =>
+                    // Prefer picking 1-2 monsters; diminishing returns beyond that
+                    (picked.num == 0) |=> 100  -> "pick first monster"
+                    (picked.num >= 1) |=> 50   -> "pick additional monster"
+                case OverlordOfDeathDoneAction(f, picked) =>
+                    true                                         |=> 200  -> "confirm overlord discount"
+                case OverlordOfDeathCancelAction(f) =>
+                    true                                         |=> -100 -> "cancel overlord pick"
+                case OverlordOfDeathCancelMainAction(f) =>
+                    true                                         |=> -300 -> "cancel active discount"
 
                 // Animated Rush — carry units 2:1 along Byagoona's move.
                 case AnimatedRushMainAction(f, _, _, n) =>
