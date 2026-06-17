@@ -1913,6 +1913,7 @@ object CthulhuWarsSolo {
                         case Monster => 2
                         case Terror => 3
                         case GOO => 4
+                        case ElderGod => 4
                     }
 
                     // Library maps: perspective-aware placement. Sprites are bottom-
