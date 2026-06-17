@@ -125,11 +125,11 @@ case class TsunamiEyePickAction(self : Faction, eyes : $[UnitRef])
     extends ForcedAction with Soft
 case class TsunamiDestPickAction(self : Faction, eye : UnitRef, source : Region)
     extends ForcedAction with Soft {
-    def question(implicit game : Game) = Tsunami.styled(XSS) + ": choose Land Area"
+    override def question(implicit game : Game) = Tsunami.styled(XSS) + ": choose Land Area"
 }
 case class TsunamiExtrasPickAction(self : Faction, eye : UnitRef, source : Region, dest : Region, picked : $[UnitRef], remaining : $[UnitRef])
     extends ForcedAction with PowerNeutral with Soft {
-    def question(implicit game : Game) = Tsunami.styled(XSS) + ": bring other Units from " + source + " to " + dest
+    override def question(implicit game : Game) = Tsunami.styled(XSS) + ": bring other Units from " + source + " to " + dest
 }
 case class TsunamiAction(self : Faction, eye : UnitRef, source : Region, dest : Region, extras : $[UnitRef])
     extends ForcedAction
@@ -142,11 +142,11 @@ case class StaticAccumulatorSkipAction(self : Faction)
     extends OptionFactionAction(("Skip " + StaticAccumulator.name).styled(XSS)) with PreBattleQuestion with Soft
 case class StaticAccumulatorSourcePickAction(self : Faction, arena : Region)
     extends ForcedAction with PowerNeutral with Soft {
-    def question(implicit game : Game) = StaticAccumulator.styled(XSS) + ": choose adjacent Area"
+    override def question(implicit game : Game) = StaticAccumulator.styled(XSS) + ": choose adjacent Area"
 }
 case class StaticAccumulatorUnitPickAction(self : Faction, source : Region, arena : Region, picked : $[UnitRef], remaining : $[UnitRef], costLeft : Int)
     extends ForcedAction with PowerNeutral with Soft {
-    def question(implicit game : Game) = StaticAccumulator.styled(XSS) + ": pick Units (Cost left: " + costLeft + ")"
+    override def question(implicit game : Game) = StaticAccumulator.styled(XSS) + ": pick Units (Cost left: " + costLeft + ")"
 }
 case class StaticAccumulatorDoneAction(self : Faction, source : Region, arena : Region, picked : $[UnitRef])
     extends ForcedAction with PowerNeutral
@@ -156,19 +156,19 @@ case class StaticAccumulatorAction(self : Faction, source : Region, arena : Regi
 // -- CLOUD OF ASHES (§1.10 SB3 / §3.10.3 / §4.4.3) ---------------------------
 // Kill-reroute prompt (per Monster killed)
 case class CloudOfAshesHoldAction(self : Faction, u : UnitRef)
-    extends OptionFactionAction(implicit g => CloudOfAshes.styled(XSS) + ": send " + g.unit(u).uclass.styled(XSS) + " to Faction Card?") with Soft
+    extends OptionFactionAction(implicit g => CloudOfAshes.styled(XSS) + ": send " + g.unit(u).uclass.styled(XSS) + " to Faction Card?") with Soft { override def question(implicit game : Game) = CloudOfAshes.styled(XSS) }
 case class CloudOfAshesDeclineAction(self : Faction, u : UnitRef)
-    extends OptionFactionAction(implicit g => CloudOfAshes.styled(XSS) + ": return " + g.unit(u).uclass.styled(XSS) + " to Pool") with Soft
+    extends OptionFactionAction(implicit g => CloudOfAshes.styled(XSS) + ": return " + g.unit(u).uclass.styled(XSS) + " to Pool") with Soft { override def question(implicit game : Game) = CloudOfAshes.styled(XSS) }
 // Doom Phase return
 case class CloudOfAshesDoomReturnMainAction(self : Faction)
     extends OptionFactionAction(CloudOfAshes.styled(XSS) + ": return a Monster") with DoomQuestion with Soft
 case class CloudOfAshesDoomReturnPickAction(self : Faction, held : $[UnitRef])
     extends ForcedAction with PowerNeutral with Soft {
-    def question(implicit game : Game) = CloudOfAshes.styled(XSS) + ": choose Monster to return"
+    override def question(implicit game : Game) = CloudOfAshes.styled(XSS) + ": choose Monster to return"
 }
 case class CloudOfAshesDoomReturnAreaAction(self : Faction, monster : UnitRef)
     extends ForcedAction with PowerNeutral with Soft {
-    def question(implicit game : Game) = CloudOfAshes.styled(XSS) + ": choose Area with Controlled Gate"
+    override def question(implicit game : Game) = CloudOfAshes.styled(XSS) + ": choose Area with Controlled Gate"
 }
 case class CloudOfAshesDoomReturnAction(self : Faction, monster : UnitRef, dest : Region)
     extends BaseFactionAction(CloudOfAshes.styled(XSS) + ": return Monster to", dest)
@@ -177,7 +177,7 @@ case class CloudOfAshesDoomReturnAction(self : Faction, monster : UnitRef, dest 
 // Post-Battle excess Pain self-assignment
 case class DistantThunderclapPainAction(self : Faction, remaining : Int, candidates : $[UnitRef])
     extends ForcedAction with PowerNeutral {
-    def question(implicit game : Game) = "Distant Thunderclap".styled(XSS) + ": assign excess Pain (" + remaining + " left)"
+    override def question(implicit game : Game) = "Distant Thunderclap".styled(XSS) + ": assign excess Pain (" + remaining + " left)"
 }
 case class DistantThunderclapPainTargetAction(self : Faction, target : UnitRef, remaining : Int, candidates : $[UnitRef])
     extends BaseFactionAction(implicit g => "Distant Thunderclap".styled(XSS) + ": Pain", implicit g => g.unit(target).uclass.styled(XSS))
@@ -481,8 +481,7 @@ object XSSExpansion extends Expansion {
                 Force(DistantThunderclapPainTargetAction(self, candidates.head, remaining, candidates))
             else
                 Ask(self).each(candidates)(ur =>
-                    DistantThunderclapPainTargetAction(self, ur, remaining, candidates)
-                        .as(game.unit(ur).uclass.styled(XSS) + " in " + game.unit(ur).region))
+                    DistantThunderclapPainTargetAction(self, ur, remaining, candidates))
 
         case DistantThunderclapPainTargetAction(self, target, remaining, candidates) =>
             val u = game.unit(target)
