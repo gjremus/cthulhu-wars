@@ -1471,10 +1471,73 @@ object Overlays {
               </tbody>
             </table>"""
 
+        case s if s.headOption.exists(h => h == "XSS" || h == "TB") => xssTbOverlay(s)
+
+
         case _ =>
             // println("onExternalClick " + s.mkString(" | "))
             ""
     }).but("")
+
+    def xssTbOverlay(s : $[Any]) : String = s match {
+        case $("XSS") =>
+            faction(XSS, "info:xss-background", Precipitation, "Ongoing",
+            "After Combat, assign Pain equal to the number of your Kills. You choose the order of Pain assignment (XSS picks first, regardless of Attacker/Defender role). Fully cancelled by Crawling Chaos Madness.",
+            $(), $(
+            (Acolyte,           6, "1", "0", s""""""),
+            (AmphibianCrawler,  2, "1", "0", s"""<div class=p>Monster. 0 Combat.</div>"""),
+            (Twister,           4, "2", "1-3", s"""<div class=p>Combat: 3 in Land Areas, 1 elsewhere.</div>"""),
+            (EyeOfTheStorm,     3, "3", "1-4", s"""<div class=p>Combat: 4 in Sea Areas, 1 elsewhere.</div><div class=p>Spellbook: ${reference(XSS, Tsunami)}</div>"""),
+            (Petrichor,         1, "8", "?", s"""
+                <div class=p>${cost(s"How to Awaken ${Petrichor.name}:")}</div>
+                <div class=p>${cost("1)")} You must Control a Unit with Cost 3+ in the target Area.</div>
+                <div class=p>${cost("2)")} Pay ${power(8)}. ${Petrichor.name} appears in the Area.</div>
+                <div class=p>${combat} Equals the count of XSS Units in play with Cost 2 or greater (includes Petrichor).</div>
+                <div class=p><span class=ability-color>Distant Thunderclap</span> ${cost("(Post-Battle):")} If Petrichor's Kills exceed available enemy Units, assign excess Pain to your own Units (XSS chooses targets).</div>
+                <div class=p>Spellbooks: ${reference(XSS, StaticAccumulator)}, ${reference(XSS, CloudOfAshes)}</div>""")
+        ))
+        case $("XSS", PetrichorBattlesAloneReq.text) => requirement("Petrichor is alone (no other XSS Units) in a Battle.")
+        case $("XSS", FourGlyphFootprintReq.text) => requirement("Have Units in 4 Areas with Faction Glyphs (any in-game or off-board core faction's Start Area / Glyph).")
+        case $("XSS", SeaGatesReq.text) => requirement("Control 3 Gates in Sea Areas<br/>OR<br/>Control 3 Gates in Areas with Faction Glyphs.")
+        case $("XSS", LandGatesReq.text) => requirement("Control 3 Gates in Land Areas<br/>OR<br/>Control 3 Gates in Areas with Faction Glyphs.")
+        case $("XSS", MonsterMassReq.text) => requirement("Have 10 Cost worth of Monsters in play (sum of Monster Costs on map).")
+        case $("XSS", AwakenPetrichorReq.text) => requirement("Awaken Petrichor.")
+        case $("XSS", Whirlwind.name) => spellbook(Whirlwind.name, "Battle", "After rolling dice, reroll any number of your non-Kill/non-Pain dice. You may do this once per Battle.")
+        case $("XSS", StaticAccumulator.name) => spellbook(StaticAccumulator.name, "Pre-Battle", "Move Units with total Cost up to 4 from one adjacent Area into the Battle Area.")
+        case $("XSS", CloudOfAshes.name) => spellbook(CloudOfAshes.name, "Ongoing", "When one of your Monsters is Killed, you may place it on your Faction Card instead of returning it to Pool. In the Doom Phase, return one Monster from the Faction Card to a Controlled Gate; remaining Monsters return to Pool.")
+        case $("XSS", Tsunami.name) => spellbook(Tsunami.name, "Action: Cost 1", "Move an Eye of the Storm from a Sea Area to an adjacent Land Area. Any or all of your other Units in the Sea Area may move with it.")
+        case $("XSS", FrozenSolid.name) => spellbook(FrozenSolid.name, "Ongoing", "Enemy Units in Areas with your Twisters cannot use the Move Action unless they pay +1 Power.")
+        case $("XSS", TorrentialDownpour.name) => spellbook(TorrentialDownpour.name, "Gather Power", "Gain 1 Power for each Sea Area containing one or more of your Units.")
+        case $("TB") =>
+            faction(TB, "info:tb-background", ThousandWrithingMaws, "Ongoing",
+            "Tentacles cannot Build nor Control Gates, nor be Captured. As an Action (Cost 2), recruit/summon two 2-Cost Units to eligible Areas.<br/><br/>" +
+            "<span class=ability-color>Behemoth</span> <span class=cost-color>(Ongoing):</span> Whenever TB Power reaches 0 (after Shudde M'ell has been Awakened and the Mantle is in play), place a Segment from Pool on the Mantle. Parts may be moved to the Mantle as a 0-Cost Unlimited Action.",
+            $(), $(
+            (Cadavolyte,        6, "2", "0", s"""<div class=p>Cultist. Can Build and Control Gates.</div>"""),
+            (Tentacle,         10, "2", "0", s"""<div class=p>Cultist. CANNOT Build/Control Gates nor be Captured. Provides Power during Gather Power.</div>"""),
+            (Chthonian,         5, "2", "1", s"""<div class=p>Monster. 1 Combat.</div>"""),
+            (ShuddeMellHead,    1, "8", "?", s"""
+                <div class=p>${cost("How to Awaken Shudde M'ell:")}</div>
+                <div class=p>${cost("1)")} The Mantle must be in play.</div>
+                <div class=p>${cost("2)")} Pay ${power(8)}. Shudde M'ell (Head) appears on the Mantle.</div>
+                <div class=p>${combat} 3 per Part in play (Head + Segments). Up to 4 Parts = up to 12 Combat.</div>
+                <div class=p>Spellbooks: ${reference(TB, Autotomy)}, ${reference(TB, Grasp)}</div>"""),
+            (ShuddeMellSegment, 3, "0", "0", s"""<div class=p>GOO Part. Placed via Behemoth or Autotomy. Contributes to Head's Combat (3 per Part).</div>""")
+        ))
+        case $("TB", OverlayMantleReq.text) => requirement("Control Gates in 2 adjacent Areas, then overlay the Mantle.")
+        case $("TB", TenTentaclesReq.text) => requirement("There are 10 Tentacles in play.")
+        case $("TB", RemoveGatePlaceChthonianReq.text) => requirement("Gain 2 Power, remove a Gate you Control, place a Chthonian in any Area you occupy.")
+        case $("TB", GatesAtGOOsReq.text) => requirement("Pay 8 Power, place Gates at every Area containing a Great Old One. Gain 1 Power per Gate placed.")
+        case $("TB", AwakenShuddeMellReq.text) => requirement("Awaken Shudde M'ell.")
+        case $("TB", ShuddeMellInThreeGlyphsReq.text) => requirement("Shudde M'ell Parts simultaneously in 3 specific Glyph Areas, OR Pay 6 Power as an Action.")
+        case $("TB", Stalk.name) => spellbook(Stalk.name, "Post-Move", "After a Move Action, relocate one Cultist to any Area your moved Units now occupy.")
+        case $("TB", Autotomy.name) => spellbook(Autotomy.name, "Post-Battle", "Transfer a Kill to a Segment. Gain Elder Signs per Segment in Pool. Ignore Pains, retreat all. At turn end, place Pool Segments on the Mantle.")
+        case $("TB", Subterrane.name) => spellbook(Subterrane.name, "Ongoing", "The Mantle is adjacent to every Area containing a TB Tentacle (for TB Units only).")
+        case $("TB", Grasp.name) => spellbook(Grasp.name, "Battle", "In a Battle with Shudde M'ell Head, add +1 Combat die per Tentacle in the Battle Area.")
+        case $("TB", Ensnare.name) => spellbook(Ensnare.name, "Action: Cost 1", "Choose an enemy with Units in a Tentacle Area. Roll 1d6. Enemy relocates that many Units to Head's Area.")
+        case $("TB", PsychicShriek.name) => spellbook(PsychicShriek.name, "Action: Cost 1", "Choose an enemy. Roll 2d6. Enemy retreats that many Units to Areas without TB Gates.")
+        case _ => ""
+    }
 
     def combat = s"<span class=combat-color>Combat:</span>"
 

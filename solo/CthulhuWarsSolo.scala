@@ -4793,7 +4793,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // standard PickerEntry pipeline — glyphSrc resolves to dc-glyph.webp
         // from DC.short.toLowerCase, matching every other faction.
         // Faceless Blight (FBE): Homebrew faction appended to the alt picker (§3.13.1)
-        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE)
+        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB)
         val altPickerEntries : $[PickerEntry] =
             altPickerFactions./(f => PickerEntry(f, false)).flatMap {
                 // Insert the BB-alt entry immediately after standard BB.
