@@ -2182,7 +2182,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // catnapped faction). I am sorry this gap survived through Fix 45.
         // Mirror the same `++ ($(BB.moon))` pattern already used by `summons`
         // (line ~2071) and `moves` (moonUnits at line ~2011).
-        val battleAreas = areas ++ $(BB.moon)
+        val battleAreas = areas ++ game.factions.has(BB).??($(BB.moon))
         battleAreas.nex.%(f.affords(1)).diff(enough).%(r => factionlike.but(f).exists(f.canAttack(r))).some.foreach { r =>
             + AttackMainAction(f, r, nexed.any.?(EnergyNexus))
         }

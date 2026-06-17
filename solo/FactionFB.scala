@@ -1213,7 +1213,7 @@ object FBExpansion extends Expansion {
                 // we add it explicitly. The FB-region-refs path picks up Moon
                 // as a "join" target if FB already has a unit there (e.g. via
                 // earlier Catnapping or earlier Writhe-to-Moon).
-                val moonDest = (self == FB).??($(BB.moon))
+                val moonDest = (self == FB && game.factions.has(BB)).??($(BB.moon))
                 val fbRegionRefs = (areas ++ moonDest).%(r => self.at(r).any).sortBy(_.toString)
                 fbRegionRefs.foreach { r =>
                     val candidates = self.at(r).%!(u => chosen.has(u.ref))
