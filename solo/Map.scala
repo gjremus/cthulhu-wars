@@ -45,6 +45,7 @@ object EarthMap3 extends Board {
         // the empty set here is safe for all callers (distance falls through to 4,
         // gate-control / cathedral / faction logic skips the Moon naturally).
         case _ : MoonHold => $()
+        case _ : MantleHold => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -95,6 +96,8 @@ object EarthMap3 extends Board {
         case FBE => regions
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
+        // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
+        case TB => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -162,6 +165,7 @@ object EarthMap4v35 extends Board {
         case Antarctica => $(SouthPacific, SouthAtlantic, IndianOcean)
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
+        case _ : MantleHold => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -212,6 +216,8 @@ object EarthMap4v35 extends Board {
         case FBE => regions
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
+        // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
+        case TB => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -283,6 +289,7 @@ object EarthMap4v53 extends Board {
         case Antarctica => $(SouthPacific, SouthAtlantic, IndianOcean)
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
+        case _ : MantleHold => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -333,6 +340,8 @@ object EarthMap4v53 extends Board {
         case FBE => regions
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
+        // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
+        case TB => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -412,6 +421,7 @@ object EarthMap5 extends Board {
         case Antarctica => $(SouthPacific, SouthAtlantic, IndianOcean)
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
+        case _ : MantleHold => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -462,6 +472,8 @@ object EarthMap5 extends Board {
         case FBE => regions
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
+        // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
+        case TB => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -551,6 +563,7 @@ object EarthMap6 extends Board {
         case MountainsOfMadness => $(Antarctica, SouthAtlantic, IndianOcean)
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
+        case _ : MantleHold => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -601,6 +614,8 @@ object EarthMap6 extends Board {
         case FBE => regions
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
+        // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
+        case TB => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -819,6 +834,7 @@ object LibraryCelaeno55 extends Board {
         case TheCrawlingOnes => $(CharnelHall, LarvaeOfOuterGods)
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
+        case _ : MantleHold => $()
     }
 
     // Full adjacency including archway connections — used for movement
@@ -862,6 +878,8 @@ object LibraryCelaeno55 extends Board {
         case FBE => regions
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
+        // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
+        case TB => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -953,6 +971,7 @@ object LibraryCelaeno33 extends Board {
         case TheCrawlingOnes => $(Hyperquarium, Oubliette, BlackHall, LarvaeOfOuterGods)
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
+        case _ : MantleHold => $()
     }
 
     def connected(region : Region) = {
@@ -971,7 +990,7 @@ object LibraryCelaeno33 extends Board {
         case GC => $(Hyperquarium); case CC => $(BlueHall); case BG => $(Fountain); case YS => $(FloatingTower)
         case SL => $(ChamberOfSngac); case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case TB => $()
         case _ => regions
     }
 
@@ -1031,6 +1050,7 @@ object LibraryCelaeno53 extends Board {
         case TheCrawlingOnes => $(CharnelHall, LarvaeOfOuterGods)
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
+        case _ : MantleHold => $()
     }
 
     def connected(region : Region) = {
@@ -1050,7 +1070,7 @@ object LibraryCelaeno53 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case TB => $()
         case _ => regions
     }
 
@@ -1131,6 +1151,7 @@ object LibraryCelaeno35 extends Board {
         case TheCrawlingOnes => $(Hyperquarium, Oubliette, BlackHall, LarvaeOfOuterGods)
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
+        case _ : MantleHold => $()
     }
 
     def connected(region : Region) = {
@@ -1150,7 +1171,7 @@ object LibraryCelaeno35 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case TB => $()
         case _ => regions
     }
 

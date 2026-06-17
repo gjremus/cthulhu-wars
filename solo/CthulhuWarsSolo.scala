@@ -725,6 +725,8 @@ object CthulhuWarsSolo {
                                         case FBE => BotFBE  .ask(actions, 0.2)(game)
                                         // Xyrious Storm (XSS): bot dispatch (Easy)
                                         case XSS => BotXSS  .ask(actions, 0.2)(game)
+                                        // The Burrowers Beneath (TB): bot dispatch (Easy)
+                                        case TB => BotTB    .ask(actions, 0.2)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -751,6 +753,8 @@ object CthulhuWarsSolo {
                                         case FBE => BotFBE  .ask(actions, 0.03)(game)
                                         // Xyrious Storm (XSS): bot dispatch (Normal)
                                         case XSS => BotXSS  .ask(actions, 0.03)(game)
+                                        // The Burrowers Beneath (TB): bot dispatch (Normal)
+                                        case TB => BotTB    .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -781,6 +785,8 @@ object CthulhuWarsSolo {
                                         case FBE => BotFBE  .ask(as, 0.03)(game)
                                         // Xyrious Storm (XSS): bot dispatch (AllVsHuman)
                                         case XSS => BotXSS  .ask(as, 0.03)(game)
+                                        // The Burrowers Beneath (TB): bot dispatch (AllVsHuman)
+                                        case TB => BotTB    .ask(as, 0.03)(game)
                                     })
 
 
@@ -969,6 +975,8 @@ object CthulhuWarsSolo {
                     case FBE => Processing(|("#3d5f1c"), |("#333333"), None)
                     // Xyrious Storm (XSS): stormy blue-grey #4a6b7a
                     case XSS => Processing(|("#4a6b7a"), |("#333333"), None)
+                    // The Burrowers Beneath (TB): earthy brown #8b6914
+                    case TB => Processing(|("#8b6914"), |("#333333"), None)
                     // Library map units: no tint (use original icon images)
                     case LibraryFaction => defaultProcessing
                     case _  => defaultProcessing
@@ -1003,6 +1011,8 @@ object CthulhuWarsSolo {
                         case FBE => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        // The Burrowers Beneath (TB): placeholder acolyte sprite (reuse dc-acolyte tinted)
+                        case TB => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -1066,6 +1076,8 @@ object CthulhuWarsSolo {
                         case FBE => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // Xyrious Storm (XSS): placeholder glyph (reuse dc-glyph tinted XSS blue-grey)
                         case XSS => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
+                        // The Burrowers Beneath (TB): placeholder glyph (reuse dc-glyph tinted TB brown)
+                        case TB => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
                         case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
@@ -1295,6 +1307,15 @@ object CthulhuWarsSolo {
                     case Twister          => DrawRect("n-shantak", |(tint), x - 39, y - 89, 79, 100)
                     case EyeOfTheStorm    => DrawRect("n-star-vampire", |(tint), x - 35, y - 75, 70, 85)
                     case Petrichor        => DrawRect("gc-cthulhu", |(tint), x - 66, y - 158, 131, 175)
+
+                    // The Burrowers Beneath (TB): placeholder sprites (no art yet).
+                    // Cadavolyte = Acolyte-sized, Tentacle = Acolyte-sized, Chthonian = Gnorri,
+                    // ShuddeMellHead = Cthulhu-sized, ShuddeMellSegment = Monster-sized.
+                    case Cadavolyte        => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                    case Tentacle          => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                    case Chthonian         => DrawRect("n-gnorri", |(tint), x - 17, y - 53, 35, 59)
+                    case ShuddeMellHead    => DrawRect("gc-cthulhu", |(tint), x - 66, y - 158, 131, 175)
+                    case ShuddeMellSegment => DrawRect("n-dimensional-shambler", |(tint), x - 35, y - 75, 70, 85)
 
                     case _ => null
                 }
@@ -3961,6 +3982,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         // MatchError for FBE games.
                                         case FBE => BotFBE
                                         case XSS => BotXSS
+                                        case TB => BotTB
                                     })
                                     bot.eval(g, aa).sortWith(bot.compare)
                                 }
@@ -4752,7 +4774,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Order: GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB
         // Faceless Blight (FBE): Homebrew faction appended (§3.13.1)
         // Xyrious Storm (XSS): Homebrew faction appended
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB)
 
         // Alt picker display order (may differ from allFactions).
         // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB, DC.

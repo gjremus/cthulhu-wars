@@ -1409,6 +1409,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case FBE => $(FBEExpansion)
             // Xyrious Storm (XSS): Homebrew faction
             case XSS => $(XSSExpansion)
+            // The Burrowers Beneath (TB): Homebrew faction
+            case TB => $(TBExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any).$(NeutralMonstersExpansion) ++
@@ -1504,6 +1506,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Xyrious Storm (XSS) state — Cloud Of Ashes holding zone (§1.10 SB3).
     // Monsters placed on the Faction Card during elimination; returned to map at Doom.
     var xssFactionCardMonsters : $[UnitRef] = $
+
+    // The Burrowers Beneath (TB) state — per FactionTB.scala §2.4 / undo HARD RULE.
+    var tbMantleInPlay : Boolean = false
+    var tbMantleAreas : $[Region] = $
+    var tbShuddeMellEverAwakened : Boolean = false
+    var tbEnsnareTargetedThisPhase : $[Faction] = $
+    var tbShriekTargetedThisPhase : $[Faction] = $
     // Set true when Distributed Death cancels a Kill assigned to Byagoona, so
     // Succor's SBR ("Byagoona Dies … do not fulfill if the Kill is prevented") is
     // NOT satisfied (§3.12.5). Reset per battle.

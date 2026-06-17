@@ -167,14 +167,14 @@ class Serialize(val game : Game) {
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 
-    def parseRegion(s : String) : |[Region] = (game.board.regions :+ SL.slumber :+ GC.deep :+ BB.moon).find(_.id == s)
+    def parseRegion(s : String) : |[Region] = (game.board.regions :+ SL.slumber :+ GC.deep :+ BB.moon :+ TB.mantle).find(_.id == s)
 }
 
 object Serialize {
     // BUBASTIS: BB added to faction registry (Task 3.15.1)
     // Defilers Court (DC): Homebrew faction
     // Faceless Blight (FBE): Homebrew faction (§3.15.1)
-    val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT, BB, DC, FBE, XSS) ++ $(NeutralAbhoth, LibraryFaction)
+    val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT, BB, DC, FBE, XSS, TB) ++ $(NeutralAbhoth, LibraryFaction)
 
     val loyaltyCards = $(
         HighPriestCard,
