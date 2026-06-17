@@ -1631,6 +1631,48 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     FBE.satisfy(SuccorReq, SuccorReq.text)
                 }
 
+                // Xyrious Storm (XSS) — PetrichorBattlesAlone SBR (§3.12.1): Petrichor
+                // was XSS's ONLY participating Unit in a Battle. Check all XSS units that
+                // were in the battle (forces + eliminated + exempted).
+                if (factions.has(XSS) && sides.has(XSS) && XSS.needs(PetrichorBattlesAloneReq)) {
+                    val xssSide = if (attacker == XSS) attackers else defenders
+                    val allXSSParticipants = (xssSide.forces ++ eliminated ++ exempted).%(_.faction == XSS)
+                    val petrichorOnly = allXSSParticipants.%(_.uclass == Petrichor).any &&
+                        allXSSParticipants.%(_.uclass != Petrichor).none
+                    if (petrichorOnly)
+                        XSS.satisfy(PetrichorBattlesAloneReq, "Petrichor battles alone")
+                }
+
+                // Xyrious Storm (XSS) — Distant Thunderclap (Post-Battle, §3.4.3):
+                // OPTIONAL. If Petrichor participated, XSS may assign its own excess Pains
+                // (pains XSS rolled that exceeded opponent's available units) to XSS's own units.
+                // Elder Sign if: after self-pain, no units remain in battle area AND opponent
+                // had a non-Cultist unit participating.
+                if (factions.has(XSS) && sides.has(XSS) && !XSS.oncePerAction.has(Precipitation)) {
+                    val xssSide = if (attacker == XSS) attackers else defenders
+                    val opponentSide = if (attacker == XSS) defenders else attackers
+                    val opponent = if (attacker == XSS) defender else attacker
+                    val petrichorParticipated = (xssSide.forces ++ eliminated.%(_.faction == XSS) ++ exempted.%(_.faction == XSS)).%(_.uclass == Petrichor).any
+                    if (petrichorParticipated) {
+                        // Excess Pains = XSS's pain rolls that exceeded opponent's available targets.
+                        // At PostBattlePhase, opponentSide.forces still has all units that survived
+                        // kills (including those since retreated via pain). Eliminated killed units
+                        // have been removed from forces.
+                        val xssPainRolls = xssSide.rolls.count(_ == Pain)
+                        val opponentAvailableForPain = opponentSide.forces.num
+                        val excessPains = (xssPainRolls - opponentAvailableForPain).max(0)
+                        // Opponent had non-Cultist: check full original roster (forces + eliminated + exempted)
+                        val opponentHadNonCultist = (opponentSide.forces ++ eliminated.%(_.faction == opponent) ++ exempted.%(_.faction == opponent))
+                            .%(_.uclass.utype != Cultist).any
+                        if (excessPains > 0 && XSS.at(arena).any) {
+                            XSS.oncePerAction :+= Precipitation
+                            return Ask(XSS)
+                                .add(DistantThunderclapOfferAction(XSS, excessPains, arena, opponentHadNonCultist))
+                                .add(DistantThunderclapSkipAction(XSS))
+                        }
+                    }
+                }
+
                 // Faceless Blight (FBE) — Necromantic Spores (Post-Battle, §3.14.4):
                 // if FBE participated, has the SB, controls a Monster in the arena, and
                 // an enemy Unit was Killed, offer to Eliminate a controlled Monster and

@@ -992,6 +992,11 @@ class Player(private val f : Faction)(implicit game : Game) {
         else
         if (f.at(r, Terror).any)
             true
+        else
+        // Xyrious Storm (XSS) Frozen Solid: XSS Acolytes controlling Gates in Faction Glyph Areas
+        // cannot be captured by Monsters. GOO/Cultist/Terror captures still apply (checked above).
+        if (e == XSS && e.can(FrozenSolid) && e.at(r, Acolyte).%(_.onGate).any && XSSExpansion.isFactionGlyphArea(r)(game))
+            false
         else {
             f.at(r, Monster).%(u => u.uclass.canCapture(u)).any
     }
@@ -3003,6 +3008,27 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                             f.log("Bacchanal: gained", 1.power, "and", "1".styled("dc"), "Sin (Y'Golonac in play)")
                         else
                             f.log("Bacchanal: gained", 1.power, "(Sin at cap", dcSinCap.toString.styled("dc") + ")")
+                    }
+                }
+
+                // Xyrious Storm (XSS) Torrential Downpour (Gather Power, §1.10 SB6):
+                // Gain 1 Power if you have Amphibian Crawlers in BOTH a Land Area AND a Sea Area.
+                // Gain +1 additional Power for each of those Amphibian Crawler Areas that
+                // contain an Enemy-Controlled Gate.
+                if (f == XSS && f.can(TorrentialDownpour)) {
+                    val crawlerRegions = f.onMap(AmphibianCrawler)./(_.region).distinct
+                    val crawlersInLand = crawlerRegions.%(_.glyph != Ocean).any
+                    val crawlersInSea = crawlerRegions.%(_.glyph == Ocean).any
+                    if (crawlersInLand && crawlersInSea) {
+                        // Base: 1 Power for having Crawlers in both Land and Sea
+                        var bonus = 1
+                        // Bonus: +1 per Crawler-occupied area with an enemy gate
+                        val enemyGateAreas = crawlerRegions.%(r =>
+                            factions.but(f).exists(e => e.gates.has(r)))
+                        bonus += enemyGateAreas.num
+                        f.power += bonus
+                        f.log(TorrentialDownpour.styled(XSS) + ": gained", bonus.power,
+                            "(Crawlers in Land + Sea" + (enemyGateAreas.any).??(", " + enemyGateAreas.num + " enemy gate" + (enemyGateAreas.num > 1).??("s")) + ")")
                     }
                 }
 
