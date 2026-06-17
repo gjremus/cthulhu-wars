@@ -239,6 +239,10 @@
                 color: #3d5f1c;
             }
 
+            .xss {
+                color: #4a6b7a;
+            }
+
             .ds-background {
                 background-color: #3d2b1b !important;
             }
@@ -361,6 +365,14 @@
 
             .fbe-border {
                 outline-color: #3d5f1c !important;
+            }
+
+            .xss-background {
+                background-color: #4a6b7a !important;
+            }
+
+            .xss-border {
+                outline-color: #4a6b7a !important;
             }
 
             .p8 {
@@ -1024,6 +1036,9 @@
              icon rendering. -->
         <img class="asset" id="fbe-glyph"         src="webp/images/dc-glyph.webp" />
 
+        <!-- Xyrious Storm (XSS): placeholder glyph (reuses dc-glyph, tinted via "xss" case in overlay.scala) -->
+        <img class="asset" id="xss-glyph"         src="webp/images/dc-glyph.webp" />
+
         <img class="asset" id="ds-glyph"          src="webp/images/ds-glyph.webp" />
         <img class="asset" id="ds-acolyte"        src="webp/images/ds-acolyte.webp" />
         <img class="asset" id="ds-high-priest"    src="webp/images/ds-high-priest.webp" />
@@ -1208,6 +1223,17 @@
         <img class="asset" id="info:fbe-acolyte"         src="webp/info/dc-acolyte.svg" />
         <img class="asset" id="info:fbe-fungal-thrall"   src="webp/info/n-dimensional-shambler.svg" />
         <img class="asset" id="info:fbe-byagoona"        src="webp/info/ys-king-in-yellow.svg" />
+
+        <!-- Xyrious Storm (XSS): info-panel assets. PLACEHOLDERS until real art
+             lands: acolyte reuses dc-acolyte; monsters reuse neutral sprites;
+             background reuses DC background. Replace with xss-*.svg when art
+             is supplied. -->
+        <img class="asset" id="info:xss-background"        src="webp/info/dc-background.webp" />
+        <img class="asset" id="info:xss-acolyte"           src="webp/info/dc-acolyte.svg" />
+        <img class="asset" id="info:xss-amphibian-crawler" src="webp/info/n-gnorri.svg" />
+        <img class="asset" id="info:xss-twister"           src="webp/info/n-shantak.svg" />
+        <img class="asset" id="info:xss-eye-of-the-storm"  src="webp/info/n-star-vampire.svg" />
+        <img class="asset" id="info:xss-petrichor"         src="webp/info/gc-cthulhu.svg" />
 
         <img class="asset" id="info:bg-acolyte" src="webp/info/bg-acolyte.svg" />
         <img class="asset" id="info:bg-background" src="webp/info/bg-background.webp" />

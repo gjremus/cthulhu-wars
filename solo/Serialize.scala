@@ -174,7 +174,7 @@ object Serialize {
     // BUBASTIS: BB added to faction registry (Task 3.15.1)
     // Defilers Court (DC): Homebrew faction
     // Faceless Blight (FBE): Homebrew faction (§3.15.1)
-    val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT, BB, DC, FBE) ++ $(NeutralAbhoth, LibraryFaction)
+    val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT, BB, DC, FBE, XSS) ++ $(NeutralAbhoth, LibraryFaction)
 
     val loyaltyCards = $(
         HighPriestCard,

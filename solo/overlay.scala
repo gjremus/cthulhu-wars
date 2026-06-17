@@ -1390,6 +1390,8 @@ object Overlays {
                         // Sepia base (~hue 40°) hue-rotated to olive-green and darkened so the
                         // RoA ceremony glyph reads FBE green, NOT the default sepia.
                         case "fbe" => "sepia(1) hue-rotate(50deg) saturate(3) brightness(0.75)"
+                        // Xyrious Storm (XSS): stormy blue-grey #4a6b7a
+                        case "xss" => "sepia(1) hue-rotate(165deg) saturate(2) brightness(0.9)"
                         case _    => "sepia(1)"
                     }
                     s"""<img src="${imageSource("n-tulzscha")}"

@@ -723,6 +723,8 @@ object CthulhuWarsSolo {
                                         case DC => BotDC   .ask(actions, 0.2)(game)
                                         // Faceless Blight (FBE): bot dispatch (Easy)
                                         case FBE => BotFBE  .ask(actions, 0.2)(game)
+                                        // Xyrious Storm (XSS): bot dispatch (Easy)
+                                        case XSS => BotXSS  .ask(actions, 0.2)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -747,6 +749,8 @@ object CthulhuWarsSolo {
                                         case DC => BotDC   .ask(actions, 0.03)(game)
                                         // Faceless Blight (FBE): bot dispatch (Normal)
                                         case FBE => BotFBE  .ask(actions, 0.03)(game)
+                                        // Xyrious Storm (XSS): bot dispatch (Normal)
+                                        case XSS => BotXSS  .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -775,6 +779,8 @@ object CthulhuWarsSolo {
                                         case DC => BotDC   .ask(as, 0.03)(game)
                                         // Faceless Blight (FBE): bot dispatch (AllVsHuman)
                                         case FBE => BotFBE  .ask(as, 0.03)(game)
+                                        // Xyrious Storm (XSS): bot dispatch (AllVsHuman)
+                                        case XSS => BotXSS  .ask(as, 0.03)(game)
                                     })
 
 
@@ -961,6 +967,8 @@ object CthulhuWarsSolo {
                     case DC => Processing(|("#F0EDA8"), |("#333333"), None)
                     // Faceless Blight (FBE): deep mossy green #3d5f1c
                     case FBE => Processing(|("#3d5f1c"), |("#333333"), None)
+                    // Xyrious Storm (XSS): stormy blue-grey #4a6b7a
+                    case XSS => Processing(|("#4a6b7a"), |("#333333"), None)
                     // Library map units: no tint (use original icon images)
                     case LibraryFaction => defaultProcessing
                     case _  => defaultProcessing
@@ -993,6 +1001,8 @@ object CthulhuWarsSolo {
                         // tinted FBE green (placeholder per §A.v / §3.17). Replace with
                         // fbe-acolyte.webp when art lands.
                         case FBE => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
+                        case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -1054,6 +1064,8 @@ object CthulhuWarsSolo {
                         // FBE green (placeholder per §A.v / §3.17.2). Replace with
                         // fbe-glyph.webp when art lands.
                         case FBE => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
+                        // Xyrious Storm (XSS): placeholder glyph (reuse dc-glyph tinted XSS blue-grey)
+                        case XSS => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
                         case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
@@ -1276,6 +1288,13 @@ object CthulhuWarsSolo {
                     // fbe-fungal-thrall.webp / fbe-byagoona.webp when art lands.
                     case FungalThrall => DrawRect("n-dimensional-shambler", |(tint), x - 35, y - 75, 70, 85)
                     case Byagoona     => DrawRect("ys-king-in-yellow", |(tint), x - 44, y - 111, 85, 116)
+
+                    // Xyrious Storm (XSS): placeholder sprites (no art yet).
+                    // Amphibian Crawler = Gnorri, Twister = Shantak, Eye of the Storm = Star Vampire, Petrichor = Cthulhu-sized.
+                    case AmphibianCrawler => DrawRect("n-gnorri", |(tint), x - 17, y - 53, 35, 59)
+                    case Twister          => DrawRect("n-shantak", |(tint), x - 39, y - 89, 79, 100)
+                    case EyeOfTheStorm    => DrawRect("n-star-vampire", |(tint), x - 35, y - 75, 70, 85)
+                    case Petrichor        => DrawRect("gc-cthulhu", |(tint), x - 66, y - 158, 131, 175)
 
                     case _ => null
                 }
@@ -3941,6 +3960,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         // pattern, §2.9/§3.13). Without this the debug menu throws a
                                         // MatchError for FBE games.
                                         case FBE => BotFBE
+                                        case XSS => BotXSS
                                     })
                                     bot.eval(g, aa).sortWith(bot.compare)
                                 }
@@ -4731,7 +4751,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Master faction list — drives existing faction picker, replay parsing, and expansion dispatch order.
         // Order: GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB
         // Faceless Blight (FBE): Homebrew faction appended (§3.13.1)
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE)
+        // Xyrious Storm (XSS): Homebrew faction appended
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS)
 
         // Alt picker display order (may differ from allFactions).
         // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB, DC.
