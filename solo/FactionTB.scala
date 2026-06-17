@@ -246,7 +246,7 @@ case class TBEnsnareRelocateAction(self : Faction, enemy : Faction, area : Regio
     override def question(implicit game : Game) = Ensnare.styled(TB) + ": " + enemy.full + " relocate " + count + " units to " + headArea
 }
 case class TBEnsnareRelocatePickAction(self : Faction, enemy : Faction, u : UnitRef, area : Region, headArea : Region, count : Int, relocated : $[UnitRef], remaining : $[UnitRef])
-    extends BaseFactionAction(implicit g => Ensnare.styled(TB) + ": relocate", implicit g => game.unit(u).uclass.styled(enemy))
+    extends BaseFactionAction(implicit g => Ensnare.styled(TB) + ": relocate", implicit g => g.unit(u).uclass.styled(enemy))
 
 // -- PSYCHIC SHRIEK (§1.10 SB6 / §3.10.6 / §4.4) -----------------------------
 case class TBPsychicShriekMainAction(self : Faction)
@@ -265,7 +265,7 @@ case class TBPsychicShriekRetreatAction(self : Faction, enemy : Faction, count :
     override def question(implicit game : Game) = PsychicShriek.styled(TB) + ": " + enemy.full + " retreat " + count + " units"
 }
 case class TBPsychicShriekRetreatPickAction(self : Faction, enemy : Faction, u : UnitRef, dest : Region, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
-    extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": retreat", implicit g => game.unit(u).uclass.styled(enemy) + " to " + dest)
+    extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": retreat", implicit g => g.unit(u).uclass.styled(enemy) + " to " + dest)
 
 // -- SBR-1: OVERLAY THE MANTLE (§1.9 / §3.12.1 / §4.5) -----------------------
 case class TBOverlayMantleMainAction(self : Faction)
@@ -461,7 +461,7 @@ object TBExpansion extends Expansion {
                 val ownGates = f.gates
                 val adjacentPairs = ownGates./~(r1 =>
                     ownGates.%(r2 => r1 != r2 && game.board.connected(r1).has(r2))./(r2 => (r1, r2)))
-                    ./(p => if (p._1.hashCode <= p._2.hashCode) p else (p._2, p._1)).distinct
+./{ case (a, b) => if (a.hashCode <= b.hashCode) (a, b) else (b, a) }.distinct
                 if (adjacentPairs.any)
                     + TBOverlayMantleMainAction(f)
             }
@@ -517,7 +517,7 @@ object TBExpansion extends Expansion {
             if (areas.num == 1)
                 Force(TBWrithingMawsPlaceSecondAction(self, uc, areas.head))
             else
-                Ask(self).each(areas)(r => TBWrithingMawsPlaceSecondAction(self, uc, r).as(r)).cancel
+                Ask(self).each(areas)(r => TBWrithingMawsPlaceSecondAction(self, uc, r)).cancel
 
         case TBWrithingMawsPlaceSecondAction(self, uc, r1) =>
             val areas = if (uc.utype == Cultist)
@@ -527,7 +527,7 @@ object TBExpansion extends Expansion {
             if (areas.num == 1)
                 Force(TBWrithingMawsAction(self, uc, r1, areas.head))
             else
-                Ask(self).each(areas)(r => TBWrithingMawsAction(self, uc, r1, r).as(r)).cancel
+                Ask(self).each(areas)(r => TBWrithingMawsAction(self, uc, r1, r)).cancel
 
         case TBWrithingMawsAction(self, uc, r1, r2) =>
             self.power -= 2
@@ -599,7 +599,7 @@ object TBExpansion extends Expansion {
         case TBStalkDestAction(self, cultist, movedRegions) =>
             // Destination = any of the just-Moved Units' Areas
             Ask(self).each(movedRegions)(r =>
-                TBStalkAction(self, cultist, r).as(r)).cancel
+                TBStalkAction(self, cultist, r)).cancel
 
         case TBStalkAction(self, cultist, dest) =>
             val u = game.unit(cultist)
@@ -636,7 +636,7 @@ object TBExpansion extends Expansion {
             // Choose 1 adjacent Area to retreat all TB units (not killed/eliminated) to
             val adjacent = game.board.connected(arena) ++ tbMantleEdges(arena)
             Ask(self).each(adjacent.distinct)(r =>
-                TBAutotomyAction(self, segment, r, arena).as(r))
+                TBAutotomyAction(self, segment, r, arena))
 
         case TBAutotomyAction(self, segment, retreatDest, arena) =>
             // Kill the Segment
@@ -730,7 +730,7 @@ object TBExpansion extends Expansion {
         // ====================================================================
         case TBPsychicShriekMainAction(self) =>
             val validEnemies = game.factions.but(self).%(e =>
-                !game.tbShriekTargetedThisPhase.has(e) && e.allInPlay.any && !game.hibernating.has(e))
+                !game.tbShriekTargetedThisPhase.has(e) && e.allInPlay.any)
             Force(TBPsychicShriekPickEnemyAction(self, validEnemies))
 
         case TBPsychicShriekPickEnemyAction(self, enemies) =>
@@ -809,7 +809,7 @@ object TBExpansion extends Expansion {
             val ownGates = self.gates
             val adjacentPairs = ownGates./~(r1 =>
                 ownGates.%(r2 => r1 != r2 && game.board.connected(r1).has(r2))./(r2 => (r1, r2)))
-                ./(p => if (p._1.hashCode <= p._2.hashCode) p else (p._2, p._1)).distinct
+                .map { case (a, b) => if (a.hashCode <= b.hashCode) (a, b) else (b, a) }.distinct
             if (adjacentPairs.num == 1)
                 Force(TBOverlayMantleGatePairAction(self, adjacentPairs.head._1, adjacentPairs.head._2))
             else
@@ -849,8 +849,8 @@ object TBExpansion extends Expansion {
         case TBOverlayMantleTransferGateAction(self, r1, r2, chosen) =>
             // Choose which of the 2 gates (+ its Cultist) transfers to the Mantle
             Ask(self)
-                .add(TBOverlayMantleTransferAction(self, r1, chosen).as("Gate in " + r1))
-                .add(TBOverlayMantleTransferAction(self, r2, chosen).as("Gate in " + r2))
+                .add(TBOverlayMantleTransferAction(self, r1, chosen))
+                .add(TBOverlayMantleTransferAction(self, r2, chosen))
 
         case TBOverlayMantleTransferAction(self, gateRegion, chosen) =>
             // Set Mantle in play
@@ -883,7 +883,7 @@ object TBExpansion extends Expansion {
             if (gates.num == 1)
                 Force(TBRemoveGatePlaceChthonianGateAction(self, gates.head))
             else
-                Ask(self).each(gates)(r => TBRemoveGatePlaceChthonianGateAction(self, r).as(r))
+                Ask(self).each(gates)(r => TBRemoveGatePlaceChthonianGateAction(self, r))
 
         case TBRemoveGatePlaceChthonianGateAction(self, r) =>
             Force(TBRemoveGatePlaceChthonianPickAreaAction(self, r))
@@ -893,7 +893,7 @@ object TBExpansion extends Expansion {
             if (occupiedAreas.num == 1)
                 Force(TBRemoveGatePlaceChthonianAreaAction(self, removedGate, occupiedAreas.head))
             else
-                Ask(self).each(occupiedAreas)(r => TBRemoveGatePlaceChthonianAreaAction(self, removedGate, r).as(r))
+                Ask(self).each(occupiedAreas)(r => TBRemoveGatePlaceChthonianAreaAction(self, removedGate, r))
 
         case TBRemoveGatePlaceChthonianAreaAction(self, removedGate, dest) =>
             // Remove the gate
