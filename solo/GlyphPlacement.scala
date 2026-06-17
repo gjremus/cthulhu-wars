@@ -48,20 +48,26 @@ class GlyphPlacement(boardId : String) {
     val height : Int = placeb.height
 
     // Random valid placement within the same region as (x, y) — used by the unit layout engine.
-    // Constrains search to the same vertical half to avoid cross-floor color collisions
+    // Constrains search to the same half to avoid cross-floor color collisions
     // on Library maps where joined bitmaps may share colors between floors.
+    // Vertical images split top/bottom (by Y); horizontal images split left/right (by X).
+    val isHorizontal : Boolean = placeb.width > placeb.height
     def findAnother(x : Int, y : Int) : (Int, Int) = {
         if (x < 0 || x >= placeb.width || y < 0 || y >= placeb.height)
             return (x, y)
         val p = place(x)(y)
-        val halfH = placeb.height / 2
-        val yMin = if (y < halfH) 0 else halfH
-        val yMax = if (y < halfH) halfH else placeb.height
+        val (xMin, xMax, yMin, yMax) = if (isHorizontal) {
+            val halfW = placeb.width / 2
+            if (x < halfW) (0, halfW, 0, placeb.height) else (halfW, placeb.width, 0, placeb.height)
+        } else {
+            val halfH = placeb.height / 2
+            if (y < halfH) (0, placeb.width, 0, halfH) else (0, placeb.width, halfH, placeb.height)
+        }
         var xx = 0
         var yy = 0
         var tries = 0
         do {
-            xx = (placeb.width * scala.math.random()).toInt
+            xx = xMin + ((xMax - xMin) * scala.math.random()).toInt
             yy = yMin + ((yMax - yMin) * scala.math.random()).toInt
             tries += 1
             if (tries > 5000) return (x, y) // safety valve
@@ -117,11 +123,16 @@ class GlyphPlacement(boardId : String) {
     //
     // Constraint: the chosen position itself must be in the place map's core region
     // (not a gap pixel) so the glyph CENTER is in the playable area.
-    def findStaticGlyphPos(gx : Int, gy : Int, halfGlyph : Int = 33, halfGate : Int = 38, maxRadius : Int = 200) : (Int, Int) = {
+    def findStaticGlyphPos(gx : Int, gy : Int, halfGlyph : Int = 33, halfGate : Int = 38, maxRadius : Int = 200, explicitRegionColor : Int = -1) : (Int, Int) = {
         // Bounds check: if gate coords exceed bitmap, return gate coords as fallback
         if (gx < 0 || gx >= placeb.width || gy < 0 || gy >= placeb.height)
             return (gx, gy)
-        val regionColor = place(gx)(gy)
+        // [2026-05-23] explicitRegionColor (Option B fix): when provided
+        // (>= 0), use it directly instead of sampling the bitmap. Caller
+        // passes the canonical color from EarthRegionPalette, eliminating
+        // the "sample at a gap pixel" failure mode that misplaced Australia's
+        // glyph in portrait mode.
+        val regionColor = if (explicitRegionColor >= 0) explicitRegionColor else place(gx)(gy)
         val GAP = 0
         val MaxExpansion = 12
         val MaxRadiusFromGate = maxRadius
