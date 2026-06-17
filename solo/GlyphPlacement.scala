@@ -48,20 +48,26 @@ class GlyphPlacement(boardId : String) {
     val height : Int = placeb.height
 
     // Random valid placement within the same region as (x, y) — used by the unit layout engine.
-    // Constrains search to the same vertical half to avoid cross-floor color collisions
+    // Constrains search to the same half to avoid cross-floor color collisions
     // on Library maps where joined bitmaps may share colors between floors.
+    // Vertical images split top/bottom (by Y); horizontal images split left/right (by X).
+    val isHorizontal : Boolean = placeb.width > placeb.height
     def findAnother(x : Int, y : Int) : (Int, Int) = {
         if (x < 0 || x >= placeb.width || y < 0 || y >= placeb.height)
             return (x, y)
         val p = place(x)(y)
-        val halfH = placeb.height / 2
-        val yMin = if (y < halfH) 0 else halfH
-        val yMax = if (y < halfH) halfH else placeb.height
+        val (xMin, xMax, yMin, yMax) = if (isHorizontal) {
+            val halfW = placeb.width / 2
+            if (x < halfW) (0, halfW, 0, placeb.height) else (halfW, placeb.width, 0, placeb.height)
+        } else {
+            val halfH = placeb.height / 2
+            if (y < halfH) (0, placeb.width, 0, halfH) else (0, placeb.width, halfH, placeb.height)
+        }
         var xx = 0
         var yy = 0
         var tries = 0
         do {
-            xx = (placeb.width * scala.math.random()).toInt
+            xx = xMin + ((xMax - xMin) * scala.math.random()).toInt
             yy = yMin + ((yMax - yMin) * scala.math.random()).toInt
             tries += 1
             if (tries > 5000) return (x, y) // safety valve
