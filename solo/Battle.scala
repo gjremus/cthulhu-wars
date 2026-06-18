@@ -67,7 +67,7 @@ case object CosmicRulerPhase extends BattlePhase
 case object DholePlanetaryDestructionPhase extends BattlePhase
 case object LaughingstockPhase extends BattlePhase
 case object LengSpiderBloodthirstPhase extends BattlePhase
-case object WhirlwindRerollPhase extends BattlePhase
+// WhirlwindRerollPhase removed — Whirlwind is a passive retreat expansion (§1.10 SB1)
 case object YigSnakebitePhase extends BattlePhase
 case object QuachilDustToDustPhase extends BattlePhase
 case object ElderShoggothPrimeCausePhase extends BattlePhase
@@ -711,14 +711,31 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             return proceed()
 
         val moonDest = (s == BB && arena != BB.moon).??($(BB.moon))
-        val destinations = (arena.connectedForRetreat.%(r => s.opponent.at(r).none) ++ moonDest).distinct
+        val standardDest = arena.connectedForRetreat.%(r => s.opponent.at(r).none)
+
+        // Xyrious Storm Whirlwind (§1.10 SB1): Twisters in Land Areas may Retreat
+        // to adjacent Sea Areas containing enemy Units. This expands the destination
+        // set for Twisters ONLY (other XSS units use standard rules).
+        val whirlwindDest = (s == XSS && XSS.can(Whirlwind) && arena.glyph != Ocean).?? {
+            // Land battle: adjacent Sea Areas that have enemy units (normally excluded)
+            arena.connectedForRetreat.%(r => r.glyph == Ocean && s.opponent.at(r).any)
+        }
+        // Whirlwind destinations only apply to Twisters, so they're only added when
+        // there are Twister refugees. For the "retreat all" or "one destination" paths,
+        // we must check if all refugees are Twisters to use the expanded set.
+        val hasTwisterRefugees = refugees.%(_.uclass == Twister).any
+        val hasNonTwisterRefugees = refugees.%(_.uclass != Twister).any
+        val allAreTwisters = hasTwisterRefugees && !hasNonTwisterRefugees
+
+        // Full destination set includes Whirlwind areas if any Twister is retreating
+        val destinations = (standardDest ++ (hasTwisterRefugees.??(whirlwindDest)) ++ moonDest).distinct
 
         val chooser : Faction = retreater(s)
 
         if (destinations.none)
             Ask(s).each(refugees.sortA)(u => EliminateNoWayAction(s, u).as(u)("Nowhere to retreat, a pained unit is eliminated"))
         else
-        if (destinations.num == 1) {
+        if (destinations.num == 1 && (allAreTwisters || whirlwindDest.none)) {
             val r = destinations.only
 
             refugees.foreach(u => retreat(u, r))
@@ -728,10 +745,26 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
         }
         else
-        if (refugees.num == 1 || s.forces.tag(Retreated).any)
-            Ask(chooser).each(destinations)(d => RetreatUnitAction(chooser, refugees.first, d).as(d)("Retreat", refugees.first, "to"))
+        if (refugees.num == 1 || s.forces.tag(Retreated).any) {
+            val u = refugees.first
+            // For non-Twisters, restrict to standard destinations only
+            val validDest = if (u.uclass == Twister) destinations else (standardDest ++ moonDest).distinct
+            if (validDest.none)
+                Ask(s).each($(u))(u2 => EliminateNoWayAction(s, u2).as(u2)("Nowhere to retreat, a pained unit is eliminated"))
+            else
+                Ask(chooser).each(validDest)(d => RetreatUnitAction(chooser, u, d).as(d)("Retreat", u, "to"))
+        }
         else
+        if (allAreTwisters || whirlwindDest.none)
+            // All same type or no Whirlwind expansion — "retreat all" is safe
             Ask(chooser).each(destinations)(d => RetreatAllAction(chooser, s, d)).add(RetreatSeparatelyAction(chooser, s, destinations))
+        else {
+            // Mixed Twisters + others with Whirlwind active — "Retreat all" only
+            // offered to standard destinations (safe for all units). "Retreat separately"
+            // gets the full destination list so Twisters can individually pick Sea Areas.
+            val safeForAll = (standardDest ++ moonDest).distinct
+            Ask(chooser).each(safeForAll)(d => RetreatAllAction(chooser, s, d)).add(RetreatSeparatelyAction(chooser, s, destinations))
+        }
     }
 
     def checkKillSpellbooks(s : Faction) {
@@ -1010,19 +1043,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                jump(WhirlwindRerollPhase)
-
-            case WhirlwindRerollPhase =>
-                // Xyrious Storm (XSS) Whirlwind: after rolling dice, XSS may reroll
-                // any number of non-Kill/non-Pain (i.e. Miss) dice. Once per battle.
-                if (factions.has(XSS) && sides.has(XSS) && XSS.can(Whirlwind) && !XSS.oncePerAction.has(Whirlwind)) {
-                    val xssSide : Side = if (attacker == XSS) attackers else defenders
-                    val misses = xssSide.rolls.count(_ == Miss)
-                    if (misses > 0)
-                        return Ask(XSS)
-                            .add(WhirlwindRerollOfferAction(XSS, misses))
-                            .add(WhirlwindRerollSkipAction(XSS))
-                }
+                // Whirlwind is a passive retreat-destination expansion (§1.10 SB1),
+                // not a dice reroll. No WhirlwindRerollPhase needed.
                 jump(LengSpiderBloodthirstPhase)
 
             case LengSpiderBloodthirstPhase =>
@@ -1592,7 +1614,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     Ask(f).add(RetreatOrderAction(f, attacker, defender)).add(RetreatOrderAction(f, defender, attacker))
                 }
                 else {
-                    jump(AttackerDefenderRetreats)
+                    // Xyrious Storm Precipitation (§1.5): XSS retreats FIRST regardless
+                    // of Attacker/Defender role. Fully cancelled by CC Madness.
+                    val precipitationActive = factions.has(XSS) && sides.has(XSS) &&
+                        XSS.abilities.has(Precipitation) &&
+                        !factions.exists(f => f != XSS && f.can(Madness))
+                    if (precipitationActive && defender == XSS)
+                        // XSS is Defender but retreats first via Precipitation
+                        jump(DefenderAttackerRetreats)
+                    else
+                        jump(AttackerDefenderRetreats)
                 }
 
             case AttackerDefenderRetreats =>
@@ -2225,8 +2256,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case RetreatSeparatelyAction(self, f, l) =>
             val u = f.forces.%(_.health == Pained).first
+            // Xyrious Storm Whirlwind: non-Twister units cannot retreat to Sea Areas
+            // with enemy units (Whirlwind destinations). Filter per-unit.
+            val validDest = if (u.uclass == Twister) l
+                else l.%(r => !(r.glyph == Ocean && f.opponent.at(r).any))
 
-            Ask(self).each(l)(r => RetreatUnitAction(self, u, r).as(r)("Retreat", u, "to"))
+            Ask(self).each(validDest)(r => RetreatUnitAction(self, u, r).as(r)("Retreat", u, "to"))
 
         // Tombstalker (TS) Oleaginous: execute retreat for a pained Gla'aki or Deep Tendril, then re-check for more
         case OleaginousRetreatAction(self, ur, r) =>
@@ -2492,31 +2527,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
              self.place(uc, r)
              proceed()
 
-        // WHIRLWIND (XSS) — reroll non-Kill/non-Pain dice, once per battle
-        case WhirlwindRerollOfferAction(self, misses) =>
-            // Offer choice of how many to reroll (1 to misses)
-            Ask(self)
-                .list((1 to misses).reverse.toList./(n => WhirlwindRerollPickAction(self, n)))
-                .cancel
-
-        case WhirlwindRerollSkipAction(self) =>
-            XSS.oncePerAction :+= Whirlwind
-            self.log(Whirlwind.styled(XSS) + ": declined")
-            proceed()
-
-        case WhirlwindRerollPickAction(self, count) =>
-            XSS.oncePerAction :+= Whirlwind
-            val xssSide : Side = if (attacker == XSS) attackers else defenders
-            // Remove 'count' Miss results from rolls and reroll them
-            val kept = xssSide.rolls.%(_ != Miss)
-            val missCount = xssSide.rolls.count(_ == Miss)
-            val missesKept = (missCount - count).times(Miss)
-            xssSide.rolls = kept ++ missesKept
-            // Reroll 'count' dice (fresh random per die)
-            val newRolls = 1.to(count)./(_ => BattleRoll.roll())
-            xssSide.rolls ++= newRolls
-            log(self, Whirlwind.styled(XSS) + ": rerolled", count, "Miss".styled("miss"), "→", newRolls.mkString(" "))
-            proceed()
+        // WHIRLWIND (XSS) — passive retreat-destination expansion (§1.10 SB1).
+        // "While in Land Areas, Twisters may Retreat to Sea Areas containing enemy Units."
+        // No action handlers needed — logic is in the retreat() function above.
 
         // CHANNEL POWER
         case ChannelPowerAction(self, n) =>
@@ -2784,7 +2797,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case StaticAccumulatorSkipAction(self) =>
             proceed()
 
-        case StaticAccumulatorAction(self, _, _, _) =>
+        case StaticAccumulatorAction(self, _, _) =>
             // Units have been moved by XSSExpansion; add to battle forces
             val xssSide : Side = if (attacker == XSS) attackers else defenders
             xssSide.forces = XSS.at(arena)

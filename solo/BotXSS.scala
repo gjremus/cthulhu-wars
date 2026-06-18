@@ -77,17 +77,15 @@ class GameEvaluationXSS(implicit game : Game) extends GameEvaluation(XSS)(game) 
                     extras.any                                   |=> 300  -> "tsunami with extras"
                     true                                         |=> 200  -> "tsunami commit"
 
-                // Static Accumulator — pre-battle reinforcement
+                // Static Accumulator — pre-battle reinforcement (multi-source)
                 case StaticAccumulatorPreBattleMainAction(f) =>
                     true                                         |=> 500  -> "static accumulator reinforce"
                 case StaticAccumulatorSkipAction(f) =>
                     true                                         |=> 0    -> "skip static accumulator"
-                case StaticAccumulatorSourcePickAction(f, _) =>
-                    true                                         |=> 100  -> "pick static accumulator source"
-                case StaticAccumulatorUnitPickAction(f, _, _, picked, remaining, _) =>
+                case StaticAccumulatorUnitPickAction(f, _, picked, remaining, _) =>
                     remaining.any && picked.num < 2              |=> 200  -> "pick more units"
                     picked.any                                   |=> 100  -> "units picked"
-                case StaticAccumulatorDoneAction(f, _, _, picked) =>
+                case StaticAccumulatorDoneAction(f, _, picked) =>
                     picked.any                                   |=> 300  -> "confirm static accumulator"
 
                 // Cloud Of Ashes — Doom phase return

@@ -38,7 +38,7 @@ case object Petrichor        extends FactionUnitClass(XSS, "Petrichor",         
 
 
 // -- SPELLBOOKS (§1.10) -------------------------------------------------------
-case object Whirlwind           extends FactionSpellbook(XSS, "Whirlwind") with BattleSpellbook
+case object Whirlwind           extends FactionSpellbook(XSS, "Whirlwind")
 case object StaticAccumulator   extends FactionSpellbook(XSS, "Static Accumulator") with BattleSpellbook
 case object CloudOfAshes        extends FactionSpellbook(XSS, "Cloud Of Ashes")
 case object Tsunami             extends FactionSpellbook(XSS, "Tsunami")
@@ -135,22 +135,18 @@ case class TsunamiAction(self : Faction, eye : UnitRef, source : Region, dest : 
     extends ForcedAction
 
 // -- STATIC ACCUMULATOR (§1.10 SB2 / §3.10.2 / §4.4.2) -----------------------
-// Pre-Battle reinforcement: Soft opt-in -> Soft source pick -> Soft unit pick -> Hard commit
+// Pre-Battle reinforcement: Soft opt-in -> Soft unit pick (from any adjacent areas) -> Hard commit
 case class StaticAccumulatorPreBattleMainAction(self : Faction)
     extends OptionFactionAction(StaticAccumulator.styled(XSS)) with PreBattleQuestion with Soft
 case class StaticAccumulatorSkipAction(self : Faction)
     extends OptionFactionAction(("Skip " + StaticAccumulator.name).styled(XSS)) with PreBattleQuestion with Soft
-case class StaticAccumulatorSourcePickAction(self : Faction, arena : Region)
+case class StaticAccumulatorUnitPickAction(self : Faction, arena : Region, picked : $[UnitRef], remaining : $[UnitRef], costLeft : Int)
     extends ForcedAction with PowerNeutral with Soft {
-    override def question(implicit game : Game) = StaticAccumulator.styled(XSS) + ": choose adjacent Area"
+    override def question(implicit game : Game) = StaticAccumulator.styled(XSS) + ": pick Units from adjacent Areas (Cost left: " + costLeft + ")"
 }
-case class StaticAccumulatorUnitPickAction(self : Faction, source : Region, arena : Region, picked : $[UnitRef], remaining : $[UnitRef], costLeft : Int)
-    extends ForcedAction with PowerNeutral with Soft {
-    override def question(implicit game : Game) = StaticAccumulator.styled(XSS) + ": pick Units (Cost left: " + costLeft + ")"
-}
-case class StaticAccumulatorDoneAction(self : Faction, source : Region, arena : Region, picked : $[UnitRef])
+case class StaticAccumulatorDoneAction(self : Faction, arena : Region, picked : $[UnitRef])
     extends ForcedAction with PowerNeutral
-case class StaticAccumulatorAction(self : Faction, source : Region, arena : Region, picked : $[UnitRef])
+case class StaticAccumulatorAction(self : Faction, arena : Region, picked : $[UnitRef])
     extends ForcedAction
 
 // -- CLOUD OF ASHES (§1.10 SB3 / §3.10.3 / §4.4.3) ---------------------------
@@ -173,14 +169,10 @@ case class CloudOfAshesDoomReturnAreaAction(self : Faction, monster : UnitRef)
 case class CloudOfAshesDoomReturnAction(self : Faction, monster : UnitRef, dest : Region)
     extends BaseFactionAction(CloudOfAshes.styled(XSS) + ": return Monster to", dest)
 
-// -- WHIRLWIND (§1.10 SB1 / Reroll) -------------------------------------------
-// Post-dice-roll: reroll any number of non-Kill/non-Pain dice. Once per battle.
-case class WhirlwindRerollOfferAction(self : Faction, misses : Int)
-    extends OptionFactionAction(Whirlwind.styled(XSS) + " (reroll up to " + misses + " Miss dice)") with Soft { override def question(implicit game : Game) = Whirlwind.styled(XSS) }
-case class WhirlwindRerollSkipAction(self : Faction)
-    extends OptionFactionAction("Skip " + Whirlwind.styled(XSS)) with Soft { override def question(implicit game : Game) = Whirlwind.styled(XSS) }
-case class WhirlwindRerollPickAction(self : Faction, count : Int)
-    extends BaseFactionAction(Whirlwind.styled(XSS) + ": reroll", "" + count + " Miss dice") { override def question(implicit game : Game) = Whirlwind.styled(XSS) }
+// -- WHIRLWIND (§1.10 SB1 / Retreat expansion) --------------------------------
+// Post-Battle: Twisters in Land Areas may Retreat to Sea Areas containing enemy
+// Units. This is a passive retreat-destination expansion — no action needed.
+// Hooked into Battle.scala retreat logic (retreat destination computation).
 
 // -- DISTANT THUNDERCLAP (§1.8 / §3.4.3 / §4.6) ------------------------------
 // Post-Battle: OPTIONAL — assign XSS's own excess Pains to XSS's own units.
@@ -207,14 +199,14 @@ case class DistantThunderclapElderSignAction(self : Faction)
 object XSSExpansion extends Expansion {
 
     // -- FROZEN SOLID helper: determine if a region is a Faction Glyph Area ----
-    // A Faction Glyph Area = any player's Start Area OR any core-faction glyph
-    // printed on the map (GC/CC/BG/YS/SL/WW).
+    // A Faction Glyph Area = any region with a faction glyph PRINTED on the map
+    // (physical map property — GC/CC/BG/YS/SL/WW starting areas regardless of
+    // whether that faction is in the game) OR any player's chosen Start Area.
     def isFactionGlyphArea(r : Region)(implicit game : Game) : Boolean = {
         val coreFactions = $(GC, CC, BG, YS, SL, WW)
-        val inGame = game.factions./~(fx => game.starting.get(fx).toList)
-        val offBoard = coreFactions.%!(fx => game.setup.has(fx))
-            ./~(fx => game.board.starting(fx)).distinct
-        val factionGlyphAreas = (inGame ++ offBoard).distinct
+        val printedGlyphs = coreFactions./~(fx => game.board.starting(fx)).distinct
+        val chosenAreas = game.factions./~(fx => game.starting.get(fx).toList)
+        val factionGlyphAreas = (printedGlyphs ++ chosenAreas).distinct
         factionGlyphAreas.has(r)
     }
 
@@ -243,15 +235,14 @@ object XSSExpansion extends Expansion {
         if (!game.setup.has(XSS)) return
         val f = XSS
 
-        // Faction-Glyph Areas = any player's Start Area OR any faction Glyph
-        // printed on the map (GC/CC/BG/YS/SL/WW); NOT XSS-own glyphs (§1.9).
-        // Mirrors the TT Idolatry factionGlyphAreas pattern.
+        // Faction-Glyph Areas = any region with a faction glyph PRINTED on the
+        // map (GC/CC/BG/YS/SL/WW starting areas regardless of game membership)
+        // OR any player's chosen Start Area. NOT XSS-own glyphs (§1.9).
         val coreFactions = $(GC, CC, BG, YS, SL, WW)
         val factionGlyphAreas = {
-            val inGame = game.factions./~(fx => game.starting.get(fx).toList)
-            val offBoard = coreFactions.%!(fx => game.setup.has(fx))
-                ./~(fx => game.board.starting(fx)).distinct
-            (inGame ++ offBoard).distinct
+            val printedGlyphs = coreFactions./~(fx => game.board.starting(fx)).distinct
+            val chosenAreas = game.factions./~(fx => game.starting.get(fx).toList)
+            (printedGlyphs ++ chosenAreas).distinct
         }
 
         // SBR 2 -- Four-Glyph Footprint (§3.12.2): count distinct Faction-Glyph
@@ -286,13 +277,18 @@ object XSSExpansion extends Expansion {
         case SetupFactionsAction if game.setup.has(XSS) && !game.starting.contains(XSS) =>
             val f = XSS
             // Find eligible Sea Areas: empty of Units, no Faction Glyph (§1.6 / §2.0a)
-            // A Faction Glyph Area = any player's Start Area or printed-map glyph region.
+            // A Faction Glyph Area = any region with a faction glyph PRINTED on the map
+            // (physical map property — doesn't change based on who's in the game).
+            // Bug fix: previously used inGame/offBoard split which missed cases where
+            // a faction (e.g. WW) is in the game but chose a DIFFERENT starting area
+            // (e.g. Antarctica), leaving the other printed-glyph area (ArcticOcean)
+            // incorrectly unexcluded. Now we simply collect ALL starting regions for
+            // ALL core factions from the board definition, plus any already-chosen areas.
             val coreFactions = $(GC, CC, BG, YS, SL, WW)
             val glyphAreas = {
-                val inGame = game.factions./~(fx => game.starting.get(fx).toList)
-                val offBoard = coreFactions.%!(fx => game.setup.has(fx))
-                    ./~(fx => game.board.starting(fx)).distinct
-                (inGame ++ offBoard).distinct
+                val printedGlyphs = coreFactions./~(fx => game.board.starting(fx)).distinct
+                val chosenAreas = game.factions./~(fx => game.starting.get(fx).toList)
+                (printedGlyphs ++ chosenAreas).distinct
             }
             val eligible = game.board.regions.%(r =>
                 r.glyph == Ocean &&
@@ -466,11 +462,18 @@ object XSSExpansion extends Expansion {
 
         // -- STATIC ACCUMULATOR (§1.10 SB2 / §3.10.2) -------------------------
         // Pre-Battle: handled via PreBattleQuestion. Perform logic here for the
-        // Soft chain and Hard commit.
+        // Soft chain and Hard commit. Allows picking units from ANY adjacent areas
+        // (multiple sources) as long as total cost <= 4.
         case StaticAccumulatorPreBattleMainAction(self) =>
             game.battle match {
                 case Some(b) =>
-                    Force(StaticAccumulatorSourcePickAction(self, b.arena))
+                    // Gather all XSS units in all adjacent areas
+                    val adjacent = game.board.connected(b.arena).%(r => self.at(r).any)
+                    val allUnits = adjacent./~(r => self.at(r)./(_.ref))
+                    if (allUnits.none)
+                        UnknownContinue
+                    else
+                        Force(StaticAccumulatorUnitPickAction(self, b.arena, $, allUnits, 4))
                 case None => UnknownContinue
             }
 
@@ -478,37 +481,30 @@ object XSSExpansion extends Expansion {
             self.log(StaticAccumulator.styled(XSS) + ": declined")
             UnknownContinue
 
-        case StaticAccumulatorSourcePickAction(self, arena) =>
-            val adjacent = game.board.connected(arena).%(r => self.at(r).any)
-            if (adjacent.none)
-                UnknownContinue
-            else
-                Ask(self).each(adjacent)(r =>
-                    StaticAccumulatorUnitPickAction(self, r, arena, $, self.at(r)./(_.ref), 4)
-                        .as(r + " (" + self.at(r).num + " Units)")).cancel
-
-        case StaticAccumulatorUnitPickAction(self, source, arena, picked, remaining, costLeft) =>
+        case StaticAccumulatorUnitPickAction(self, arena, picked, remaining, costLeft) =>
             implicit val asking = Asking(self)
             remaining.%(ur => game.unit(ur).uclass.cost <= costLeft).foreach { ur =>
                 val u = game.unit(ur)
-                + StaticAccumulatorUnitPickAction(self, source, arena,
+                + StaticAccumulatorUnitPickAction(self, arena,
                     picked :+ ur, remaining.but(ur), costLeft - u.uclass.cost)
-                    .as(u.uclass.styled(XSS) + " (Cost " + u.uclass.cost + ")")
+                    .as(u.uclass.styled(XSS) + " in " + u.region + " (Cost " + u.uclass.cost + ")")
             }
             if (picked.any)
-                + StaticAccumulatorDoneAction(self, source, arena, picked)
+                + StaticAccumulatorDoneAction(self, arena, picked)
                     .as("Done".styled("power"))
             + CancelAction
             asking
 
-        case StaticAccumulatorDoneAction(self, source, arena, picked) =>
-            Force(StaticAccumulatorAction(self, source, arena, picked))
+        case StaticAccumulatorDoneAction(self, arena, picked) =>
+            Force(StaticAccumulatorAction(self, arena, picked))
 
-        case StaticAccumulatorAction(self, source, arena, picked) =>
+        case StaticAccumulatorAction(self, arena, picked) =>
             // Move picked Units into the Battle Area
+            val sources = picked./(ur => game.unit(ur).region).distinct
             picked.foreach { ur => game.unit(ur).region = arena }
             self.log(StaticAccumulator.styled(XSS) + ": moved", picked.num,
-                "Unit" + (picked.num > 1).??("s"), "from", source, "to", arena)
+                "Unit" + (picked.num > 1).??("s"), "from",
+                sources.mkString(", "), "to", arena)
             UnknownContinue
 
         // -- DISTANT THUNDERCLAP (§1.8 / §3.4.3) ------------------------------
@@ -593,17 +589,18 @@ object XSSExpansion extends Expansion {
 
         // -- CLOUD OF ASHES per-kill hold prompt (§3.14.8) ---------------------
         // These actions fire from Battle's CloudOfAshesPromptPhase.
+        // Must return to CloudOfAshesPromptPhase to check for more pending monsters.
         case CloudOfAshesHoldAction(self, u) =>
             // Unit is already on XSSFactionCardHold from the eliminate hook; confirm hold
             self.log(CloudOfAshes.styled(XSS) + ":", game.unit(u).uclass.styled(XSS), "placed on Faction Card")
-            UnknownContinue
+            Force(BattleProceedAction(CloudOfAshesPromptPhase))
 
         case CloudOfAshesDeclineAction(self, u) =>
             // Remove from holding, return to Pool
             game.xssFactionCardMonsters = game.xssFactionCardMonsters.but(u)
             game.unit(u).region = self.reserve
             self.log(CloudOfAshes.styled(XSS) + ":", game.unit(u).uclass.styled(XSS), "returned to Pool")
-            UnknownContinue
+            Force(BattleProceedAction(CloudOfAshesPromptPhase))
 
         // -- CATCH-ALL ---------------------------------------------------------
         case _ => UnknownContinue
