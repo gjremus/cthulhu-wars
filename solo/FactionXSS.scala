@@ -173,6 +173,15 @@ case class CloudOfAshesDoomReturnAreaAction(self : Faction, monster : UnitRef)
 case class CloudOfAshesDoomReturnAction(self : Faction, monster : UnitRef, dest : Region)
     extends BaseFactionAction(CloudOfAshes.styled(XSS) + ": return Monster to", dest)
 
+// -- WHIRLWIND (§1.10 SB1 / Reroll) -------------------------------------------
+// Post-dice-roll: reroll any number of non-Kill/non-Pain dice. Once per battle.
+case class WhirlwindRerollOfferAction(self : Faction, misses : Int)
+    extends OptionFactionAction(Whirlwind.styled(XSS) + " (reroll up to " + misses + " Miss dice)") with Soft { override def question(implicit game : Game) = Whirlwind.styled(XSS) }
+case class WhirlwindRerollSkipAction(self : Faction)
+    extends OptionFactionAction("Skip " + Whirlwind.styled(XSS)) with Soft { override def question(implicit game : Game) = Whirlwind.styled(XSS) }
+case class WhirlwindRerollPickAction(self : Faction, count : Int)
+    extends BaseFactionAction(Whirlwind.styled(XSS) + ": reroll", "" + count + " Miss dice") { override def question(implicit game : Game) = Whirlwind.styled(XSS) }
+
 // -- DISTANT THUNDERCLAP (§1.8 / §3.4.3 / §4.6) ------------------------------
 // Post-Battle: OPTIONAL — assign XSS's own excess Pains to XSS's own units.
 // If after resolution no units remain in the battle area AND opponent had a non-Cultist, gain Elder Sign.
@@ -186,6 +195,8 @@ case class DistantThunderclapPainAction(self : Faction, remaining : Int, candida
 }
 case class DistantThunderclapPainTargetAction(self : Faction, target : UnitRef, remaining : Int, candidates : $[UnitRef], arena : Region, opponentHadNonCultist : Boolean)
     extends BaseFactionAction(implicit g => "Distant Thunderclap".styled(XSS) + ": Pain", implicit g => g.unit(target).uclass.styled(XSS))
+case class DistantThunderclapRetreatDestAction(self : Faction, target : UnitRef, dest : Region, remaining : Int, candidates : $[UnitRef], arena : Region, opponentHadNonCultist : Boolean)
+    extends BaseFactionAction("Distant Thunderclap".styled(XSS) + ": retreat to", dest)
 case class DistantThunderclapElderSignAction(self : Faction)
     extends ForcedAction
 
@@ -209,12 +220,20 @@ object XSSExpansion extends Expansion {
 
     // -- CLOUD OF ASHES kill-path hook (§3.10.3 / §3.14.8) --------------------
     // Called on every Unit elimination. If an XSS Monster dies and SB 3 is on
-    // the sheet, reroute to Faction Card (prompt handled in perform via pending queue).
+    // the sheet, intercept the kill: remove Eliminated tag (prevents pool-return),
+    // move to XSSFactionCardHold, record in xssFactionCardMonsters. A per-kill
+    // Yes/No prompt fires post-EliminatePhase so the player can decline.
     override def eliminate(u : UnitFigure)(implicit game : Game) {
         if (!game.setup.has(XSS)) return
         if (u.faction == XSS && u.uclass.utype == Monster && XSS.can(CloudOfAshes)) {
-            // Append to the holding zone; the per-kill Yes/No prompt is issued
-            // in the afterAction or battle-resolution site.
+            // Intercept: remove Eliminated tag so Game.eliminate does NOT send to pool.
+            u.remove(Eliminated)
+            // Park on the faction card holding region.
+            u.region = XSSFactionCardHold(XSS)
+            u.onGate = false
+            u.health = Alive
+            u.state = $
+            // Record ref for Doom Phase return logic.
             game.xssFactionCardMonsters :+= u.ref
         }
     }
@@ -501,17 +520,17 @@ object XSSExpansion extends Expansion {
 
         case DistantThunderclapSkipAction(self) =>
             self.log("Distant Thunderclap".styled(XSS) + ": declined")
-            UnknownContinue
+            Force(BattleDoneAction(self))
 
         case DistantThunderclapPainAction(self, remaining, candidates, arena, opponentHadNonCultist) =>
             if (remaining <= 0 || candidates.none) {
                 // Check Elder Sign condition: no units of any faction remain in the battle area
                 // AND opponent had at least one non-Cultist unit participating
                 val anyUnitsInArena = game.factions.exists(fx => fx.at(arena).any)
-                if (!anyUnitsInArena && opponentHadNonCultist) {
+                if (!anyUnitsInArena && opponentHadNonCultist)
                     Force(DistantThunderclapElderSignAction(self))
-                } else
-                    UnknownContinue
+                else
+                    Force(BattleDoneAction(self))
             }
             else if (candidates.num == 1)
                 Force(DistantThunderclapPainTargetAction(self, candidates.head, remaining, candidates, arena, opponentHadNonCultist))
@@ -520,31 +539,52 @@ object XSSExpansion extends Expansion {
                     DistantThunderclapPainTargetAction(self, ur, remaining, candidates, arena, opponentHadNonCultist))
 
         case DistantThunderclapPainTargetAction(self, target, remaining, candidates, arena, opponentHadNonCultist) =>
-            val u = game.unit(target)
-            // Pain the chosen XSS Unit (retreat it — move to adjacent area)
+            // Pain the chosen XSS Unit — player picks retreat destination
             val retreatAreas = game.board.connected(arena)
-            if (retreatAreas.any) {
-                u.region = retreatAreas.head
-                u.onGate = false
-            } else {
+            if (retreatAreas.none) {
+                // No retreat destination — eliminate
+                val u = game.unit(target)
                 u.region = self.reserve
+                u.onGate = false
+                self.log("Distant Thunderclap".styled(XSS) + ": excess Pain assigned to", u.uclass.styled(XSS), "(no retreat — eliminated)")
+                if (remaining - 1 > 0)
+                    Force(DistantThunderclapPainAction(self, remaining - 1, candidates.but(target), arena, opponentHadNonCultist))
+                else {
+                    val anyUnitsInArena = game.factions.exists(fx => fx.at(arena).any)
+                    if (!anyUnitsInArena && opponentHadNonCultist)
+                        Force(DistantThunderclapElderSignAction(self))
+                    else
+                        Force(BattleDoneAction(self))
+                }
+            } else if (retreatAreas.num == 1) {
+                // Auto-resolve single destination
+                Force(DistantThunderclapRetreatDestAction(self, target, retreatAreas.head, remaining, candidates, arena, opponentHadNonCultist))
+            } else {
+                // Multiple destinations — player picks
+                Ask(self).each(retreatAreas)(r =>
+                    DistantThunderclapRetreatDestAction(self, target, r, remaining, candidates, arena, opponentHadNonCultist))
             }
-            self.log("Distant Thunderclap".styled(XSS) + ": excess Pain assigned to", u.uclass.styled(XSS))
+
+        case DistantThunderclapRetreatDestAction(self, target, dest, remaining, candidates, arena, opponentHadNonCultist) =>
+            val u = game.unit(target)
+            u.region = dest
+            u.onGate = false
+            self.log("Distant Thunderclap".styled(XSS) + ": excess Pain assigned to", u.uclass.styled(XSS), "— retreated to", dest)
             if (remaining - 1 > 0)
                 Force(DistantThunderclapPainAction(self, remaining - 1, candidates.but(target), arena, opponentHadNonCultist))
             else {
                 // Check Elder Sign condition after all pains assigned
                 val anyUnitsInArena = game.factions.exists(fx => fx.at(arena).any)
-                if (!anyUnitsInArena && opponentHadNonCultist) {
+                if (!anyUnitsInArena && opponentHadNonCultist)
                     Force(DistantThunderclapElderSignAction(self))
-                } else
-                    UnknownContinue
+                else
+                    Force(BattleDoneAction(self))
             }
 
         case DistantThunderclapElderSignAction(self) =>
             self.takeES(1)
             self.log("Distant Thunderclap".styled(XSS) + ": gained", 1.es, "(no units remain, opponent had non-Cultist)")
-            UnknownContinue
+            Force(BattleDoneAction(self))
 
         // -- AWAKEN PETRICHOR SBR (§3.12.6) ------------------------------------
         case AwakenedAction(self : XSS.type, Petrichor, _, _) =>
@@ -552,9 +592,9 @@ object XSSExpansion extends Expansion {
             EndAction(self)
 
         // -- CLOUD OF ASHES per-kill hold prompt (§3.14.8) ---------------------
-        // These actions fire from the Battle resolution / eliminate hook context.
+        // These actions fire from Battle's CloudOfAshesPromptPhase.
         case CloudOfAshesHoldAction(self, u) =>
-            // Already appended in eliminate(); confirm hold
+            // Unit is already on XSSFactionCardHold from the eliminate hook; confirm hold
             self.log(CloudOfAshes.styled(XSS) + ":", game.unit(u).uclass.styled(XSS), "placed on Faction Card")
             UnknownContinue
 

@@ -105,6 +105,13 @@ case class VelvetFanHold(faction : Faction) extends FactionRegion {
     val name = faction.name + " Velvet Fan"
 }
 
+// XSS Cloud Of Ashes: Monsters held on the Faction Card (invisible to allInPlay/onMap/pool).
+case class XSSFactionCardHold(faction : Faction) extends FactionRegion {
+    val glyph = Pool
+    val id = "XSSFactionCardHold"
+    val name = faction.name + " Faction Card"
+}
+
 case class Extinct(faction : Faction) extends FactionRegion {
     val glyph = Extinct
     val id = "???"

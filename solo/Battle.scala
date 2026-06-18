@@ -67,6 +67,7 @@ case object CosmicRulerPhase extends BattlePhase
 case object DholePlanetaryDestructionPhase extends BattlePhase
 case object LaughingstockPhase extends BattlePhase
 case object LengSpiderBloodthirstPhase extends BattlePhase
+case object WhirlwindRerollPhase extends BattlePhase
 case object YigSnakebitePhase extends BattlePhase
 case object QuachilDustToDustPhase extends BattlePhase
 case object ElderShoggothPrimeCausePhase extends BattlePhase
@@ -140,6 +141,7 @@ case class QuachilDustToDustESAction(self : Faction, uRef : UnitRef, quOwner : F
     override def question(implicit game : Game) = self.full + " — " + "Dust to Dust".styled("nt")
 }
 case object EliminatePhase extends BattlePhase
+case object CloudOfAshesPromptPhase extends BattlePhase
 case object BerserkergangPhase extends BattlePhase
 case object UnholyGroundPhase extends BattlePhase
 case object AssignDefenderPains extends BattlePhase
@@ -536,6 +538,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             s.opponent.forces.%(_.uclass.utype == Monster).any) {
             options :+= ShapestealingPreBattleAction(FBE)
             options :+= ShapestealingSkipAction(FBE)
+        }
+
+        // Xyrious Storm (XSS): Static Accumulator (Pre-Battle, §1.10 SB2).
+        // If Petrichor is Present (in the Battle Area) and there are XSS Units in
+        // an adjacent Area, offer to pull up to 4 Cost worth of Units into the battle.
+        if (s == XSS && s.can(StaticAccumulator) && s.tag(StaticAccumulator).not &&
+            s.forces.%(_.uclass == Petrichor).any &&
+            game.board.connected(arena).%(r => s.at(r).any).any) {
+            options :+= StaticAccumulatorPreBattleMainAction(XSS)
+            options :+= StaticAccumulatorSkipAction(XSS)
         }
 
         Ask(s).list(options).add(PreBattleDoneAction(s, next))
@@ -998,6 +1010,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                jump(WhirlwindRerollPhase)
+
+            case WhirlwindRerollPhase =>
+                // Xyrious Storm (XSS) Whirlwind: after rolling dice, XSS may reroll
+                // any number of non-Kill/non-Pain (i.e. Miss) dice. Once per battle.
+                if (factions.has(XSS) && sides.has(XSS) && XSS.can(Whirlwind) && !XSS.oncePerAction.has(Whirlwind)) {
+                    val xssSide : Side = if (attacker == XSS) attackers else defenders
+                    val misses = xssSide.rolls.count(_ == Miss)
+                    if (misses > 0)
+                        return Ask(XSS)
+                            .add(WhirlwindRerollOfferAction(XSS, misses))
+                            .add(WhirlwindRerollSkipAction(XSS))
+                }
                 jump(LengSpiderBloodthirstPhase)
 
             case LengSpiderBloodthirstPhase =>
@@ -1372,6 +1397,26 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     if (!eliminated.has(u)) eliminate(u)
                 }
 
+                jump(CloudOfAshesPromptPhase)
+
+            case CloudOfAshesPromptPhase =>
+                // Xyrious Storm (XSS) Cloud Of Ashes (§1.10 SB3 / §3.14.8):
+                // Per-kill optional prompt. Each XSS Monster killed THIS battle
+                // has been intercepted by the eliminate hook and parked on XSSFactionCardHold.
+                // Offer a Hold/Decline choice per monster. Decline sends to pool.
+                // Only prompt for monsters killed in THIS battle (in the eliminated list).
+                if (factions.has(XSS) && XSS.can(CloudOfAshes)) {
+                    val killedThisBattle = eliminated.%(_.faction == XSS).%(_.uclass.utype == Monster)./(_.ref)
+                    val pending = game.xssFactionCardMonsters.%(ur =>
+                        killedThisBattle.has(ur) && game.unit(ur).region == XSSFactionCardHold(XSS)
+                    )
+                    if (pending.any) {
+                        val ur = pending.head
+                        return Ask(XSS)
+                            .add(CloudOfAshesHoldAction(XSS, ur))
+                            .add(CloudOfAshesDeclineAction(XSS, ur))
+                    }
+                }
                 jump(BerserkergangPhase)
 
             case BerserkergangPhase =>
@@ -1420,10 +1465,26 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(AssignDefenderPains)
 
             case AssignDefenderPains =>
-                assignPains(defender, AssignAttackerPains)
+                // Xyrious Storm Precipitation (§1.5): XSS assigns pains FIRST regardless
+                // of Attacker/Defender role. Fully cancelled by CC Madness.
+                val precipitationActive = factions.has(XSS) && sides.has(XSS) &&
+                    XSS.abilities.has(Precipitation) &&
+                    !factions.exists(f => f != XSS && f.can(Madness))
+                if (precipitationActive && attacker == XSS) {
+                    // XSS is Attacker but gets to assign pains first via Precipitation
+                    assignPains(attacker, AssignAttackerPains)
+                } else
+                    assignPains(defender, AssignAttackerPains)
 
             case AssignAttackerPains =>
-                assignPains(attacker, AllPainsAssignedPhase)
+                val precipitationActive = factions.has(XSS) && sides.has(XSS) &&
+                    XSS.abilities.has(Precipitation) &&
+                    !factions.exists(f => f != XSS && f.can(Madness))
+                if (precipitationActive && attacker == XSS) {
+                    // XSS (Attacker) already went first; now Defender assigns
+                    assignPains(defender, AllPainsAssignedPhase)
+                } else
+                    assignPains(attacker, AllPainsAssignedPhase)
 
             case AllPainsAssignedPhase =>
                 sides.foreach { s =>
@@ -2431,6 +2492,32 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
              self.place(uc, r)
              proceed()
 
+        // WHIRLWIND (XSS) — reroll non-Kill/non-Pain dice, once per battle
+        case WhirlwindRerollOfferAction(self, misses) =>
+            // Offer choice of how many to reroll (1 to misses)
+            Ask(self)
+                .list((1 to misses).reverse.toList./(n => WhirlwindRerollPickAction(self, n)))
+                .cancel
+
+        case WhirlwindRerollSkipAction(self) =>
+            XSS.oncePerAction :+= Whirlwind
+            self.log(Whirlwind.styled(XSS) + ": declined")
+            proceed()
+
+        case WhirlwindRerollPickAction(self, count) =>
+            XSS.oncePerAction :+= Whirlwind
+            val xssSide : Side = if (attacker == XSS) attackers else defenders
+            // Remove 'count' Miss results from rolls and reroll them
+            val kept = xssSide.rolls.%(_ != Miss)
+            val missCount = xssSide.rolls.count(_ == Miss)
+            val missesKept = (missCount - count).times(Miss)
+            xssSide.rolls = kept ++ missesKept
+            // Reroll 'count' dice (fresh random per die)
+            val newRolls = 1.to(count)./(_ => BattleRoll.roll())
+            xssSide.rolls ++= newRolls
+            log(self, Whirlwind.styled(XSS) + ": rerolled", count, "Miss".styled("miss"), "→", newRolls.mkString(" "))
+            proceed()
+
         // CHANNEL POWER
         case ChannelPowerAction(self, n) =>
             self.add(ChannelPower)
@@ -2690,6 +2777,27 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case DistributedDeathSkipAction(self) =>
             proceed()
+
+        // ── XYRIOUS STORM (XSS) battle-action resume cases ───────────────────────
+        // XSSExpansion performs the XSS-side logic and returns UnknownContinue;
+        // these cases resume the battle via proceed().
+        case StaticAccumulatorSkipAction(self) =>
+            proceed()
+
+        case StaticAccumulatorAction(self, _, _, _) =>
+            // Units have been moved by XSSExpansion; add to battle forces
+            val xssSide : Side = if (attacker == XSS) attackers else defenders
+            xssSide.forces = XSS.at(arena)
+            xssSide.add(StaticAccumulator)
+            proceed()
+
+        case CloudOfAshesHoldAction(self, _) =>
+            // XSSExpansion logs the hold; re-enter CloudOfAshesPromptPhase for next monster
+            jump(CloudOfAshesPromptPhase)
+
+        case CloudOfAshesDeclineAction(self, _) =>
+            // XSSExpansion moved unit to pool; re-enter CloudOfAshesPromptPhase for next
+            jump(CloudOfAshesPromptPhase)
 
     }
 
