@@ -301,7 +301,7 @@ object XSSExpansion extends Expansion {
             if (eligible.num == 1)
                 Force(StartingRegionAction(f, eligible.head))
             else
-                Ask(f).each(eligible)(r => StartingRegionAction(f, r)).cancel
+                Ask(f).each(eligible)(r => StartingRegionAction(f, r).as(r)(f, "starts in")).cancel
 
         case StartingRegionAction(self : XSS.type, r) =>
             // Place 6 Acolytes and a Controlled Gate in the chosen Sea Area (§1.6)
