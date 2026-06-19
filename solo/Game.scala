@@ -974,7 +974,8 @@ class Player(private val f : Faction)(implicit game : Game) {
         if (f == e)
             false
         else
-        if (e.at(r, Cultist).none)
+        // Thousand Writhing Maws: Tentacles cannot be Captured — exclude from capture eligibility
+        if (e.at(r, Cultist).%(u => u.uclass.canCapture(u)(game)).none)
             false
         else
         // Great Race of Yith: Possession — captures ignoring all protection
@@ -1514,8 +1515,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     //  • fbeCardDice : Faction-Card dice pool, stored as pip values 1-6. The combat
     //    FACE is derived (6=Kill, 4/5=Pain, else Miss). Byagoona's Combat = count of
     //    pips >= 4; Shapestealing compares a pip directly to a Monster Cost.
-    //  • fbeSelfConsumingDeaths : Self Consuming per-Action death tally; one Boolean
-    //    per Unit that died this Action (true = the dying Unit was FBE-controlled).
+    //  • fbeSelfConsumingDeaths : Self Consuming per-Action death tally; one entry
+    //    per FBE-controlled Monster that died this Action. Triggers at 2+.
     //  • fbeShapestolen : enemy Monsters temporarily fighting for FBE this Battle.
     var fbeCardDice : $[Int] = $
     var fbeSelfConsumingDeaths : $[Boolean] = $
@@ -4442,7 +4443,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 self.payTax(r)
 
             // MindParasiteCultist: insect owner and original faction can't use normal capture (separate flow for insect owner)
-            val l = f.at(r).cultists.%(u => u.uclass != MindParasiteCultist || (self != f && !mindParasiteOriginalFaction.get(u.ref).has(self))).sortBy(u => u.uclass.cost * 10 + u.onGate.??(5))
+            // Thousand Writhing Maws: Tentacles cannot be Captured — filter out units whose canCapture returns false
+            val l = f.at(r).cultists.%(u => u.uclass.canCapture(u)(game)).%(u => u.uclass != MindParasiteCultist || (self != f && !mindParasiteOriginalFaction.get(u.ref).has(self))).sortBy(u => u.uclass.cost * 10 + u.onGate.??(5))
             if (l.none) {
                 EndAction(self)
             } else {

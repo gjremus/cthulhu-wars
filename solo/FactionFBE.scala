@@ -18,9 +18,9 @@ import html._
 //    value 1-6 to a Monster's Cost (§1.10 SB3) while Byagoona's Combat counts the
 //    Kill/Pain faces (§1.8).
 //  • Self Consuming death tally lives on game.fbeSelfConsumingDeaths : $[Boolean]
-//    (one entry per Unit that died this Action; the Boolean = "was FBE-controlled").
-//    Pushed in FBEExpansion.eliminate (universal death hook), evaluated and cleared
-//    in FBEExpansion.afterAction (§1.5.1 / §3.6).
+//    (one entry per FBE-controlled Monster that died this Action). Only FBE monsters
+//    count toward the 2+ trigger. Pushed in FBEExpansion.eliminate (death hook),
+//    evaluated and cleared in FBEExpansion.afterAction (§1.5.1 / §3.6).
 //  • Ghasts are barred from any FBE game at SETUP (§1.6, creator-approved global
 //    Ghast ban — see Game.scala loyaltyCards init), so every "Monster" rule reads
 //    uniformly across Fungal Thralls and controlled Neutral Monsters with no
@@ -87,11 +87,12 @@ case object FBE extends Faction { f =>
 
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
         // Byagoona's Combat = count of Kill/Pain faces on the Faction-Card dice
-        // (§1.8). Pip >= 4 is a Pain or Kill face (4/5 Pain, 6 Kill). All other
-        // FBE units use their printed cost. Neutral Monsters use neutralStrength.
+        // (§1.8). Pip >= 4 is a Pain or Kill face (4/5 Pain, 6 Kill). Fungal
+        // Thralls use their cost (2) as combat. Acolytes (Cultists) have 0 combat.
+        // Neutral Monsters use neutralStrength.
         val byagoonaCount = units.%(_.uclass == Byagoona).num
         val byagoonaStr   = (byagoonaCount > 0).??(game.fbeCardDice.count(_ >= 4))
-        units.%(u => u.uclass != Byagoona).not(Zeroed)./(_.uclass.cost).sum +
+        units.%(u => u.uclass != Byagoona && u.uclass.utype == Monster).not(Zeroed)./(_.uclass.cost).sum +
         byagoonaStr +
         neutralStrength(units, opponent)
     }
@@ -211,24 +212,27 @@ object FBEExpansion extends Expansion {
     def face(pip : Int) : BattleRoll = if (pip >= 6) Kill else if (pip >= 4) Pain else Miss
 
     // ── SELF CONSUMING death tally (§1.5.1 / §3.6) ───────────────────────────
-    // Universal death hook: every Unit eliminated during the active Action (battle
-    // or otherwise) is recorded. The Boolean records whether the dying Unit was
-    // FBE-controlled (so the +1 Doom 3-controlled clause can be checked).
+    // Death hook: only FBE-controlled Monster eliminations are recorded.
+    // Self Consuming triggers at 2+ deaths; Doom bonus at 3+.
     override def eliminate(u : UnitFigure)(implicit game : Game) {
         if (!game.setup.has(FBE)) return
-        game.fbeSelfConsumingDeaths :+= (u.faction == FBE)
+        // Only track FBE-controlled Monster deaths for Self Consuming (§1.5.1):
+        // the trigger requires 2+ FBE monsters eliminated in the same action.
+        if (u.faction == FBE && u.uclass.utype == Monster)
+            game.fbeSelfConsumingDeaths :+= true
     }
 
     // ── SELF CONSUMING resolution (fires at end of every Action) (§3.6) ───────
     override def afterAction()(implicit game : Game) {
         if (!game.setup.has(FBE)) return
         val deaths = game.fbeSelfConsumingDeaths
+        // Self Consuming triggers when 2+ FBE monsters are eliminated in the same action.
         if (deaths.num >= 2) {
             FBE.power += 1
-            FBE.log(SelfConsuming.styled(FBE) + ": 2+ Units died — gained", 1.power)
-            if (deaths.count(_ == true) >= 3) {
+            FBE.log(SelfConsuming.styled(FBE) + ": 2+ FBE Monsters eliminated — gained", 1.power)
+            if (deaths.num >= 3) {
                 FBE.doom += 1
-                FBE.log(SelfConsuming.styled(FBE) + ": FBE controlled 3+ — also gained", 1.doom)
+                FBE.log(SelfConsuming.styled(FBE) + ": 3+ FBE Monsters — also gained", 1.doom)
             }
         }
         game.fbeSelfConsumingDeaths = $
@@ -305,6 +309,8 @@ object FBEExpansion extends Expansion {
             game.reveals(f)
 
             game.highPriests(f)
+
+            game.hires(f)
 
             // Succor — offer once per Doom phase if acquired and FBE has any unit.
             if (f.can(Succor) && f.units.%(_.region.onMap).any && !f.oncePerAction.has(Succor))

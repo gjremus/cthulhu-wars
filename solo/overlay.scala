@@ -1950,7 +1950,19 @@ object Overlays {
         case $("FBE", "ByagoonaAwaken") => fbeByagoonaAwakenOverlay()
 
         case $("FBE", ChangelingAdherentsReq.text) => requirement("A total of 3 Kills are Rolled in a Battle you Participate in.")
-        case $("FBE", NecromanticSporesReq.text)   => requirement("As an Action, Eliminate Two Fungal Thralls.")
+        case $("FBE", NecromanticSporesReq.text)   =>
+            val locationInfo = currentGame match {
+                case Some(g) =>
+                    implicit val gg : Game = g
+                    val thralls = FBE.onMap(FungalThrall)
+                    if (thralls.any)
+                        "<br/><br/><span class=cost-color>Fungal Thralls on map (" + thralls.num + "):</span> " +
+                        thralls./(t => t.region.toString).distinct./(r => r + " (" + thralls.count(_.region.toString == r) + ")").mkString(", ")
+                    else
+                        "<br/><br/><span class=cost-color>No Fungal Thralls on map.</span>"
+                case None => ""
+            }
+            requirement("As an Action, Eliminate Two Fungal Thralls." + locationInfo)
         case $("FBE", ShapestealingReq.text)        => requirement("Have 3 Units in an Enemy Start Area.")
         case $("FBE", AnimatedRushReq.text)         => requirement("Have 3 Dice on your Faction Card.")
         case $("FBE", SuccorReq.text)               => requirement("Byagoona Dies in Battle. Do not fulfill if the Kill/Elimination is prevented.")
