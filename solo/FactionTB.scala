@@ -48,6 +48,7 @@ case object Tentacle extends FactionUnitClass(TB, "Tentacle", Cultist, 2) {
     // Thousand Writhing Maws: Tentacles cannot Build nor Control Gates, nor be Captured.
     override def canControlGate(u : UnitFigure)(implicit game : Game) : Boolean = false
     override def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBeCaptured(u : UnitFigure)(implicit game : Game) : Boolean = false
 }
 case object Chthonian extends FactionUnitClass(TB, "Chthonian", Monster, 2)
 case object ShuddeMellHead extends FactionUnitClass(TB, "Shudde M'ell (Head)", GOO, 8)
@@ -180,27 +181,28 @@ case class TBBehemothSegmentAction(self : Faction)
     extends ForcedAction
 
 // -- STALK: Post-Move relocation (§1.10 SB1 / §3.10.1 / §4.4) ----------------
-case class TBStalkMainAction(self : Faction, movedRegions : $[Region])
+// `mover` tracks which faction moved a unit so we can resume their MoveContinueAction.
+case class TBStalkMainAction(self : Faction, movedRegions : $[Region], mover : Faction)
     extends ForcedAction with PowerNeutral with Soft {
     override def question(implicit game : Game) = Stalk.styled(TB) + ": relocate a Cultist?"
 }
-case class TBStalkUseAction(self : Faction, movedRegions : $[Region])
+case class TBStalkUseAction(self : Faction, movedRegions : $[Region], mover : Faction)
     extends OptionFactionAction("Use " + Stalk.styled(TB)) with Soft {
     override def question(implicit game : Game) = Stalk.styled(TB) + ": relocate a Cultist?"
 }
-case class TBStalkSkipAction(self : Faction)
+case class TBStalkSkipAction(self : Faction, mover : Faction)
     extends OptionFactionAction("Skip " + Stalk.styled(TB)) with Soft {
     override def question(implicit game : Game) = Stalk.styled(TB)
 }
-case class TBStalkPickCultistAction(self : Faction, movedRegions : $[Region])
+case class TBStalkPickCultistAction(self : Faction, movedRegions : $[Region], mover : Faction)
     extends ForcedAction with PowerNeutral with Soft {
     override def question(implicit game : Game) = Stalk.styled(TB) + ": choose Cultist to relocate"
 }
-case class TBStalkDestAction(self : Faction, cultist : UnitRef, movedRegions : $[Region])
+case class TBStalkDestAction(self : Faction, cultist : UnitRef, movedRegions : $[Region], mover : Faction)
     extends ForcedAction with PowerNeutral with Soft {
     override def question(implicit game : Game) = Stalk.styled(TB) + ": choose destination"
 }
-case class TBStalkAction(self : Faction, cultist : UnitRef, dest : Region)
+case class TBStalkAction(self : Faction, cultist : UnitRef, dest : Region, mover : Faction)
     extends ForcedAction with PowerNeutral
 
 // -- AUTOTOMY: Post-Battle Kill transfer (§1.10 SB2 / §3.10.2 / §4.4) --------
@@ -517,7 +519,7 @@ object TBExpansion extends Expansion {
             if (areas.num == 1)
                 Force(TBWrithingMawsPlaceSecondAction(self, uc, areas.head))
             else
-                Ask(self).each(areas)(r => TBWrithingMawsPlaceSecondAction(self, uc, r)).cancel
+                Ask(self).each(areas)(r => TBWrithingMawsPlaceSecondAction(self, uc, r).as(r)(ThousandWrithingMaws.styled(TB), ": place first", uc.styled(TB), "in")).cancel
 
         case TBWrithingMawsPlaceSecondAction(self, uc, r1) =>
             val areas = if (uc.utype == Cultist)
@@ -527,7 +529,7 @@ object TBExpansion extends Expansion {
             if (areas.num == 1)
                 Force(TBWrithingMawsAction(self, uc, r1, areas.head))
             else
-                Ask(self).each(areas)(r => TBWrithingMawsAction(self, uc, r1, r)).cancel
+                Ask(self).each(areas)(r => TBWrithingMawsAction(self, uc, r1, r).as(r)(ThousandWrithingMaws.styled(TB), ": place second", uc.styled(TB), "in")).cancel
 
         case TBWrithingMawsAction(self, uc, r1, r2) =>
             self.power -= 2
@@ -574,39 +576,42 @@ object TBExpansion extends Expansion {
 
         // ====================================================================
         // STALK: Post-Move relocation (§3.10.1)
+        // Trigger: immediately after ANY faction's Move Action (per guide §1.10 SB1:
+        // "Immediately after any faction's Move Action, you may relocate a single
+        // Cultist to a Moved Unit's Area.")
         // ====================================================================
-        case TBStalkMainAction(self, movedRegions) =>
+        case TBStalkMainAction(self, movedRegions, mover) =>
             implicit val asking = Asking(self)
-            + TBStalkUseAction(self, movedRegions)
-            + TBStalkSkipAction(self)
+            + TBStalkUseAction(self, movedRegions, mover)
+            + TBStalkSkipAction(self, mover)
             asking
 
-        case TBStalkUseAction(self, movedRegions) =>
-            Force(TBStalkPickCultistAction(self, movedRegions))
+        case TBStalkUseAction(self, movedRegions, mover) =>
+            Force(TBStalkPickCultistAction(self, movedRegions, mover))
 
-        case TBStalkSkipAction(self) =>
-            UnknownContinue
+        case TBStalkSkipAction(self, mover) =>
+            EndAction(mover)
 
-        case TBStalkPickCultistAction(self, movedRegions) =>
+        case TBStalkPickCultistAction(self, movedRegions, mover) =>
             val cultists = self.allInPlay.%(u => u.uclass.utype == Cultist)
             if (cultists.none)
-                UnknownContinue
+                EndAction(mover)
             else
                 Ask(self).each(cultists)(u =>
-                    TBStalkDestAction(self, u.ref, movedRegions)
+                    TBStalkDestAction(self, u.ref, movedRegions, mover)
                         .as(u.uclass.styled(TB) + " in " + u.region)).cancel
 
-        case TBStalkDestAction(self, cultist, movedRegions) =>
+        case TBStalkDestAction(self, cultist, movedRegions, mover) =>
             // Destination = any of the just-Moved Units' Areas
             Ask(self).each(movedRegions)(r =>
-                TBStalkAction(self, cultist, r)).cancel
+                TBStalkAction(self, cultist, r, mover)).cancel
 
-        case TBStalkAction(self, cultist, dest) =>
+        case TBStalkAction(self, cultist, dest, mover) =>
             val u = game.unit(cultist)
             val from = u.region
             u.region = dest
             self.log(Stalk.styled(TB) + ": relocated", u.uclass.styled(TB), "from", from, "to", dest)
-            UnknownContinue
+            EndAction(mover)
 
         // ====================================================================
         // AUTOTOMY: Post-Battle Kill transfer (§3.10.2)

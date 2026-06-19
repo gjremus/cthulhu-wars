@@ -83,17 +83,17 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 200  -> "move part commit"
 
                 // Stalk: post-move relocation
-                case TBStalkMainAction(f, _) =>
+                case TBStalkMainAction(f, _, _) =>
                     true                                         |=> 300  -> "stalk relocation"
-                case TBStalkUseAction(f, _) =>
+                case TBStalkUseAction(f, _, _) =>
                     true                                         |=> 400  -> "use stalk"
-                case TBStalkSkipAction(f) =>
+                case TBStalkSkipAction(f, _) =>
                     true                                         |=> 0    -> "skip stalk"
-                case TBStalkPickCultistAction(f, _) =>
+                case TBStalkPickCultistAction(f, _, _) =>
                     true                                         |=> 100  -> "pick stalk cultist"
-                case TBStalkDestAction(f, _, _) =>
+                case TBStalkDestAction(f, _, _, _) =>
                     true                                         |=> 100  -> "pick stalk dest"
-                case TBStalkAction(f, _, _) =>
+                case TBStalkAction(f, _, _, _) =>
                     true                                         |=> 200  -> "stalk commit"
 
                 // Autotomy: post-battle Kill transfer

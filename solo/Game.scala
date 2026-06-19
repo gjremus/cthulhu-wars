@@ -218,6 +218,7 @@ abstract class UnitClass(val name : String, val utype : UnitType, val cost : Int
     def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !MindParasite.isParasitized(u)
     def canBattle(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref)
     def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = true
+    def canBeCaptured(u : UnitFigure)(implicit game : Game) : Boolean = true
     def canControlGate(u : UnitFigure)(implicit game : Game) : Boolean = false
     def canBeRecruited(f : Faction)(implicit game : Game) : Boolean = utype == Cultist
     def canBeSummoned(f : Faction)(implicit game : Game) : Boolean = utype == Monster || utype == Terror
@@ -975,7 +976,7 @@ class Player(private val f : Faction)(implicit game : Game) {
             false
         else
         // Thousand Writhing Maws: Tentacles cannot be Captured — exclude from capture eligibility
-        if (e.at(r, Cultist).%(u => u.uclass.canCapture(u)(game)).none)
+        if (e.at(r, Cultist).%(u => u.uclass.canBeCaptured(u)).none)
             false
         else
         // Great Race of Yith: Possession — captures ignoring all protection
@@ -2880,7 +2881,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Ghatanothoa IGOO: mummified cultists produce no Power during Gather Power
                 // Exclude mummified AND parasitized cultists from power calc
                 // Parasitized cultists generate power for their ORIGINAL faction, not insect owner
-                val ownCultists = f.cultists.%(u => !mummifiedCultists.has(u.ref) && u.uclass != MindParasiteCultist).num
+                // Thousand Writhing Maws: TB's Cadavolytes and Tentacles generate no Power during Gather
+                val ownCultists = f.cultists.%(u => !mummifiedCultists.has(u.ref) && u.uclass != MindParasiteCultist && !(f == TB && (u.uclass == Cadavolyte || u.uclass == Tentacle))).num
                 // Add parasitized cultists that originally belonged to this faction
                 val parasitizedForMe = factions./~(e => e.units.%(u => u.uclass == MindParasiteCultist && u.region.onMap && mindParasiteOriginalFaction.get(u.ref).has(f))).num
                 val cultists = ownCultists + parasitizedForMe
@@ -2921,7 +2923,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Firstborn (FB): grant +1 power during Gather Power if the High Priests game option is enabled
                 val fbHPBonus = (f == FB && options.has(HighPriests)).??(1)
 
-                f.power = hibernate + ownGates * 2 + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship + fbHPBonus
+                // Thousand Writhing Maws: TB gains +1 Power per Area containing a Tentacle
+                val tbTentacleAreas = (f == TB).??(f.onMap(Tentacle)./(_.region).distinct.num)
+
+                f.power = hibernate + ownGates * 2 + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship + fbHPBonus + tbTentacleAreas
                 f.hibernating = false
 
                 val fromHibernate = (hibernate > 0).?(hibernate.styled("region") + " hibernate")
@@ -2937,8 +2942,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val fromWorship = (worship > 0).?(worship.styled("region") + " cathedral".s(worship))
                 // Firstborn (FB): log line for the High Priest power bonus
                 val fromFBHP = (fbHPBonus > 0).?(fbHPBonus.styled("region") + " High Priest bonus")
+                // Thousand Writhing Maws: +1 Power per Area containing Tentacle
+                val fromTBTentacles = (tbTentacleAreas > 0).?(tbTentacleAreas.styled("region") + " Tentacle area".s(tbTentacleAreas))
 
-                f.log("got", f.power.power, "(" + $(fromHibernate, fromGates, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP).flatten.mkString(" + ") + ")")
+                f.log("got", f.power.power, "(" + $(fromHibernate, fromGates, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP, fromTBTentacles).flatten.mkString(" + ") + ")")
 
                 if (greenDecayCultists > 0) {
                     f.log("Green Decay".styled("nt") + ":", greenDecayCultists, "captured " + "cultist".s(greenDecayCultists), "→", greenDecayCultists.es, "(not power)")
@@ -4214,6 +4221,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     destinations = destinations :+ BB.moon
             }
 
+            // TB: Mantle adjacency — TB units can move to/from the Mantle via
+            // tbMantleAreas (always) and Tentacle areas (with Subterrane SB).
+            if (self == TB && tbMantleInPlay) {
+                val mantleEdges = TBExpansion.tbMantleEdges(from)(game)
+                if (mantleEdges.any)
+                    destinations = (destinations ++ mantleEdges).distinct
+            }
+
             val arriving = self.units.%(_.region.glyph.onMap).tag(Moved)./(_.region).distinct
 
             val l1 = destinations.%(arriving.contains) ++ destinations.%!(arriving.contains)
@@ -4244,11 +4259,22 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 self.log("recovered", 1.power, "from", Burrow)
             }
 
+            // Stalk (TB §1.10 SB1): "Immediately after any faction's Move Action,
+            // you may relocate a single Cultist to a Moved Unit's Area."
+            // Collect moved units' destinations before clearing Moved tags.
+            val tbStalkDests = if (setup.has(TB) && TB.can(Stalk) && TB.allInPlay.%(_.uclass.utype == Cultist).any)
+                self.units.%(_.tag(Moved))./(_.region).distinct
+            else $[Region]
+
             self.units.foreach(_.remove(Moved))
             self.units.foreach(_.remove(MovedForFree))
             self.units.foreach(_.remove(MovedForExtra))
 
-            EndAction(self)
+            // Fire Stalk prompt if TB has the spellbook and units moved
+            if (tbStalkDests.any)
+                TBStalkMainAction(TB, tbStalkDests, self)
+            else
+                EndAction(self)
 
         // Bubastis Moon Guard (Fix 45, v2.4.13): block any non-BB unit move
         // whose destination is the Moon. MoveSelectAction already filters
@@ -4443,8 +4469,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 self.payTax(r)
 
             // MindParasiteCultist: insect owner and original faction can't use normal capture (separate flow for insect owner)
-            // Thousand Writhing Maws: Tentacles cannot be Captured — filter out units whose canCapture returns false
-            val l = f.at(r).cultists.%(u => u.uclass.canCapture(u)(game)).%(u => u.uclass != MindParasiteCultist || (self != f && !mindParasiteOriginalFaction.get(u.ref).has(self))).sortBy(u => u.uclass.cost * 10 + u.onGate.??(5))
+            // Thousand Writhing Maws: Tentacles cannot be Captured — filter out units whose canBeCaptured returns false
+            val l = f.at(r).cultists.%(u => u.uclass.canBeCaptured(u)).%(u => u.uclass != MindParasiteCultist || (self != f && !mindParasiteOriginalFaction.get(u.ref).has(self))).sortBy(u => u.uclass.cost * 10 + u.onGate.??(5))
             if (l.none) {
                 EndAction(self)
             } else {
