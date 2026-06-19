@@ -105,13 +105,13 @@ class GameEvaluationXSS(implicit game : Game) extends GameEvaluation(XSS)(game) 
                     true                                         |=> -100 -> "decline hold (return to pool)"
 
                 // Distant Thunderclap — optional excess pain self-assignment
-                case DistantThunderclapOfferAction(f, _, _, _) =>
+                case DistantThunderclapOfferAction(f, _, _, _, _) =>
                     true                                         |=> 500  -> "use thunderclap"
                 case DistantThunderclapSkipAction(f) =>
                     true                                         |=> -100 -> "skip thunderclap"
-                case DistantThunderclapPainAction(f, _, _, _, _) =>
+                case DistantThunderclapPainAction(f, _, _, _, _, _) =>
                     true                                         |=> 0    -> "thunderclap pain"
-                case DistantThunderclapPainTargetAction(f, target, _, _, _, _) =>
+                case DistantThunderclapPainTargetAction(f, target, _, _, _, _, _) =>
                     val u = game.unit(target)
                     (u.uclass == AmphibianCrawler)               |=> 500  -> "pain cheapest unit"
                     (u.uclass == Twister)                        |=> 200  -> "pain twister"

@@ -1759,7 +1759,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         if (excessPains > 0 && XSS.at(arena).any) {
                             XSS.oncePerAction :+= Precipitation
                             return Ask(XSS)
-                                .add(DistantThunderclapOfferAction(XSS, excessPains, arena, opponentHadNonCultist))
+                                .add(DistantThunderclapOfferAction(XSS, excessPains, arena, opponent, opponentHadNonCultist))
                                 .add(DistantThunderclapSkipAction(XSS))
                         }
                     }
