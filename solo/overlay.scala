@@ -1481,8 +1481,8 @@ object Overlays {
 
     def xssTbOverlay(s : $[Any]) : String = s match {
         case $("XSS") =>
-            faction(XSS, "info:xss-background", Precipitation, "Ongoing",
-            "After Combat, assign Pain equal to the number of your Kills. You choose the order of Pain assignment (XSS picks first, regardless of Attacker/Defender role). Fully cancelled by Crawling Chaos Madness.",
+            faction(XSS, "info:xss-background", Precipitation, "Post-Battle",
+            "You always Pain out of a Battle first, even if you are the Defender. Fully cancelled by Crawling Chaos Madness.",
             $(), $(
             (Acolyte,           6, "1", "0", s""""""),
             (AmphibianCrawler,  2, "1", "0", s"""<div class=p>Monster. 0 Combat.</div>"""),
@@ -1502,7 +1502,7 @@ object Overlays {
         case $("XSS", LandGatesReq.text) => requirement("Control 3 Gates in Land Areas<br/>OR<br/>Control 3 Gates in Areas with Faction Glyphs.")
         case $("XSS", MonsterMassReq.text) => requirement("Have 10 Cost worth of Monsters in play (sum of Monster Costs on map).")
         case $("XSS", AwakenPetrichorReq.text) => requirement("Awaken Petrichor.")
-        case $("XSS", Whirlwind.name) => spellbook(Whirlwind.name, "Battle", "After rolling dice, reroll any number of your non-Kill/non-Pain dice. You may do this once per Battle.")
+        case $("XSS", Whirlwind.name) => spellbook(Whirlwind.name, "Post-Battle", "While in Land Areas, Twisters may Retreat to Sea Areas containing enemy Units.")
         case $("XSS", StaticAccumulator.name) => spellbook(StaticAccumulator.name, "Pre-Battle", "Move Units with total Cost up to 4 from one adjacent Area into the Battle Area.")
         case $("XSS", CloudOfAshes.name) => spellbook(CloudOfAshes.name, "Ongoing", "When one of your Monsters is Killed, you may place it on your Faction Card instead of returning it to Pool. In the Doom Phase, return one Monster from the Faction Card to a Controlled Gate; remaining Monsters return to Pool.")
         case $("XSS", Tsunami.name) => spellbook(Tsunami.name, "Action: Cost 1", "Move an Eye of the Storm from a Sea Area to an adjacent Land Area. Any or all of your other Units in the Sea Area may move with it.")
