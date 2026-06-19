@@ -160,8 +160,11 @@ case class DCTenebrosumMainAction(self : Faction, cost : Int, actionName : Strin
 // deducted instead of Sin and the log to lose its "used Tenebrosum to" prefix.
 case class DCTenebrosumRepeatAction(self : Faction, cost : Int, actionName : String)
     extends BaseFactionAction(
-        Tenebrosum.styled(DC) + ": Repeat " + actionName.styled(self) +
-            (if (cost > 0) " for " + cost.toString.styled("dc") + " Sin" else " (free)"),
+        Tenebrosum.styled(DC) + ": Repeat " + actionName.styled(self) + {
+            if (cost == 0) " (free)"
+            else if (actionName == "Summon") " for Sin"
+            else " for " + cost.toString.styled("dc") + " Sin"
+        },
         "Confirm".styled("power"))
     with PowerNeutral
 

@@ -1259,7 +1259,13 @@ case class FirstPlayerAction(self : Faction, f : Faction) extends BaseFactionAct
 case class PlayDirectionAction(self : Faction, order : $[Faction]) extends BaseFactionAction("Order of play", order.mkString(" > "))
 
 trait MainQuestion extends FactionAction {
-    def question(implicit game : Game) = game.nexed.some./(n => "" + EnergyNexus + " in " + n.mkString(", ")).|("" + self + (self.acted || self.battled.any).??(" unlimited") + " action") + " (" + (self.power > 0).?(self.power.power).|("0 power") + ")"
+    def question(implicit game : Game) = game.nexed.some./(n => "" + EnergyNexus + " in " + n.mkString(", ")).|("" + self + (self.acted || self.battled.any).??(" unlimited") + " action") + " (" + {
+        if (game.dcTenebrosumGuard && (self == DC || self == SL)) {
+            val sin = if (self == SL) game.slSin else game.dcSin
+            (sin > 0).?(sin.toString.styled("dc") + " Sin").|(("0 Sin").styled("dc"))
+        } else
+            (self.power > 0).?(self.power.power).|("0 power")
+    } + ")"
     override def safeQ(implicit game : Game) = self @@ {
         case f if game.nexed.any => "" + EnergyNexus + " in " + game.nexed.mkString(", ")
         case f if f.acted => "Unlimited actions"
@@ -1904,11 +1910,20 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     // from raw to avoid "DC used Tenebrosum to DC built a gate..."
                     // FactionEx.log prepends f (→ f.full) as the first arg; strip
                     // that prefix so the final line reads e.g. "Defilers Court used
-                    // Tenebrosum to built a gate in Africa (3 Sin)".
+                    // Tenebrosum to build a gate in Africa (3 Sin)".
                     val tenFaction = dcTenebrosumPrefixFaction
                     val factionPrefix = tenFaction.full + " "
                     val stripped = if (raw.startsWith(factionPrefix)) raw.stripPrefix(factionPrefix) else raw
-                    tenFaction.full + " used Tenebrosum to " + stripped + sinTag
+                    // HB Fix 120 (2026-06-19): grammar — "used Tenebrosum to move"
+                    // not "to moved". Convert leading past-tense verb to infinitive.
+                    val corrected = stripped
+                        .replaceFirst("^moved ", "move ")
+                        .replaceFirst("^built ", "build ")
+                        .replaceFirst("^summoned ", "summon ")
+                        .replaceFirst("^recruited ", "recruit ")
+                        .replaceFirst("^awakened ", "awaken ")
+                        .replaceFirst("^captured ", "capture ")
+                    tenFaction.full + " used Tenebrosum to " + corrected + sinTag
                 } else raw
 
             if (undoubled.has(line).not && pendingLine.any)
@@ -4281,6 +4296,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Track Ghato paid moves for anti-ping-pong
             if (self == FB && u.uclass == Ghatanothoa && cost > 0)
                 fbGhatoLastMoveOrigin = Some(o)
+
+            // HB Fix 120 (2026-06-19): Tenebrosum multi-unit move log fix.
+            // The one-shot dcTenebrosumPrefixPending flag is consumed by the
+            // first unit's log call; subsequent units fell through to the
+            // generic "moved" log. Re-arm the prefix before EVERY unit's log
+            // when inside a Tenebrosum per-unit move so all units get the
+            // correct "used Tenebrosum to move ... (1 Sin)" entry.
+            if (dcTenebrosumGuard && dcTenebrosumMovePerUnit) {
+                dcTenebrosumPrefixPending = true
+                dcTenebrosumPrefixFaction = self
+                dcTenebrosumPrefixCost = 1
+            }
 
             self.log("moved", u, "from", o, "to", r)
 

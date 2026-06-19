@@ -35,8 +35,8 @@ fi
 MAIN_JS="$HB_ROOT/solo/target/scala-2.13/cthulhu-wars-solo-hrf-opt/main.js"
 if $DO_BUILD || [ ! -f "$MAIN_JS" ]; then
     echo "==> [build] sbt fullOptJS (Homebrew) ..."
-    export JAVA_HOME=/tmp/zulu-jdk/zulu21.50.19-ca-jdk21.0.11-macosx_aarch64/Contents/Home
-    export PATH="$JAVA_HOME/bin:$HOME/.local/bin:$PATH"
+    export JAVA_HOME=/Users/gremus/.local/jdk/zulu21.50.19-ca-jdk21.0.11-macosx_aarch64/Contents/Home
+    export PATH="$JAVA_HOME/bin:$PATH"
     (cd "$HB_ROOT/solo" && sbt fullOptJS 2>&1 | tail -5)
 fi
 if [ ! -f "$MAIN_JS" ]; then
