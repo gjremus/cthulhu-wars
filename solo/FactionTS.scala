@@ -209,7 +209,7 @@ object TSExpansion extends Expansion {
         // UNDULATE (carry chain after a TS move)
         case MovedAction(self, u, from, to) if self == TS && self.can(Undulate) =>
             val carrierCost = u.uclass.cost
-            val eligible = self.at(from).not(Moved).%(v => v.uclass.cost > 0 && v.uclass.cost < carrierCost)
+            val eligible = self.at(from).%(v => v.uclass.cost > 0 && v.uclass.cost < carrierCost)
             // debug removed
             if (eligible.any)
                 Force(TSUndulateCarryPhaseAction(self, from, to, carrierCost))
@@ -220,7 +220,7 @@ object TSExpansion extends Expansion {
             // Round 8: respect canBeMoved (matches Arctic Wind / Beyond One pattern).
             // Byatis has canBeMoved = false (see IGOOs.scala line 41) and must NOT be
             // carried by Undulate, just like other movement abilities exclude it.
-            val eligible = self.at(from).not(Moved).%(v => v.uclass.cost > 0 && v.uclass.cost < carrierCost && v.uclass.canBeMoved(v))
+            val eligible = self.at(from).%(v => v.uclass.cost > 0 && v.uclass.cost < carrierCost && v.uclass.canBeMoved(v))
             if (eligible.any) {
                 implicit val asking = Asking(self)
                 eligible.sortBy(v => -v.uclass.cost).foreach { v =>
