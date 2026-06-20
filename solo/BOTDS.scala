@@ -344,6 +344,14 @@ class GameEvaluationDS(implicit game : Game) extends GameEvaluation(DS)(game) {
                 n <= 1                 |=> -500 -> "lone region undirected energy bad"
                 enemyGooThreat(r)      |=> -800 -> "goo threat at thesis"
 
+            case UndirectedEnergyConfirmAction(_) =>
+                val r = self.all(AvatarThesis).head.region
+                val n = factionsPresent(r)
+                n >= 3                 |=> 2000 -> "3 factions undirected energy"
+                n == 2                 |=> 1200 -> "2 factions undirected energy gain 2 power"
+                n <= 1                 |=> -500 -> "lone region undirected energy bad"
+                enemyGooThreat(r)      |=> -800 -> "goo threat at thesis"
+
             // ---- FIENDISH GROWTH: fires at AvatarAntithesis region, places n units ----
             case FiendishGrowthAction(_) =>
                 val r = self.all(AvatarAntithesis).head.region
