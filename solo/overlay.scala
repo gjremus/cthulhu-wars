@@ -1130,15 +1130,21 @@ object Overlays {
             // without a sprite mapping. Missing hp field defaults to "alive"
             // for backward compatibility.
             val parsed = rawEntries./(entry => {
-                val parts = entry.split("\\|", 3)
+                val parts = entry.split("\\|", 4)
                 val assetId = if (parts.length > 0) parts(0).trim else ""
                 val display = if (parts.length > 1) parts(1).trim else assetId
                 val hp      = if (parts.length > 2) parts(2).trim else "alive"
+                // 4th field (BB Moon sizing fix): the unit's on-map sprite height
+                // in map-pixel space. Defaults to 70 (Earth Cat height) for legacy
+                // 3-field entries so old cached payloads still render sensibly.
+                val onMapH  = if (parts.length > 3)
+                    scala.util.Try(parts(3).trim.toDouble).getOrElse(70.0)
+                else 70.0
                 val src     = if (assetId.nonEmpty)
                     hrf.web.getElem(assetId).as[dom.html.Image]./(_.src).|("")
                 else ""
-                (src, display, hp)
-            }).filter { case (src, _, _) => src.nonEmpty }
+                (src, display, hp, onMapH)
+            }).filter { case (src, _, _, _) => src.nonEmpty }
             // Fix 58 (BB v2.4.24): use the standard map placement pipeline.
             // The placement bitmap (bb-moon-place / bb-moon-h-place) is now
             // pixel-1:1 with the displayed moon image (both 1024×878). Magenta
@@ -1148,13 +1154,20 @@ object Overlays {
             // bounding-box normalisation, no fixed disc-rectangle stretch
             // constants — same model as GlyphPlacement.scala for the map.
             val n = parsed.length
-            // Sprite half-size in % of moon image height (sprite is 14% tall).
-            val spriteH = 14.0
+            // BB Moon sizing fix: render each sprite at a height PROPORTIONAL to
+            // its real on-map sprite height, so the Moon matches the regular map
+            // (a Bastet towers over an Earth Cat, exactly as on the board) instead
+            // of every unit being a flat 14%-tall sprite. The Earth Cat (on-map
+            // height 70px) is the anchor: it keeps its established 14%-of-moon-
+            // height size, and every other unit scales relative to it by the same
+            // 0.2 (= 14.0/70.0) %-per-map-pixel factor used here.
+            val moonSpriteScale = 14.0 / 70.0
+            def spriteHFor(onMapH : Double) : Double = onMapH * moonSpriteScale
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
             // Stable seed: only the asset-id list affects scatter positions, so
             // a unit's hp transition (alive → pained → killed → eliminated)
             // does not jiggle every other sprite when the overlay re-renders.
-            val seed = parsed.length * 31 + parsed./({ case (s, _, _) => s }).mkString.hashCode
+            val seed = parsed.length * 31 + parsed./({ case (s, _, _, _) => s }).mkString.hashCode
             val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
             // Convert pixel coords on the placement bitmap (which is 1:1 with
             // the displayed moon image) into CSS % of the moon image's
@@ -1173,10 +1186,13 @@ object Overlays {
             // Moon overlay's mid-battle cleanup state.
             val killSrc = hrf.web.getElem("kill").as[dom.html.Image]./(_.src).|("")
             val painSrc = hrf.web.getElem("pain").as[dom.html.Image]./(_.src).|("")
-            // Marker covers ~50% of sprite height so it is clearly visible
-            // over a 14%-tall sprite without dominating the moon disc.
-            val markerH = spriteH * 0.5
-            val unitFigures = parsed.zip(positions)./({ case ((src, display, hp), (xPct, yPct)) =>
+            val unitFigures = parsed.zip(positions)./({ case ((src, display, hp, onMapH), (xPct, yPct)) =>
+                // Per-unit sprite height (% of moon image height), proportional to
+                // the unit's real on-map height — matches the regular map's sizing.
+                val spriteH = spriteHFor(onMapH)
+                // Marker covers ~50% of THIS sprite's height so it stays clearly
+                // visible over the unit without dominating the moon disc.
+                val markerH = spriteH * 0.5
                 val markerSrc = hp match {
                     case "killed" => killSrc
                     case "pained" => painSrc

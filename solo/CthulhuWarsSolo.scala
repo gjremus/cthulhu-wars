@@ -3207,7 +3207,18 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         val asset   = safe(moonSpriteAssetId(u))
                         val display = safe(u.uclass.name) + " (" + safe(u.faction.short) + ")"
                         val hp      = hpTag(u)
-                        asset + "|" + display + "|" + hp
+                        // BB Moon sizing fix: pass each unit's ACTUAL on-map sprite
+                        // height (the same DrawRect.height the canvas map renders)
+                        // so the Moon overlay can size each sprite proportionally,
+                        // exactly like the regular map — instead of a flat 14%-tall
+                        // sprite that made a Bastet the same size as an Earth Cat.
+                        // Reuse DrawItem.proto (the canonical per-class size table)
+                        // so the Moon sizing never drifts from the map sizing.
+                        val onMapH  = {
+                            val ph = DrawItem(BB.moon, u.faction, u.uclass, u.health, u.state, 0, 0).proto
+                            if (ph != null) ph.height else 70
+                        }
+                        asset + "|" + display + "|" + hp + "|" + onMapH
                     }).mkString(";")
                     // BB Fix 31 (v2.4.8): if the HUD button is missing for any
                     // reason (orphaned by a map-small clear), recreate it now so
