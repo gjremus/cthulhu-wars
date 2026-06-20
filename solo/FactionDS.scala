@@ -44,7 +44,8 @@ case object AwakenAvatarAntithesis extends Requirement("Awaken Avatar Antithesis
 case object AwakenAvatarSynthesis extends Requirement("Awaken Avatar Synthesis")
 
 // Avatar Thesis awakening: pick azathoth track value (cost 0-8), then distribute power
-case class UndirectedEnergyAction(self : Faction) extends OptionFactionAction(UndirectedEnergy.styled(self)) with MainQuestion
+case class UndirectedEnergyAction(self : Faction) extends OptionFactionAction(UndirectedEnergy.styled(self)) with MainQuestion with Soft
+case class UndirectedEnergyConfirmAction(self : Faction) extends BaseFactionAction("Use", UndirectedEnergy.styled(self))
 
 case class ChaosGateSBAction(self : Faction) extends OptionFactionAction(ChaosGateSB.styled(self)) with MainQuestion with Soft
 case class ChaosGateSBPlaceAction(self : Faction, r : Region) extends BaseFactionAction("Place Chaos Gate in", implicit g => r + self.iced(r))
@@ -322,6 +323,9 @@ object DSExpansion extends Expansion {
 
         // UNDIRECTED ENERGY
         case UndirectedEnergyAction(self) =>
+            Ask(self).add(UndirectedEnergyConfirmAction(self)).cancel
+
+        case UndirectedEnergyConfirmAction(self) =>
             val r = self.all(AvatarThesis).head.region
             val n = game.factions.%(_.at(r).any).num
             self.power -= 1
