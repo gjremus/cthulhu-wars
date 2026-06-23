@@ -18,9 +18,10 @@ import html._
 //    value 1-6 to a Monster's Cost (§1.10 SB3) while Byagoona's Combat counts the
 //    Kill/Pain faces (§1.8).
 //  • Self Consuming death tally lives on game.fbeSelfConsumingDeaths : $[Boolean]
-//    (one entry per FBE-controlled Monster that died this Action). Only FBE monsters
-//    count toward the 2+ trigger. Pushed in FBEExpansion.eliminate (death hook),
-//    evaluated and cleared in FBEExpansion.afterAction (§1.5.1 / §3.6).
+//    (one entry per Unit of ANY faction that died this Action; the Boolean = "was
+//    FBE-controlled"). The 2+ Power trigger counts every Unit; the 3+ Doom bonus
+//    counts only FBE-controlled ones (§1.5.1). Pushed in FBEExpansion.eliminate
+//    (universal death hook), evaluated and cleared in FBEExpansion.afterAction.
 //  • Ghasts are barred from any FBE game at SETUP (§1.6, creator-approved global
 //    Ghast ban — see Game.scala loyaltyCards init), so every "Monster" rule reads
 //    uniformly across Fungal Thralls and controlled Neutral Monsters with no
@@ -212,27 +213,27 @@ object FBEExpansion extends Expansion {
     def face(pip : Int) : BattleRoll = if (pip >= 6) Kill else if (pip >= 4) Pain else Miss
 
     // ── SELF CONSUMING death tally (§1.5.1 / §3.6) ───────────────────────────
-    // Death hook: only FBE-controlled Monster eliminations are recorded.
-    // Self Consuming triggers at 2+ deaths; Doom bonus at 3+.
+    // Universal death hook: every Unit eliminated during the active Action (battle
+    // or otherwise), regardless of faction, is recorded. The Boolean records whether
+    // the dying Unit was FBE-controlled so the +1 Doom "controlled 3+" clause can be
+    // checked. Power triggers on 2+ Units of ANY faction; Doom needs 3+ FBE-controlled.
     override def eliminate(u : UnitFigure)(implicit game : Game) {
         if (!game.setup.has(FBE)) return
-        // Only track FBE-controlled Monster deaths for Self Consuming (§1.5.1):
-        // the trigger requires 2+ FBE monsters eliminated in the same action.
-        if (u.faction == FBE && u.uclass.utype == Monster)
-            game.fbeSelfConsumingDeaths :+= true
+        game.fbeSelfConsumingDeaths :+= (u.faction == FBE)
     }
 
     // ── SELF CONSUMING resolution (fires at end of every Action) (§3.6) ───────
     override def afterAction()(implicit game : Game) {
         if (!game.setup.has(FBE)) return
         val deaths = game.fbeSelfConsumingDeaths
-        // Self Consuming triggers when 2+ FBE monsters are eliminated in the same action.
+        // §1.5.1: 2+ Units (any faction) Killed/Eliminated in one Action → +1 Power;
+        // if FBE controlled at least 3 of those Units → also +1 Doom.
         if (deaths.num >= 2) {
             FBE.power += 1
-            FBE.log(SelfConsuming.styled(FBE) + ": 2+ FBE Monsters eliminated — gained", 1.power)
-            if (deaths.num >= 3) {
+            FBE.log(SelfConsuming.styled(FBE) + ": 2+ Units died — gained", 1.power)
+            if (deaths.count(_ == true) >= 3) {
                 FBE.doom += 1
-                FBE.log(SelfConsuming.styled(FBE) + ": 3+ FBE Monsters — also gained", 1.doom)
+                FBE.log(SelfConsuming.styled(FBE) + ": FBE controlled 3+ — also gained", 1.doom)
             }
         }
         game.fbeSelfConsumingDeaths = $
@@ -396,8 +397,9 @@ object FBEExpansion extends Expansion {
         case ByagoonaAwakenPickAction(self, r, picked, remaining) =>
             implicit val asking = Asking(self)
             remaining.foreach { ur =>
+                val u = game.unit(ur)
                 + ByagoonaAwakenPickAction(self, r, picked :+ ur, remaining.but(ur))
-                    .as("Add " + game.unit(ur).uclass.styled(FBE))
+                    .as("Add " + u.uclass.styled(FBE) + " in " + u.region + " (Cost " + u.uclass.cost + ")")
             }
             if (picked.any)
                 + ByagoonaAwakenDoneAction(self, r, picked)
@@ -465,7 +467,8 @@ object FBEExpansion extends Expansion {
                         Force(NecromanticSporesEliminateAction(self, monsters.head.ref, b.arena, n))
                     else
                         Ask(self).each(monsters)(u =>
-                            NecromanticSporesEliminateAction(self, u.ref, b.arena, n))
+                            NecromanticSporesEliminateAction(self, u.ref, b.arena, n)
+                                .as(u.uclass.styled(FBE) + " in " + u.region + " (Cost " + u.uclass.cost + ")"))
                 case None => UnknownContinue
             }
 
@@ -682,8 +685,9 @@ object FBEExpansion extends Expansion {
             implicit val asking = Asking(self)
             if (picked.num < 2)
                 remaining.foreach { ur =>
+                    val u = game.unit(ur)
                     + EliminateTwoFungalThrallsPickAction(self, picked :+ ur, remaining.but(ur))
-                        .as("Add " + game.unit(ur).uclass.styled(FBE))
+                        .as("Add " + u.uclass.styled(FBE) + " in " + u.region + " (Cost " + u.uclass.cost + ")")
                 }
             if (picked.num == 2)
                 + EliminateTwoFungalThrallsDoneAction(self, picked)
