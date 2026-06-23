@@ -1743,6 +1743,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case PrimeCauseSkipAction(self) =>
+            // Mark this side as having used (declined) Prime Cause so the re-evaluated
+            // ElderShoggothPrimeCausePhase advances past it instead of re-asking the same
+            // menu forever. Without this the Skip option loops back to the choose-unit menu.
+            primeCauseUsed :+= self
             proceed()
 
         case PrimeCauseCancelReplacementAction(self) =>
@@ -2079,7 +2083,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case DirectedEnergySkipAction(self) =>
-            self.oncePerTurn :+= DirectedEnergy
+            // Skipping Directed Energy must NOT flip the spellbook facedown: the facedown flip
+            // is the cost of USING the ability. Declining leaves it face-up/available for a later
+            // battle this turn. The per-battle re-trigger guard is the Side.effects tag added at
+            // the offer site (DS.add(DirectedEnergy)), not oncePerTurn, so removing the flip here
+            // is safe within the current battle.
             proceed()
 
         // FIENDISH SPAWN (DS alternate pre-battle)
