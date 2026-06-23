@@ -295,6 +295,13 @@ object FBEExpansion extends Expansion {
                 game.fbeCardDice = game.fbeCardDice ++ rolled
                 self.log(ChangelingAdherents.styled(FBE) + ": rolled",
                     rolled./(p => FBEExpansion.face(p).toString).mkString(", ") + ", placed on Faction Card")
+                // HB FBE: re-evaluate spellbook requirements right after Changeling
+                // Adherents places dice during Gather Power. The phase-level triggers()
+                // (Game.scala raise-to-half) runs BEFORE these dice land, so without this
+                // the "Have 3 Dice on your Faction Card" (Animated Rush) requirement would
+                // only be satisfied later in the Action Phase. Re-running here satisfies it
+                // in Gather Power, as intended.
+                game.triggers()
                 Force(AfterPowerGatherAction)
             }
             else
