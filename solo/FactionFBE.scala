@@ -139,7 +139,7 @@ case class NecromanticSporesMainAction(self : Faction, n : Int)
 case class NecromanticSporesSkipAction(self : Faction)
     extends OptionFactionAction("Necromantic Spores".styled(FBE) + ": skip") with PostBattleQuestion
 case class NecromanticSporesEliminateAction(self : Faction, monster : UnitRef, r : Region, n : Int)
-    extends BaseFactionAction("Necromantic Spores".styled(FBE) + ": Eliminate", implicit g => g.unit(monster).uclass.styled(FBE))
+    extends BaseFactionAction("Necromantic Spores".styled(FBE) + ": Eliminate", implicit g => { val mu = g.unit(monster); mu.uclass.styled(FBE) + " in " + mu.region + " (Cost " + mu.uclass.cost + ")" })
 
 // ── SHAPESTEALING (Pre-Battle, §1.10 SB3 / §3.10.3 / §4.4.3) ─────────────────
 case class ShapestealingPreBattleAction(self : Faction)
@@ -467,8 +467,7 @@ object FBEExpansion extends Expansion {
                         Force(NecromanticSporesEliminateAction(self, monsters.head.ref, b.arena, n))
                     else
                         Ask(self).each(monsters)(u =>
-                            NecromanticSporesEliminateAction(self, u.ref, b.arena, n)
-                                .as(u.uclass.styled(FBE) + " in " + u.region + " (Cost " + u.uclass.cost + ")"))
+                            NecromanticSporesEliminateAction(self, u.ref, b.arena, n))
                 case None => UnknownContinue
             }
 
