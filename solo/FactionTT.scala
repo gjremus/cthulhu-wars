@@ -506,6 +506,11 @@ object TTExpansion extends Expansion {
             self.log("awakened", UbboSathla.styled(TT), "in", r, (cost > 0).??("for " + cost.power))
             self.satisfy(TTAwakenUbboSathla, "Awaken Ubbo-Sathla")
             ttUbboEverAwakened = true
+            // Hell's Banquet timing: when Ubbo is awakened DURING a doom phase (cost 0), Hell's Banquet
+            // must NOT fire that same doom phase — it first fires next doom phase. Mark the sentinel done
+            // so the re-entered DoomAction below skips the Hell's Banquet roll. The flag is cleared at
+            // DoomDoneAction, so Hell's Banquet will fire normally on subsequent doom phases.
+            if (cost == 0) game.ttHellsBanquetDone = true
             if (cost == 0) Force(DoomAction(self)) else EndAction(self)
 
         // UNSPEAKABLE OATH
