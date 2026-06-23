@@ -1740,6 +1740,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case PrimeCauseSkipAction(self) =>
+            // Mark this side as having used (declined) Prime Cause so the re-evaluated
+            // ElderShoggothPrimeCausePhase advances past it instead of re-asking the same
+            // menu forever. Without this the Skip option loops back to the choose-unit menu.
+            primeCauseUsed :+= self
             proceed()
 
         case QuachilDustToDustRemoveAction(self, uRef, quOwner) =>
