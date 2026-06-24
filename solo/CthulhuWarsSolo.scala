@@ -1167,10 +1167,14 @@ object CthulhuWarsSolo {
                     case FallenProphet => DrawRect("dc-fallen-prophet", |(tint), x - 47, y - 136, 95, 136)
                     case YgolonacDC    => DrawRect("n-ygolonac",        |(tint), x - 66, y - 158, 131, 175)
 
+                    // Bubastis (BB): unit sprites — strength-readable scaling (matches BB v2.4.32).
+                    // Formula: x = Bastet - EarthCat (140); y = EarthCat (70).
+                    // Mars = y + 0.25x = 105; Saturn = y + 0.5x = 140; Uranus = y + 0.75x = 175.
+                    // Bastet (210) and EarthCat (70) anchor the scale; widths scale with height to preserve aspect.
                     case EarthCat      => DrawRect("bb-earth-cat",      |(tint), x - 33, y - 70,  65,  70)
-                    case CatFromMars   => DrawRect("bb-cat-from-mars",  |(tint), x - 46, y - 118, 92, 118)
-                    case CatFromSaturn => DrawRect("bb-cat-from-saturn",|(tint), x - 51, y - 135, 101, 135)
-                    case CatFromUranus => DrawRect("bb-cat-from-uranus",|(tint), x - 58, y - 142, 115, 142)
+                    case CatFromMars   => DrawRect("bb-cat-from-mars",  |(tint), x - 41, y - 105, 82, 105)
+                    case CatFromSaturn => DrawRect("bb-cat-from-saturn",|(tint), x - 53, y - 140, 105, 140)
+                    case CatFromUranus => DrawRect("bb-cat-from-uranus",|(tint), x - 71, y - 175, 142, 175)
                     case Bastet        => DrawRect("bb-bastet",         |(tint), x - 64, y - 210, 128, 210)
 
                     case DesecrationToken => DrawRect("ys-desecration", None, x - 20, y - 20, 41, 40)
@@ -3433,7 +3437,18 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     val moonList = moonFigs./(u => {
                         val asset   = safe(moonSpriteAssetId(u))
                         val display = safe(u.uclass.name) + " (" + safe(u.faction.short) + ")"
-                        asset + "|" + display
+                        // BB Moon sizing (mirror of BB v2.4.x): pass each unit's ACTUAL
+                        // on-map sprite height (the same DrawRect.height the canvas map
+                        // renders) so the Moon overlay can size each sprite proportionally,
+                        // exactly like the regular map — instead of a flat 14%-tall sprite
+                        // that made a Bastet the same size as an Earth Cat. Reuse
+                        // DrawItem.proto (the canonical per-class size table) so the Moon
+                        // sizing never drifts from the map sizing.
+                        val onMapH  = {
+                            val ph = DrawItem(BB.moon, u.faction, u.uclass, u.health, u.state, 0, 0).proto
+                            if (ph != null) ph.height else 70
+                        }
+                        asset + "|" + display + "|" + onMapH
                     }).mkString(";")
                     // BB Fix 31 (v2.4.8): if the HUD button is missing for any
                     // reason (orphaned by a map-small clear), recreate it now so

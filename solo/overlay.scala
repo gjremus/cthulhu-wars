@@ -1186,19 +1186,24 @@ object Overlays {
             val rawEntries = if (unitList.toString.trim.nonEmpty)
                 unitList.toString.split(";").toList
             else List.empty
-            // Each entry: "asset-id|Display Name (FAC)". Render the map sprite
-            // image. Defensive empty fallback on missing asset ids so the
-            // overlay never breaks if a future unit class slips through
-            // without a sprite mapping.
+            // Each entry: "asset-id|Display Name (FAC)|onMapH". Render the map
+            // sprite image. Defensive empty fallback on missing asset ids so the
+            // overlay never breaks if a future unit class slips through without a
+            // sprite mapping. The 3rd field (BB Moon sizing): the unit's on-map
+            // sprite height in map-pixel space. Defaults to 70 (Earth Cat height)
+            // for legacy 2-field entries so old cached payloads still render.
             val parsed = rawEntries./(entry => {
-                val parts = entry.split("\\|", 2)
+                val parts = entry.split("\\|", 3)
                 val assetId = if (parts.length > 0) parts(0).trim else ""
                 val display = if (parts.length > 1) parts(1).trim else assetId
+                val onMapH  = if (parts.length > 2)
+                    scala.util.Try(parts(2).trim.toDouble).getOrElse(70.0)
+                else 70.0
                 val src     = if (assetId.nonEmpty)
                     hrf.web.getElem(assetId).as[dom.html.Image]./(_.src).|("")
                 else ""
-                (src, display)
-            }).filter { case (src, _) => src.nonEmpty }
+                (src, display, onMapH)
+            }).filter { case (src, _, _) => src.nonEmpty }
             // [v2.4.10] Use the dedicated Moon placement bitmap (bb-moon-place /
             // bb-moon-h-place) to scatter sprites strictly inside the moon disc.
             // The bitmap drives placement just like earth*-place / library*-place
@@ -1208,10 +1213,17 @@ object Overlays {
             // of the circle's bounding box. We map those onto the moon image
             // rect so every cat sprite lands inside the disc.
             val n = parsed.length
-            // Sprite half-size in % of moon image height (sprite is 14% tall).
-            val spriteH = 14.0
+            // BB Moon sizing: render each sprite at a height PROPORTIONAL to its
+            // real on-map sprite height, so the Moon matches the regular map (a
+            // Bastet towers over an Earth Cat, exactly as on the board) instead of
+            // every unit being a flat 14%-tall sprite. The Earth Cat (on-map height
+            // 70px) is the anchor: it keeps its established 14%-of-moon-height size,
+            // and every other unit scales relative to it by the same 0.2 (= 14/70)
+            // %-per-map-pixel factor.
+            val moonSpriteScale = 14.0 / 70.0
+            def spriteHFor(onMapH : Double) : Double = onMapH * moonSpriteScale
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
-            val seed = parsed.length * 31 + parsed./({ case (s, _) => s }).mkString.hashCode
+            val seed = parsed.length * 31 + parsed./({ case (s, _, _) => s }).mkString.hashCode
             val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
             // Map each (xFrac, yFrac) of the circle bbox onto the moon image:
             // the moon disc fills ~76% horizontally and ~89% vertically of
@@ -1226,7 +1238,10 @@ object Overlays {
                 val dy = (yf - 0.5) * discHPct
                 (discCx + dx, discCy + dy)
             }
-            val unitFigures = parsed.zip(positions)./({ case ((src, display), (xPct, yPct)) =>
+            val unitFigures = parsed.zip(positions)./({ case ((src, display, onMapH), (xPct, yPct)) =>
+                // Per-unit sprite height (% of moon image height), proportional to
+                // the unit's real on-map height — matches the regular map's sizing.
+                val spriteH = spriteHFor(onMapH)
                 f"""<img src="$src"
                          title="$display"
                          style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
