@@ -31,7 +31,15 @@ case object DragonDescending extends FactionSpellbook(OW, "Dragon Descending")
 case object EightGates extends Requirement("8 gates on the map")
 case object TenGates extends Requirement("10 gates on the map")
 case object TwelveGates extends Requirement("12 gates on the map")
-case object UnitsAtEnemyGates extends Requirement("Units at 2 enemy gates")
+case object UnitsAtEnemyGates extends Requirement("Units at 2 enemy gates") {
+    // Cheap Mutants raises the threshold from 2 to 3; reflect that in every
+    // surface this label appears (faction-card empty SB slot, satisfy log
+    // line, overlay popup) so the displayed number matches the rule actually
+    // being checked in OWExpansion.triggers.
+    override def displayText(implicit game : Game) : String =
+        if (game.options.has(OpenerCheapMutants)) "Units at 3 enemy gates"
+        else "Units at 2 enemy gates"
+}
 case object LoseUnitInBattle extends Requirement("Lose unit in battle")
 case object GooMeetsGoo extends Requirement("GOO in area with enemy GOO")
 case object AwakenYogSothoth extends Requirement("Awaken Yog-Sothoth")
@@ -121,7 +129,8 @@ object OWExpansion extends Expansion {
         f.satisfyIf(TwelveGates, "Twelve Gates on the map", game.allGates.onMap.num >= 12)
         f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.at(r).goos.any).any).any)
         val unitsAtEnemyGatesThreshold = if (game.options.has(OpenerCheapMutants)) 3 else 2
-        f.satisfyIf(UnitsAtEnemyGates, "Units at two enemy Gates", areas.%(r => f.at(r).any && f.enemies.%(_.gates.has(r)).any).num >= unitsAtEnemyGatesThreshold)
+        val unitsAtEnemyGatesLabel = if (game.options.has(OpenerCheapMutants)) "Units at three enemy Gates" else "Units at two enemy Gates"
+        f.satisfyIf(UnitsAtEnemyGates, unitsAtEnemyGatesLabel, areas.%(r => f.at(r).any && f.enemies.%(_.gates.has(r)).any).num >= unitsAtEnemyGatesThreshold)
     }
 
     override def eliminate(u : UnitFigure)(implicit game : Game) : Unit = {
