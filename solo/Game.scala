@@ -326,7 +326,13 @@ abstract class FactionSpellbook(val faction : Faction, name : String) extends Sp
     override def elem = name.styled(faction)
 }
 
-abstract class Requirement(val text : String, val es : Int = 0)
+abstract class Requirement(val text : String, val es : Int = 0) {
+    // Optional dynamic label override — subclasses can vary by game options
+    // (e.g. OW UnitsAtEnemyGates threshold changes with CheapMutants).
+    // The static `text` remains the stable pattern-match key for overlay
+    // dispatch; displayText is what gets rendered to the user.
+    def displayText(implicit game : Game) : String = text
+}
 
 trait Faction { f =>
     def name : String

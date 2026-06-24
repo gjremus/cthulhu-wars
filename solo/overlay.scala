@@ -679,6 +679,8 @@ object Overlays {
         case $("OW", TenGates.text) => requirement("There are 10 Gates on the Map.")
         case $("OW", TwelveGates.text) => requirement("There are 12 Gates on the Map.")
         case $("OW", UnitsAtEnemyGates.text) => requirement("You have Units in at least 2 Areas containing<br/>enemy-Controlled Gates.")
+        // OpenerCheapMutants variant: same SBR with threshold raised to 3.
+        case $("OW", "Units at 3 enemy gates") => requirement("You have Units in at least 3 Areas containing<br/>enemy-Controlled Gates.")
         case $("OW", LoseUnitInBattle.text) => requirement("Lose 1 of your own Units in Battle.")
         case $("OW", GooMeetsGoo.text) => requirement("Your Great Old One is in the same Area with<br/>an enemy Great Old One.")
         case $("OW", AwakenYogSothoth.text) => requirement("Awaken Yog-Sothoth.")
@@ -983,7 +985,7 @@ object Overlays {
                 <div class=p>${cost("3)")} Eliminate the High Priest, then place Ubbo-Sathla at your Controlled Gate.</div>
                 <div class=p>${combat} Equals the Growth counter value on the Doom track.</div>
                 <div class=p><span class=ability-color>Hell's Banquet</span> ${cost("(Doom Phase):")} Once Ubbo-Sathla has been Awakened, each Doom Phase (whether or not Ubbo-Sathla is still in play), roll 1d6 and increase the Growth counter by the die roll.</div>""")
-        ))
+        ), "Faction Card Text reflects Tsang Tribe spellbooks regardless of which tribe was chosen, similar to real world faction card.")
 
         // Tcho-Tcho (TT): spellbook requirement info card overlays
         case $("TT", TTSycophancyTrigger.text)    => requirement("Another faction performs a Ritual of Annihilation OR reaches 15 Doom.")
@@ -1852,7 +1854,7 @@ object Overlays {
         ))
     }
 
-    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)]) = s"""
+    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "") = s"""
         <table class="faction-table" style="background-image:url(${imageSource(background)})">
             <thead>
                 <tr>
@@ -1958,6 +1960,25 @@ object Overlays {
                                 </div>
                             </td>
                         </tr>""")
+                }
+                ${
+                    if (footer.any) { s"""
+                        <tr>
+                            <td colspan=6>
+                                <div class="separator">
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan=6>
+                                <div style="padding-left: 3ex; padding-right: 3ex; padding-top: 1ex; padding-bottom: 1ex;">
+                                    <div class="p">${footer}</div>
+                                </div>
+                            </td>
+                        </tr>"""
+                    }
+                    else
+                        ""
                 }
             </tbody>
         </table>"""

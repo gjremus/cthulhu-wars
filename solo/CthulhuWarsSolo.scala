@@ -2455,7 +2455,13 @@ object CthulhuWarsSolo {
                         case Pay3EverybodyGains1 => "Pay your last 2 power"
                         case Pay3EverybodyLoses1 => "Pay your last 3 power"
                         case _ => r.text
-                    } else r.text
+                    }
+                    // OW variant (OpenerCheapMutants): UnitsAtEnemyGates SBR threshold
+                    // raises from 2 to 3. Defer to Requirement.displayText which subclasses
+                    // override (see FactionOW.scala UnitsAtEnemyGates.displayText). Send the
+                    // dynamic text through the overlay click handler too so the popup matches.
+                    else if (f == OW) r.displayText(game)
+                    else r.text
                     val s = displayText.replace("\\", "\\\\").replace("'", "&#39;") // "
                     val d = s"""<div class='spellbook'
                         onclick='event.stopPropagation(); onExternalClick("${f.short}", "${s}")'
