@@ -681,8 +681,8 @@ object CthulhuWarsSolo {
                         if (confirm.not && actions.%!(_.isInfo).num == 1 && actions.has(NeedOk).not)
                             UIPerform(game, actions.%!(_.isInfo).only)
                         else
-                        if (confirm.not && actions(0).isInstanceOf[SpellbookAction] && actions.num == faction.unclaimedSB)
-                            UIPerform(game, actions(0))
+                        if (confirm.not && actions.%!(_.isInfo).any && actions.%!(_.isInfo)(0).isInstanceOf[SpellbookAction] && actions.%!(_.isInfo).num == faction.unclaimedSB)
+                            UIPerform(game, actions.%!(_.isInfo)(0))
                         else {
                             setup.difficulty(faction) match {
                                 case Human | Recorded =>
