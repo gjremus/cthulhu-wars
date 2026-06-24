@@ -2166,7 +2166,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (fs.any) {
                 val f = fs(0)
                 val bs = (f.library.%!(f.has) ++ neutralSpellbooks).diff(f.ignorePerInstant)
-                Ask(f).each(bs)(b => SpellbookAction(f, b, next))
+                // OW lost-2nd-spellbook fix: attach an OutOfTurnRefresh so that if an
+                // out-of-turn power (e.g. OW Dragon Ascending) is taken between two owed
+                // spellbook awards, returning via OutOfTurnReturn re-enters CheckSpellbooks
+                // and re-prompts any still-owed book instead of silently dropping it.
+                Ask(f).each(bs)(b => SpellbookAction(f, b, next)).add(OutOfTurnRefresh(CheckSpellbooksAction(next)))
             }
             else
             if (fe.any) {
