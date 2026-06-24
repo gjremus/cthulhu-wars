@@ -1004,7 +1004,7 @@ object Overlays {
                 <div class=p>${cost("3)")} Eliminate the High Priest, then place Ubbo-Sathla at your Controlled Gate.</div>
                 <div class=p>${combat} Equals the Growth counter value on the Doom track.</div>
                 <div class=p><span class=ability-color>Hell's Banquet</span> ${cost("(Doom Phase):")} Once Ubbo-Sathla has been Awakened, each Doom Phase (whether or not Ubbo-Sathla is still in play), roll 1d6 and increase the Growth counter by the die roll.</div>""")
-        ))
+        ), "Faction Card Text reflects Tsang Tribe spellbooks regardless of which tribe was chosen, similar to real world faction card.")
 
         // Tcho-Tcho (TT): spellbook requirement info card overlays
         case $("TT", TTSycophancyTrigger.text)    => requirement("Another faction performs a Ritual of Annihilation OR reaches 15 Doom.")
@@ -2096,7 +2096,7 @@ object Overlays {
         ))
     }
 
-    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)]) = {
+    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "") = {
         // `background` is normally an asset id resolved via imageSource(...). FBE
         // passes an already-resolved data URL (its tinted placeholder, see
         // fbeTintedBackground) — use such pre-resolved URLs verbatim.
@@ -2207,6 +2207,25 @@ object Overlays {
                                 </div>
                             </td>
                         </tr>""")
+                }
+                ${
+                    if (footer.any) { s"""
+                        <tr>
+                            <td colspan=6>
+                                <div class="separator">
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan=6>
+                                <div style="padding-left: 3ex; padding-right: 3ex; padding-top: 1ex; padding-bottom: 1ex;">
+                                    <div class="p">${footer}</div>
+                                </div>
+                            </td>
+                        </tr>"""
+                    }
+                    else
+                        ""
                 }
             </tbody>
         </table>"""
