@@ -2975,7 +2975,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 CheckSpellbooksAction(DoomAction(f))
 
         // MAIN
-        case PreMainAction(f) if factions.exists(f => f.unfulfilled.num + f.spellbooks.num < f.spellbooks.num) =>
+        case PreMainAction(f) if factions.exists(f => f.unfulfilled.num + f.spellbooks.num < f.library.num) =>
             CheckSpellbooksAction(PreMainAction(f))
 
         case PreMainAction(f) if f.active.not && f.hibernating.not =>
