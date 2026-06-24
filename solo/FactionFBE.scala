@@ -406,7 +406,7 @@ object FBEExpansion extends Expansion {
             remaining.foreach { ur =>
                 val u = game.unit(ur)
                 + ByagoonaAwakenPickAction(self, r, picked :+ ur, remaining.but(ur))
-                    .as("Add " + u.uclass.styled(FBE) + " in " + u.region + " (Cost " + u.uclass.cost + ")")
+                    .as("Add " + u.full + " in " + u.region + " (Cost " + u.uclass.cost + ")")
             }
             if (picked.any)
                 + ByagoonaAwakenDoneAction(self, r, picked)
@@ -564,9 +564,9 @@ object FBEExpansion extends Expansion {
                 Force(MoveContinueAction(self, true))
             else {
                 implicit val asking = Asking(self)
-                self.units.%(_.region.onMap).%(_.uclass != Byagoona).%(u => !moved.has(u.ref)).%(u => game.board.connected(u.region).any).foreach { u =>
+                self.units.%(_.region.onMap).%(_.uclass != Byagoona).%(u => !moved.has(u.ref)).%(u => game.board.connected(u.region).%(d => self.affords(0)(d)).any).foreach { u =>
                     + AnimatedRushDestPickAction(self, u.ref, movesLeft, moved)
-                        .as(u.uclass.styled(FBE) + " in " + u.region)
+                        .as(u.full + " in " + u.region)
                 }
                 + AnimatedRushDoneEarlyAction(self)
                 asking
@@ -575,9 +575,9 @@ object FBEExpansion extends Expansion {
         case AnimatedRushDestPickAction(self, unitRef, movesLeft, moved) =>
             implicit val asking = Asking(self)
             val u = game.unit(unitRef)
-            game.board.connected(u.region).foreach { dest =>
+            game.board.connected(u.region).%(dest => self.affords(0)(dest)).foreach { dest =>
                 + AnimatedRushMoveAction(self, unitRef, dest, movesLeft, moved)
-                    .as(dest)
+                    .as(dest + self.iced(dest))
             }
             + CancelAction
             asking
@@ -585,7 +585,14 @@ object FBEExpansion extends Expansion {
         case AnimatedRushMoveAction(self, unitRef, dest, movesLeft, moved) =>
             val u = game.unit(unitRef)
             val from = u.region
+            // Ice Age tax (§1.5.1): a free Animated Rush move into an enemy Ice Age
+            // area still pays +1 Power, unless FBE already paid for that area this
+            // turn. payTax returns 0 when the area is already tagged Moved (Byagoona's
+            // own paid move, or an earlier Rush unit), so the tax is charged once.
+            self.payTax(dest)
             u.region = dest
+            u.onGate = false
+            u.add(Moved)
             self.log("Animated Rush".styled(FBE) + ":", u.uclass.styled(FBE), from, "→", dest)
             Force(AnimatedRushUnitPickAction(self, movesLeft - 1, moved :+ unitRef))
 
@@ -604,7 +611,7 @@ object FBEExpansion extends Expansion {
             implicit val asking = Asking(self)
             remaining.foreach { ur =>
                 + SuccorPickAction(self, picked :+ ur, remaining.but(ur))
-                    .as("Add " + game.unit(ur).uclass.styled(FBE) + " in " + game.unit(ur).region)
+                    .as("Add " + game.unit(ur).full + " in " + game.unit(ur).region)
             }
             if (picked.any) {
                 // Roll Y d6 (replay-safe) then resolve.
@@ -655,7 +662,7 @@ object FBEExpansion extends Expansion {
             remaining.foreach { ur =>
                 val u = game.unit(ur)
                 + OverlordOfDeathPickAction(self, picked :+ ur, remaining.but(ur))
-                    .as(u.uclass.styled(FBE) + " in " + u.region + " (Cost " + u.uclass.cost + ")")
+                    .as(u.full + " in " + u.region + " (Cost " + u.uclass.cost + ")")
             }
             if (picked.any)
                 + OverlordOfDeathDoneAction(self, picked)
@@ -693,7 +700,7 @@ object FBEExpansion extends Expansion {
                 remaining.foreach { ur =>
                     val u = game.unit(ur)
                     + EliminateTwoFungalThrallsPickAction(self, picked :+ ur, remaining.but(ur))
-                        .as("Add " + u.uclass.styled(FBE) + " in " + u.region + " (Cost " + u.uclass.cost + ")")
+                        .as("Add " + u.full + " in " + u.region + " (Cost " + u.uclass.cost + ")")
                 }
             if (picked.num == 2)
                 + EliminateTwoFungalThrallsDoneAction(self, picked)
