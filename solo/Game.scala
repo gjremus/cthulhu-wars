@@ -421,8 +421,8 @@ trait Faction { f =>
         // HIGH-2 revised: ElderGod (Bastet) counts as GOO per spec §1.3.
         units(Cthugha).not(Zeroed).%(u => opponent.at(u.region).%(_.uclass.isGOO).any).num +
         0 +
-        // Atlach-Nacha: combat 0
-        units(AtlachNacha).not(Zeroed).num * 0 +
+        // Atlach-Nacha: combat 4
+        units(AtlachNacha).not(Zeroed).num * 4 +
         // Bokrug: combat 0
         units(Bokrug).not(Zeroed).num * 0 +
         // Gla'aki IGOO: combat 0
