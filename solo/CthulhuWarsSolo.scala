@@ -1070,10 +1070,7 @@ object CthulhuWarsSolo {
                         case BB => DrawRect("bb-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // Defilers Court (DC): faction glyph sprite
                         case DC => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
-                        // Faceless Blight (FBE): no glyph art yet — reuse dc-glyph tinted
-                        // FBE green (placeholder per §A.v / §3.17.2). Replace with
-                        // fbe-glyph.webp when art lands.
-                        case FBE => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
+                        case FBE => DrawRect("fbe-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // Xyrious Storm (XSS): placeholder glyph (reuse dc-glyph tinted XSS blue-grey)
                         case XSS => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
                         case TB => DrawRect("tb-glyph", |(tint), x - 50, y - 50, 100, 100)
@@ -1287,11 +1284,7 @@ object CthulhuWarsSolo {
                     // no fixed printed glyph; the start area is set in FactionDC.scala on the
                     // AwakenedAction(YgolonacDC) handler.
                     case StartingGlyph if faction == DC => DrawRect("dc-glyph", None, x - 33, y - 33, 66, 66)
-                    // Faceless Blight (FBE): start area is chosen at setup; render its
-                    // (placeholder dc-) glyph on the chosen start region, like FB/DC.
-                    // Tinted FBE green (#3d5f1c) per §4.0.2 since dc-glyph is a placeholder
-                    // (real fbe-glyph art is already faction-green and would use None).
-                    case StartingGlyph if faction == FBE => DrawRect("dc-glyph", |(tint), x - 33, y - 33, 66, 66)
+                    case StartingGlyph if faction == FBE => DrawRect("fbe-glyph", None, x - 33, y - 33, 66, 66)
 
                     // Library map units — larger than monsters, smaller than GOOs
                     case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 52, y - 104, 104, 104)
@@ -5030,11 +5023,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             }
 
             def glyphSrc(f : Faction) : String =
-                // FBE has no glyph art yet. Point the picker at the dc-glyph
-                // placeholder file (which exists on the VM) so it doesn't 404
-                // as a broken image. Replace with fbe-glyph.webp when art lands.
-                if (f == FBE) "webp/images/dc-glyph.webp"
-                else "webp/images/" + f.short.toLowerCase + "-glyph.webp"
+                "webp/images/" + f.short.toLowerCase + "-glyph.webp"
             // [2026-06-02] §3.13.3 / §3.13.4: BB-alt picker entry uses the
             // homebrew glyph (bb-glyph-hb) so users can tell the two BB rows
             // apart at a glance. Standard BB keeps the regular glyph. Other
@@ -5110,10 +5099,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         val glyph = dom.document.createElement("img").asInstanceOf[html.Image]
                         glyph.src = entryGlyphSrc(e)
                         glyph.alt = e.short
-                        // FBE has no glyph art yet; green-tint the dc-glyph placeholder to the
-                        // faction color (mirrors the in-game RoA "fbe" tint). Drop when real art lands.
-                        glyph.style.cssText = "width:32px;height:32px;object-fit:contain;" +
-                            (if (e.faction == FBE) "filter:sepia(1) hue-rotate(50deg) saturate(3) brightness(0.75);" else "")
+                        glyph.style.cssText = "width:32px;height:32px;object-fit:contain;"
                         glyph.title = e.label
 
                         val cb = dom.document.createElement("input").asInstanceOf[html.Input]
@@ -5373,9 +5359,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     val labelTxt = if (f == BB && bbAlt) f.full + " (alt SBs)" else f.full
                     gImg.alt = labelTxt
                     gImg.title = labelTxt
-                    // FBE placeholder glyph: green-tint to the faction color (mirrors the RoA "fbe" tint).
-                    gImg.style.cssText = "width:64px;height:64px;object-fit:contain;" +
-                        (if (f == FBE) "filter:sepia(1) hue-rotate(50deg) saturate(3) brightness(0.75);" else "")
+                    gImg.style.cssText = "width:64px;height:64px;object-fit:contain;"
                     block.appendChild(gImg)
                     box.appendChild(block)
                 }

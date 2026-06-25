@@ -130,6 +130,8 @@ case class ByagoonaAwakenRollAction(self : Faction, r : Region, picked : $[UnitR
 // ── DISTRIBUTED DEATH (Post-Battle Kill mitigation, §1.8 / §3.4.4 / §4.6) ────
 case class DistributedDeathMainAction(self : Faction, n : Int)
     extends OptionFactionAction(implicit g => ("Distributed Death".styled(FBE) + ": discard " + n + " dice to prevent " + n + " " + ("Kill".s(n)).styled("kill"))) with PostBattleQuestion
+case class DistributedDeathPickAction(self : Faction, toSave : $[UnitRef], remaining : $[UnitRef], diceToDiscard : Int)
+    extends BaseFactionAction("Distributed Death".styled(FBE) + ": save", implicit g => g.unitOpt(toSave.last)./(_.uclass.styled(FBE)).|("unit"))
 case class DistributedDeathSkipAction(self : Faction)
     extends OptionFactionAction("Distributed Death".styled(FBE) + ": skip") with PostBattleQuestion
 
@@ -458,6 +460,9 @@ object FBEExpansion extends Expansion {
         // is performed in Battle.scala, which owns live Battle state. These arms
         // are pure pass-throughs so the battle flow resumes via proceed().
         case DistributedDeathMainAction(self, n) =>
+            UnknownContinue
+
+        case DistributedDeathPickAction(self, toSave, remaining, diceToDiscard) =>
             UnknownContinue
 
         case DistributedDeathSkipAction(self) =>

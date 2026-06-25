@@ -1035,18 +1035,13 @@
         <img class="asset" id="bb-moon-h-place"    src="webp/images/bb-moon-h-place.webp" />
 
         <!-- Faceless Blight (FBE): map/RoA assets (Task 3.11.10 / §4.0.2-§4.0.3).
-             PLACEHOLDER art until real fbe-glyph.webp lands (§A.v / §3.17.2): the
-             RoA ceremony-track glyph render (overlay.scala) resolves its image by
-             id "fbe-glyph" and tints it FBE green via the tintFilter "fbe" case,
-             so this id MUST resolve or the RoA track crashes ("Cannot read width").
-             It points at the same dc-glyph art the map DrawRect placeholder uses,
-             preserving the glyph→dc-glyph placeholder mapping. The six FBE SB
-             icons are NOT registered as <img> assets: this build renders spellbook
-             names as clickable text spans (like DC), not per-SB icon images, so no
-             fbe-sb-* DOM nodes are referenced anywhere — adding them would be dead
-             entries. Add real fbe-sb-* assets only if/when the tray switches to
-             icon rendering. -->
-        <img class="asset" id="fbe-glyph"         src="webp/images/dc-glyph.webp" />
+             Real glyph art deployed 2026-06-25 from implementation guide §A.v.
+             The six FBE SB icons are NOT registered as <img> assets: this build
+             renders spellbook names as clickable text spans (like DC), not per-SB
+             icon images, so no fbe-sb-* DOM nodes are referenced anywhere — adding
+             them would be dead entries. Add real fbe-sb-* assets only if/when the
+             tray switches to icon rendering. -->
+        <img class="asset" id="fbe-glyph"         src="webp/images/fbe-glyph.webp" />
 
         <!-- Xyrious Storm (XSS): placeholder glyph (reuses dc-glyph, tinted via "xss" case in overlay.scala) -->
         <img class="asset" id="xss-glyph"         src="webp/images/dc-glyph.webp" />
@@ -1235,12 +1230,12 @@
              unknown image source and the overlay never rendered. -->
         <img class="asset" id="info:dc-y'golonac"        src="webp/info/n-ygolonac.svg" />
 
-        <!-- Faceless Blight (FBE): info-panel assets. PLACEHOLDERS until real art
-             lands (§A.v / §3.17): acolyte reuses dc-acolyte; Fungal Thrall reuses
-             Dimensional Shambler; Byagoona reuses King in Yellow; background reuses
-             DC background. Replace src with fbe-*.svg / fbe-background.webp when art
-             is supplied. -->
-        <img class="asset" id="info:fbe-background"      src="webp/info/dc-background.webp" />
+        <!-- Faceless Blight (FBE): info-panel assets.
+             Background: real FBE-green art deployed 2026-06-25.
+             Unit SVGs still placeholders until real FBE unit art is supplied:
+             acolyte reuses dc-acolyte; Fungal Thrall reuses Dimensional Shambler;
+             Byagoona reuses King in Yellow. Replace with fbe-*.svg when art lands. -->
+        <img class="asset" id="info:fbe-background"      src="webp/info/fbe-background.webp" />
         <img class="asset" id="info:fbe-acolyte"         src="webp/info/dc-acolyte.svg" />
         <img class="asset" id="info:fbe-fungal-thrall"   src="webp/info/n-dimensional-shambler.svg" />
         <img class="asset" id="info:fbe-byagoona"        src="webp/info/ys-king-in-yellow.svg" />

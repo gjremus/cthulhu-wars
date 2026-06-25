@@ -2803,9 +2803,25 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case DistributedDeathMainAction(self, n) =>
-            // Prevent n Kills assigned to FBE Units by discarding n card dice.
-            fbeDistributedDeath(n)
-            proceed()
+            val fbeKilled = sides./~(fac => (if (fac == attacker) attackers else defenders).forces)
+                .%(u => u.faction == FBE && u.health == Killed)
+            if (n < fbeKilled.num) {
+                // More kills than n — player picks which units to save
+                Ask(FBE).each(fbeKilled)(u => DistributedDeathPickAction(FBE, $(u.ref), fbeKilled.%(_.ref != u.ref)./(_.ref), n))
+            } else {
+                fbeDistributedDeathSave(fbeKilled, n)
+                proceed()
+            }
+
+        case DistributedDeathPickAction(self, toSave, remaining, diceToDiscard) =>
+            if (toSave.num < diceToDiscard && remaining.any) {
+                // Still need to pick more units to save
+                Ask(FBE).each(remaining./(r => game.unitOpt(r)).flatten)(u => DistributedDeathPickAction(FBE, toSave :+ u.ref, remaining.%(r => r != u.ref), diceToDiscard))
+            } else {
+                val units = toSave./~(r => game.unitOpt(r))
+                fbeDistributedDeathSave(units, diceToDiscard)
+                proceed()
+            }
 
         case DistributedDeathSkipAction(self) =>
             proceed()
@@ -2837,17 +2853,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // currently assigned to FBE Units (set their health back to Alive) and discard
     // n card dice (lowest values, deterministic for replay). If a cancelled Kill
     // was on Byagoona, flag it so Succor's SBR is NOT satisfied (§3.12.5).
-    def fbeDistributedDeath(n : Int) {
-        if (n <= 0) return
-        val fbeKilled = sides./~(fac => (if (fac == attacker) attackers else defenders).forces)
-            .%(u => u.faction == FBE && u.health == Killed)
-        val toSave = fbeKilled.take(n)
+    def fbeDistributedDeathSave(toSave : $[UnitFigure], diceToDiscard : Int) {
+        if (toSave.none) return
         toSave.foreach { u =>
-            u.health = Alive
+            // Spared(Alive): unit cannot receive any further combat result this battle
+            // (same immunity as Eternal — prevents excess pains being assigned to saved units)
+            u.health = Spared(Alive)
             if (u.uclass == Byagoona) game.fbeByagoonaKillPrevented = true
             log(u.uclass.styled(FBE), "saved by", "Distributed Death".styled(FBE))
         }
-        val discard = math.min(n, game.fbeCardDice.num)
+        val discard = math.min(diceToDiscard, game.fbeCardDice.num)
         game.fbeCardDice = game.fbeCardDice.sortBy(x => x).drop(discard)
         log("Distributed Death".styled(FBE) + ": discarded", discard, (discard == 1).?("die").|("dice") + ", prevented", toSave.num, ("Kill".s(toSave.num)).styled("kill"))
     }
