@@ -1484,6 +1484,30 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         .done(BattleDoneAction(f))
                 }
 
+                // Xyrious Storm (XSS) — Distant Thunderclap (§3.4.3):
+                // Fires before pain assignment (NecrophagyPhase window) so excess-pain count
+                // is computed against un-pained opponent forces. After XSS resolves, battle
+                // continues to AssignDefenderPains. ES check is independent (PostBattlePhase).
+                if (factions.has(XSS) && sides.has(XSS) && !XSS.oncePerAction.has(Precipitation)) {
+                    val xssSide = if (attacker == XSS) attackers else defenders
+                    val opponentSide = if (attacker == XSS) defenders else attackers
+                    val opponent = if (attacker == XSS) defender else attacker
+                    val petrichorParticipated = (xssSide.forces ++ eliminated.%(_.faction == XSS) ++ exempted.%(_.faction == XSS)).%(_.uclass == Petrichor).any
+                    if (petrichorParticipated) {
+                        val xssPainRolls = xssSide.rolls.count(_ == Pain)
+                        val opponentAvailableForPain = opponentSide.forces.num
+                        val excessPains = (xssPainRolls - opponentAvailableForPain).max(0)
+                        val opponentHadNonCultist = (opponentSide.forces ++ eliminated.%(_.faction == opponent) ++ exempted.%(_.faction == opponent))
+                            .%(_.uclass.utype != Cultist).any
+                        if (excessPains > 0 && XSS.at(arena).any) {
+                            XSS.oncePerAction :+= Precipitation
+                            return Ask(XSS)
+                                .add(DistantThunderclapOfferAction(XSS, excessPains, arena, opponent, opponentHadNonCultist))
+                                .add(DistantThunderclapSkipAction(XSS))
+                        }
+                    }
+                }
+
                 jump(AssignDefenderPains)
 
             case AssignDefenderPains =>
@@ -1735,32 +1759,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         XSS.satisfy(PetrichorBattlesAloneReq, "Petrichor battles alone")
                 }
 
-                // Xyrious Storm (XSS) — Distant Thunderclap (Post-Battle, §3.4.3):
-                // OPTIONAL. If Petrichor participated, XSS may assign its own excess Pains
-                // (pains XSS rolled that exceeded opponent's available units) to XSS's own units.
-                // Elder Sign if: after self-pain, no units remain in battle area AND opponent
-                // had a non-Cultist unit participating.
-                if (factions.has(XSS) && sides.has(XSS) && !XSS.oncePerAction.has(Precipitation)) {
+                // Xyrious Storm (XSS) — Distant Thunderclap ES check (§3.4.3, independent):
+                // If Petrichor participated AND no participants from either side remain in the
+                // battle area AND opponent had a non-Cultist unit, XSS gains 1 Elder Sign.
+                // This is separate from the excess-pain assignment (which fires at NecrophagyPhase).
+                if (factions.has(XSS) && sides.has(XSS)) {
                     val xssSide = if (attacker == XSS) attackers else defenders
                     val opponentSide = if (attacker == XSS) defenders else attackers
                     val opponent = if (attacker == XSS) defender else attacker
                     val petrichorParticipated = (xssSide.forces ++ eliminated.%(_.faction == XSS) ++ exempted.%(_.faction == XSS)).%(_.uclass == Petrichor).any
                     if (petrichorParticipated) {
-                        // Excess Pains = XSS's pain rolls that exceeded opponent's available targets.
-                        // At PostBattlePhase, opponentSide.forces still has all units that survived
-                        // kills (including those since retreated via pain). Eliminated killed units
-                        // have been removed from forces.
-                        val xssPainRolls = xssSide.rolls.count(_ == Pain)
-                        val opponentAvailableForPain = opponentSide.forces.num
-                        val excessPains = (xssPainRolls - opponentAvailableForPain).max(0)
-                        // Opponent had non-Cultist: check full original roster (forces + eliminated + exempted)
+                        val xssInArena = xssSide.forces.%(_.region == arena).any
+                        val opponentInArena = opponentSide.forces.%(_.region == arena).any
                         val opponentHadNonCultist = (opponentSide.forces ++ eliminated.%(_.faction == opponent) ++ exempted.%(_.faction == opponent))
                             .%(_.uclass.utype != Cultist).any
-                        if (excessPains > 0 && XSS.at(arena).any) {
-                            XSS.oncePerAction :+= Precipitation
-                            return Ask(XSS)
-                                .add(DistantThunderclapOfferAction(XSS, excessPains, arena, opponent, opponentHadNonCultist))
-                                .add(DistantThunderclapSkipAction(XSS))
+                        if (!xssInArena && !opponentInArena && opponentHadNonCultist) {
+                            XSS.takeES(1)
+                            log("Distant Thunderclap".styled(XSS) + ": gained", 1.es, "(battle area vacated, opponent had non-Cultist)")
                         }
                     }
                 }

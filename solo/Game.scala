@@ -804,7 +804,7 @@ case object UnspeakableOathImmediately extends UnspeakableOathPlan("Queue Activa
     override val info = selected
 }
 case object UnspeakableOathPrompt extends UnspeakableOathPlan("Always prompt") with DefaultPlan with OneOfPlan
-case object UnspeakableOathSkip extends UnspeakableOathPlan("Skip, unless...") with OneOfPlan { override val followers = $(UnspeakableOathThreatOfHPCapture, UnspeakableOathThreatOfAcolyteCapture, UnspeakableOathThreatOfAttackOnHighPriest, UnspeakableOathOpportunityEndOfPhase) }
+case object UnspeakableOathSkip extends UnspeakableOathPlan("Skip, unless...") with OneOfPlan { override val followers = $(UnspeakableOathThreatOfHPCapture, UnspeakableOathThreatOfAcolyteCapture, UnspeakableOathThreatOfAttackOnHighPriest, UnspeakableOathOpportunityEndOfPhase, UnspeakableOathThreatOfCatnapping) }
 trait UnspeakableThreat extends UnspeakableOathPlan { override val requires = $($(UnspeakableOathSkip)) }
 case object UnspeakableOathThreatOfHPCapture extends UnspeakableOathPlan("...threat of High Priest capture") with UnspeakableThreat
 case object UnspeakableOathThreatOfGhroth extends UnspeakableOathPlan("...threat of Ghroth eliminating High Priest") with UnspeakableThreat
@@ -2400,9 +2400,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 + AwakenMainAction(f, uc, l)
             }
         }
-        // ElderGod units (Bastet) use a custom awakenCost but are not in factionGOOs
+        // ElderGod units (Bastet) use a custom awakenCost but are not in factionGOOs.
+        // Bastet can awaken on BB.moon (a valid Area for BB); include it like summon/battle.
         f.pool.%(_.uclass.utype == ElderGod)./(_.uclass).distinct.foreach { uc =>
-            areas.nex.%(r => dcTenebrosumGuard || f.affords(f.awakenCost(uc, r).|(999))(r)).some.foreach { l =>
+            val elderAreas = areas ++ (f == BB).??($(BB.moon))
+            elderAreas.nex.%(r => dcTenebrosumGuard || f.affords(f.awakenCost(uc, r).|(999))(r)).some.foreach { l =>
                 + AwakenMainAction(f, uc, l)
             }
         }
@@ -2473,16 +2475,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (f.has(Yig) && f.upgrades.has(MessengerOfYig).not && f.allGates.onMap.any)
             + YigRemoveGateMainAction(f)
 
-        // Ghatanothoa IGOO: spellbook requirement — control 2 or fewer Gates, or pay 3 Power
-        if (f.has(GhatanotoaIGOO) && f.upgrades.has(ExecrationOfMu).not) {
-            if (f.allGates.num <= 2) {
-                // Auto-satisfy: already controlling 2 or fewer gates
-                f.upgrades :+= ExecrationOfMu
-                f.log("gained", ExecrationOfMu.styled(f), "for", GhatanotoaIGOO.styled(f), "(2 or fewer Gates)")
-            } else if (f.power >= 3) {
-                + GhatanotoaSBRPayAction(f)
-            }
-        }
+        // Ghatanothoa IGOO: SBR — pay 4 Power as Action (doom-phase auto-satisfy handled in DoomAction)
+        if (f.has(GhatanotoaIGOO) && f.upgrades.has(ExecrationOfMu).not && f.power >= 4)
+            + GhatanotoaSBRPayAction(f)
 
         // Azathoth: Nuclear Chaos spellbook (Action: Cost 0)
         // Card: every player rolls 1d6, highest gets Power, lowest gets ES, owner may adjust +/-1
@@ -3548,6 +3543,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             game.highPriests(f)
 
             game.hires(f)
+
+            // Ghatanothoa IGOO: doom-phase SBR auto-satisfy — fewer than 6 total Gates + Cultists
+            if (f.has(GhatanotoaIGOO) && f.upgrades.has(ExecrationOfMu).not) {
+                val gatesOnMap = f.allGates.onMap.num
+                val cultistsOnMap = f.units.%(u => u.region.onMap && u.uclass.utype == Cultist).num
+                if (gatesOnMap + cultistsOnMap < 6) {
+                    f.upgrades :+= ExecrationOfMu
+                    f.log("gained", ExecrationOfMu.styled(f), "for", GhatanotoaIGOO.styled(f), "(" + (gatesOnMap + cultistsOnMap) + " Gates + Cultists on map)")
+                }
+            }
 
             // Innsmouth Look (mandatory if this faction controls Father Dagon)
             val hasInnsmouth = f.has(TheInnsmouthLook) && !f.oncePerGame.has(TheInnsmouthLook) && f.has(FatherDagon) && f.allInPlay.%(_.uclass == Acolyte).any && !f.oncePerTurn.has(TheInnsmouthLook)

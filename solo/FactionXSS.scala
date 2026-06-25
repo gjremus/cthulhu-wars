@@ -509,17 +509,12 @@ object XSSExpansion extends Expansion {
 
         case DistantThunderclapSkipAction(self) =>
             self.log("Distant Thunderclap".styled(XSS) + ": declined")
-            Force(BattleDoneAction(self))
+            Force(BattleProceedAction(AssignDefenderPains))
 
         case DistantThunderclapPainAction(self, remaining, candidates, arena, opponent, opponentHadNonCultist) =>
-            if (remaining <= 0 || candidates.none) {
-                // Elder Sign: no PARTICIPATING units (XSS or opponent) remain in battle area
-                val participantsInArena = self.at(arena).any || opponent.at(arena).any
-                if (!participantsInArena && opponentHadNonCultist)
-                    Force(DistantThunderclapElderSignAction(self))
-                else
-                    Force(BattleDoneAction(self))
-            }
+            if (remaining <= 0 || candidates.none)
+                // Pain assignment done; ES check fires independently at PostBattlePhase
+                Force(BattleProceedAction(AssignDefenderPains))
             else if (candidates.num == 1)
                 Force(DistantThunderclapPainTargetAction(self, candidates.head, remaining, candidates, arena, opponent, opponentHadNonCultist))
             else
@@ -527,28 +522,16 @@ object XSSExpansion extends Expansion {
                     DistantThunderclapPainTargetAction(self, ur, remaining, candidates, arena, opponent, opponentHadNonCultist))
 
         case DistantThunderclapPainTargetAction(self, target, remaining, candidates, arena, opponent, opponentHadNonCultist) =>
-            // Pain the chosen XSS Unit — player picks retreat destination
-            val retreatAreas = game.board.connected(arena)
+            val retreatAreas = game.board.connected(arena).%(r => r != arena)
             if (retreatAreas.none) {
-                // No retreat destination — eliminate
                 val u = game.unit(target)
                 u.region = self.reserve
                 u.onGate = false
                 self.log("Distant Thunderclap".styled(XSS) + ": excess Pain assigned to", u.uclass.styled(XSS), "(no retreat — eliminated)")
-                if (remaining - 1 > 0)
-                    Force(DistantThunderclapPainAction(self, remaining - 1, candidates.but(target), arena, opponent, opponentHadNonCultist))
-                else {
-                    val participantsInArena = self.at(arena).any || opponent.at(arena).any
-                    if (!participantsInArena && opponentHadNonCultist)
-                        Force(DistantThunderclapElderSignAction(self))
-                    else
-                        Force(BattleDoneAction(self))
-                }
+                Force(DistantThunderclapPainAction(self, remaining - 1, candidates.but(target), arena, opponent, opponentHadNonCultist))
             } else if (retreatAreas.num == 1) {
-                // Auto-resolve single destination
                 Force(DistantThunderclapRetreatDestAction(self, target, retreatAreas.head, remaining, candidates, arena, opponent, opponentHadNonCultist))
             } else {
-                // Multiple destinations — player picks
                 Ask(self).each(retreatAreas)(r =>
                     DistantThunderclapRetreatDestAction(self, target, r, remaining, candidates, arena, opponent, opponentHadNonCultist))
             }
@@ -558,20 +541,7 @@ object XSSExpansion extends Expansion {
             u.region = dest
             u.onGate = false
             self.log("Distant Thunderclap".styled(XSS) + ": excess Pain assigned to", u.uclass.styled(XSS), "— retreated to", dest)
-            if (remaining - 1 > 0)
-                Force(DistantThunderclapPainAction(self, remaining - 1, candidates.but(target), arena, opponent, opponentHadNonCultist))
-            else {
-                val participantsInArena = self.at(arena).any || opponent.at(arena).any
-                if (!participantsInArena && opponentHadNonCultist)
-                    Force(DistantThunderclapElderSignAction(self))
-                else
-                    Force(BattleDoneAction(self))
-            }
-
-        case DistantThunderclapElderSignAction(self) =>
-            self.takeES(1)
-            self.log("Distant Thunderclap".styled(XSS) + ": gained", 1.es, "(no units remain, opponent had non-Cultist)")
-            Force(BattleDoneAction(self))
+            Force(DistantThunderclapPainAction(self, remaining - 1, candidates.but(target), arena, opponent, opponentHadNonCultist))
 
         // -- AWAKEN PETRICHOR SBR (§3.12.6) ------------------------------------
         case AwakenedAction(self : XSS.type, Petrichor, _, _) =>
