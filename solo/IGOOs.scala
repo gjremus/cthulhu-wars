@@ -313,7 +313,7 @@ case class PlaceSpinneretMainAction(self : Faction) extends OptionFactionAction(
 // The Innsmouth Look: forced Acolyte removal at Doom Phase (player chooses which)
 case class InnsmouthLookRemoveAction(self : Faction, then : Action) extends ForcedAction
 case class InnsmouthLookDoomDoneAction(self : Faction) extends ForcedAction
-case class InnsmouthLookChooseAction(self : Faction, u : UnitFigure, then : Action) extends BaseFactionAction(implicit g => "The Innsmouth Look".styled("nt"), implicit g => "Remove " + Acolyte.styled(self) + (if (u.onGate) " (on gate)" else "") + " from " + u.region) {
+case class InnsmouthLookChooseAction(self : Faction, u : UnitRef, then : Action) extends BaseFactionAction(implicit g => "The Innsmouth Look".styled("nt"), implicit g => g.unitOpt(u)./(uf => "Remove " + Acolyte.styled(self) + (if (uf.onGate) " (on gate)" else "") + " from " + uf.region).|("Remove " + Acolyte.styled(self))) {
     override def question(implicit game : Game) = self.full + " — " + "The Innsmouth Look".styled("nt") + " — choose Acolyte to remove permanently"
 }
 
@@ -345,8 +345,8 @@ case class DoomSarnathChooseOption(self : Faction, option : Int, then : Action) 
 }
 case class DoomSarnathChooseFactionAction(self : Faction, option : Int, target : Faction, then : Action) extends BaseFactionAction(
     implicit g => "Doom that Came to Sarnath".styled("nt"), target.full)
-case class DoomSarnathEliminateUnit(self : Faction, owner : Faction, u : UnitFigure, then : Action) extends BaseFactionAction(
-    implicit g => "Choose a " + owner.full + " unit to eliminate", implicit g => u.uclass.styled(owner) + " in " + u.region) {
+case class DoomSarnathEliminateUnit(self : Faction, owner : Faction, u : UnitRef, then : Action) extends BaseFactionAction(
+    implicit g => "Choose a " + owner.full + " unit to eliminate", implicit g => g.unitOpt(u)./(uf => uf.uclass.styled(owner) + " in " + uf.region).|(u.uclass.styled(owner))) {
     override def question(implicit game : Game) = self.full + " — " + "Choose a ".styled("nt") + owner.full + " cultist or monster to eliminate"
 }
 case class DoomSarnathDiscardES(self : Faction, owner : Faction, index : Int, then : Action) extends BaseFactionAction(
@@ -355,10 +355,10 @@ case class DoomSarnathDiscardES(self : Faction, owner : Faction, index : Int, th
 }
 
 // Tsunami/Agony Sting: per-owner cultist movement choice
-case class TsunamiMoveCultistAction(self : Faction, u : UnitFigure, dest : Region, remaining : $[UnitFigure], then : Action) extends BaseFactionAction(implicit g => "Tsunami".styled("nt") + " — move " + u.uclass.styled(self), dest) {
+case class TsunamiMoveCultistAction(self : Faction, u : UnitRef, dest : Region, remaining : $[UnitRef], then : Action) extends BaseFactionAction(implicit g => "Tsunami".styled("nt") + " — move " + u.uclass.styled(self), dest) {
     override def question(implicit game : Game) = self.full + " — " + "Tsunami".styled("nt") + " — choose destination for " + u.uclass.styled(self)
 }
-case class TsunamiProcessAction(self : Faction, sourceRegion : Region, remaining : $[(Faction, $[UnitFigure])], oceanDest : Boolean, then : Action) extends ForcedAction
+case class TsunamiProcessAction(self : Faction, sourceRegion : Region, remaining : $[(Faction, $[UnitRef])], oceanDest : Boolean, then : Action) extends ForcedAction
 
 // Yig: Messenger of Yig — doom phase donation choice
 case class MessengerOfYigDonateAction(self : Faction, yigOwner : Faction) extends BaseFactionAction(
@@ -1034,7 +1034,7 @@ object IGOOsExpansion extends Expansion {
         case FatherDagonTsunamiTargetAction(self, r) =>
             self.power -= 1
             // Each faction's cultists moved by their owner to adjacent ocean areas
-            val perFaction = factions./(f => (f, f.at(r).%(_.uclass.utype == Cultist))).%{ case (_, units) => units.any }
+            val perFaction = factions./(f => (f, f.at(r).%(_.uclass.utype == Cultist)./(_.ref))).%{ case (_, units) => units.any }
             self.log("Tsunami".styled("nt") + ": all Cultists in", r, "must move to adjacent Ocean")
             TsunamiProcessAction(self, r, perFaction, oceanDest = true, EndAction(self))
 
@@ -1046,7 +1046,7 @@ object IGOOsExpansion extends Expansion {
         case MotherHydraAgonyStingTargetAction(self, r) =>
             self.power -= 1
             // Each enemy's cultists moved by their owner to adjacent land areas (owner's cultists immune)
-            val perFaction = self.enemies./(f => (f, f.at(r).%(_.uclass.utype == Cultist))).%{ case (_, units) => units.any }
+            val perFaction = self.enemies./(f => (f, f.at(r).%(_.uclass.utype == Cultist)./(_.ref))).%{ case (_, units) => units.any }
             self.log("The Agony Sting".styled("nt") + ": all enemy Cultists in", r, "must move to adjacent Land")
             TsunamiProcessAction(self, r, perFaction, oceanDest = false, EndAction(self))
 
@@ -1065,9 +1065,11 @@ object IGOOsExpansion extends Expansion {
                     TsunamiProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
                 } else if (adj.num == 1) {
                     // Only one option — auto-move
-                    cultists.foreach { u =>
-                        u.region = adj.head
-                        u.onGate = false
+                    cultists.foreach { ur =>
+                        game.unitOpt(ur).foreach { u =>
+                            u.region = adj.head
+                            u.onGate = false
+                        }
                     }
                     faction.log("moved", cultists.num, "cultist".s(cultists.num), "to", adj.head)
                     TsunamiProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
@@ -1081,8 +1083,10 @@ object IGOOsExpansion extends Expansion {
             }
 
         case TsunamiMoveCultistAction(self, u, dest, remaining, then) =>
-            u.region = dest
-            u.onGate = false
+            game.unitOpt(u).foreach { uf =>
+                uf.region = dest
+                uf.onGate = false
+            }
             self.log("moved", u.uclass.styled(self), "to", dest)
             Force(then)
 
@@ -1115,7 +1119,7 @@ object IGOOsExpansion extends Expansion {
             val acolytes = self.allInPlay.%(_.uclass == Acolyte)
             if (acolytes.any) {
                 // Distinguish on-gate vs off-gate in the menu
-                Ask(self).each(acolytes)(u => InnsmouthLookChooseAction(self, u, InnsmouthLookDoomDoneAction(self)))
+                Ask(self).each(acolytes)(u => InnsmouthLookChooseAction(self, u.ref, InnsmouthLookDoomDoneAction(self)))
             } else {
                 self.oncePerTurn :+= TheInnsmouthLook
                 Force(DoomAction(self))
@@ -1136,15 +1140,16 @@ object IGOOsExpansion extends Expansion {
         case InnsmouthLookRemoveAction(self, then) =>
             val acolytes = self.allInPlay.%(_.uclass == Acolyte)
             if (acolytes.any) {
-                Ask(self).each(acolytes)(u => InnsmouthLookChooseAction(self, u, then))
+                Ask(self).each(acolytes)(u => InnsmouthLookChooseAction(self, u.ref, then))
             } else {
                 Force(then)
             }
 
         case InnsmouthLookChooseAction(self, u, then) =>
-            self.units = self.units.%(_.ref != u.ref)
+            val removedRegion = game.unitOpt(u)./(_.region.toString).|("|unknown|")
+            self.units = self.units.%(_.ref != u)
             self.power += 6
-            self.log("The Innsmouth Look".styled("nt") + ": removed", Acolyte.styled(self), "from", u.region, "permanently, gained", 6.power)
+            self.log("The Innsmouth Look".styled("nt") + ": removed", Acolyte.styled(self), "from", removedRegion, "permanently, gained", 6.power)
             Force(then)
 
         // Mother Hydra: The Zygote spellbook — place Acolytes from Pool one by one
@@ -1390,7 +1395,7 @@ object IGOOsExpansion extends Expansion {
                 // sorcery / deep units (region.onMap == false) cannot be targeted.
                 val units = self.units.%(u => u.region.onMap && (u.uclass.utype == Monster || u.uclass.utype == Cultist))
                 val regionSorted = units.sortBy(u => u.region.name)
-                Ask(target).each(regionSorted)(u => DoomSarnathEliminateUnit(target, self, u, then))
+                Ask(target).each(regionSorted)(u => DoomSarnathEliminateUnit(target, self, u.ref, then))
             } else {
                 // Enemy chooses one of Bokrug owner's elder signs (face-down)
                 var ask = Ask(target)
@@ -1401,8 +1406,9 @@ object IGOOsExpansion extends Expansion {
             }
 
         case DoomSarnathEliminateUnit(self, owner, u, then) =>
-            game.eliminate(u)
-            self.log("Doom that Came to Sarnath".styled("nt") + ":", self.full, "eliminated", u.uclass.styled(owner), "of", owner.full, "in", u.region)
+            val elimRegion = game.unitOpt(u)./(_.region.toString).|("?")
+            game.unitOpt(u).foreach(game.eliminate)
+            self.log("Doom that Came to Sarnath".styled("nt") + ":", self.full, "eliminated", u.uclass.styled(owner), "of", owner.full, "in", elimRegion)
             Force(then)
 
         case DoomSarnathDiscardES(self, owner, index, then) =>

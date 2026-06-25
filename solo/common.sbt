@@ -1,6 +1,6 @@
 name := "Cthulhu Wars Solo HRF"
 
-version := "more-neutral-units-v2.10"
+version := "more-neutral-units-v2.11"
 
 scalaVersion := "2.13.16"
 
