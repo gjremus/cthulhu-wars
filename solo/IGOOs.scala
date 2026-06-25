@@ -248,8 +248,8 @@ case class YigRemoveGateAction(self : Faction, r : Region) extends BaseFactionAc
     override def question(implicit game : Game) = self.full + " — " + "Yig SBR".styled("nt") + " — remove Controlled Gate"
 }
 
-// Ghatanothoa IGOO: spellbook requirement — control 2 or fewer Gates, or pay 3 Power
-case class GhatanotoaSBRPayAction(self : Faction) extends OptionFactionAction(implicit g => "Pay " + "3 Power".styled("power") + " (Ghatanothoa IGOO SBR)".styled("nt")) with MainQuestion
+// Ghatanothoa IGOO: spellbook requirement — fewer than 6 Gates+Cultists at doom phase, or pay 4 Power as action
+case class GhatanotoaSBRPayAction(self : Faction) extends OptionFactionAction(implicit g => "Pay " + "4 Power".styled("power") + " (Ghatanothoa IGOO SBR)".styled("nt")) with MainQuestion
 
 // Azathoth IGOO: Nuclear Chaos spellbook action
 case class NuclearChaosMainAction(self : Faction) extends OptionFactionAction(implicit g => "Nuclear Chaos".styled("nt") + " (Cost 0)") with MainQuestion
@@ -1191,9 +1191,9 @@ object IGOOsExpansion extends Expansion {
 
         // ── GHATANOTHOA IGOO SBR: pay 3 Power ──
         case GhatanotoaSBRPayAction(self) =>
-            self.power -= 3
+            self.power -= 4
             self.upgrades :+= ExecrationOfMu
-            self.log("paid", 3.power, "for", ExecrationOfMu.styled(self), "for", GhatanotoaIGOO.styled(self))
+            self.log("paid", 4.power, "for", ExecrationOfMu.styled(self), "for", GhatanotoaIGOO.styled(self))
             EndAction(self)
 
         // ── NUCLEAR CHAOS (Azathoth spellbook) ──
