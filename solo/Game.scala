@@ -375,8 +375,8 @@ trait Faction { f =>
         // Actual combat is calculated dynamically during battle (picks highest enemy GOO)
         units(Cthugha).not(Zeroed).%(u => opponent.at(u.region).%(_.uclass.utype == GOO).any).num +
         0 +
-        // Atlach-Nacha: combat 0
-        units(AtlachNacha).not(Zeroed).num * 0 +
+        // Atlach-Nacha: combat 4
+        units(AtlachNacha).not(Zeroed).num * 4 +
         // Bokrug: combat 0
         units(Bokrug).not(Zeroed).num * 0 +
         // Gla'aki IGOO: combat 0
