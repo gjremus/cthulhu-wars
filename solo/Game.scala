@@ -804,6 +804,7 @@ case object UnspeakableOathOpportunityEndOfPhase extends UnspeakableOathPlan("..
 case object UnspeakableOathOpportunityFirstPlayer extends UnspeakableOathPlan("...become eligible First Player") with UnspeakableThreat
 
 case object UnspeakableOathThreatOfAcolyteCapture extends UnspeakableOathPlan("...threat of Acolyte capture") with UnspeakableThreat
+case object UnspeakableOathThreatOfCatnapping extends UnspeakableOathPlan("...threat of Catnapping to the Moon") with UnspeakableThreat
 case object UnspeakableOathThreatOfAttackOnHighPriest extends UnspeakableOathPlan("...credible threat of High Priest being killed") with UnspeakableThreat
 case object UnspeakableOathThreatOfAttackOnGate extends UnspeakableOathPlan("...credible threat to the controlled gate") with UnspeakableThreat
 case object UnspeakableOathThreatOfAttackOnGOO extends UnspeakableOathPlan("...credible threat of battle against GOO") with UnspeakableThreat
@@ -2570,11 +2571,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         (f == OW).$(UnspeakableOathOpportunityOfDreadCurse) ++
         f.enemies.has(CC).$(UnspeakableOathThreatOfThousandForms) ++
         f.enemies.has(BG).$(UnspeakableOathThreatOfGhroth) ++
+        f.enemies.has(BB).$(UnspeakableOathThreatOfCatnapping) ++
         (f != AN).$(UnspeakableOathThreatOfAttackOnGOO) ++
         $(UnspeakableOathThreatOfAttackOnGate)
 
         if (f.commands.of[UnspeakableOathPlan].none)
-            f.commands ++= $(UnspeakableOathSkip, UnspeakableOathThreatOfHPCapture, UnspeakableOathThreatOfAcolyteCapture, UnspeakableOathThreatOfAttackOnHighPriest, UnspeakableOathOpportunityEndOfPhase)
+            f.commands ++= $(UnspeakableOathSkip, UnspeakableOathThreatOfHPCapture, UnspeakableOathThreatOfAcolyteCapture, UnspeakableOathThreatOfAttackOnHighPriest, UnspeakableOathOpportunityEndOfPhase) ++
+            f.enemies.has(BB).$(UnspeakableOathThreatOfCatnapping)
 
         f.plans ++= $(
             HighPriestGatesPrompt,
@@ -3628,6 +3631,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         if (e == BG && e.can(Ghroth) && e.power >= 2 && e.all(Fungi)./(_.region).distinct.num > f.acolytes.%!(_.onGate).num && f.acolytes.%(_.onGate).any)
                             reasons :+= "" + e + " might " + Ghroth + " an " + Acolyte.styled(f) + " on the Gate"
 
+                    if (f.commands.has(UnspeakableOathThreatOfCatnapping))
+                        if (e == BB && e.can(Catnapping))
+                            BB.onMap(Bastet)./(_.region).%(r => f.at(r).any).some./{ l =>
+                                reasons :+= "" + Bastet.styled(BB) + " might " + Catnapping.styled(BB) + " your units " + ("in " + l.mkString(", ")).inline
+                            }
+
                     if (f.commands.has(UnspeakableOathOpportunityOfDreadCurse))
                         if (f == OW && f.can(DreadCurse) && (f.all(Abomination).any || f.all(SpawnOW).any))
                             if (e.onMap(GOO).exists(u => (f.all(Abomination).num + f.all(SpawnOW).num) / 2 + 1 > e.at(u.region).notGOOs.num))
@@ -3677,6 +3686,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     if (f.commands.has(UnspeakableOathThreatOfGhroth) && canAct)
                         if (e == BG && e.can(Ghroth) && e.power >= 2 && e.all(Fungi)./(_.region).distinct.num > f.acolytes.num)
                             reasons :+= "" + e + " might " + Ghroth + " " + HighPriest.styled(f)
+
+                    if (f.commands.has(UnspeakableOathThreatOfCatnapping) && canAct)
+                        if (e == BB && e.can(Catnapping))
+                            BB.onMap(Bastet)./(_.region).%(r => f.at(r).any).some./{ l =>
+                                reasons :+= "" + Bastet.styled(BB) + " might " + Catnapping.styled(BB) + " your units " + ("in " + l.mkString(", ")).inline
+                            }
 
                     if (f.commands.has(UnspeakableOathThreatOfAttackOnHighPriest) && canBattle)
                         f.all(HighPriest)./(_.region).distinct.%(r => canBattleIn(r) && e.canAttack(r)(f) && e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.not(Yothan).not(HighPriest).num).some./{ l =>
