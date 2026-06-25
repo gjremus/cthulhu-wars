@@ -818,6 +818,7 @@ case object UnspeakableOathThreatOfAcolyteCapture extends UnspeakableOathPlan(".
 case object UnspeakableOathThreatOfAttackOnHighPriest extends UnspeakableOathPlan("...credible threat of High Priest being killed") with UnspeakableThreat
 case object UnspeakableOathThreatOfAttackOnGate extends UnspeakableOathPlan("...credible threat to the controlled gate") with UnspeakableThreat
 case object UnspeakableOathThreatOfAttackOnGOO extends UnspeakableOathPlan("...credible threat of battle against GOO") with UnspeakableThreat
+case object UnspeakableOathThreatOfCatnapping extends UnspeakableOathPlan("...threat of Catnapping to the Moon") with UnspeakableThreat
 
 
 class Player(private val f : Faction)(implicit game : Game) {
@@ -2635,11 +2636,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         (f == OW).$(UnspeakableOathOpportunityOfDreadCurse) ++
         f.enemies.has(CC).$(UnspeakableOathThreatOfThousandForms) ++
         f.enemies.has(BG).$(UnspeakableOathThreatOfGhroth) ++
+        f.enemies.has(BB).$(UnspeakableOathThreatOfCatnapping) ++
         (f != AN).$(UnspeakableOathThreatOfAttackOnGOO) ++
         $(UnspeakableOathThreatOfAttackOnGate)
 
         if (f.commands.of[UnspeakableOathPlan].none)
-            f.commands ++= $(UnspeakableOathSkip, UnspeakableOathThreatOfHPCapture, UnspeakableOathThreatOfAcolyteCapture, UnspeakableOathThreatOfAttackOnHighPriest, UnspeakableOathOpportunityEndOfPhase)
+            f.commands ++= $(UnspeakableOathSkip, UnspeakableOathThreatOfHPCapture, UnspeakableOathThreatOfAcolyteCapture, UnspeakableOathThreatOfAttackOnHighPriest, UnspeakableOathOpportunityEndOfPhase) ++
+            f.enemies.has(BB).$(UnspeakableOathThreatOfCatnapping)
 
         f.plans ++= $(
             HighPriestGatesPrompt,
@@ -3769,6 +3772,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         if (e == BG && e.can(Ghroth) && e.power >= 2 && e.all(Fungi)./(_.region).distinct.num > f.acolytes.%!(_.onGate).num && f.acolytes.%(_.onGate).any)
                             reasons :+= "" + e + " might " + Ghroth + " an " + Acolyte.styled(f) + " on the Gate"
 
+                    if (f.commands.has(UnspeakableOathThreatOfCatnapping))
+                        if (e == BB && e.can(Catnapping))
+                            BB.onMap(Bastet)./(_.region).%(r => f.at(r).any).some./{ l =>
+                                reasons :+= "" + Bastet.styled(BB) + " might " + Catnapping.styled(BB) + " your units " + ("in " + l.mkString(", ")).inline
+                            }
+
                     if (f.commands.has(UnspeakableOathOpportunityOfDreadCurse))
                         if (f == OW && f.can(DreadCurse) && (f.all(Abomination).any || f.all(SpawnOW).any))
                             if (e.onMap(GOO).exists(u => (f.all(Abomination).num + f.all(SpawnOW).num) / 2 + 1 > e.at(u.region).notGOOs.num))
@@ -3818,6 +3827,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     if (f.commands.has(UnspeakableOathThreatOfGhroth) && canAct)
                         if (e == BG && e.can(Ghroth) && e.power >= 2 && e.all(Fungi)./(_.region).distinct.num > f.acolytes.num)
                             reasons :+= "" + e + " might " + Ghroth + " " + HighPriest.styled(f)
+
+                    if (f.commands.has(UnspeakableOathThreatOfCatnapping) && canAct)
+                        if (e == BB && e.can(Catnapping))
+                            BB.onMap(Bastet)./(_.region).%(r => f.at(r).any).some./{ l =>
+                                reasons :+= "" + Bastet.styled(BB) + " might " + Catnapping.styled(BB) + " your units " + ("in " + l.mkString(", ")).inline
+                            }
 
                     if (f.commands.has(UnspeakableOathThreatOfAttackOnHighPriest) && canBattle)
                         f.all(HighPriest)./(_.region).distinct.%(r => canBattleIn(r) && e.canAttack(r)(f) && e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.not(Yothan).not(HighPriest).num).some./{ l =>
@@ -4056,6 +4071,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     if (f.commands.has(ShamblerOpportunityEndOfPhase) || f.commands.has(ShamblerPrompt))
                         + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(next))).as(DimensionalShamblerUnit.styled(f), "to Map")("End of Action Phase")
 
+                // TB SBR-3 (§1.9): "Gain 2 Power, then during your Turn, remove a Gate
+                // you Control, and place a Chthonian in an Area your Unit occupies."
+                // Per the guide note, this fires after all player actions like
+                // Unspeakable Oath. Resolving returns into the end-of-phase loop.
+                if (f == TB && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
+                    + TBRemoveGatePlaceChthonianPromptAction(f, EndPhasePromptsAction(next, l.but(f))).as(RemoveGatePlaceChthonianReq.text.styled(TB))("End of Action Phase")
+
                 |(asking.ask).%(_.actions.%!(_.isInfo).any)./(_.add(NeedOk).add(OutOfTurnRefresh(EndPhasePromptsAction(next, l))).add(SacrificeHighPriestAllowedAction).group(" ").skip(EndPhasePromptsAction(next, l.but(f))))
             }
 
@@ -4228,7 +4250,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // TB: Mantle adjacency — TB units can move to/from the Mantle via
             // tbMantleAreas (always) and Tentacle areas (with Subterrane SB).
             if (self == TB && tbMantleInPlay) {
-                val mantleEdges = TBExpansion.tbMantleEdges(from)(game)
+                val mantleEdges = TBExpansion.tbMantleEdges(from)
                 if (mantleEdges.any)
                     destinations = (destinations ++ mantleEdges).distinct
             }
@@ -4266,9 +4288,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Stalk (TB §1.10 SB1): "Immediately after any faction's Move Action,
             // you may relocate a single Cultist to a Moved Unit's Area."
             // Collect moved units' destinations before clearing Moved tags.
-            val tbStalkDests = if (setup.has(TB) && TB.can(Stalk) && TB.allInPlay.%(_.uclass.utype == Cultist).any)
+            val tbStalkDests : $[Region] = if (setup.has(TB) && TB.can(Stalk) && TB.allInPlay.%(_.uclass.utype == Cultist).any)
                 self.units.%(_.tag(Moved))./(_.region).distinct
-            else $[Region]
+            else $()
 
             self.units.foreach(_.remove(Moved))
             self.units.foreach(_.remove(MovedForFree))

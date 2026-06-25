@@ -313,16 +313,15 @@ object XSSExpansion extends Expansion {
         case DoomAction(f : XSS.type) =>
             implicit val asking = Asking(f)
 
-            // Cloud Of Ashes: if SB 3 is on the sheet and Faction Card is non-empty,
-            // offer the return-from-Card action.
-            if (f.can(CloudOfAshes) && game.xssFactionCardMonsters.any) {
+            // Cloud Of Ashes: find Monsters held on the Faction Card by scanning the
+            // hold region directly. xssFactionCardMonsters is cleared during the
+            // per-kill Hold prompts, so Doom Phase scans the region instead.
+            val heldOnCard = f.units.%(_.region == XSSFactionCardHold(f))./(_.ref)
+            if (f.can(CloudOfAshes) && heldOnCard.any) {
                 // If XSS has zero Controlled Gates, return all to Pool immediately
                 if (f.gates.none) {
-                    game.xssFactionCardMonsters.foreach { ur =>
-                        game.unit(ur).region = f.reserve
-                    }
+                    heldOnCard.foreach { ur => game.unit(ur).region = f.reserve }
                     f.log(CloudOfAshes.styled(XSS) + ": no Controlled Gates — all Monsters return to Pool")
-                    game.xssFactionCardMonsters = $
                 } else {
                     + CloudOfAshesDoomReturnMainAction(f)
                 }
@@ -342,15 +341,13 @@ object XSSExpansion extends Expansion {
 
         // -- CLOUD OF ASHES DOOM RETURN (§3.10.3 / §4.4.3) --------------------
         case CloudOfAshesDoomReturnMainAction(self) =>
-            val held = game.xssFactionCardMonsters
+            val held = self.units.%(_.region == XSSFactionCardHold(self))./(_.ref)
             if (held.num == 1)
-                // Auto-resolve Monster pick when only one held
                 Force(CloudOfAshesDoomReturnAreaAction(self, held.head))
             else
                 Force(CloudOfAshesDoomReturnPickAction(self, held))
 
         case CloudOfAshesDoomReturnPickAction(self, held) =>
-            // Each held Monster is selectable; route to area pick on selection
             Ask(self).each(held)(ur =>
                 CloudOfAshesDoomReturnAreaAction(self, ur)
                     .as(game.unit(ur).uclass.styled(XSS)))
@@ -363,16 +360,12 @@ object XSSExpansion extends Expansion {
                 Ask(self).each(gateAreas)(r => CloudOfAshesDoomReturnAction(self, monster, r))
 
         case CloudOfAshesDoomReturnAction(self, monster, dest) =>
-            // Return the chosen Monster to the map (Healthy, normal side, §1.10 SB3)
             game.unit(monster).region = dest
             self.log(CloudOfAshes.styled(XSS) + ": returned", game.unit(monster).uclass.styled(XSS), "to", dest)
-            // All remaining held Monsters return to Pool
-            game.xssFactionCardMonsters.but(monster).foreach { ur =>
-                game.unit(ur).region = self.reserve
-            }
-            if (game.xssFactionCardMonsters.but(monster).any)
+            val remaining = self.units.%(_.region == XSSFactionCardHold(self))./(_.ref).but(monster)
+            remaining.foreach { ur => game.unit(ur).region = self.reserve }
+            if (remaining.any)
                 self.log(CloudOfAshes.styled(XSS) + ": remaining Monsters returned to Pool")
-            game.xssFactionCardMonsters = $
             Force(DoomAction(self))
 
         // -- MAIN ACTION (§2.7 / §3.10) ----------------------------------------
@@ -589,7 +582,10 @@ object XSSExpansion extends Expansion {
         // These actions fire from Battle's CloudOfAshesPromptPhase.
         // Must return to CloudOfAshesPromptPhase to check for more pending monsters.
         case CloudOfAshesHoldAction(self, u) =>
-            // Unit is already on XSSFactionCardHold from the eliminate hook; confirm hold
+            // Unit is already on XSSFactionCardHold from the eliminate hook; confirm hold.
+            // Remove from the pending-prompt list so CloudOfAshesPromptPhase does not re-ask;
+            // Doom Phase will find it by scanning XSSFactionCardHold(XSS) directly.
+            game.xssFactionCardMonsters = game.xssFactionCardMonsters.but(u)
             self.log(CloudOfAshes.styled(XSS) + ":", game.unit(u).uclass.styled(XSS), "placed on Faction Card")
             Force(BattleProceedAction(CloudOfAshesPromptPhase))
 

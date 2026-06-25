@@ -296,19 +296,25 @@ case class TBOverlayMantleTransferAction(self : Faction, gateRegion : Region, ch
     extends BaseFactionAction("Transfer Gate from", implicit g => gateRegion + " to " + TB.mantle)
 
 // -- SBR-3: REMOVE GATE, PLACE CHTHONIAN (§1.9 / §3.12.3 / §4.5) -------------
-case class TBRemoveGatePlaceChthonianMainAction(self : Faction)
-    extends OptionFactionAction(RemoveGatePlaceChthonianReq.text.styled(TB)) with MainQuestion with Soft
-case class TBRemoveGatePlaceChthonianPickGateAction(self : Faction)
+// Fired as an end-of-Action-Phase prompt, mirroring High Priest Unspeakable Oath
+// (§1.9 note: "use the same prompts as used for Unspeakable Oath... pop up after
+// all player actions"). `then` carries the end-of-phase continuation so resolving
+// (or skipping) the prompt returns into the normal end-of-phase flow.
+case class TBRemoveGatePlaceChthonianPromptAction(self : Faction, then : ForcedAction)
+    extends ForcedAction with Soft {
+    override def question(implicit game : Game) = RemoveGatePlaceChthonianReq.text.styled(TB) + "?"
+}
+case class TBRemoveGatePlaceChthonianPickGateAction(self : Faction, then : ForcedAction)
     extends ForcedAction with Soft {
     override def question(implicit game : Game) = "Remove which Gate you Control?"
 }
-case class TBRemoveGatePlaceChthonianGateAction(self : Faction, r : Region)
+case class TBRemoveGatePlaceChthonianGateAction(self : Faction, r : Region, then : ForcedAction)
     extends BaseFactionAction("Remove Gate in", r) with Soft
-case class TBRemoveGatePlaceChthonianPickAreaAction(self : Faction, removedGate : Region)
+case class TBRemoveGatePlaceChthonianPickAreaAction(self : Faction, removedGate : Region, then : ForcedAction)
     extends ForcedAction with Soft {
     override def question(implicit game : Game) = "Place " + Chthonian.styled(TB) + " in which Area your Unit occupies?"
 }
-case class TBRemoveGatePlaceChthonianAreaAction(self : Faction, removedGate : Region, dest : Region)
+case class TBRemoveGatePlaceChthonianAreaAction(self : Faction, removedGate : Region, dest : Region, then : ForcedAction)
     extends BaseFactionAction("Place " + Chthonian.styled(TB) + " in", dest)
 
 // -- SBR-4: GATES AT EVERY GOO AREA (§1.9 / §3.12.4 / §4.5) ------------------
@@ -411,17 +417,8 @@ object TBExpansion extends Expansion {
         case MainAction(f : TB.type) =>
             implicit val asking = Asking(f)
 
-            game.moves(f)
-            game.captures(f)
-            game.recruits(f)
-            game.battles(f)
-            game.controls(f)
-            game.builds(f)
-            game.summons(f)
-            game.awakens(f)
-            game.independents(f)
-
             // Thousand Writhing Maws: 2-Power double recruit/summon (§1.5.1 / §3.6.3)
+            // Offered FIRST in the action menu (creator request 2026-06-19).
             if (f.power >= 2) {
                 val eligible2CostTypes : $[UnitClass] = {
                     var types : $[UnitClass] = $
@@ -433,6 +430,16 @@ object TBExpansion extends Expansion {
                 if (eligible2CostTypes.any)
                     + TBWrithingMawsMainAction(f)
             }
+
+            game.moves(f)
+            game.captures(f)
+            game.recruits(f)
+            game.battles(f)
+            game.controls(f)
+            game.builds(f)
+            game.summons(f)
+            game.awakens(f)
+            game.independents(f)
 
             // Behemoth: Move any Part to the Mantle (0-Cost Unlimited, §1.8 / §3.4.3)
             if (game.tbMantleInPlay && game.tbShuddeMellEverAwakened) {
@@ -468,12 +475,9 @@ object TBExpansion extends Expansion {
                     + TBOverlayMantleMainAction(f)
             }
 
-            // SBR-3: Remove a Gate, place a Chthonian (opt-in any time until earned)
-            if (f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any) {
-                val occupiedAreas = f.allInPlay./(_.region).distinct
-                if (occupiedAreas.any)
-                    + TBRemoveGatePlaceChthonianMainAction(f)
-            }
+            // SBR-3: Remove a Gate, place a Chthonian — NOT a main-menu action.
+            // It now fires as an end-of-Action-Phase prompt (like Unspeakable Oath),
+            // wired in Game.scala's EndPhasePromptsAction (creator request 2026-06-19).
 
             // SBR-4: Gates at every GOO Area (Action, pay 8 Power)
             if (f.needs(GatesAtGOOsReq) && f.power >= 8) {
@@ -604,7 +608,7 @@ object TBExpansion extends Expansion {
         case TBStalkDestAction(self, cultist, movedRegions, mover) =>
             // Destination = any of the just-Moved Units' Areas
             Ask(self).each(movedRegions)(r =>
-                TBStalkAction(self, cultist, r, mover)).cancel
+                TBStalkAction(self, cultist, r, mover).as(r)(Stalk.styled(TB), ": relocate to")).cancel
 
         case TBStalkAction(self, cultist, dest, mover) =>
             val u = game.unit(cultist)
@@ -877,30 +881,30 @@ object TBExpansion extends Expansion {
         // ====================================================================
         // SBR-3: REMOVE GATE, PLACE CHTHONIAN (§3.12.3)
         // ====================================================================
-        case TBRemoveGatePlaceChthonianMainAction(self) =>
-            // Gain 2 Power first
+        case TBRemoveGatePlaceChthonianPromptAction(self, then) =>
+            // Gain 2 Power first (per the Spellbook Requirement)
             self.power += 2
             self.log(RemoveGatePlaceChthonianReq.text.styled(TB) + ": gained", 2.power)
-            Force(TBRemoveGatePlaceChthonianPickGateAction(self))
+            Force(TBRemoveGatePlaceChthonianPickGateAction(self, then))
 
-        case TBRemoveGatePlaceChthonianPickGateAction(self) =>
+        case TBRemoveGatePlaceChthonianPickGateAction(self, then) =>
             val gates = self.gates
             if (gates.num == 1)
-                Force(TBRemoveGatePlaceChthonianGateAction(self, gates.head))
+                Force(TBRemoveGatePlaceChthonianGateAction(self, gates.head, then))
             else
-                Ask(self).each(gates)(r => TBRemoveGatePlaceChthonianGateAction(self, r))
+                Ask(self).each(gates)(r => TBRemoveGatePlaceChthonianGateAction(self, r, then))
 
-        case TBRemoveGatePlaceChthonianGateAction(self, r) =>
-            Force(TBRemoveGatePlaceChthonianPickAreaAction(self, r))
+        case TBRemoveGatePlaceChthonianGateAction(self, r, then) =>
+            Force(TBRemoveGatePlaceChthonianPickAreaAction(self, r, then))
 
-        case TBRemoveGatePlaceChthonianPickAreaAction(self, removedGate) =>
+        case TBRemoveGatePlaceChthonianPickAreaAction(self, removedGate, then) =>
             val occupiedAreas = self.allInPlay./(_.region).distinct
             if (occupiedAreas.num == 1)
-                Force(TBRemoveGatePlaceChthonianAreaAction(self, removedGate, occupiedAreas.head))
+                Force(TBRemoveGatePlaceChthonianAreaAction(self, removedGate, occupiedAreas.head, then))
             else
-                Ask(self).each(occupiedAreas)(r => TBRemoveGatePlaceChthonianAreaAction(self, removedGate, r))
+                Ask(self).each(occupiedAreas)(r => TBRemoveGatePlaceChthonianAreaAction(self, removedGate, r, then))
 
-        case TBRemoveGatePlaceChthonianAreaAction(self, removedGate, dest) =>
+        case TBRemoveGatePlaceChthonianAreaAction(self, removedGate, dest, then) =>
             // Remove the gate
             self.gates = self.gates.but(removedGate)
             self.log("Removed Gate in", removedGate)
@@ -908,7 +912,7 @@ object TBExpansion extends Expansion {
             self.place(Chthonian, dest)
             self.log("Placed", Chthonian.styled(TB), "in", dest)
             self.satisfy(RemoveGatePlaceChthonianReq, "Remove a Gate, place a Chthonian")
-            EndAction(self)
+            then
 
         // ====================================================================
         // SBR-4: GATES AT EVERY GOO AREA (§3.12.4)

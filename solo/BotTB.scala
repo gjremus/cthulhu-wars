@@ -142,16 +142,16 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case TBOverlayMantleTransferAction(f, _, _) =>
                     true                                         |=> 200  -> "transfer gate commit"
 
-                // SBR-3: Remove Gate, Place Chthonian
-                case TBRemoveGatePlaceChthonianMainAction(f) =>
+                // SBR-3: Remove Gate, Place Chthonian (end-of-Action-Phase prompt)
+                case TBRemoveGatePlaceChthonianPromptAction(f, _) =>
                     self.gates.num > 2                           |=> 400  -> "remove gate place chthonian"
-                case TBRemoveGatePlaceChthonianPickGateAction(f) =>
+                case TBRemoveGatePlaceChthonianPickGateAction(f, _) =>
                     true                                         |=> 100  -> "pick gate to remove"
-                case TBRemoveGatePlaceChthonianGateAction(f, _) =>
+                case TBRemoveGatePlaceChthonianGateAction(f, _, _) =>
                     true                                         |=> 100  -> "gate removal commit"
-                case TBRemoveGatePlaceChthonianPickAreaAction(f, _) =>
+                case TBRemoveGatePlaceChthonianPickAreaAction(f, _, _) =>
                     true                                         |=> 100  -> "pick chthonian placement"
-                case TBRemoveGatePlaceChthonianAreaAction(f, _, _) =>
+                case TBRemoveGatePlaceChthonianAreaAction(f, _, _, _) =>
                     true                                         |=> 200  -> "chthonian placement commit"
 
                 // SBR-4: Gates at every GOO Area
