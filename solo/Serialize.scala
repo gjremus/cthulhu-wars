@@ -33,6 +33,8 @@ class Serialize(val game : Game) {
 
         case ss : List[_] => ss./(write).mkString("[", ", ", "]")
 
+        case (a, b) => "Pair(" + write(a) + ", " + write(b) + ")"
+
         // Firstborn (FB) helper case classes (used as fields in FB actions and state).
         // Follow the AzathothOffer pattern: function-call form with productIterator.
         // Parser reconstructs via the reflection-based EApply catch-all.
@@ -139,6 +141,8 @@ class Serialize(val game : Game) {
         case ESymbol("UnspeakableOathThreatOfAttack") => UnspeakableOathThreatOfAttackOnHighPriest
         case ESymbol("UnspeakableOathOfAttackOnGOO") => UnspeakableOathThreatOfAttackOnGOO
         case ESymbol("UnspeakableOathOfAttackOnGate") => UnspeakableOathThreatOfAttackOnGate
+        case ESymbol("Tuple2") => null
+        case ESymbol("UnitFigure") => null
         case ESymbol(s) =>
             parseFaction(s).map(_.asInstanceOf[Any])
                 .orElse(parseRegion(s).map(_.asInstanceOf[Any]))
@@ -155,6 +159,7 @@ class Serialize(val game : Game) {
         case ESome(e) => Some(parseExpr(e))
         case ENone => None
         case EList(l) => l.map(parseExpr)
+        case EApply("Pair", ps) => (parseExpr(ps(0)), parseExpr(ps(1)))
         case EApply("AzathothOffer", ps) => AzathothOffer(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[Int])
         // Firstborn (FB) helper case classes — explicit parser cases mirror the
         // writer cases in Serialize.write. Same pattern as AzathothOffer above.
@@ -170,6 +175,8 @@ class Serialize(val game : Game) {
         // 5th param would do EndAction(TS) and desync replays such as game 454.
         case EApply("TSPlaceTomeUnitAction", ps) if ps.num == 4 => TSPlaceTomeUnitAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitClass], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int])
         case EApply("TSPlaceTomeUnitAction", ps) if ps.num == 5 => TSPlaceTomeUnitActionLegacy5(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitClass], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[Faction])
+        case EApply("TsunamiMoveCultistAction", ps) => ForcedCultistMoveAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[$[UnitRef]], parseExpr(ps(4)).asInstanceOf[Action])
+        case EApply("TsunamiProcessAction", ps) => ForcedCultistMoveProcessAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[$[(Faction, $[UnitRef])]], parseExpr(ps(3)).asInstanceOf[Boolean], parseExpr(ps(4)).asInstanceOf[Action])
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 
