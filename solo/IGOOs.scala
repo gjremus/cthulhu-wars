@@ -355,8 +355,8 @@ case class DoomSarnathDiscardES(self : Faction, owner : Faction, index : Int, th
 }
 
 // Forced cultist move: shared between Tsunami and Agony Sting
-case class ForcedCultistMoveAction(self : Faction, u : UnitRef, dest : Region, remaining : $[UnitRef], then : Action) extends BaseFactionAction(implicit g => "Forced Move".styled("nt") + " — move " + u.uclass.styled(self), dest) {
-    override def question(implicit game : Game) = self.full + " — " + "Forced Move".styled("nt") + " — choose destination for " + u.uclass.styled(self)
+case class ForcedCultistMoveAction(self : Faction, u : UnitRef, dest : Region, remaining : $[UnitRef], then : Action) extends BaseFactionAction(implicit g => "Forced Move".styled("nt") + " — move " + (if (u != null) u.uclass.styled(self) else "unit".styled(self)), dest) {
+    override def question(implicit game : Game) = self.full + " — " + "Forced Move".styled("nt") + " — choose destination for " + (if (u != null) u.uclass.styled(self) else "unit".styled(self))
 }
 case class ForcedCultistMoveProcessAction(self : Faction, sourceRegion : Region, remaining : $[(Faction, $[UnitRef])], oceanDest : Boolean, then : Action) extends ForcedAction
 
@@ -1083,11 +1083,13 @@ object IGOOsExpansion extends Expansion {
             }
 
         case ForcedCultistMoveAction(self, u, dest, remaining, then) =>
-            game.unitOpt(u).foreach { uf =>
-                uf.region = dest
-                uf.onGate = false
+            if (u != null) {
+                game.unitOpt(u).foreach { uf =>
+                    uf.region = dest
+                    uf.onGate = false
+                }
+                self.log("moved", u.uclass.styled(self), "to", dest)
             }
-            self.log("moved", u.uclass.styled(self), "to", dest)
             Force(then)
 
         // Ghatanothoa IGOO: Mummify
