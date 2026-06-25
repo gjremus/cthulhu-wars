@@ -76,9 +76,9 @@ case object BloatedWomanCard extends IGOOLoyaltyCard(BloatedWomanIcon, BloatedWo
 case object BloatedWomanIcon extends UnitClass("The Bloated Woman Icon", Token, 0)
 case object BloatedWoman extends UnitClass("The Bloated Woman", GOO, 4) with IGOO
 
-case object AtlachNachaCard extends IGOOLoyaltyCard(AtlachNachaIcon, AtlachNacha, power = 4, combat = 0)
+case object AtlachNachaCard extends IGOOLoyaltyCard(AtlachNachaIcon, AtlachNacha, power = 6, combat = 4)
 case object AtlachNachaIcon extends UnitClass("Atlach-Nacha Icon", Token, 0)
-case object AtlachNacha extends UnitClass("Atlach-Nacha", GOO, 4) with IGOO
+case object AtlachNacha extends UnitClass("Atlach-Nacha", GOO, 6) with IGOO
 
 case object BokrugCard extends IGOOLoyaltyCard(BokrugIcon, Bokrug, power = 6, combat = 0)
 case object BokrugIcon extends UnitClass("Bokrug Icon", Token, 0)
