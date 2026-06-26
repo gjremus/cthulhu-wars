@@ -723,9 +723,11 @@ object FBEExpansion extends Expansion {
         // ── OVERLORD OF DEATH — turn-end cleanup (HB Fix 127) ────────────────
         // If the discount is still active when the turn ends without having
         // gone through EndAction (which fires afterAction → reset), forfeit it.
-        case EndTurnAction(f) if f == FBE && game.fbeOverlordDiscount > 0 =>
-            FBE.log(OverlordOfDeath.styled(FBE) + ": unused discount expired")
+        case EndTurnAction(f) if f == FBE && (game.fbeOverlordDiscount > 0 || game.fbeSelfConsumingDeaths.any) =>
+            if (game.fbeOverlordDiscount > 0)
+                FBE.log(OverlordOfDeath.styled(FBE) + ": unused discount expired")
             game.fbeOverlordDiscount = 0
+            game.fbeSelfConsumingDeaths = $
             UnknownContinue
 
         // ── OVERLORD OF DEATH — cost discount intercepts (HB Fix 127) ─────────
