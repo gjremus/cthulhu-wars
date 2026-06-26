@@ -355,10 +355,13 @@ case class DoomSarnathDiscardES(self : Faction, owner : Faction, index : Int, th
 }
 
 // Forced cultist move: shared between Tsunami and Agony Sting
-case class ForcedCultistMoveAction(self : Faction, u : UnitRef, dest : Region, remaining : $[UnitRef], then : Action) extends BaseFactionAction(implicit g => "Forced Move".styled("nt") + " — move " + (if (u != null) u.uclass.styled(self) else "unit".styled(self)), dest) {
-    override def question(implicit game : Game) = self.full + " — " + "Forced Move".styled("nt") + " — choose destination for " + (if (u != null) u.uclass.styled(self) else "unit".styled(self))
+case class ForcedCultistMoveAction(self : Faction, u : UnitRef, dest : Region, remaining : $[UnitRef], then : Action) extends BaseFactionAction(implicit g => "Agony Sting".styled("nt") + " — move " + (if (u != null) u.uclass.styled(self) else "Cultist".styled(self)) + " to", dest) {
+    override def question(implicit game : Game) = self.full + " — " + "Agony Sting".styled("nt") + " — choose region to move Cultist to"
 }
 case class ForcedCultistMoveProcessAction(self : Faction, sourceRegion : Region, remaining : $[(Faction, $[UnitRef])], oceanDest : Boolean, then : Action) extends ForcedAction
+case class ForcedCultistMoveOrderAction(self : Faction, f : Faction, sourceRegion : Region, remaining : $[(Faction, $[UnitRef])], oceanDest : Boolean, then : Action) extends BaseFactionAction(implicit g => f.full, f.short) {
+    override def question(implicit game : Game) = self.full + " — " + "Agony Sting".styled("nt") + " — choose faction to move Cultists first"
+}
 
 // Yig: Messenger of Yig — doom phase donation choice
 case class MessengerOfYigDonateAction(self : Faction, yigOwner : Faction) extends BaseFactionAction(
@@ -1033,10 +1036,12 @@ object IGOOsExpansion extends Expansion {
 
         case FatherDagonTsunamiTargetAction(self, r) =>
             self.power -= 1
-            // Each faction's cultists moved by their owner to adjacent ocean areas
             val perFaction = factions./(f => (f, f.at(r).%(_.uclass.utype == Cultist)./(_.ref))).%{ case (_, units) => units.any }
             self.log("Tsunami".styled("nt") + ": all Cultists in", r, "must move to adjacent Ocean")
-            ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = true, EndAction(self))
+            if (perFaction.num > 1)
+                Ask(self).each(perFaction./(f => f._1))(f => ForcedCultistMoveOrderAction(self, f, r, perFaction, true, EndAction(self)))
+            else
+                ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = true, EndAction(self))
 
         // Mother Hydra: Agony Sting
         case MotherHydraAgonyStingMainAction(self) =>
@@ -1045,10 +1050,16 @@ object IGOOsExpansion extends Expansion {
 
         case MotherHydraAgonyStingTargetAction(self, r) =>
             self.power -= 1
-            // Each enemy's cultists moved by their owner to adjacent land areas (owner's cultists immune)
             val perFaction = self.enemies./(f => (f, f.at(r).%(_.uclass.utype == Cultist)./(_.ref))).%{ case (_, units) => units.any }
             self.log("The Agony Sting".styled("nt") + ": all enemy Cultists in", r, "must move to adjacent Land")
-            ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = false, EndAction(self))
+            if (perFaction.num > 1)
+                Ask(self).each(perFaction./(f => f._1))(f => ForcedCultistMoveOrderAction(self, f, r, perFaction, false, EndAction(self)))
+            else
+                ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = false, EndAction(self))
+
+        case ForcedCultistMoveOrderAction(self, chosenFaction, sourceRegion, remaining, oceanDest, then) =>
+            val reordered = remaining.%(f => f._1 == chosenFaction) ++ remaining.%(f => f._1 != chosenFaction)
+            ForcedCultistMoveProcessAction(self, sourceRegion, reordered, oceanDest, then)
 
         // Forced cultist move: shared between Tsunami and Agony Sting
         case ForcedCultistMoveProcessAction(self, sourceRegion, remaining, oceanDest, then) =>
@@ -1061,10 +1072,8 @@ object IGOOsExpansion extends Expansion {
                 else
                     game.board.connected(sourceRegion).%(_.glyph != Ocean)
                 if (adj.none || cultists.none) {
-                    // No valid destination — skip
                     ForcedCultistMoveProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
                 } else if (adj.num == 1) {
-                    // Only one option — auto-move
                     cultists.foreach { ur =>
                         game.unitOpt(ur).foreach { u =>
                             u.region = adj.head
@@ -1074,7 +1083,6 @@ object IGOOsExpansion extends Expansion {
                     faction.log("moved", cultists.num, "cultist".s(cultists.num), "to", adj.head)
                     ForcedCultistMoveProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
                 } else {
-                    // Multiple destinations — faction chooses for each cultist
                     val u = cultists.head
                     val rest = cultists.tail
                     val nextRemaining = if (rest.any) (faction, rest) +: remaining.tail else remaining.tail
