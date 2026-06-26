@@ -248,13 +248,13 @@ object TSExpansion extends Expansion {
                 asking
             }
             else
-                Force(AfterPowerGatherAction)  // re-dispatch; guard now false → Game.scala handler runs
+                Force(AfterPowerGatherAction)
 
         case TSShepherdGatherAction(self, r, remaining) =>
             val n = self.at(r, TombHerd).num
             self.power += n
             self.log("Shepherd of the Crypt".styled("nt") + ": gained", n.power, "from", n, TombHerd.styled(TS), "in", r)
-            Force(AfterPowerGatherAction)  // done; sentinel already set so Game.scala handler runs
+            Force(AfterPowerGatherAction)
 
         // DOOM PHASE
         case DoomAction(f) if f == TS =>
