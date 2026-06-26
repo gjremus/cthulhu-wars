@@ -2638,6 +2638,7 @@ object CthulhuWarsSolo {
                     // Pass option state for conditional overlay text
                     val sbExtra = (f, sb) match {
                         case (SL, EnergyNexus) if game.options.has(SleeperEnergyNexusPreBattle) => ", true"
+                        case (OW, DreadCurse) if game.options.has(OpenerYogCurseDie) => ", true"
                         case _ => ""
                     }
                     val d = s"""<div class='spellbook'
