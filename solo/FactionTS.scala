@@ -256,8 +256,6 @@ object TSExpansion extends Expansion {
                 asking
             }
             else {
-                // Shepherd loop done — mark and re-enter PowerGatherAction so
-                // raise-to-half + triggers + AfterPowerGatherAction can run.
                 TSExpansion.shepherdDoneThisGather = true
                 Force(PowerGatherAction(TSExpansion.pgrLastFaction))
             }
@@ -266,10 +264,10 @@ object TSExpansion extends Expansion {
             val n = self.at(r, TombHerd).num
             self.power += n
             self.log("Shepherd of the Crypt".styled("nt") + ": gained", n.power, "from", n, TombHerd.styled(TS), "in", r)
-            if (remaining.any)
+            val replayNextIsShepherd = game.nextReplayActionHint.exists(_.startsWith("TSShepherdGather"))
+            if (remaining.any && replayNextIsShepherd)
                 Force(TSShepherdGatherPhaseAction(self, remaining))
             else {
-                // Last region — mark and re-enter PowerGatherAction (see comment above).
                 TSExpansion.shepherdDoneThisGather = true
                 Force(PowerGatherAction(TSExpansion.pgrLastFaction))
             }
