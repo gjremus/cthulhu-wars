@@ -675,10 +675,11 @@ object FBEExpansion extends Expansion {
             asking
 
         case OverlordOfDeathDoneAction(self, picked) =>
-            // Eliminate the selected monsters and set the discount
+            // Eliminate the selected monsters and set the discount.
+            // Deaths accumulate in fbeSelfConsumingDeaths — Self Consuming fires
+            // after the discounted action resolves (§1.10 SB6: OoD eliminations
+            // count for Self Consuming when 2+ are eliminated).
             picked.foreach(ur => game.eliminate(game.unit(ur)))
-            // OoD eliminations must NOT trigger Self-Consuming (same pattern as Succor Fix 122)
-            game.fbeSelfConsumingDeaths = $
             game.fbeOverlordDiscount = picked.num
             self.log(OverlordOfDeath.styled(FBE) + ": Eliminated", picked.num, "Monster" + (picked.num > 1).??("s") +
                 ", next action discounted by", picked.num.power)

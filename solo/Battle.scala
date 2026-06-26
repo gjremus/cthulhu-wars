@@ -531,10 +531,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
         // Faceless Blight (FBE): Shapestealing (Pre-Battle, §1.10 SB3 / §3.14.2).
-        // Offer if FBE has the SB, has at least one card die to roll, and there is
-        // an enemy Monster present in the battle. FBEExpansion resolves the roll +
-        // control-swap; the ShapestealingResolveAction case below resumes proceed().
-        if (s == FBE && s.can(Shapestealing) && game.fbeCardDice.nonEmpty &&
+        // Offer if FBE has the SB, has at least one card die to roll, there is
+        // an enemy Monster present in the battle, and it hasn't been used/skipped yet.
+        if (s == FBE && s.can(Shapestealing) && !s.tag(Shapestealing) && game.fbeCardDice.nonEmpty &&
             s.opponent.forces.%(_.uclass.utype == Monster).any) {
             options :+= ShapestealingPreBattleAction(FBE)
             options :+= ShapestealingSkipAction(FBE)
@@ -1154,9 +1153,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 }
 
                 // Faceless Blight (FBE) — Distributed Death (§3.14.3 / §4.6): if FBE
-                // has card dice and any Kill is assigned to an FBE Unit, offer to
-                // discard N dice to prevent N Kills (before EliminatePhase resolves).
-                if (factions.has(FBE) && sides.has(FBE) && !fbeDistributedDeathOffered && game.fbeCardDice.nonEmpty && FBE.onMap(Byagoona).any) {
+                // has card dice, Byagoona is present in the Battle, and any Kill is
+                // assigned to an FBE Unit, offer to discard N dice to prevent N Kills.
+                if (factions.has(FBE) && sides.has(FBE) && !fbeDistributedDeathOffered && game.fbeCardDice.nonEmpty &&
+                    (FBE : Side).forces.%(_.uclass == Byagoona).any) {
                     val fbeKilled = sides./~(fac => (if (fac == attacker) attackers else defenders).forces)
                         .%(u => u.faction == FBE && u.health == Killed).num
                     if (fbeKilled > 0) {
@@ -2770,12 +2770,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case ShapestealingSkipAction(self) =>
+            (FBE : Side).add(Shapestealing)
             proceed()
 
         case ShapestealingTargetAction(self, _) =>
             proceed()
 
         case ShapestealingResolveAction(self, enemyMonster, _) =>
+            (FBE : Side).add(Shapestealing)
             // Move any newly-shapestolen enemy Monster from its owner's side into
             // FBE's side so it rolls and assigns hits as FBE this Combat (§1.10 SB3).
             game.fbeShapestolen.foreach { ref =>
