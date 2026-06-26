@@ -224,7 +224,7 @@ object FBEExpansion extends Expansion {
     // and never count toward Self Consuming.
     override def eliminate(u : UnitFigure)(implicit game : Game) {
         if (!game.setup.has(FBE)) return
-        if (u.uclass == HighPriest) return
+        if (game.fbeHPSacrificeInProgress) return
         game.fbeSelfConsumingDeaths :+= (u.faction == FBE)
     }
 

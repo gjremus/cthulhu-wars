@@ -821,6 +821,19 @@ case object UnspeakableOathThreatOfAttackOnGOO extends UnspeakableOathPlan("...c
 case object UnspeakableOathThreatOfCatnapping extends UnspeakableOathPlan("...threat of Catnapping to the Moon") with UnspeakableThreat
 
 
+sealed abstract class TBRemoveGatePlan(val label : String) extends Plan {
+    val group = "Remove Gate, Place Chthonian".styled(TB)
+}
+case object TBRemoveGatePrompt extends TBRemoveGatePlan("Always prompt") with DefaultPlan with OneOfPlan
+case object TBRemoveGateSkip extends TBRemoveGatePlan("Skip, unless...") with OneOfPlan { override val followers = $(TBRemoveGateThreatOfCapture) }
+trait TBRemoveGateThreat extends TBRemoveGatePlan { override val requires = $($(TBRemoveGateSkip)) }
+case object TBRemoveGateThreatOfCapture extends TBRemoveGatePlan("...threat of capture") with TBRemoveGateThreat
+case object TBRemoveGateThreatOfAttackOnGate extends TBRemoveGatePlan("...credible threat to a controlled gate") with TBRemoveGateThreat
+case object TBRemoveGateThreatOfAttackOnGOO extends TBRemoveGatePlan("...credible threat of battle against GOO") with TBRemoveGateThreat
+case object TBRemoveGateThreatOfCatnapping extends TBRemoveGatePlan("...threat of Catnapping to the Moon") with TBRemoveGateThreat
+case object TBRemoveGateOpportunityEndOfPhase extends TBRemoveGatePlan("...end of Action Phase") with TBRemoveGateThreat
+
+
 class Player(private val f : Faction)(implicit game : Game) {
     var gates : $[Region] = $
     var abandoned : $[Region] = $
@@ -1487,6 +1500,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var queue : $[Battle] = $
     var anyIceAge : Boolean = false
     var lastDaolothRegion : |[Region] = None
+    var nextReplayActionHint : |[String] = None
     var tulzschaFlameTurn : Int = 1
     var neutralSpellbooks : $[Spellbook] = options.contains(NeutralSpellbooks).$(MaoCeremony, Recriminations, Shriveling, StarsAreRight, UmrAtTawil, Undimensioned)
     // Faceless Blight (FBE) GLOBAL GHAST BAN (§1.6, creator-approved): when FBE is
@@ -1545,6 +1559,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Stores the current discount (number of Monsters eliminated this session).
     // Applied to the NEXT power-spending action, then reset to 0 in afterAction.
     var fbeOverlordDiscount : Int = 0
+    // High Priest sacrifice suppress flag — set during Unspeakable Oath HP
+    // sacrifices so Self Consuming ignores the death (not part of an Action).
+    var fbeHPSacrificeInProgress : Boolean = false
 
     // Defilers Court (DC) state — per guide G29 (CRIT): Sin pool lives on Game.scala
     // for undo safety (NOT on DCExpansion singleton). HB Fix 96 (2026-06-07):
@@ -2573,7 +2590,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             allGOOs.%(goo => {
                 val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) f.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
                 val cthughaCost = 6 - gooCost
-                dcTenebrosumGuard || f.power >= cthughaCost && f.gates.has(goo.region)
+                (dcTenebrosumGuard || f.power >= cthughaCost) && f.gates.has(goo.region)
             }).any
         }
         val azathothAvailable = loyaltyCards.has(AzathothIGOOCard) && (dcTenebrosumGuard || f.power >= 8) &&
@@ -2736,7 +2753,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
         // INIT
         case StartAction =>
-            log("Cthulhu Wars TchoTcho tcho-tcho-v2.1")
+            log("Cthulhu Wars Homebrew homebrew-v2.13")
             log("Options", options./(_.toString.hh).mkString(" "))
 
             if (options.has(GateDiplomacy)) {
@@ -2863,7 +2880,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             SetupFactionsAction
 
-        case PowerGatherAction(last) if factions.%!(_.hibernating).%(_.power > 0).any =>
+        case PowerGatherAction(last) if nextReplayActionHint.exists(h => h.startsWith("MainGatesAction") || h.startsWith("PreMainAction") || h.startsWith("MainAction") || h.startsWith("NextPlayerAction")) =>
+            factions.foreach { f =>
+                f.active = f.power > 0 && f.hibernating.not
+            }
+
+            PreMainAction(last)
+
+        case PowerGatherAction(last) if factions.%!(_.hibernating).%(_.power > 0).any && !TSExpansion.shepherdDoneThisGather =>
             factions.foreach { f =>
                 f.active = f.power > 0 && f.hibernating.not
             }
@@ -3143,7 +3167,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // completes) doesn't loop. `last` is stashed into TSExpansion so
             // the re-entry can rebuild PowerGatherAction(last). See FactionTS.scala.
             if (factions.has(TS) && TS.onMap(Glaaki).any && TS.onMap(TombHerd).any && !TSExpansion.shepherdDoneThisGather) {
-                if (ElderThingMindControl.suppresses(TS.onMap(Glaaki).head)) {
+                val replayBlocksShepherd = nextReplayActionHint.exists(h => !h.startsWith("TSShepherdGather"))
+                if (replayBlocksShepherd) {
+                    // noop
+                } else if (ElderThingMindControl.suppresses(TS.onMap(Glaaki).head)) {
                     TS.log("Shepherd of the Crypt".styled("nt"), "blocked by", "Elder Thing".styled("nt"))
                 } else {
                     val regions = areas.nex.%(r => TS.at(r, TombHerd).any)
@@ -3840,6 +3867,40 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     + SacrificeHighPriestPromptAction(f, PreMainAction(f)).as("Sacrifice", HighPriest.styled(f))("Unspeakable Oath".hl, reasons./("<br/>(" + _ + ")").mkString(""))
             }
 
+            if (f == TB && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any) {
+                var reasons = f.commands.has(TBRemoveGatePrompt).$("always prompted")
+
+                f.enemies.%(e => e.active || e.all(HighPriest).any).foreach { e =>
+                    val canAct = true
+                    val canBattle = true
+                    def canBattleIn(r : Region) = true
+
+                    if (f.commands.has(TBRemoveGateThreatOfCapture) && canAct)
+                        f.onMap(Cadavolyte)./(_.region).distinct.%(r => e.canCapture(r)(f)).some./{ l =>
+                            reasons :+= "" + e + " might capture " + Cadavolyte.styled(f) + " " + ("in " + l.mkString(", ")).inline
+                        }
+
+                    if (f.commands.has(TBRemoveGateThreatOfAttackOnGate) && canBattle)
+                        f.gates.%(r => canBattleIn(r) && e.canAttack(r)(f) && e.strength(e.at(r), f) * 3 / 4 + 1 >= f.at(r).num).some./{ l =>
+                            reasons :+= "" + e + " might attack the gate" + " " + ("in " + l.mkString(", ")).inline
+                        }
+
+                    if (f.commands.has(TBRemoveGateThreatOfAttackOnGOO) && canBattle)
+                        f.onMap(GOO)./(_.region).%(r => canBattleIn(r) && e.canAttack(r)(f) && (e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.not(Yothan).not(HighPriest).num || e.at(r).got(Hastur))).some./{ l =>
+                            reasons :+= "GOO might be in danger from " + e + " " + ("in " + l.mkString(", ")).inline
+                        }
+
+                    if (f.commands.has(TBRemoveGateThreatOfCatnapping) && canAct)
+                        if (e == BB && e.can(Catnapping))
+                            BB.onMap(Bastet)./(_.region).%(r => f.at(r).any).some./{ l =>
+                                reasons :+= "" + Bastet.styled(BB) + " might " + Catnapping.styled(BB) + " your units " + ("in " + l.mkString(", ")).inline
+                            }
+                }
+
+                if (reasons.any)
+                    + TBRemoveGatePlaceChthonianPromptAction(f, PreMainAction(f)).as(RemoveGatePlaceChthonianReq.text.styled(TB))("(free)", reasons./("<br/>(" + _ + ")").mkString(""))
+            }
+
             asking.ask.useIf(_.actions.exists(_.isInfo.not))(_.add(NeedOk).add(OutOfTurnRefresh(PreMainAction(f))).add(SacrificeHighPriestAllowedAction).group(" ")).skip(MainAction(f))
 
         case PreMainAction(f) if f.active =>
@@ -3940,6 +4001,34 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         if (dsReason.any)
                             + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(e))).as(DimensionalShamblerUnit.styled(f), "to Map")("(" + dsReason.get + ")")
                     }
+                }
+
+                if (f == TB && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any) {
+                    var reasons = f.commands.has(TBRemoveGatePrompt).$("always prompted")
+
+                    if (f.commands.has(TBRemoveGateThreatOfCapture) && canAct)
+                        f.onMap(Cadavolyte)./(_.region).distinct.%(r => e.canCapture(r)(f)).some./{ l =>
+                            reasons :+= "" + e + " might capture " + Cadavolyte.styled(f) + " " + ("in " + l.mkString(", ")).inline
+                        }
+
+                    if (f.commands.has(TBRemoveGateThreatOfAttackOnGate) && canBattle)
+                        f.gates.%(r => canBattleIn(r) && e.canAttack(r)(f) && e.strength(e.at(r), f) * 3 / 4 + 1 >= f.at(r).num).some./{ l =>
+                            reasons :+= "" + e + " might attack the gate" + " " + ("in " + l.mkString(", ")).inline
+                        }
+
+                    if (f.commands.has(TBRemoveGateThreatOfAttackOnGOO) && canBattle)
+                        f.onMap(GOO)./(_.region).%(r => canBattleIn(r) && e.canAttack(r)(f) && (e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.not(Yothan).not(HighPriest).num || e.at(r).got(Hastur))).some./{ l =>
+                            reasons :+= "GOO might be in danger from " + e + " " + ("in " + l.mkString(", ")).inline
+                        }
+
+                    if (f.commands.has(TBRemoveGateThreatOfCatnapping) && canAct)
+                        if (e == BB && e.can(Catnapping))
+                            BB.onMap(Bastet)./(_.region).%(r => f.at(r).any).some./{ l =>
+                                reasons :+= "" + Bastet.styled(BB) + " might " + Catnapping.styled(BB) + " your units " + ("in " + l.mkString(", ")).inline
+                            }
+
+                    if (reasons.any)
+                        + TBRemoveGatePlaceChthonianPromptAction(f, PreMainAction(e)).as(RemoveGatePlaceChthonianReq.text.styled(TB))("(free)", reasons./("<br/>(" + _ + ")").mkString(""))
                 }
 
                 |(asking.ask).%(_.actions.%!(_.isInfo).any)./(_.add(NeedOk).add(OutOfTurnRefresh(PreMainAction(e))).add(SacrificeHighPriestAllowedAction).group(" ").skip(PreActionPromptsAction(e, l.but(f))))
@@ -4110,12 +4199,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     if (f.commands.has(ShamblerOpportunityEndOfPhase) || f.commands.has(ShamblerPrompt))
                         + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(next))).as(DimensionalShamblerUnit.styled(f), "to Map")("End of Action Phase")
 
-                // TB SBR-3 (§1.9): "Gain 2 Power, then during your Turn, remove a Gate
-                // you Control, and place a Chthonian in an Area your Unit occupies."
-                // Per the guide note, this fires after all player actions like
-                // Unspeakable Oath. Resolving returns into the end-of-phase loop.
                 if (f == TB && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
-                    + TBRemoveGatePlaceChthonianPromptAction(f, EndPhasePromptsAction(next, l.but(f))).as(RemoveGatePlaceChthonianReq.text.styled(TB))("End of Action Phase")
+                    if (f.commands.has(TBRemoveGateOpportunityEndOfPhase) || f.commands.has(TBRemoveGatePrompt))
+                        + TBRemoveGatePlaceChthonianPromptAction(f, EndPhasePromptsAction(next, l.but(f))).as(RemoveGatePlaceChthonianReq.text.styled(TB))("End of Action Phase")
 
                 |(asking.ask).%(_.actions.%!(_.isInfo).any)./(_.add(NeedOk).add(OutOfTurnRefresh(EndPhasePromptsAction(next, l))).add(SacrificeHighPriestAllowedAction).group(" ").skip(EndPhasePromptsAction(next, l.but(f))))
             }
@@ -4815,7 +4901,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case SacrificeHighPriestAction(self, r, then) =>
             val c = self.at(r).one(HighPriest)
 
+            fbeHPSacrificeInProgress = true
             eliminate(c)
+            fbeHPSacrificeInProgress = false
 
             self.oncePerAction :-= Passion
 
