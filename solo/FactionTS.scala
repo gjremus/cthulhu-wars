@@ -264,13 +264,8 @@ object TSExpansion extends Expansion {
             val n = self.at(r, TombHerd).num
             self.power += n
             self.log("Shepherd of the Crypt".styled("nt") + ": gained", n.power, "from", n, TombHerd.styled(TS), "in", r)
-            val replayNextIsShepherd = game.nextReplayActionHint.exists(_.startsWith("TSShepherdGather"))
-            if (remaining.any && replayNextIsShepherd)
-                Force(TSShepherdGatherPhaseAction(self, remaining))
-            else {
-                TSExpansion.shepherdDoneThisGather = true
-                Force(PowerGatherAction(TSExpansion.pgrLastFaction))
-            }
+            TSExpansion.shepherdDoneThisGather = true
+            Force(PowerGatherAction(TSExpansion.pgrLastFaction))
 
         // DOOM PHASE
         case DoomAction(f) if f == TS =>
