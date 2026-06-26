@@ -159,11 +159,12 @@ case class AnimatedRushMainAction(self : Faction, source : Region, dest : Region
     extends OptionFactionAction(implicit g => ("Animated Rush".styled(FBE) + ": discard " + n + " " + (n == 1).?("die").|("dice") + ", move " + (2 * n) + " Units")) { override def question(implicit game : Game) = "Animated Rush".styled(FBE) }
 case class AnimatedRushSkipAction(self : Faction)
     extends OptionFactionAction("Animated Rush".styled(FBE) + ": skip") { override def question(implicit game : Game) = "Animated Rush".styled(FBE) }
-case class AnimatedRushUnitPickAction(self : Faction, movesLeft : Int, moved : $[UnitRef]) extends ForcedAction with PowerNeutral
-case class AnimatedRushDestPickAction(self : Faction, unitRef : UnitRef, movesLeft : Int, moved : $[UnitRef])
+case class AnimatedRushUnitPickAction(self : Faction, movesLeft : Int, moved : $[UnitRef], discardedDice : $[Int], originalPositions : $[(UnitRef, Region)], rushSource : Region, rushDest : Region) extends ForcedAction with PowerNeutral
+case class AnimatedRushDestPickAction(self : Faction, unitRef : UnitRef, movesLeft : Int, moved : $[UnitRef], discardedDice : $[Int], originalPositions : $[(UnitRef, Region)], rushSource : Region, rushDest : Region)
     extends ForcedAction with PowerNeutral with Soft { override def question(implicit game : Game) = "Animated Rush".styled(FBE) + ": move " + game.unit(unitRef).uclass.styled(FBE) + " to" }
-case class AnimatedRushMoveAction(self : Faction, unitRef : UnitRef, dest : Region, movesLeft : Int, moved : $[UnitRef]) extends ForcedAction with PowerNeutral
-case class AnimatedRushDoneEarlyAction(self : Faction) extends OptionFactionAction("Done") with PowerNeutral { override def question(implicit game : Game) = "Animated Rush".styled(FBE) }
+case class AnimatedRushMoveAction(self : Faction, unitRef : UnitRef, dest : Region, movesLeft : Int, moved : $[UnitRef], discardedDice : $[Int], originalPositions : $[(UnitRef, Region)], rushSource : Region, rushDest : Region) extends ForcedAction with PowerNeutral
+case class AnimatedRushCancelAction(self : Faction, discardedDice : $[Int], originalPositions : $[(UnitRef, Region)], rushSource : Region, rushDest : Region)
+    extends OptionFactionAction("Cancel Rush") with PowerNeutral { override def question(implicit game : Game) = "Animated Rush".styled(FBE) }
 
 // ── SUCCOR (Doom Phase, §1.10 SB5 / §3.10.5 / §4.4.5) ────────────────────────
 case class SuccorMainAction(self : Faction)
@@ -219,8 +220,11 @@ object FBEExpansion extends Expansion {
     // or otherwise), regardless of faction, is recorded. The Boolean records whether
     // the dying Unit was FBE-controlled so the +1 Doom "controlled 3+" clause can be
     // checked. Power triggers on 2+ Units of ANY faction; Doom needs 3+ FBE-controlled.
+    // Exception: High Priest sacrifices (Unspeakable Oath) are not part of Actions
+    // and never count toward Self Consuming.
     override def eliminate(u : UnitFigure)(implicit game : Game) {
         if (!game.setup.has(FBE)) return
+        if (u.uclass == HighPriest) return
         game.fbeSelfConsumingDeaths :+= (u.faction == FBE)
     }
 
@@ -555,39 +559,55 @@ object FBEExpansion extends Expansion {
             asking
 
         case AnimatedRushMainAction(self, source, dest, n) =>
-            game.fbeCardDice = game.fbeCardDice.sortBy(x => x).drop(n)
+            val sorted = game.fbeCardDice.sortBy(x => x)
+            val discarded = sorted.take(n)
+            game.fbeCardDice = sorted.drop(n)
             self.log("Animated Rush".styled(FBE) + ": discarded", n, (n == 1).?("die").|("dice"),
                 "— moving", 2 * n, "Units")
-            Force(AnimatedRushUnitPickAction(self, 2 * n, $))
+            Force(AnimatedRushUnitPickAction(self, 2 * n, $, discarded, $, source, dest))
 
         case AnimatedRushSkipAction(self) =>
             self.log("Animated Rush".styled(FBE) + ": declined")
             Force(MoveContinueAction(self, true))
 
-        case AnimatedRushUnitPickAction(self, movesLeft, moved) =>
+        case AnimatedRushUnitPickAction(self, movesLeft, moved, discardedDice, originalPositions, rushSource, rushDest) =>
             if (movesLeft <= 0)
                 Force(MoveContinueAction(self, true))
             else {
-                implicit val asking = Asking(self)
-                self.units.%(_.region.onMap).%(_.uclass != Byagoona).%(u => !moved.has(u.ref)).%(u => game.board.connected(u.region).%(d => self.affords(0)(d)).any).foreach { u =>
-                    + AnimatedRushDestPickAction(self, u.ref, movesLeft, moved)
-                        .as(u.full + " in " + u.region)
+                val eligible = self.units.%(_.region.onMap).%(_.uclass != Byagoona).%(u => !moved.has(u.ref)).%(u => game.board.connected(u.region).%(d => self.affords(0)(d)).any)
+                if (eligible.none) {
+                    // No units can move — auto-cancel: refund dice and undo moves.
+                    game.fbeCardDice = game.fbeCardDice ++ discardedDice
+                    originalPositions.foreach { case (ur, r) =>
+                        val u = game.unit(ur)
+                        u.region = r
+                        u.remove(Moved)
+                    }
+                    self.log("Animated Rush".styled(FBE) + ": cancelled — no eligible units, dice refunded")
+                    Force(MoveContinueAction(self, true))
                 }
-                + AnimatedRushDoneEarlyAction(self)
-                asking
+                else {
+                    implicit val asking = Asking(self)
+                    eligible.foreach { u =>
+                        + AnimatedRushDestPickAction(self, u.ref, movesLeft, moved, discardedDice, originalPositions, rushSource, rushDest)
+                            .as(u.full + " in " + u.region)
+                    }
+                    + AnimatedRushCancelAction(self, discardedDice, originalPositions, rushSource, rushDest)
+                    asking
+                }
             }
 
-        case AnimatedRushDestPickAction(self, unitRef, movesLeft, moved) =>
+        case AnimatedRushDestPickAction(self, unitRef, movesLeft, moved, discardedDice, originalPositions, rushSource, rushDest) =>
             implicit val asking = Asking(self)
             val u = game.unit(unitRef)
             game.board.connected(u.region).%(dest => self.affords(0)(dest)).foreach { dest =>
-                + AnimatedRushMoveAction(self, unitRef, dest, movesLeft, moved)
+                + AnimatedRushMoveAction(self, unitRef, dest, movesLeft, moved, discardedDice, originalPositions, rushSource, rushDest)
                     .as(dest + self.iced(dest))
             }
             + CancelAction
             asking
 
-        case AnimatedRushMoveAction(self, unitRef, dest, movesLeft, moved) =>
+        case AnimatedRushMoveAction(self, unitRef, dest, movesLeft, moved, discardedDice, originalPositions, rushSource, rushDest) =>
             val u = game.unit(unitRef)
             val from = u.region
             // Ice Age tax (§1.5.1): a free Animated Rush move into an enemy Ice Age
@@ -599,11 +619,24 @@ object FBEExpansion extends Expansion {
             u.onGate = false
             u.add(Moved)
             self.log("Animated Rush".styled(FBE) + ":", u.uclass.styled(FBE), from, "→", dest)
-            Force(AnimatedRushUnitPickAction(self, movesLeft - 1, moved :+ unitRef))
+            Force(AnimatedRushUnitPickAction(self, movesLeft - 1, moved :+ unitRef, discardedDice, originalPositions :+ (unitRef, from), rushSource, rushDest))
 
-        case AnimatedRushDoneEarlyAction(self) =>
-            self.log("Animated Rush".styled(FBE) + ": done early")
-            Force(MoveContinueAction(self, true))
+        case AnimatedRushCancelAction(self, discardedDice, originalPositions, rushSource, rushDest) =>
+            // Refund the discarded dice.
+            game.fbeCardDice = game.fbeCardDice ++ discardedDice
+            // Undo any unit moves made during this rush.
+            originalPositions.foreach { case (ur, r) =>
+                val u = game.unit(ur)
+                u.region = r
+                u.remove(Moved)
+            }
+            self.log("Animated Rush".styled(FBE) + ": cancelled — dice refunded")
+            // Re-present the Animated Rush prompt (choose dice or skip).
+            implicit val asking = Asking(self)
+            val maxK = math.min(game.fbeCardDice.num, self.units.%(_.region.onMap).%(_.uclass != Byagoona).num / 2)
+            (1 to maxK).foreach(k => + AnimatedRushMainAction(self, rushSource, rushDest, k))
+            + AnimatedRushSkipAction(self)
+            asking
 
         // ── SUCCOR (§1.10 SB5 / §3.10.5) ─────────────────────────────────────
         case SuccorMainAction(self) =>
