@@ -229,7 +229,8 @@ object SLExpansion extends Expansion {
             // offered after an iGOO awakens with empty pool, etc.
             if (game.slPermanentBorrowed.has(Tenebrosum)) {
                 game.dcLastActionForTenebrosum.foreach { case (a, cost, an) =>
-                    if (cost > 0 && game.slSin >= cost && !game.dcTenebrosumGuard
+                    val minCost = DCExpansion.tenebrosumMinSinCostPublic(f, a, cost, an)
+                    if (minCost > 0 && game.slSin >= minCost && !game.dcTenebrosumGuard
                         && !game.slTenebrosumUsedThisTurn
                         && DCExpansion.tenebrosumLegalToRepeatPublic(f, a, cost, an))
                         + DCTenebrosumMainAction(f, cost, an)

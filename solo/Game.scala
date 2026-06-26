@@ -2554,6 +2554,40 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     }
 
+    // HB Fix 128: Tenebrosum Awaken chooser — offers ONLY iGOO awakening
+    // options (the AwakenIGOOMainAction submenu + Bokrug re-awaken), NOT
+    // iGOO SBR actions (Yig gate removal, Ghatanothoa pay-4, Tulzscha, etc.).
+    def tenebrosumIndependentAwakensOnly(f : Faction)(implicit w : AskWrapper) {
+        val availableStandardIGOOs = loyaltyCards.of[IGOOLoyaltyCard]
+            .%(igoo => dcTenebrosumGuard || igooCost(f, igoo) <= f.power)
+            .%(igoo => !(igoo == GhatanotoaIGOOCard && factions.has(FB)))
+            .%(igoo => !(igoo == GlaakiIGOOCard && factions.has(TS)))
+            .%(igoo => igoo != AzathothIGOOCard)
+            .%(igoo => igoo != CthughaCard)
+            .%(igoo => {
+                val cost = igooCost(f, igoo)
+                areas.nex.%(f.canAwakenIGOO).%(r => dcTenebrosumGuard || f.affords(cost)(r)).any
+            })
+        val cthughaAvailable = loyaltyCards.has(CthughaCard) && {
+            val allGOOs = f.allInPlay.%(_.uclass.isGOO).%(u => u.uclass != Cthugha)
+            allGOOs.%(goo => {
+                val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) f.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
+                val cthughaCost = 6 - gooCost
+                dcTenebrosumGuard || f.power >= cthughaCost && f.gates.has(goo.region)
+            }).any
+        }
+        val azathothAvailable = loyaltyCards.has(AzathothIGOOCard) && (dcTenebrosumGuard || f.power >= 8) &&
+            f.allGates.onMap.%(r => f.at(r).goos.any).any
+        if (availableStandardIGOOs.any || cthughaAvailable || azathothAvailable)
+            + AwakenIGOOMainAction(f)
+        // Bokrug re-awakening (owner keeps card, Bokrug in pool)
+        if (f.loyaltyCards.has(BokrugCard) && f.pool(Bokrug).any && (dcTenebrosumGuard || f.power >= 6)) {
+            areas.nex.%(f.canAwakenIGOO).%(r => dcTenebrosumGuard || f.affords(6)(r)).some.foreach { gates =>
+                + IndependentGOOMainAction(f, BokrugCard, gates)
+            }
+        }
+    }
+
     def neutralSpellbooks(f : Faction)(implicit w : AskWrapper) {
         if (f.has(Undimensioned) && f.units.%(_.region.glyph.onMap)./(_.region).distinct.num > 1 && f.units.%(_.region.glyph.onMap)./(_.region).%(f.affords(2)).any)
             + UndimensionedMainAction(f)
@@ -4747,10 +4781,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (self.pool(uc).none || (!dcTenebrosumGuard && self.affords(cost)(r).not))
                 EndAction(self)
             else {
-                // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
-                // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+                // HB Fix 128: on a Tenebrosum repeat (sin-paid), debit Sin at
+                // this GOO's actual cost. The upfront debit was skipped because
+                // the broadened chooser lets the player pick a different GOO.
                 if (!dcTenebrosumGuard)
                     self.power -= cost
+                else {
+                    if (self == SL) slSin -= cost else dcSin -= cost
+                    dcTenebrosumPrefixCost = cost
+                }
 
                 self.payTax(r)
                 self.place(uc, r)

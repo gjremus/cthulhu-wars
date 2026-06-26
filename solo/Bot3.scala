@@ -1569,13 +1569,13 @@ case class Bot3(faction : Faction) {
                         enemyCults >= 1 |=> 500 -> "agony sting enemy cultists"
                         true |=> 100 -> "agony sting ocean"
 
-                    // ── Tsunami / Agony Sting cultist move (response) ───────
-                    case TsunamiMoveCultistAction(_, u, dest, _, _) =>
+                    // ── Forced cultist move (Tsunami / Agony Sting response) ───────
+                    case ForcedCultistMoveAction(_, u, dest, _, _) =>
                         // Cultist owner picks where forced cultist goes
-                        self.gates.has(dest) |=> 500 -> "tsunami: move to own gate"
-                        self.at(dest).any |=> 300 -> "tsunami: move near own units"
-                        self.enemies.exists(_.gates.has(dest)) |=> -200 -> "tsunami: avoid enemy gate"
-                        true |=> 100 -> "tsunami move"
+                        self.gates.has(dest) |=> 500 -> "forced move: move to own gate"
+                        self.at(dest).any |=> 300 -> "forced move: move near own units"
+                        self.enemies.exists(_.gates.has(dest)) |=> -200 -> "forced move: avoid enemy gate"
+                        true |=> 100 -> "forced move"
 
                     // ── Innsmouth Look (Doom phase SB) ──────────────────────
                     case InnsmouthLookChooseAction(_, u, _) =>
@@ -1600,14 +1600,14 @@ case class Bot3(faction : Faction) {
 
                     case NuclearChaosAdjustAction(_, rolls, adjust) =>
                         // Owner adjusts own roll +/- 1; prefer adjusting up
-                        val myRoll = rolls.%(_.f == self).head.n
+                        val myRoll = rolls.getOrElse(self, 3)
                         (adjust == 1 && myRoll <= 5) |=> 500 -> "nuclear chaos: bump roll up"
                         (adjust == -1 && myRoll == 6) |=> 300 -> "nuclear chaos: bump 6→5"
                         true |=> 0 -> "nuclear chaos adjust"
 
                     case NuclearChaosKeepAction(_, rolls) =>
                         // Keep if my roll is already 5+
-                        val myRoll = rolls.%(_.f == self).head.n
+                        val myRoll = rolls.getOrElse(self, 3)
                         myRoll >= 5 |=> 400 -> "nuclear chaos: keep high roll"
                         myRoll <= 2 |=> -200 -> "nuclear chaos: dont keep low roll"
                         true |=> 100 -> "nuclear chaos keep"

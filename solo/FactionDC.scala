@@ -144,6 +144,7 @@ case class DCTenebrosumMainAction(self : Faction, cost : Int, actionName : Strin
         Tenebrosum.styled(DC) + ": Repeat " + actionName.styled(self) + {
             if (cost == 0) " (free)"
             else if (actionName == "Summon") " (Sin = unit's cost)"
+            else if (actionName == "Awaken") " (Sin = awakening cost)"
             else " for " + cost.toString.styled("dc") + " Sin"
         })
     with MainQuestion with Soft with PowerNeutral
@@ -163,6 +164,7 @@ case class DCTenebrosumRepeatAction(self : Faction, cost : Int, actionName : Str
         Tenebrosum.styled(DC) + ": Repeat " + actionName.styled(self) + {
             if (cost == 0) " (free)"
             else if (actionName == "Summon") " for Sin"
+            else if (actionName == "Awaken") " for Sin"
             else " for " + cost.toString.styled("dc") + " Sin"
         },
         "Confirm".styled("power"))
@@ -479,8 +481,11 @@ object DCExpansion extends Expansion {
             // per user spec. Sin check is game.dcSin >= cost (trivially true at 0).
             // HB Fix 90 (2026-06-07): also check the action class is still LEGAL
             // to repeat (pool/target/region availability) — see tenebrosumLegalToRepeat.
+            // HB Fix 128 (2026-06-26): for broadened actions (Summon/Awaken), gate
+            // on the cheapest available option, not the last unit's cost.
             game.dcLastActionForTenebrosum.foreach { case (a, cost, an) =>
-                if (game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn
+                val minCost = tenebrosumMinSinCost(f, a, cost, an)
+                if (game.dcSin >= minCost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn
                     && tenebrosumLegalToRepeat(f, a, cost, an))
                     + DCTenebrosumMainAction(f, cost, an)
             }
@@ -534,8 +539,11 @@ object DCExpansion extends Expansion {
             // per user spec. Sin check is game.dcSin >= cost (trivially true at 0).
             // HB Fix 90 (2026-06-07): also check the action class is still LEGAL
             // to repeat (pool/target/region availability) — see tenebrosumLegalToRepeat.
+            // HB Fix 128 (2026-06-26): for broadened actions (Summon/Awaken), gate
+            // on the cheapest available option, not the last unit's cost.
             game.dcLastActionForTenebrosum.foreach { case (a, cost, an) =>
-                if (game.dcSin >= cost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn
+                val minCost = tenebrosumMinSinCost(f, a, cost, an)
+                if (game.dcSin >= minCost && !game.dcTenebrosumGuard && !game.dcTenebrosumUsedThisTurn
                     && tenebrosumLegalToRepeat(f, a, cost, an))
                     + DCTenebrosumMainAction(f, cost, an)
             }
@@ -633,11 +641,16 @@ object DCExpansion extends Expansion {
                     // would charge the old unit's cost. So, exactly like a Move
                     // repeat, SKIP the upfront Sin debit for a Summon repeat and
                     // let the SummonAction handler (Game.scala) debit Sin at the
-                    // picked unit's actual summonCost. All other action classes
-                    // (Battle/Capture/Build/Recruit/Awaken/Ritual/SB) keep the
-                    // single upfront flat debit unchanged.
+                    // picked unit's actual summonCost.
                     val isSummonRepeat = recordedAction.isInstanceOf[SummonAction]
-                    val skipUpfront = isMoveRepeat || isSummonRepeat
+                    // HB Fix 128: same logic for Awaken iGOO — the broadened
+                    // chooser lets the player pick a DIFFERENT iGOO whose cost
+                    // differs from the first. Skip upfront debit; the
+                    // IndependentGOOAction handler debits Sin at pick time.
+                    val isAwakenRepeat = recordedAction.isInstanceOf[AwakenAction] ||
+                        recordedAction.isInstanceOf[IndependentGOOAction] ||
+                        recordedAction.isInstanceOf[CthughaAwakenAction]
+                    val skipUpfront = isMoveRepeat || isSummonRepeat || isAwakenRepeat
                     if (self == SL) {
                         if (!skipUpfront) game.slSin -= cost
                         game.slTenebrosumUsedThisTurn = true
@@ -687,6 +700,7 @@ object DCExpansion extends Expansion {
                     game.dcTenebrosumPrefixCost =
                         if (isMoveRepeat) 1
                         else if (isSummonRepeat) 0
+                        else if (isAwakenRepeat) 0
                         else cost
                     // Clear last-action so the SAME action isn't repeated as the "last" again
                     game.dcLastActionForTenebrosum = None
@@ -715,13 +729,15 @@ object DCExpansion extends Expansion {
 
         // ── Tenebrosum broadened Awaken chooser (HB Fix 113, 2026-06-13) ─────
         // Offer EVERY awakenable faction GOO + iGOO (not just the one just
-        // awakened). game.awakens / game.independents bypass their affords
-        // filters under the guard, and AwakenAction / IndependentGOOAction skip
-        // the Power debit under the guard.
+        // awakened). game.awakens bypasses affords under the guard, and
+        // AwakenAction / IndependentGOOAction skip the Power debit under guard.
+        // HB Fix 128: Only offer awakening options — NOT iGOO SBR actions
+        // (Yig gate removal, Ghatanothoa pay-4, Tulzscha, etc.). Tenebrosum
+        // copies only the SAME action type (Awaken), not side-effect powers.
         case DCTenebrosumAwakenChooserAction(self) =>
             implicit val asking = Asking(self)
             game.awakens(self)
-            game.independents(self)
+            game.tenebrosumIndependentAwakensOnly(self)
             + CancelAction
             asking
 
@@ -739,6 +755,7 @@ object DCExpansion extends Expansion {
             game.rituals(f)
             game.reveals(f)
             game.highPriests(f)
+            game.hires(f)
             + DoomDoneAction(f)
             asking
 
@@ -1396,6 +1413,33 @@ object DCExpansion extends Expansion {
         }
     }
 
+    // HB Fix 128 (2026-06-26): the minimum Sin cost to offer Tenebrosum for
+    // broadened action types (Summon/Awaken) is the cheapest available option,
+    // not the cost of the unit last used. For all other action types, the
+    // recorded cost is still the correct gate.
+    private def tenebrosumMinSinCost(self : Faction, a : Action, recordedCost : Int, an : String)(implicit game : Game) : Int = a match {
+        case _ : SummonAction =>
+            val summonAreas = areas ++ ((self == BB).??($(BB.moon)))
+            val accessibleAreas = summonAreas.nex.%(self.canAccessGate)
+            if (accessibleAreas.none) recordedCost
+            else {
+                val candidates = self.pool.monsterly./(_.uclass).distinct.%(_.canBeSummoned(self))
+                if (candidates.none) recordedCost
+                else candidates./(uc => accessibleAreas./(r => self.summonCost(uc, r)).min).min
+            }
+        case _ : AwakenAction | _ : IndependentGOOAction | _ : CthughaAwakenAction =>
+            val hasPoolGOO = self.pool.%(_.uclass.isGOO).any
+            val heldIGOOs = self.loyaltyCards.of[IGOOLoyaltyCard]
+            val costs = {
+                (if (hasPoolGOO) self.pool.%(_.uclass.isGOO)./(_.uclass).distinct./~(uc =>
+                    self.allGates.onMap./(r => self.awakenCost(uc, r)).flatten
+                ) else $()) ++
+                heldIGOOs./(_.power)
+            }
+            if (costs.any) costs.min else recordedCost
+        case _ => recordedCost
+    }
+
     // 2026-06-06 Fix 75: a faction is Tenebrosum-eligible if it's DC, or if it's
     // SL holding the permanent DC bundle via Ancient Sorcery (Fix 2).
     private def tenebrosumEligible(self : Faction)(implicit game : Game) : Boolean =
@@ -1408,6 +1452,11 @@ object DCExpansion extends Expansion {
     // replay chooser opens. SL call-site updated accordingly.
     def tenebrosumLegalToRepeatPublic(self : Faction, a : Action, cost : Int, an : String)(implicit game : Game) : Boolean =
         tenebrosumLegalToRepeat(self, a, cost, an)
+
+    // HB Fix 128 (2026-06-26): Public wrapper for the min-sin-cost computation
+    // so SL's borrowed-Tenebrosum offer can use the same broadened gate.
+    def tenebrosumMinSinCostPublic(self : Faction, a : Action, cost : Int, an : String)(implicit game : Game) : Int =
+        tenebrosumMinSinCost(self, a, cost, an)
 
     // HB Fix 90 (2026-06-07): Bug 1 — Tenebrosum can only be OFFERED if the
     // recorded action class is still legally repeatable. Pool empty, no valid

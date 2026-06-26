@@ -1011,7 +1011,7 @@ object CthulhuWarsSolo {
                         case FBE => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                        case TB => DrawRect("tb-cadavolyte", |(tint), x - 17, y - 54, 39, 60)
+                        case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -1040,7 +1040,7 @@ object CthulhuWarsSolo {
                         // Tombstalker (TS): high priest unit sprite
                         case TS => DrawRect("ts-high-priest", |(tint), x - 35, y - 60, 70, 66)
                         case TT => DrawRect("tt-high-priest", |(tint), x - 35, y - 60, 70, 68)
-                        case TB => DrawRect("tb-high-priest", |(tint), x - 35, y - 60, 70, 67)
+                        case TB => DrawRect("tb-high-priest", None, x - 35, y - 60, 70, 67)
                         case _ => DrawRect("gc-high-priest", |(tint), x - 35, y - 60, 70, 66)
                     }
 
@@ -1073,7 +1073,7 @@ object CthulhuWarsSolo {
                         case FBE => DrawRect("fbe-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // Xyrious Storm (XSS): placeholder glyph (reuse dc-glyph tinted XSS blue-grey)
                         case XSS => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
-                        case TB => DrawRect("tb-glyph", |(tint), x - 50, y - 50, 100, 100)
+                        case TB => DrawRect("tb-glyph", None, x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
                         case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
@@ -1304,11 +1304,11 @@ object CthulhuWarsSolo {
                     case EyeOfTheStorm    => DrawRect("n-star-vampire", |(tint), x - 35, y - 75, 70, 85)
                     case Petrichor        => DrawRect("gc-cthulhu", |(tint), x - 66, y - 158, 131, 175)
 
-                    case Cadavolyte        => DrawRect("tb-cadavolyte", |(tint), x - 17, y - 54, 39, 60)
-                    case Tentacle          => DrawRect("tb-tentacle", |(tint), x - 17, y - 54, 39, 60)
-                    case Chthonian         => DrawRect("tb-chthonian", |(tint), x - 30, y - 60, 60, 63)
-                    case ShuddeMellHead    => DrawRect("tb-shudde-mell-head", |(tint), x - 66, y - 158, 131, 158)
-                    case ShuddeMellSegment => DrawRect("tb-shudde-mell-segment", |(tint), x - 45, y - 40, 90, 40)
+                    case Cadavolyte        => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
+                    case Tentacle          => DrawRect("tb-tentacle", None, x - 17, y - 54, 39, 60)
+                    case Chthonian         => DrawRect("tb-chthonian", None, x - 30, y - 60, 60, 63)
+                    case ShuddeMellHead    => DrawRect("tb-shudde-mell-head", None, x - 66, y - 158, 131, 158)
+                    case ShuddeMellSegment => DrawRect("tb-shudde-mell-segment", None, x - 45, y - 40, 90, 40)
 
                     case _ => null
                 }
@@ -3251,6 +3251,37 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                               ">0</span>
                     </span>"""
                 else ""
+                val tbMantleHudButton = if (setup.seating.has(TB)) s"""
+                    <span id="tb-mantle-hud-btn"
+                        style="
+                            pointer-events: auto;
+                            cursor: pointer;
+                            display: none;
+                            align-items: center;
+                            position: relative;
+                            vertical-align: middle;
+                            flex-shrink: 0;
+                        "
+                        onclick="event.stopPropagation(); onExternalClick('TB','Mantle',0,'')"
+                        onpointerover="event.stopPropagation(); onExternalOver('TB','Mantle',0,'')"
+                        onpointerout="event.stopPropagation(); onExternalOut('TB','Mantle',0,'')">
+                        <img src="${Overlays.imageSource("tb-mantle")}"
+                             style="height: max(2.5em, 7vmin); width: auto; display: block;" />
+                        <span id="tb-mantle-hud-count"
+                              style="
+                                  position: absolute;
+                                  top: 50%;
+                                  left: 50%;
+                                  transform: translate(-50%, -50%);
+                                  color: white;
+                                  font-size: max(1.1em, 3vmin);
+                                  font-weight: bold;
+                                  line-height: 1;
+                                  text-shadow: 0 0 3px black, 0 0 3px black, 0 0 3px black;
+                                  pointer-events: none;
+                              ">0</span>
+                    </span>"""
+                else ""
                 val localTitle = dom.document.createElement("div")
                 localTitle.innerHTML = s"""
                     <div style="
@@ -3303,6 +3334,16 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                       ">5</span>
                             </span>
                             ${bbMoonHudButton}
+                        </div>
+                        <div style="
+                            position: absolute;
+                            bottom: 0;
+                            right: 0;
+                            display: flex;
+                            align-items: center;
+                            pointer-events: none;
+                        ">
+                            ${tbMantleHudButton}
                         </div>
                     </div>"""
                 mapSmall.appendChild(localTitle)
@@ -3451,6 +3492,43 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     dom.document.getElementById("bb-moon-hud-count").?.foreach(_.innerHTML = moonCount.toString)
                     dom.document.getElementById("bb-moon-hud-btn").?.foreach { el =>
                         val s = s"""onExternalClick("BB","Moon",$moonCount,"$moonList")"""
+                        el.setAttribute("onclick", "event.stopPropagation(); " + s)
+                        el.setAttribute("onpointerover", "event.stopPropagation(); " + s.replace("Click","Over"))
+                        el.setAttribute("onpointerout",  "event.stopPropagation(); " + s.replace("Click","Out"))
+                    }
+                }
+
+                if (setup.seating.has(TB)) {
+                    implicit val g : Game = displayGame
+                    val mantleInPlay = displayGame.tbMantleInPlay
+                    val mantleFigs : $[UnitFigure] = if (mantleInPlay) TB.at(TB.mantle) else $
+                    val mantleCount = mantleFigs.num
+                    def mantleSpriteAssetId(u : UnitFigure) : String = u.uclass match {
+                        case Cadavolyte        => "tb-cadavolyte"
+                        case Tentacle          => "tb-tentacle"
+                        case Chthonian         => "tb-chthonian"
+                        case ShuddeMellHead    => "tb-shudde-mell-head"
+                        case ShuddeMellSegment => "tb-shudde-mell-segment"
+                        case _                 => "tb-cadavolyte"
+                    }
+                    def safe(s : String) : String = s.replace("\"", "").replace("'", "").replace(";", "").replace("|", "")
+                    val mantleList = mantleFigs./(u => {
+                        val asset   = safe(mantleSpriteAssetId(u))
+                        val display = safe(u.uclass.name) + " (TB)"
+                        val onMapH  = {
+                            val ph = DrawItem(TB.mantle, TB, u.uclass, u.health, u.state, 0, 0).proto
+                            if (ph != null) ph.height else 60
+                        }
+                        asset + "|" + display + "|" + onMapH
+                    }).mkString(";")
+                    if (dom.document.getElementById("tb-mantle-hud-btn") == null)
+                        renderMapHud()
+                    dom.document.getElementById("tb-mantle-hud-btn").?.foreach { el =>
+                        el.asInstanceOf[html.Element].style.display = if (mantleInPlay) "inline-flex" else "none"
+                    }
+                    dom.document.getElementById("tb-mantle-hud-count").?.foreach(_.innerHTML = mantleCount.toString)
+                    dom.document.getElementById("tb-mantle-hud-btn").?.foreach { el =>
+                        val s = s"""onExternalClick("TB","Mantle",$mantleCount,"$mantleList")"""
                         el.setAttribute("onclick", "event.stopPropagation(); " + s)
                         el.setAttribute("onpointerover", "event.stopPropagation(); " + s.replace("Click","Over"))
                         el.setAttribute("onpointerout",  "event.stopPropagation(); " + s.replace("Click","Out"))

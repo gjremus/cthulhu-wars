@@ -296,10 +296,10 @@ case class TBOverlayMantleTransferAction(self : Faction, gateRegion : Region, ch
     extends BaseFactionAction("Transfer Gate from", implicit g => gateRegion + " to " + TB.mantle)
 
 // -- SBR-3: REMOVE GATE, PLACE CHTHONIAN (§1.9 / §3.12.3 / §4.5) -------------
-// Fired as an end-of-Action-Phase prompt, mirroring High Priest Unspeakable Oath
-// (§1.9 note: "use the same prompts as used for Unspeakable Oath... pop up after
-// all player actions"). `then` carries the end-of-phase continuation so resolving
-// (or skipping) the prompt returns into the normal end-of-phase flow.
+// Anytime during TB's turn (unlimited, 0-cost, like GC Devolve). Also fires at
+// end-of-Action-Phase as a fallback prompt. `then` carries the continuation.
+case class TBRemoveGatePlaceChthonianMainAction(self : Faction)
+    extends OptionFactionAction(RemoveGatePlaceChthonianReq.text.styled(TB) + " (free)") with MainQuestion with Soft
 case class TBRemoveGatePlaceChthonianPromptAction(self : Faction, then : ForcedAction)
     extends ForcedAction with Soft {
     override def question(implicit game : Game) = RemoveGatePlaceChthonianReq.text.styled(TB) + "?"
@@ -475,9 +475,9 @@ object TBExpansion extends Expansion {
                     + TBOverlayMantleMainAction(f)
             }
 
-            // SBR-3: Remove a Gate, place a Chthonian — NOT a main-menu action.
-            // It now fires as an end-of-Action-Phase prompt (like Unspeakable Oath),
-            // wired in Game.scala's EndPhasePromptsAction (creator request 2026-06-19).
+            // SBR-3: Remove a Gate, place a Chthonian (Unlimited, 0-Cost, anytime during turn like GC Devolve)
+            if (f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
+                + TBRemoveGatePlaceChthonianMainAction(f)
 
             // SBR-4: Gates at every GOO Area (Action, pay 8 Power)
             if (f.needs(GatesAtGOOsReq) && f.power >= 8) {
@@ -778,9 +778,14 @@ object TBExpansion extends Expansion {
             if (count <= 0 || remaining.none)
                 EndAction(TB)
             else {
-                // Valid destinations: Areas NOT in priorAreas AND without TB Gates
-                val validDests = game.board.regions.%(r => !priorAreas.has(r) && !TB.gates.has(r))
-                if (validDests.none) {
+                // Valid destinations per unit: ADJACENT to unit's region, NOT in priorAreas, no TB Gates
+                val unitsWithDests = remaining./~{ ur =>
+                    val unitRegion = game.unit(ur).region
+                    val adjacent = game.board.connected(unitRegion)
+                    val validDests = adjacent.%(r => !priorAreas.has(r) && !TB.gates.has(r))
+                    validDests./(r => (ur, r))
+                }
+                if (unitsWithDests.none) {
                     // FCG #23: auto-eliminate any unit with no legal destination
                     remaining.foreach { ur =>
                         val u = game.unit(ur)
@@ -788,18 +793,14 @@ object TBExpansion extends Expansion {
                     }
                     TB.log(PsychicShriek.styled(TB) + ": no legal destinations — eliminated remaining units")
                     EndAction(TB)
-                } else if (remaining.num == 1) {
-                    // Only one unit — still need destination pick
-                    // FCG #26: enemy picks (self = enemy)
-                    Ask(self).each(validDests)(r =>
-                        TBPsychicShriekRetreatPickAction(self, enemy, remaining.head, r, count, priorAreas, retreated, remaining))
+                } else if (unitsWithDests.num == 1) {
+                    val (ur, r) = unitsWithDests.head
+                    Force(TBPsychicShriekRetreatPickAction(self, enemy, ur, r, count, priorAreas, retreated, remaining))
                 } else {
-                    // Enemy picks which unit + destination
+                    // FCG #26: enemy picks which unit + destination
                     implicit val asking = Asking(self)
-                    remaining.foreach { ur =>
-                        validDests.foreach { r =>
-                            + TBPsychicShriekRetreatPickAction(self, enemy, ur, r, count, priorAreas, retreated, remaining)
-                        }
+                    unitsWithDests.foreach { case (ur, r) =>
+                        + TBPsychicShriekRetreatPickAction(self, enemy, ur, r, count, priorAreas, retreated, remaining)
                     }
                     asking
                 }
@@ -867,6 +868,7 @@ object TBExpansion extends Expansion {
             game.tbMantleAreas = chosen
             // Transfer the gate to the Mantle
             self.gates = self.gates.but(gateRegion) :+ TB.mantle
+            game.gates = game.gates.but(gateRegion) :+ TB.mantle
             // Move the Cultist that was on-gate to the Mantle
             val cultistOnGate = self.at(gateRegion).%(u => u.onGate && u.uclass.utype == Cultist).headOption
             cultistOnGate.foreach { u =>
@@ -881,6 +883,9 @@ object TBExpansion extends Expansion {
         // ====================================================================
         // SBR-3: REMOVE GATE, PLACE CHTHONIAN (§3.12.3)
         // ====================================================================
+        case TBRemoveGatePlaceChthonianMainAction(self) =>
+            Force(TBRemoveGatePlaceChthonianPromptAction(self, MainAction(self)))
+
         case TBRemoveGatePlaceChthonianPromptAction(self, then) =>
             // Gain 2 Power first (per the Spellbook Requirement)
             self.power += 2
@@ -905,8 +910,10 @@ object TBExpansion extends Expansion {
                 Ask(self).each(occupiedAreas)(r => TBRemoveGatePlaceChthonianAreaAction(self, removedGate, r, then))
 
         case TBRemoveGatePlaceChthonianAreaAction(self, removedGate, dest, then) =>
-            // Remove the gate
+            // Remove the gate and clear onGate for the controlling cultist
+            self.at(removedGate).%(_.onGate).foreach(_.onGate = false)
             self.gates = self.gates.but(removedGate)
+            game.gates = game.gates.but(removedGate)
             self.log("Removed Gate in", removedGate)
             // Place Chthonian
             self.place(Chthonian, dest)
