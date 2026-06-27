@@ -283,18 +283,17 @@ case class TBOverlayMantleAreasAction(self : Faction, r1 : Region, r2 : Region, 
     override def question(implicit game : Game) = "Choose Areas " + TB.mantle + " is touching (must include " + r1 + " and " + r2 + ")"
 }
 case class TBOverlayMantleAreaToggleAction(self : Faction, r : Region, r1 : Region, r2 : Region, chosen : $[Region], remaining : $[Region])
-    extends BaseFactionAction("Add Area to " + TB.mantle + " adjacency:", r)
+    extends BaseFactionAction("Add Area to " + TB.mantle + " adjacency (the Mantle is ~size of 3P Australia):", r)
 case class TBOverlayMantleDoneAction(self : Faction, r1 : Region, r2 : Region, chosen : $[Region])
     extends OptionFactionAction("Done".styled("power")) with Soft {
     override def question(implicit game : Game) = "Confirm " + TB.mantle + " adjacency"
 }
-case class TBOverlayMantleTransferGateAction(self : Faction, r1 : Region, r2 : Region, chosen : $[Region])
+case class TBOverlayMantlePickTransferAction(self : Faction, r1 : Region, r2 : Region, chosen : $[Region])
     extends ForcedAction with Soft {
-    override def question(implicit game : Game) = "Transfer which Gate (and its Cultist) to " + TB.mantle + "?"
+    override def question(implicit game : Game) = "Which Gate to transfer to " + TB.mantle + "?"
 }
-case class TBOverlayMantleTransferAction(self : Faction, gateRegion : Region, chosen : $[Region])
-    extends BaseFactionAction("Transfer Gate from", implicit g => gateRegion + " to " + TB.mantle)
-
+case class TBOverlayMantleTransferAction(self : Faction, source : Region, chosen : $[Region])
+    extends BaseFactionAction("Transfer Gate from", source) with Soft
 // -- SBR-3: REMOVE GATE, PLACE CHTHONIAN (§1.9 / §3.12.3 / §4.5) -------------
 // Anytime during TB's turn (unlimited, 0-cost, like GC Devolve). Also fires at
 // end-of-Action-Phase as a fallback prompt. `then` carries the continuation.
@@ -363,6 +362,39 @@ object TBExpansion extends Expansion {
             f.power = 8
             // Sentinel start — Mantle is TB's Start Area but not yet in play
             game.starting = game.starting + (TB -> TB.mantle)
+
+            f.plans ++= $(
+                TBRemoveGatePrompt,
+                TBRemoveGateSkip,
+                TBRemoveGateThreatOfCapture,
+                TBRemoveGateThreatOfAttackOnGate,
+                TBRemoveGateThreatOfAttackOnGOO,
+            ) ++
+            f.enemies.has(BB).$(TBRemoveGateThreatOfCatnapping) ++
+            $(TBRemoveGateOpportunityEndOfPhase)
+
+            if (options.has(QuickGame)) {
+                f.commands :+= TBRemoveGateSkip
+                f.commands :+= TBRemoveGateThreatOfCapture
+            }
+            else
+                f.commands :+= TBRemoveGatePrompt
+
+            f.plans ++= $(
+                TBStalkPrompt,
+                TBStalkSkipAll,
+                TBStalkThreatToGate,
+                TBStalkThreatToGOO,
+                TBStalkThreatOfCapture
+            )
+
+            if (options.has(QuickGame)) {
+                f.commands :+= TBStalkSkipAll
+                f.commands :+= TBStalkThreatToGate
+            }
+            else
+                f.commands :+= TBStalkPrompt
+
             f.log("starts with", 8.power, "and places 8", Tentacle.styled(TB), "in 8 different Areas")
             Force(TBSetupPlaceTentacleAction(f, 8))
 
@@ -417,6 +449,9 @@ object TBExpansion extends Expansion {
         case MainAction(f : TB.type) =>
             implicit val asking = Asking(f)
 
+            // SBR-1: Overlay the Mantle — removed from action menu per creator.
+            // It fires immediately (not as an action) from BuildGateAction and AfterAction.
+
             // Thousand Writhing Maws: 2-Power double recruit/summon (§1.5.1 / §3.6.3)
             // Offered FIRST in the action menu (creator request 2026-06-19).
             if (f.power >= 2) {
@@ -463,16 +498,6 @@ object TBExpansion extends Expansion {
                     !game.tbShriekTargetedThisPhase.has(e) && e.allInPlay.any && !e.hibernating)
                 if (validEnemies.any)
                     + TBPsychicShriekMainAction(f)
-            }
-
-            // SBR-1: Overlay the Mantle (opt-in when Controlling 2 adjacent Gated Areas)
-            if (f.needs(OverlayMantleReq) && !game.tbMantleInPlay) {
-                val ownGates = f.gates
-                val adjacentPairs = ownGates./~(r1 =>
-                    ownGates.%(r2 => r1 != r2 && game.board.connected(r1).has(r2))./(r2 => (r1, r2)))
-./{ case (a, b) => if (a.hashCode <= b.hashCode) (a, b) else (b, a) }.distinct
-                if (adjacentPairs.any)
-                    + TBOverlayMantleMainAction(f)
             }
 
             // SBR-3: Remove a Gate, place a Chthonian (Unlimited, 0-Cost, anytime during turn like GC Devolve)
@@ -854,29 +879,44 @@ object TBExpansion extends Expansion {
             Force(TBOverlayMantleAreasAction(self, r1, r2, chosen :+ r, remaining.but(r)))
 
         case TBOverlayMantleDoneAction(self, r1, r2, chosen) =>
-            Force(TBOverlayMantleTransferGateAction(self, r1, r2, chosen))
+            Force(TBOverlayMantlePickTransferAction(self, r1, r2, chosen))
 
-        case TBOverlayMantleTransferGateAction(self, r1, r2, chosen) =>
-            // Choose which of the 2 gates (+ its Cultist) transfers to the Mantle
-            Ask(self)
-                .add(TBOverlayMantleTransferAction(self, r1, chosen))
-                .add(TBOverlayMantleTransferAction(self, r2, chosen))
+        case TBOverlayMantlePickTransferAction(self, r1, r2, chosen) =>
+            val gatedAreas = $(r1, r2).%(self.gates.has(_))
+            if (gatedAreas.num == 1)
+                Force(TBOverlayMantleTransferAction(self, gatedAreas.head, chosen))
+            else {
+                implicit val asking = Asking(self)
+                gatedAreas.foreach { r =>
+                    + TBOverlayMantleTransferAction(self, r, chosen)
+                }
+                asking
+            }
 
-        case TBOverlayMantleTransferAction(self, gateRegion, chosen) =>
-            // Set Mantle in play
+        case TBOverlayMantleTransferAction(self, source, chosen) =>
             game.tbMantleInPlay = true
             game.tbMantleAreas = chosen
-            // Transfer the gate to the Mantle
-            self.gates = self.gates.but(gateRegion) :+ TB.mantle
-            game.gates = game.gates.but(gateRegion) :+ TB.mantle
-            // Move the Cultist that was on-gate to the Mantle
-            val cultistOnGate = self.at(gateRegion).%(u => u.onGate && u.uclass.utype == Cultist).headOption
-            cultistOnGate.foreach { u =>
-                u.region = TB.mantle
-                u.onGate = true
+            // Remove gate from source area
+            self.gates = self.gates.but(source)
+            game.gates = game.gates.but(source)
+            // Transfer gate to the Mantle
+            self.gates :+= TB.mantle
+            game.gates :+= TB.mantle
+            // Move the acolyte from the source gate to the Mantle
+            val gateKeeper = self.at(source).%(u => u.onGate && u.uclass.utype == Cultist).headOption
+            gateKeeper match {
+                case Some(u) =>
+                    u.region = TB.mantle
+                    u.onGate = true
+                case None =>
+                    val poolCultist = self.pool.%(_.uclass.utype == Cultist).headOption
+                    poolCultist.foreach { u =>
+                        self.place(u.uclass, TB.mantle)
+                        self.at(TB.mantle).%(_.uclass.utype == Cultist).last.onGate = true
+                    }
             }
             self.log("Overlaid", TB.mantle, "on", chosen.mkString(", "))
-            self.log("Transferred Gate and Cultist from", gateRegion, "to", TB.mantle)
+            self.log("Transferred Gate from", source, "to", TB.mantle)
             self.satisfy(OverlayMantleReq, "Overlay the Mantle")
             EndAction(self)
 
@@ -919,6 +959,8 @@ object TBExpansion extends Expansion {
             self.place(Chthonian, dest)
             self.log("Placed", Chthonian.styled(TB), "in", dest)
             self.satisfy(RemoveGatePlaceChthonianReq, "Remove a Gate, place a Chthonian")
+            self.commands = self.commands.%!(_.isInstanceOf[TBRemoveGatePlan])
+            self.plans = self.plans.%!(_.isInstanceOf[TBRemoveGatePlan])
             then
 
         // ====================================================================

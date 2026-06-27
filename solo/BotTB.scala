@@ -137,10 +137,10 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 150  -> "add mantle area"
                 case TBOverlayMantleDoneAction(f, _, _, _) =>
                     true                                         |=> 300  -> "confirm mantle overlay"
-                case TBOverlayMantleTransferGateAction(f, _, _, _) =>
+                case TBOverlayMantlePickTransferAction(f, _, _, _) =>
                     true                                         |=> 100  -> "pick gate to transfer"
                 case TBOverlayMantleTransferAction(f, _, _) =>
-                    true                                         |=> 200  -> "transfer gate commit"
+                    true                                         |=> 200  -> "transfer gate to mantle"
 
                 // SBR-3: Remove Gate, Place Chthonian (end-of-Action-Phase prompt)
                 case TBRemoveGatePlaceChthonianPromptAction(f, _) =>
