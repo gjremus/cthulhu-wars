@@ -2073,6 +2073,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Bubastis Moon Gate: control cannot be seized/lost per the Moon Tile rule
                 // (source/bubastis.txt line 108) + FAQ #19 ("Bubastis' Moon Gate is inherent
                 // and always present"). Skip the abandon-on-no-onGate-unit check for BB.moon.
+                // TB Mantle Gate: normal gate — can be lost if no onGate unit is present.
                 if (!(f == BB && r == BB.moon) && f.at(r).%(_.onGate).none) {
                     f.gates :-= r
                     f.log("lost control of the gate in", r)
@@ -2413,7 +2414,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // Sin-paid Awaken repeat can offer a DIFFERENT GOO than the one just awakened
         // (downstream AwakenAction already skips the Power debit under the guard).
         f.pool.goos.factionGOOs./(_.uclass).distinct.reverse.foreach { uc =>
-            areas.nex.%(r => dcTenebrosumGuard || f.affords(f.awakenCost(uc, r).|(999))(r)).some.foreach { l =>
+            val awakenAreas = areas.nex ++ (f == TB && tbMantleInPlay).??($(TB.mantle))
+            awakenAreas.%(r => dcTenebrosumGuard || f.affords(f.awakenCost(uc, r).|(999))(r)).some.foreach { l =>
                 + AwakenMainAction(f, uc, l)
             }
         }
@@ -4750,7 +4752,19 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // so it doesn't trigger CG via the snapshot delta. Register it as a CG edge case.
             if (factions.has(FB))
                 fbCyclopeanGazeActionRegions :+= r
-            EndAction(self)
+            // TB: immediately prompt Mantle overlay if 2 adjacent gates now exist
+            if (self == TB && TB.needs(OverlayMantleReq) && !tbMantleInPlay) {
+                val ownGates = TB.gates
+                val adjacentPairs = ownGates./~(r1 =>
+                    ownGates.%(r2 => r1 != r2 && board.connected(r1).has(r2))./(r2 => (r1, r2)))
+                    .map { case (a, b) => if (a.hashCode <= b.hashCode) (a, b) else (b, a) }.distinct
+                if (adjacentPairs.any)
+                    Force(TBOverlayMantleMainAction(TB))
+                else
+                    EndAction(self)
+            }
+            else
+                EndAction(self)
 
         // RECRUIT
         case RecruitMainAction(self, uc, l) =>
