@@ -1569,13 +1569,13 @@ case class Bot3(faction : Faction) {
                         enemyCults >= 1 |=> 500 -> "agony sting enemy cultists"
                         true |=> 100 -> "agony sting ocean"
 
-                    // ── Tsunami / Agony Sting cultist move (response) ───────
-                    case TsunamiMoveCultistAction(_, u, dest, _, _) =>
+                    // ── Forced cultist move (Tsunami / Agony Sting response) ───────
+                    case ForcedCultistMoveAction(_, u, dest, _, _) =>
                         // Cultist owner picks where forced cultist goes
-                        self.gates.has(dest) |=> 500 -> "tsunami: move to own gate"
-                        self.at(dest).any |=> 300 -> "tsunami: move near own units"
-                        self.enemies.exists(_.gates.has(dest)) |=> -200 -> "tsunami: avoid enemy gate"
-                        true |=> 100 -> "tsunami move"
+                        self.gates.has(dest) |=> 500 -> "forced move: move to own gate"
+                        self.at(dest).any |=> 300 -> "forced move: move near own units"
+                        self.enemies.exists(_.gates.has(dest)) |=> -200 -> "forced move: avoid enemy gate"
+                        true |=> 100 -> "forced move"
 
                     // ── Innsmouth Look (Doom phase SB) ──────────────────────
                     case InnsmouthLookChooseAction(_, u, _) =>

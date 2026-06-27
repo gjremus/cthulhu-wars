@@ -253,14 +253,14 @@ case class GhatanotoaSBRPayAction(self : Faction) extends OptionFactionAction(im
 
 // Azathoth IGOO: Nuclear Chaos spellbook action
 case class NuclearChaosMainAction(self : Faction) extends OptionFactionAction(implicit g => "Nuclear Chaos".styled("nt") + " (Cost 0)") with MainQuestion
-case class NuclearChaosRollAction(self : Faction, rolls : $[Offer]) extends ForcedAction
-case class NuclearChaosAdjustAction(self : Faction, rolls : $[Offer], adjust : Int) extends BaseFactionAction(implicit g => "Nuclear Chaos".styled("nt"), implicit g => {
-    val myRoll = rolls.%(_.f == self).head.n + adjust
+case class NuclearChaosRollAction(self : Faction, rolls : Map[Faction, Int]) extends ForcedAction
+case class NuclearChaosAdjustAction(self : Faction, rolls : Map[Faction, Int], adjust : Int) extends BaseFactionAction(implicit g => "Nuclear Chaos".styled("nt"), implicit g => {
+    val myRoll = rolls.getOrElse(self, 0) + adjust
     s"Adjust to $myRoll (" + (if (adjust > 0) "+1" else "-1") + ")"
 }) {
     override def question(implicit game : Game) = self.full + " — " + "Nuclear Chaos".styled("nt") + " — adjust your roll?"
 }
-case class NuclearChaosKeepAction(self : Faction, rolls : $[Offer]) extends BaseFactionAction(implicit g => "Nuclear Chaos".styled("nt"), implicit g => "Keep roll as-is") {
+case class NuclearChaosKeepAction(self : Faction, rolls : Map[Faction, Int]) extends BaseFactionAction(implicit g => "Nuclear Chaos".styled("nt"), implicit g => "Keep roll as-is") {
     override def question(implicit game : Game) = self.full + " — " + "Nuclear Chaos".styled("nt") + " — adjust your roll?"
 }
 
@@ -290,7 +290,7 @@ case class AzathothAwakenMainAction(self : Faction) extends OptionFactionAction(
     "</div>"
 }) with MainQuestion with Soft
 case class AzathothAwakenCommitAction(self : Faction, powerCost : Int, gateRegion : Region) extends ForcedAction
-case class AzathothEnemyChoiceAction(self : Faction, face : Int, remaining : $[Faction], choices : $[Offer]) extends ForcedAction
+case class AzathothEnemyChoiceAction(self : Faction, face : Int, remaining : $[Faction], choices : Map[Faction, Int]) extends ForcedAction
 case class AzathothEnemyChooseAction(self : Faction, face : Int, chooser : Faction) extends BaseFactionAction(implicit g => "Azathoth".styled("nt") + " Awakening", implicit g => {
     val qm = Overlays.imageSource("question-mark")
     val p = s""""Azathoth", false""".replace('"'.toString, "&quot;")
@@ -301,7 +301,7 @@ case class AzathothEnemyChooseAction(self : Faction, face : Int, chooser : Facti
 }) {
     override def question(implicit game : Game) = chooser.full + " — " + "Azathoth".styled("nt") + " Awakening — choose die face"
 }
-case class AzathothResolveAction(self : Faction, choices : $[Offer], gateRegion : Region) extends ForcedAction
+case class AzathothResolveAction(self : Faction, choices : Map[Faction, Int], gateRegion : Region) extends ForcedAction
 
 // Ghatanothoa IGOO: Mummify action
 case class GhatanotoaMummifyAction(self : Faction) extends OptionFactionAction(implicit g => "Mummify".styled("nt") + " " + "(" + "1 Power".styled("power") + ")") with MainQuestion
@@ -313,7 +313,7 @@ case class PlaceSpinneretMainAction(self : Faction) extends OptionFactionAction(
 // The Innsmouth Look: forced Acolyte removal at Doom Phase (player chooses which)
 case class InnsmouthLookRemoveAction(self : Faction, then : Action) extends ForcedAction
 case class InnsmouthLookDoomDoneAction(self : Faction) extends ForcedAction
-case class InnsmouthLookChooseAction(self : Faction, u : UnitFigure, then : Action) extends BaseFactionAction(implicit g => "The Innsmouth Look".styled("nt"), implicit g => "Remove " + Acolyte.styled(self) + (if (u.onGate) " (on gate)" else "") + " from " + u.region) {
+case class InnsmouthLookChooseAction(self : Faction, u : UnitRef, then : Action) extends BaseFactionAction(implicit g => "The Innsmouth Look".styled("nt"), implicit g => g.unitOpt(u)./(uf => "Remove " + Acolyte.styled(self) + (if (uf.onGate) " (on gate)" else "") + " from " + uf.region).|("Remove " + Acolyte.styled(self))) {
     override def question(implicit game : Game) = self.full + " — " + "The Innsmouth Look".styled("nt") + " — choose Acolyte to remove permanently"
 }
 
@@ -345,8 +345,8 @@ case class DoomSarnathChooseOption(self : Faction, option : Int, then : Action) 
 }
 case class DoomSarnathChooseFactionAction(self : Faction, option : Int, target : Faction, then : Action) extends BaseFactionAction(
     implicit g => "Doom that Came to Sarnath".styled("nt"), target.full)
-case class DoomSarnathEliminateUnit(self : Faction, owner : Faction, u : UnitFigure, then : Action) extends BaseFactionAction(
-    implicit g => "Choose a " + owner.full + " unit to eliminate", implicit g => u.uclass.styled(owner) + " in " + u.region) {
+case class DoomSarnathEliminateUnit(self : Faction, owner : Faction, u : UnitRef, then : Action) extends BaseFactionAction(
+    implicit g => "Choose a " + owner.full + " unit to eliminate", implicit g => g.unitOpt(u)./(uf => uf.uclass.styled(owner) + " in " + uf.region).|(u.uclass.styled(owner))) {
     override def question(implicit game : Game) = self.full + " — " + "Choose a ".styled("nt") + owner.full + " cultist or monster to eliminate"
 }
 case class DoomSarnathDiscardES(self : Faction, owner : Faction, index : Int, then : Action) extends BaseFactionAction(
@@ -354,11 +354,11 @@ case class DoomSarnathDiscardES(self : Faction, owner : Faction, index : Int, th
     override def question(implicit game : Game) = self.full + " — " + "Choose an elder sign of ".styled("nt") + owner.full + " to discard"
 }
 
-// Tsunami/Agony Sting: per-owner cultist movement choice
-case class TsunamiMoveCultistAction(self : Faction, u : UnitFigure, dest : Region, remaining : $[UnitFigure], then : Action) extends BaseFactionAction(implicit g => "Tsunami".styled("nt") + " — move " + u.uclass.styled(self), dest) {
-    override def question(implicit game : Game) = self.full + " — " + "Tsunami".styled("nt") + " — choose destination for " + u.uclass.styled(self)
+// Forced cultist move: shared between Tsunami and Agony Sting
+case class ForcedCultistMoveAction(self : Faction, u : UnitRef, dest : Region, remaining : $[UnitRef], then : Action) extends BaseFactionAction(implicit g => "Forced Move".styled("nt") + " — move " + (if (u != null) u.uclass.styled(self) else "unit".styled(self)), dest) {
+    override def question(implicit game : Game) = self.full + " — " + "Forced Move".styled("nt") + " — choose destination for " + (if (u != null) u.uclass.styled(self) else "unit".styled(self))
 }
-case class TsunamiProcessAction(self : Faction, sourceRegion : Region, remaining : $[(Faction, $[UnitFigure])], oceanDest : Boolean, then : Action) extends ForcedAction
+case class ForcedCultistMoveProcessAction(self : Faction, sourceRegion : Region, remaining : $[(Faction, $[UnitRef])], oceanDest : Boolean, then : Action) extends ForcedAction
 
 // Yig: Messenger of Yig — doom phase donation choice
 case class MessengerOfYigDonateAction(self : Faction, yigOwner : Faction) extends BaseFactionAction(
@@ -457,13 +457,12 @@ object IGOOsExpansion extends Expansion {
 
         // Execration of Mu (Ghatanothoa IGOO spellbook): Mummify is instant/ongoing
         // Any enemy Cultist sharing Area with Ghatanothoa is immediately mummified
-        // Lunacy (BB): Earth Cats are targetable as Cultists by enemy spellbooks.
         factions.foreach { f =>
             if (f.has(ExecrationOfMu) && !f.oncePerGame.has(ExecrationOfMu) && f.has(GhatanotoaIGOO)) {
                 val ghat = f.allInPlay.%(_.uclass == GhatanotoaIGOO)
                 if (ghat.any && !ElderThingMindControl.suppresses(ghat.head)) {
                     val r = ghat.head.region
-                    f.enemies./~(_.at(r).%(_.targetableAsCultistByEnemy)).foreach { u =>
+                    f.enemies./~(_.at(r).%(_.uclass.utype == Cultist)).foreach { u =>
                         if (!game.mummifiedCultists.has(u.ref)) {
                             game.mummifiedCultists :+= u.ref
                             log("Execration of Mu".styled("nt") + ":", u.uclass.styled(u.faction), "auto-mummified in", r)
@@ -523,16 +522,9 @@ object IGOOsExpansion extends Expansion {
         }
 
         // Azathoth: "Every Faction must have a GOO in play"
-        // BB Fix 85, v2.4.31 — For BB, Bastet (utype==ElderGod) counts as BB's GOO for
-        // the Nuclear Chaos activation gate. `allInPlay.goos` uses `isGOO` which already
-        // includes ElderGod, so Bastet on the Moon (inPlay) satisfies this gate. Make
-        // BB's gate explicit for clarity and defense-in-depth against future regressions.
         factions.foreach { f =>
             if (f.has(AzathothIGOO) && f.upgrades.has(NuclearChaos).not) {
-                if (factions.forall(e =>
-                    if (e == BB) e.allInPlay.%(u => u.uclass.isGOO || u.uclass == Bastet).any
-                    else e.allInPlay.goos.any
-                )) {
+                if (factions.forall(e => e.allInPlay.goos.any)) {
                     f.upgrades :+= NuclearChaos
                     f.log("gained", NuclearChaos.styled(f), "for", AzathothIGOO.styled(f))
                 }
@@ -877,23 +869,12 @@ object IGOOsExpansion extends Expansion {
             self.power -= 1
             self.payTax(r)
 
-            // Parallel-guide Fix 40: forced enemy-cultist relocation must NOT trigger
-            // FB Cyclopean Gaze.
-            game.fbSuppressCGForPlacement = true
-            // BB Fix 87, v2.4.31 — extend cultist filter to include EarthCats (BB's
-            // Cultist-equivalent). Bracket the region writes with byatisInForgetfulness
-            // so the Moon Guard exception chain permits cultists/EarthCats moving onto
-            // the Moon when Byatis is on the Moon.
-            val isMoonDest = d == BB.moon
-            if (isMoonDest) game.byatisInForgetfulness = true
             self.enemies.foreach { f =>
-                f.at(r).%(u => u.uclass.utype == Cultist || u.uclass == EarthCat).foreach { u =>
+                f.at(r).cultists.foreach { u =>
                     u.region = d
                     u.onGate = false
                 }
             }
-            if (isMoonDest) game.byatisInForgetfulness = false
-            game.fbSuppressCGForPlacement = false
 
             log(Byatis.styled(self), "used", GodOfForgetfulness.name.styled("nt"), "to move all enemy cultist from", r, "to", d)
             EndAction(self)
@@ -903,22 +884,13 @@ object IGOOsExpansion extends Expansion {
             Ask(self).each(l)(r => FilthAction(self, r)).cancel
 
         case FilthAction(self, r) =>
-            // BB Fix 84, v2.4.31 — Defensive guard: Filth may never be placed on the Moon.
-            // The upstream destination list (areas.nex) already excludes Moon, but this
-            // explicit guard prevents any future regression from leaking Moon through.
-            if (r == BB.moon) {
-                self.log("Filth blocked: cannot be placed on", BB.moon)
-                EndAction(self)
-            }
-            else {
-                self.power -= 1
-                self.payTax(r)
+            self.power -= 1
+            self.payTax(r)
 
-                self.place(Filth, r)
-                log(Abhoth.styled(self), "placed", Filth.styled(self), "in", r)
+            self.place(Filth, r)
+            log(Abhoth.styled(self), "placed", Filth.styled(self), "in", r)
 
-                EndAction(self)
-            }
+            EndAction(self)
 
         // DAOLOTH — Round 8 Bug 49 (FB CG ordering): when Daoloth moves to a new region
         // and the owner has Interdimensional, place the gate IMMEDIATELY here in the
@@ -967,11 +939,14 @@ object IGOOsExpansion extends Expansion {
             val targetFaction = target.faction
             val region = target.region
 
-            // Eliminate the replaced unit (exempt from battle forces first so it's
-            // removed cleanly without double-processing in EliminatePhase)
+            // Eliminate the replaced unit (use battle.eliminate so it's added to
+            // the `eliminated` list — that makes the unit available to Velvet Fan
+            // capture per "killed or eliminated enemy" card rule).
             val targetFigure = game.unit(target)
-            game.battle.foreach(_.exempt(targetFigure))
-            game.eliminate(targetFigure)
+            game.battle match {
+                case Some(b) => b.eliminate(targetFigure)
+                case None    => game.eliminate(targetFigure)
+            }
 
             // Place Y'Golonac in the target's region under the new owner
             val newYg = new UnitFigure(targetFaction, Ygolonac, 1, region)
@@ -1052,34 +1027,16 @@ object IGOOsExpansion extends Expansion {
             Force(DoomAction(self))
 
         // Father Dagon: Tsunami
-        // BB Fix 88, v2.4.31 — Moon counts as a "Land Area" per the Moon Lunacy
-        // rules and may be selected as the Tsunami source. The Moon is adjacent
-        // to every map region (Fix 52), so any Ocean area is a valid destination
-        // when Moon is the source. Cultists/EarthCats on the Moon get swept to
-        // a water area (the destination is a water area, NOT the Moon).
         case FatherDagonTsunamiMainAction(self) =>
             val landNearOcean = areas.%(r => r.glyph != Ocean && game.board.connected(r).exists(_.glyph == Ocean))
-            val sources =
-                if (factions.has(BB)) landNearOcean :+ BB.moon
-                else landNearOcean
-            Ask(self).each(sources)(r => FatherDagonTsunamiTargetAction(self, r)).cancel
+            Ask(self).each(landNearOcean)(r => FatherDagonTsunamiTargetAction(self, r)).cancel
 
         case FatherDagonTsunamiTargetAction(self, r) =>
             self.power -= 1
             // Each faction's cultists moved by their owner to adjacent ocean areas
-            // BB Fix 88, v2.4.31 — Tsunami also sweeps EarthCats (BB's Cultist-equivalent),
-            // BUT only when held by a non-BB faction. BB's own EarthCats are NOT swept by
-            // Tsunami (spec qualifier: "if held by a non BB faction").
-            val perFaction = factions./{ f =>
-                val swept =
-                    if (f == BB)
-                        f.at(r).%(_.uclass.utype == Cultist)
-                    else
-                        f.at(r).%(u => u.uclass.utype == Cultist || u.uclass == EarthCat)
-                (f, swept)
-            }.%{ case (_, units) => units.any }
+            val perFaction = factions./(f => (f, f.at(r).%(_.uclass.utype == Cultist)./(_.ref))).%{ case (_, units) => units.any }
             self.log("Tsunami".styled("nt") + ": all Cultists in", r, "must move to adjacent Ocean")
-            TsunamiProcessAction(self, r, perFaction, oceanDest = true, EndAction(self))
+            ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = true, EndAction(self))
 
         // Mother Hydra: Agony Sting
         case MotherHydraAgonyStingMainAction(self) =>
@@ -1089,49 +1046,51 @@ object IGOOsExpansion extends Expansion {
         case MotherHydraAgonyStingTargetAction(self, r) =>
             self.power -= 1
             // Each enemy's cultists moved by their owner to adjacent land areas (owner's cultists immune)
-            val perFaction = self.enemies./(f => (f, f.at(r).%(_.uclass.utype == Cultist))).%{ case (_, units) => units.any }
+            val perFaction = self.enemies./(f => (f, f.at(r).%(_.uclass.utype == Cultist)./(_.ref))).%{ case (_, units) => units.any }
             self.log("The Agony Sting".styled("nt") + ": all enemy Cultists in", r, "must move to adjacent Land")
-            TsunamiProcessAction(self, r, perFaction, oceanDest = false, EndAction(self))
+            ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = false, EndAction(self))
 
-        // Tsunami/Agony Sting: process per-faction cultist movement
-        case TsunamiProcessAction(self, sourceRegion, remaining, oceanDest, then) =>
+        // Forced cultist move: shared between Tsunami and Agony Sting
+        case ForcedCultistMoveProcessAction(self, sourceRegion, remaining, oceanDest, then) =>
             if (remaining.none) {
                 Force(then)
             } else {
                 val (faction, cultists) = remaining.head
-                // BB Fix 88, v2.4.31 — when Tsunami source is the Moon, the Moon is
-                // adjacent to every map region (Fix 52 Lunacy semantics), so all Ocean
-                // areas are valid destinations. The destination remains a water area
-                // (never the Moon itself).
                 val adj = if (oceanDest)
-                    (if (sourceRegion == BB.moon) areas.%(_.glyph == Ocean)
-                     else game.board.connected(sourceRegion).%(_.glyph == Ocean))
+                    game.board.connected(sourceRegion).%(_.glyph == Ocean)
                 else
                     game.board.connected(sourceRegion).%(_.glyph != Ocean)
                 if (adj.none || cultists.none) {
                     // No valid destination — skip
-                    TsunamiProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
+                    ForcedCultistMoveProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
                 } else if (adj.num == 1) {
                     // Only one option — auto-move
-                    cultists.foreach { u =>
-                        u.region = adj.head
-                        u.onGate = false
+                    cultists.foreach { ur =>
+                        game.unitOpt(ur).foreach { u =>
+                            u.region = adj.head
+                            u.onGate = false
+                        }
                     }
-                    faction.log("moved", cultists.num, "cultist".s(cultists.num), "to", adj.head)
-                    TsunamiProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
+                    val powerName = if (oceanDest) "Tsunami" else "The Agony Sting"
+                    faction.log(cultists.num, "cultist".s(cultists.num), "forcibly moved by", powerName.styled("nt"), "to", adj.head)
+                    ForcedCultistMoveProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
                 } else {
                     // Multiple destinations — faction chooses for each cultist
                     val u = cultists.head
                     val rest = cultists.tail
                     val nextRemaining = if (rest.any) (faction, rest) +: remaining.tail else remaining.tail
-                    Ask(faction).each(adj)(dest => TsunamiMoveCultistAction(faction, u, dest, rest, TsunamiProcessAction(self, sourceRegion, nextRemaining, oceanDest, then)))
+                    Ask(faction).each(adj)(dest => ForcedCultistMoveAction(faction, u, dest, rest, ForcedCultistMoveProcessAction(self, sourceRegion, nextRemaining, oceanDest, then)))
                 }
             }
 
-        case TsunamiMoveCultistAction(self, u, dest, remaining, then) =>
-            u.region = dest
-            u.onGate = false
-            self.log("moved", u.uclass.styled(self), "to", dest)
+        case ForcedCultistMoveAction(self, u, dest, remaining, then) =>
+            if (u != null) {
+                game.unitOpt(u).foreach { uf =>
+                    uf.region = dest
+                    uf.onGate = false
+                }
+                self.log(u.uclass.styled(self), "forcibly moved to", dest)
+            }
             Force(then)
 
         // Ghatanothoa IGOO: Mummify
@@ -1139,8 +1098,7 @@ object IGOOsExpansion extends Expansion {
             self.power -= 1
             val ghat = self.allInPlay.%(_.uclass == GhatanotoaIGOO).head
             val r = ghat.region
-            // Lunacy (BB): Earth Cats are targetable as Cultists by enemy spellbooks.
-            val targets = self.enemies./~(_.at(r).%(_.targetableAsCultistByEnemy).%(u => !game.mummifiedCultists.has(u.ref)))
+            val targets = self.enemies./~(_.at(r).%(_.uclass.utype == Cultist).%(u => !game.mummifiedCultists.has(u.ref)))
             targets.foreach { u =>
                 game.mummifiedCultists :+= u.ref
             }
@@ -1152,17 +1110,10 @@ object IGOOsExpansion extends Expansion {
             self.power -= 1
             val an = self.allInPlay.%(_.uclass == AtlachNacha).head
             val r = an.region
-            // BB Moon Guard for tokens (Fix 50, v2.4.18): the Spinneret menu
-            // entry is gated by `r.onMap` in Game.scala (which excludes Moon),
-            // so the user can never reach this handler with r == BB.moon.
-            // Defense-in-depth guard added anyway in case AN ends up on the
-            // Moon via some future code path. Sorry for missing this earlier.
-            if (!game.bbMoonRejectsToken("Spinneret web token", self, r)) {
-                game.webTokens :+= r
-                self.log("Place Spinneret".styled("nt") + ": placed web token in", r, "(" + game.webTokens.num + "/6)")
-                if (game.webTokens.num >= 6) {
-                    self.log("completed", CosmicWeb.styled(self), "for", AtlachNacha.styled(self))
-                }
+            game.webTokens :+= r
+            self.log("Place Spinneret".styled("nt") + ": placed web token in", r, "(" + game.webTokens.num + "/6)")
+            if (game.webTokens.num >= 6) {
+                self.log("completed", CosmicWeb.styled(self), "for", AtlachNacha.styled(self))
             }
             EndAction(self)
 
@@ -1171,7 +1122,7 @@ object IGOOsExpansion extends Expansion {
             val acolytes = self.allInPlay.%(_.uclass == Acolyte)
             if (acolytes.any) {
                 // Distinguish on-gate vs off-gate in the menu
-                Ask(self).each(acolytes)(u => InnsmouthLookChooseAction(self, u, InnsmouthLookDoomDoneAction(self)))
+                Ask(self).each(acolytes)(u => InnsmouthLookChooseAction(self, u.ref, InnsmouthLookDoomDoneAction(self)))
             } else {
                 self.oncePerTurn :+= TheInnsmouthLook
                 Force(DoomAction(self))
@@ -1192,15 +1143,16 @@ object IGOOsExpansion extends Expansion {
         case InnsmouthLookRemoveAction(self, then) =>
             val acolytes = self.allInPlay.%(_.uclass == Acolyte)
             if (acolytes.any) {
-                Ask(self).each(acolytes)(u => InnsmouthLookChooseAction(self, u, then))
+                Ask(self).each(acolytes)(u => InnsmouthLookChooseAction(self, u.ref, then))
             } else {
                 Force(then)
             }
 
         case InnsmouthLookChooseAction(self, u, then) =>
-            self.units = self.units.%(_.ref != u.ref)
+            val removedRegion = game.unitOpt(u)./(_.region.toString).|("|unknown|")
+            self.units = self.units.%(_.ref != u)
             self.power += 6
-            self.log("The Innsmouth Look".styled("nt") + ": removed", Acolyte.styled(self), "from", u.region, "permanently, gained", 6.power)
+            self.log("The Innsmouth Look".styled("nt") + ": removed", Acolyte.styled(self), "from", removedRegion, "permanently, gained", 6.power)
             Force(then)
 
         // Mother Hydra: The Zygote spellbook — place Acolytes from Pool one by one
@@ -1253,11 +1205,11 @@ object IGOOsExpansion extends Expansion {
 
         // ── NUCLEAR CHAOS (Azathoth spellbook) ──
         case NuclearChaosMainAction(self) =>
-            // All players roll 1d6 — stored as $[Offer] so it serializes cleanly
-            val rolls : $[Offer] = factions./(f => Offer(f, (1::2::3::4::5::6).shuffle.first))
-            factions.foreach { f => f.log("rolled a " + rolls.%(_.f == f).head.n + " for", "Nuclear Chaos".styled("nt")) }
+            // All players roll 1d6
+            val rolls = factions.map(f => f -> (1::2::3::4::5::6).shuffle.first).toMap
+            factions.foreach { f => f.log("rolled a " + rolls(f) + " for", "Nuclear Chaos".styled("nt")) }
             // Owner may adjust their roll +/-1
-            val myRoll = rolls.%(_.f == self).head.n
+            val myRoll = rolls(self)
             val canPlus = myRoll < 6
             val canMinus = myRoll > 1
             var ask = Ask(self)
@@ -1267,8 +1219,8 @@ object IGOOsExpansion extends Expansion {
             ask
 
         case NuclearChaosAdjustAction(self, rolls, adjust) =>
-            val adjusted = rolls.%(_.f != self) :+ Offer(self, rolls.%(_.f == self).head.n + adjust)
-            self.log("Nuclear Chaos".styled("nt") + ": adjusted roll to", adjusted.%(_.f == self).head.n)
+            val adjusted = rolls + (self -> (rolls(self) + adjust))
+            self.log("Nuclear Chaos".styled("nt") + ": adjusted roll to", adjusted(self))
             Force(NuclearChaosRollAction(self, adjusted))
 
         case NuclearChaosKeepAction(self, rolls) =>
@@ -1278,20 +1230,20 @@ object IGOOsExpansion extends Expansion {
             // Flip facedown now (after adjust/keep choice resolved)
             if (!self.oncePerGame.has(NuclearChaos))
                 self.oncePerGame :+= NuclearChaos
-            val maxRoll = rolls./(_.n).max
-            val minRoll = rolls./(_.n).min
+            val maxRoll = rolls.values.max
+            val minRoll = rolls.values.min
             // Highest roller(s) gain Power equal to their roll
-            rolls.foreach { o =>
-                if (o.n == maxRoll) {
-                    o.f.power += o.n
-                    o.f.log("Nuclear Chaos".styled("nt") + s": highest roll (${o.n}), gained", o.n.power)
+            rolls.foreach { case (f, roll) =>
+                if (roll == maxRoll) {
+                    f.power += roll
+                    f.log("Nuclear Chaos".styled("nt") + s": highest roll ($roll), gained", roll.power)
                 }
             }
             // Lowest roller(s) gain that many Elder Signs
-            rolls.foreach { o =>
-                if (o.n == minRoll && o.n != maxRoll) {
-                    o.f.takeES(o.n)
-                    o.f.log("Nuclear Chaos".styled("nt") + s": lowest roll (${o.n}), gained", o.n.es)
+            rolls.foreach { case (f, roll) =>
+                if (roll == minRoll && roll != maxRoll) {
+                    f.takeES(roll)
+                    f.log("Nuclear Chaos".styled("nt") + s": lowest roll ($roll), gained", roll.es)
                 }
             }
             EndAction(self)
@@ -1305,7 +1257,7 @@ object IGOOsExpansion extends Expansion {
         case AzathothAwakenCommitAction(self, _, gateRegion) =>
             // Store gate region for later resolve
             game.azathothAwakenGateRegion = |(gateRegion)
-            game.azathothAwakenChoices = $
+            game.azathothAwakenChoices = Map()
             // Roll 1d6+2 for Power cost
             RollD6("Azathoth Awakening — roll for Power cost", roll => {
                 val powerCost = roll + 2
@@ -1313,7 +1265,7 @@ object IGOOsExpansion extends Expansion {
                 self.log("rolled", roll, "+ 2 =", powerCost.power, "to awaken", "Azathoth".styled("nt"))
                 // Start enemy choice loop
                 val enemies = factions.but(self)
-                AzathothEnemyChoiceAction(self, 0, enemies, $)
+                AzathothEnemyChoiceAction(self, 0, enemies, Map())
             })
 
         case AzathothEnemyChoiceAction(self, _, remaining, choices) =>
@@ -1328,30 +1280,30 @@ object IGOOsExpansion extends Expansion {
         case AzathothEnemyChooseAction(self, face, chooser) =>
             // Hidden choice — don't reveal the number yet
             chooser.log("has chosen their dice face")
-            // Accumulate choice in game var as $[Offer] so it serializes cleanly
-            game.azathothAwakenChoices = game.azathothAwakenChoices.%(_.f != chooser) :+ Offer(chooser, face)
+            // Accumulate choice in game var
+            game.azathothAwakenChoices += (chooser -> face)
             // Continue with remaining enemies
             val enemies = factions.but(self)
-            val remaining = enemies.%(f => game.azathothAwakenChoices.%(_.f == f).none)
+            val remaining = enemies.%(f => !game.azathothAwakenChoices.contains(f))
             AzathothEnemyChoiceAction(self, 0, remaining, game.azathothAwakenChoices)
 
         case AzathothResolveAction(self, choices, gateRegion) =>
             // Reveal all choices at once
-            choices.foreach { o =>
-                o.f.log("chose the", o.n, "dice face")
-                o.f.power += o.n
-                o.f.log("gained", o.n.power)
+            choices.foreach { case (f, face) =>
+                f.log("chose the", face, "dice face")
+                f.power += face
+                f.log("gained", face.power)
             }
             // Find lowest roller(s) — they lose 2 Doom
-            val minFace = choices./(_.n).min
-            choices.foreach { o =>
-                if (o.n == minFace) {
-                    o.f.doom = math.max(0, o.f.doom - 2)
-                    o.f.log("had lowest Azathoth vote (" + o.n + "), lost", 2.doom)
+            val minFace = choices.values.min
+            choices.foreach { case (f, face) =>
+                if (face == minFace) {
+                    f.doom = math.max(0, f.doom - 2)
+                    f.log("had lowest Azathoth vote (" + face + "), lost", 2.doom)
                 }
             }
             // Sum all faces = glyph position = combat value
-            val total = choices./(_.n).sum
+            val total = choices.values.sum
             game.azathothGlyphPosition = total
             log("Azathoth".styled("nt"), "glyph placed at", total, "on the Doom track")
 
@@ -1399,16 +1351,7 @@ object IGOOsExpansion extends Expansion {
             bokrugOwner match {
                 case Some(owner) if owner.allInPlay.%(_.uclass == Bokrug).none =>
                     // Bokrug NOT on map — check for valid regions (no enemy units)
-                    // BB Fix 86, v2.4.31 — Moon is a valid candidate when BB is in the
-                    // game (Moon counts as an "Area" for Ghosts of Ib placement). The
-                    // no-enemy-units check still applies; only BB's own units may be on
-                    // the Moon, so only BB itself can ever place Bokrug there.
-                    val baseRegions = areas.nex.%(r => owner.enemies.forall(_.at(r).%(_.uclass.utype != MapUnit).none))
-                    val validRegions =
-                        if (factions.has(BB) && owner.enemies.forall(_.at(BB.moon).%(_.uclass.utype != MapUnit).none))
-                            baseRegions :+ BB.moon
-                        else
-                            baseRegions
+                    val validRegions = areas.nex.%(r => owner.enemies.forall(_.at(r).%(_.uclass.utype != MapUnit).none))
                     if (validRegions.any) {
                         log(Bokrug.styled(owner), "Ghosts of Ib".styled("nt") + ":", owner.full, "must place", Bokrug.styled(owner))
                         Ask(owner).each(validRegions)(r => GhostsOfIbChooseAction(owner, r, then))
@@ -1420,13 +1363,7 @@ object IGOOsExpansion extends Expansion {
 
         case GhostsOfIbChooseAction(self, r, then) =>
             val bokrug = self.pool.one(Bokrug)
-            // BB Fix 86, v2.4.31 — bracket the Moon-bound region write with the
-            // ghostsInPlace transient flag so the Moon Guard exception chain in
-            // Game.scala recognizes Ghosts of Ib placements as legal.
-            val isMoonPlace = r == BB.moon
-            if (isMoonPlace) game.ghostsInPlace = true
             bokrug.region = r
-            if (isMoonPlace) game.ghostsInPlace = false
             self.log("Ghosts of Ib".styled("nt") + ": placed", Bokrug.styled(self), "in", r)
             Force(then)
 
@@ -1461,7 +1398,7 @@ object IGOOsExpansion extends Expansion {
                 // sorcery / deep units (region.onMap == false) cannot be targeted.
                 val units = self.units.%(u => u.region.onMap && (u.uclass.utype == Monster || u.uclass.utype == Cultist))
                 val regionSorted = units.sortBy(u => u.region.name)
-                Ask(target).each(regionSorted)(u => DoomSarnathEliminateUnit(target, self, u, then))
+                Ask(target).each(regionSorted)(u => DoomSarnathEliminateUnit(target, self, u.ref, then))
             } else {
                 // Enemy chooses one of Bokrug owner's elder signs (face-down)
                 var ask = Ask(target)
@@ -1472,8 +1409,9 @@ object IGOOsExpansion extends Expansion {
             }
 
         case DoomSarnathEliminateUnit(self, owner, u, then) =>
-            game.eliminate(u)
-            self.log("Doom that Came to Sarnath".styled("nt") + ":", self.full, "eliminated", u.uclass.styled(owner), "of", owner.full, "in", u.region)
+            val elimRegion = game.unitOpt(u)./(_.region.toString).|("?")
+            game.unitOpt(u).foreach(game.eliminate)
+            self.log("Doom that Came to Sarnath".styled("nt") + ":", self.full, "eliminated", u.uclass.styled(owner), "of", owner.full, "in", elimRegion)
             Force(then)
 
         case DoomSarnathDiscardES(self, owner, index, then) =>
