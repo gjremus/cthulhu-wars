@@ -4431,12 +4431,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     destinations = destinations :+ BB.moon
             }
 
-            // TB: Mantle adjacency — any faction's units can move to/from the
-            // Mantle via tbMantleAreas (always) and Tentacle areas (with Subterrane SB).
+            // TB: Mantle adjacency — only TB units may move TO the Mantle;
+            // non-TB units already on the Mantle (via Ensnare) can move away.
             if (tbMantleInPlay) {
-                val mantleEdges = TBExpansion.tbMantleEdges(from)
-                if (mantleEdges.any)
-                    destinations = (destinations ++ mantleEdges).distinct
+                if (self == TB) {
+                    val mantleEdges = TBExpansion.tbMantleEdges(from)
+                    if (mantleEdges.any)
+                        destinations = (destinations ++ mantleEdges).distinct
+                } else if (from.is[MantleHold]) {
+                    val mantleEdges = TBExpansion.tbMantleEdges(from)
+                    if (mantleEdges.any)
+                        destinations = (destinations ++ mantleEdges).distinct
+                }
             }
 
             val arriving = self.units.%(_.region.glyph.onMap).tag(Moved)./(_.region).distinct
@@ -4512,6 +4518,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // directly in FactionBB.scala, not via MoveAction.
         case MoveAction(self, u, o, r, cost) if self != BB && r == BB.moon =>
             self.log("move of", u, "to", BB.moon, "blocked: only BB units may enter the Moon (Catnapping is the sole exception)")
+            EndAction(self)
+
+        case MoveAction(self, u, o, r, cost) if self != TB && r.is[MantleHold] =>
+            self.log("move of", u, "to", TB.mantle, "blocked: only TB units may enter the Mantle")
             EndAction(self)
 
         case MoveAction(self, u, o, r, cost) =>

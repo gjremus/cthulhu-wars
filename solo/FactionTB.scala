@@ -293,7 +293,7 @@ case class TBOverlayMantlePickTransferAction(self : Faction, r1 : Region, r2 : R
     override def question(implicit game : Game) = "Which Gate to transfer to " + TB.mantle + "?"
 }
 case class TBOverlayMantleTransferAction(self : Faction, source : Region, chosen : $[Region])
-    extends BaseFactionAction("Transfer Gate from", source) with Soft
+    extends BaseFactionAction("Transfer Gate from", source)
 // -- SBR-3: REMOVE GATE, PLACE CHTHONIAN (§1.9 / §3.12.3 / §4.5) -------------
 // Anytime during TB's turn (unlimited, 0-cost, like GC Devolve). Also fires at
 // end-of-Action-Phase as a fallback prompt. `then` carries the continuation.
