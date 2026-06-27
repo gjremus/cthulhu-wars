@@ -535,12 +535,7 @@ object CthulhuWarsSolo {
             }
 
             statuses.lazyZip(setup.seating).foreach { (s, f) =>
-                // s.as[html.Element].get.style.backgroundImage = "url(info/" + f.style + "-header.png)"
-                // Faceless Blight (FBE): its "info:fbe-background" asset is the DC
-                // placeholder; recolor to FBE green via Overlays.fbeTintedBackground
-                // (tints the BACKGROUND IMAGE only — see fbeTintedBackground comment).
-                // Other factions use their real background art unchanged.
-                val bgUrl = if (f == FBE) Overlays.fbeTintedBackground() else Overlays.imageSource("info:" + f.style + "-background")
+                val bgUrl = Overlays.imageSource("info:" + f.style + "-background")
                 s.as[html.Element].get.style.backgroundImage = "url(" + bgUrl + ")"
                 s.as[html.Element].get.style.backgroundSize = "cover"
             }
@@ -3480,25 +3475,27 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     }
                     val moonFigs = displayGame.factions./~(ff => ff.at(BB.moon))
                     val moonCount = moonFigs.num
-                    // Encode each unit as "assetId|Display Name (FAC)" and join with ";".
-                    // Strip any chars that would break the JS string literal we splice into
-                    // the onclick attribute.
                     def safe(s : String) : String = s.replace("\"", "").replace("'", "").replace(";", "").replace("|", "")
+                    def hpTag(u : UnitFigure) : String = u.health match {
+                        case Killed                          => "killed"
+                        case DoubleHP(Killed, Killed)        => "killed"
+                        case DoubleHP(Killed, _)             => "killed"
+                        case DoubleHP(_, Killed)             => "killed"
+                        case Pained                          => "pained"
+                        case DoubleHP(Pained, _)             => "pained"
+                        case DoubleHP(_, Pained)             => "pained"
+                        case _                               => "alive"
+                    }
                     val moonList = moonFigs./(u => {
                         val asset   = safe(moonSpriteAssetId(u))
                         val display = safe(u.uclass.name) + " (" + safe(u.faction.short) + ")"
-                        // BB Moon sizing (mirror of BB v2.4.x): pass each unit's ACTUAL
-                        // on-map sprite height (the same DrawRect.height the canvas map
-                        // renders) so the Moon overlay can size each sprite proportionally,
-                        // exactly like the regular map — instead of a flat 14%-tall sprite
-                        // that made a Bastet the same size as an Earth Cat. Reuse
-                        // DrawItem.proto (the canonical per-class size table) so the Moon
-                        // sizing never drifts from the map sizing.
+                        val hp      = hpTag(u)
                         val onMapH  = {
                             val ph = DrawItem(BB.moon, u.faction, u.uclass, u.health, u.state, 0, 0).proto
                             if (ph != null) ph.height else 70
                         }
-                        asset + "|" + display + "|" + onMapH
+                        val fShort  = safe(u.faction.short)
+                        asset + "|" + display + "|" + hp + "|" + onMapH + "|" + fShort
                     }).mkString(";")
                     // BB Fix 31 (v2.4.8): if the HUD button is missing for any
                     // reason (orphaned by a map-small clear), recreate it now so
@@ -3517,26 +3514,32 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 if (setup.seating.has(TB)) {
                     implicit val g : Game = displayGame
                     val mantleInPlay = displayGame.tbMantleInPlay
-                    val mantleFigs : $[UnitFigure] = if (mantleInPlay) TB.at(TB.mantle) else $
-                    val mantleCount = mantleFigs.num
-                    def mantleSpriteAssetId(u : UnitFigure) : String = u.uclass match {
-                        case Cadavolyte        => "tb-cadavolyte"
-                        case Tentacle          => "tb-tentacle"
-                        case Chthonian         => "tb-chthonian"
-                        case ShuddeMellHead    => "tb-shudde-mell-head"
-                        case ShuddeMellSegment => "tb-shudde-mell-segment"
-                        case _                 => "tb-cadavolyte"
+                    val mantleFigs : $[UnitFigure] = if (mantleInPlay) displayGame.factions./~(ff => ff.at(TB.mantle)) else $
+                    val mantleGatePresent = TB.gates.has(TB.mantle)
+                    val mantleCount = mantleFigs.num + (if (mantleGatePresent) 1 else 0)
+                    def mantleSpriteAssetId(u : UnitFigure) : String = {
+                        val f = u.faction
+                        u.uclass match {
+                            case Cadavolyte        => "tb-cadavolyte"
+                            case Tentacle          => "tb-tentacle"
+                            case Chthonian         => "tb-chthonian"
+                            case ShuddeMellHead    => "tb-shudde-mell-head"
+                            case ShuddeMellSegment => "tb-shudde-mell-segment"
+                            case other             => f.short.toLowerCase + "-" + other.name.toLowerCase.replace(" ", "-").replace("'", "")
+                        }
                     }
                     def safe(s : String) : String = s.replace("\"", "").replace("'", "").replace(";", "").replace("|", "")
-                    val mantleList = mantleFigs./(u => {
+                    val gateEntry = if (mantleGatePresent) $("gate|Gate (TB)|76") else $[String]()
+                    val unitEntries = mantleFigs./(u => {
                         val asset   = safe(mantleSpriteAssetId(u))
-                        val display = safe(u.uclass.name) + " (TB)"
+                        val display = safe(u.uclass.name) + " (" + safe(u.faction.short) + ")"
                         val onMapH  = {
-                            val ph = DrawItem(TB.mantle, TB, u.uclass, u.health, u.state, 0, 0).proto
+                            val ph = DrawItem(TB.mantle, u.faction, u.uclass, u.health, u.state, 0, 0).proto
                             if (ph != null) ph.height else 60
                         }
                         asset + "|" + display + "|" + onMapH
-                    }).mkString(";")
+                    })
+                    val mantleList = (gateEntry ++ unitEntries).mkString(";")
                     if (dom.document.getElementById("tb-mantle-hud-btn") == null)
                         renderMapHud()
                     dom.document.getElementById("tb-mantle-hud-btn").?.foreach { el =>

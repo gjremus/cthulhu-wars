@@ -316,26 +316,46 @@ object MoonPlacement {
         pointsVertical.get
     }
 
-    // Pick `n` scatter positions for sprites. Returns (xFrac, yFrac) pairs in
-    // [0..1] of the magenta-circle bounding box. Caller maps these onto the
-    // rendered moon image rect (the moon disc fills almost the entire moon
-    // image). Greedy farthest-point sampling: each next point maximises the
-    // minimum distance to already-placed points — same UX intent as the prior
-    // polar scatter, no straight rows, minimal overlap, but every result is
-    // guaranteed inside the magenta circle (i.e. inside the disc).
     def scatter(n : Int, useHorizontal : Boolean, seed : Int) : Array[(Double, Double)] = {
         val pool = if (useHorizontal) horizontal else vertical
         if (pool.isEmpty || n <= 0) return Array.empty
         val rng = new scala.util.Random(seed)
         val out = scala.collection.mutable.ArrayBuffer.empty[(Double, Double)]
-        out += pool(rng.nextInt(pool.length))
+
+        val textZones : Array[(Double, Double, Double, Double)] = Array(
+            (0.13, 0.57, 0.88, 0.90)
+        )
+
+        def inTextZone(xf : Double, yf : Double) : Boolean = {
+            var z = 0
+            while (z < textZones.length) {
+                val (x1, y1, x2, y2) = textZones(z)
+                if (xf >= x1 && xf <= x2 && yf >= y1 && yf <= y2) return true
+                z += 1
+            }
+            false
+        }
+
+        def centerWeight(xf : Double, yf : Double) : Double = {
+            val dx = (xf - 0.5) * 2.0
+            val dy = (yf - 0.5) * 2.0
+            val dist = Math.sqrt(dx * dx + dy * dy)
+            val w = 1.0 - 0.6 * dist * dist
+            if (w < 0.1) 0.1 else w
+        }
+
+        val innerPool = pool.filter { case (xf, yf) => !inTextZone(xf, yf) }
+        val usePool = if (innerPool.nonEmpty) innerPool else pool
+
+        val startIdx = rng.nextInt(usePool.length)
+        out += usePool(startIdx)
         var i = 1
         while (i < n) {
-            var best : (Double, Double) = pool(rng.nextInt(pool.length))
-            var bestMin = -1.0
+            var best : (Double, Double) = usePool(rng.nextInt(usePool.length))
+            var bestScore = -1.0
             var tries = 0
-            while (tries < 40) {
-                val cand = pool(rng.nextInt(pool.length))
+            while (tries < 60) {
+                val cand = usePool(rng.nextInt(usePool.length))
                 var minD2 = Double.MaxValue
                 var k = 0
                 while (k < out.length) {
@@ -346,8 +366,9 @@ object MoonPlacement {
                     if (d2 < minD2) minD2 = d2
                     k += 1
                 }
-                if (minD2 > bestMin) {
-                    bestMin = minD2
+                val score = minD2 * centerWeight(cand._1, cand._2)
+                if (score > bestScore) {
+                    bestScore = score
                     best = cand
                 }
                 tries += 1
@@ -400,7 +421,9 @@ object Overlays {
     def onExternalClick(s : Any*) {
         temp = false
 
+        println("onExternalClick args: " + s.mkString(" | "))
         val text = info(s.$)
+        println("onExternalClick text.any=" + text.any)
 
         overlay.soonHide = 0
         overlay.soonShow = 0
@@ -443,30 +466,7 @@ object Overlays {
 
     def imageSource(id : String) = hrf.web.getElem(id).as[dom.html.Image]./(_.src).|!("unknown image source " + id)
 
-    // Faceless Blight (FBE) — PLACEHOLDER faction-card background.
-    // FBE has no real `fbe-background.webp` art yet, so the asset id
-    // "info:fbe-background" is wired to the DC placeholder (dc-background.webp),
-    // which is DC-colored. Every other faction's card/overlay shows its own
-    // faction-colored background art, so we recolor the placeholder to FBE green
-    // (#3d5f1c) here using the SAME image-tint mechanism the map uses for FBE unit
-    // sprites (CthulhuWarsSolo.getTintedAsset -> data URL; "color" composite keeps
-    // the source luminance and only shifts hue). This tints the BACKGROUND IMAGE
-    // ONLY (it returns a data URL fed to CSS background-image) — the unit /
-    // spellbook / ability TEXT drawn on top of the table is never inside a tinted
-    // container and stays fully readable.
-    // TODO: when real fbe-background.webp art (already FBE green) is supplied,
-    //       drop this tint and point "info:fbe-background" at the real asset.
-    private var fbeBackgroundCache : String = null
-    def fbeTintedBackground() : String = {
-        if (fbeBackgroundCache == null)
-            // Same Processing FBE map sprites use (CthulhuWarsSolo line ~958):
-            // tint #3d5f1c (FBE green) + a light grey screen to lift the darks.
-            fbeBackgroundCache = CthulhuWarsSolo.getTintedAsset(
-                "info:fbe-background",
-                CthulhuWarsSolo.Processing(|("#3d5f1c"), |("#333333"), None)
-            ).toDataURL("image/png")
-        fbeBackgroundCache
-    }
+
 
     // Fix HB-77 (2026-06-06): Y'Golonac dynamic awaken-cost display reads the
     // current DC spellbook count from the live Game. Set by the main render
@@ -1193,17 +1193,39 @@ object Overlays {
             // sprite height in map-pixel space. Defaults to 70 (Earth Cat height)
             // for legacy 2-field entries so old cached payloads still render.
             val parsed = rawEntries./(entry => {
-                val parts = entry.split("\\|", 3)
+                val parts = entry.split("\\|", 5)
                 val assetId = if (parts.length > 0) parts(0).trim else ""
                 val display = if (parts.length > 1) parts(1).trim else assetId
-                val onMapH  = if (parts.length > 2)
-                    scala.util.Try(parts(2).trim.toDouble).getOrElse(70.0)
+                val hp      = if (parts.length > 2) parts(2).trim else "alive"
+                val onMapH  = if (parts.length > 3)
+                    scala.util.Try(parts(3).trim.toDouble).getOrElse(70.0)
                 else 70.0
-                val src     = if (assetId.nonEmpty)
-                    hrf.web.getElem(assetId).as[dom.html.Image]./(_.src).|("")
-                else ""
-                (src, display, onMapH)
-            }).filter { case (src, _, _) => src.nonEmpty }
+                val fShort  = if (parts.length > 4) parts(4).trim else ""
+                val src     = if (assetId.nonEmpty) {
+                    val tint = fShort match {
+                        case "GC" => CthulhuWarsSolo.Processing(|("#77a055"), |("#222222"), None)
+                        case "CC" => CthulhuWarsSolo.Processing(|("#4977b3"), |("#111111"), None)
+                        case "BG" => CthulhuWarsSolo.Processing(|("#cd3233"), None, |("#555555"))
+                        case "YS" => CthulhuWarsSolo.Processing(|("#ffd000"), |("#663344"), None)
+                        case "WW" => CthulhuWarsSolo.Processing(|("#88a9be"), |("#5577aa"), None)
+                        case "SL" => CthulhuWarsSolo.Processing(|("#db6a33"), |("#4a1a1a"), None)
+                        case "OW" => CthulhuWarsSolo.Processing(|("#6c4296"), None, |("#4c4c4c"))
+                        case "AN" => CthulhuWarsSolo.Processing(|("#47a5bc"), |("#333333"), None)
+                        case "TS" => CthulhuWarsSolo.Processing(|("#BDE0BC"), |("#333333"), None)
+                        case "FB" => CthulhuWarsSolo.Processing(|("#CB307E"), |("#333333"), None)
+                        case "DS" => CthulhuWarsSolo.Processing(|("#3A2825"), None, |("#120E0C"))
+                        case "TT" => CthulhuWarsSolo.Processing(|("#fc9ca0"), |("#333333"), None)
+                        case "BB" => CthulhuWarsSolo.Processing(|("#c8a84b"), |("#333333"), None)
+                        case "DC" => CthulhuWarsSolo.Processing(|("#F0EDA8"), |("#333333"), None)
+                        case "XSS" => CthulhuWarsSolo.Processing(|("#4a6b7a"), |("#333333"), None)
+                        case "TB" => CthulhuWarsSolo.Processing(|("#8b6914"), |("#333333"), None)
+                        case "FBE" => CthulhuWarsSolo.Processing(|("#3d5f1c"), |("#333333"), None)
+                        case _    => CthulhuWarsSolo.Processing(None, None, None)
+                    }
+                    CthulhuWarsSolo.getTintedAsset(assetId, tint).toDataURL("image/png")
+                } else ""
+                (src, display, hp, onMapH)
+            }).filter { case (src, _, _, _) => src.nonEmpty }
             // [v2.4.10] Use the dedicated Moon placement bitmap (bb-moon-place /
             // bb-moon-h-place) to scatter sprites strictly inside the moon disc.
             // The bitmap drives placement just like earth*-place / library*-place
@@ -1223,7 +1245,7 @@ object Overlays {
             val moonSpriteScale = 14.0 / 70.0
             def spriteHFor(onMapH : Double) : Double = onMapH * moonSpriteScale
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
-            val seed = parsed.length * 31 + parsed./({ case (s, _, _) => s }).mkString.hashCode
+            val seed = parsed.length * 31 + parsed./({ case (s, _, _, _) => s }).mkString.hashCode
             val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
             // Map each (xFrac, yFrac) of the circle bbox onto the moon image:
             // the moon disc fills ~76% horizontally and ~89% vertically of
@@ -1238,13 +1260,15 @@ object Overlays {
                 val dy = (yf - 0.5) * discHPct
                 (discCx + dx, discCy + dy)
             }
-            val unitFigures = parsed.zip(positions)./({ case ((src, display, onMapH), (xPct, yPct)) =>
-                // Per-unit sprite height (% of moon image height), proportional to
-                // the unit's real on-map height — matches the regular map's sizing.
+            val unitFigures = parsed.zip(positions)./({ case ((src, display, hp, onMapH), (xPct, yPct)) =>
                 val spriteH = spriteHFor(onMapH)
-                f"""<img src="$src"
-                         title="$display"
-                         style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
+                val hpOverlay = hp match {
+                    case "killed" => s"""<img src="${imageSource("kill")}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;" />"""
+                    case "pained" => s"""<img src="${imageSource("pain")}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;" />"""
+                    case _ => ""
+                }
+                f"""<div style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none;">
+                    <img src="$src" title="$display" style="height: 100%%; width: auto; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />$hpOverlay</div>"""
             }).mkString("")
             val figureLayer = if (count > 0)
                 s"""<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;">$unitFigures</div>"""
@@ -1566,7 +1590,7 @@ object Overlays {
             ""
     }).but("")
 
-    def xssTbOverlay(s : $[Any]) : String = s match {
+    def xssTbOverlay(s : $[Any]) : String = { println("xssTbOverlay called with: " + s.mkString(",")); s match {
         case $("XSS") =>
             faction(XSS, "info:xss-background", Precipitation, "Post-Battle",
             "You always Pain out of a Battle first, even if you are the Defender. Fully cancelled by Crawling Chaos Madness.",
@@ -1624,7 +1648,7 @@ object Overlays {
         case $("TB", Ensnare.name) => spellbook(Ensnare.name, "Action: Cost 1", "Choose an enemy with Units in a Tentacle Area. Roll 1d6. Enemy relocates that many Units to Head's Area.")
         case $("TB", PsychicShriek.name) => spellbook(PsychicShriek.name, "Action: Cost 1", "Choose an enemy. Roll 2d6. Enemy retreats that many Units to Areas without TB Gates.")
         case _ => ""
-    }
+    }}
 
     def combat = s"<span class=combat-color>Combat:</span>"
 
@@ -2119,10 +2143,7 @@ object Overlays {
     def fbeFactionOverlay() = {
         def fbeRef(sb : Spellbook) =
             s"""<span class="ability-color pointer" onclick="onExternalClick('FBE', '${sb.name}')">${sb.name}</span>"""
-        // FBE green-tinted placeholder background (see fbeTintedBackground); passed
-        // as a resolved data URL rather than the raw "info:fbe-background" asset id
-        // so the card no longer shows DC coloring.
-        faction(FBE, fbeTintedBackground(), SelfConsuming, "Ongoing",
+        faction(FBE, "info:fbe-background", SelfConsuming, "Ongoing",
             "Whenever two or more Units are Killed or Eliminated as part of the same Action, Gain 1 Power. If you controlled at least three of them, also gain 1 Doom.",
             $(ChangelingAdherents, NecromanticSpores, Shapestealing, AnimatedRush, Succor, OverlordOfDeath), $(
             (Acolyte,      6, "1", "0", s"""<div class=p>Setup: 6 Acolytes + a Controlled Gate in an empty area not adjacent to another faction's start area. Spellbook: ${fbeRef(ChangelingAdherents)}</div>"""),
@@ -2169,9 +2190,6 @@ object Overlays {
     }
 
     def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "") = {
-        // `background` is normally an asset id resolved via imageSource(...). FBE
-        // passes an already-resolved data URL (its tinted placeholder, see
-        // fbeTintedBackground) — use such pre-resolved URLs verbatim.
         val backgroundUrl = if (background.startsWith("data:")) background else imageSource(background)
         s"""
         <table class="faction-table" style="background-image:url(${backgroundUrl})">
