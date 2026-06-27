@@ -1480,6 +1480,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var queue : $[Battle] = $
     var anyIceAge : Boolean = false
     var lastDaolothRegion : |[Region] = None
+    var nextReplayActionHint : |[String] = None
     var tulzschaFlameTurn : Int = 1
     var neutralSpellbooks : $[Spellbook] = options.contains(NeutralSpellbooks).$(MaoCeremony, Recriminations, Shriveling, StarsAreRight, UmrAtTawil, Undimensioned)
     var loyaltyCards : $[LoyaltyCard] = options.of[LoyaltyCardGameOption]./(_.lc)
@@ -1689,7 +1690,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Azathoth IGOO: glyph position on doom track (= combat value)
     var azathothGlyphPosition : Int = 0
     // Azathoth IGOO: awakening state (enemy choices accumulated + gate region)
-    var azathothAwakenChoices : $[Offer] = $
+    var azathothAwakenChoices : Map[Faction, Int] = Map()
     var azathothAwakenGateRegion : |[Region] = None
     // Messenger of Yig: track which enemies have been asked this Doom Phase
     var messengerOfYigAsked : $[Faction] = $
@@ -2739,7 +2740,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             SetupFactionsAction
 
-        case PowerGatherAction(last) if factions.%!(_.hibernating).%(_.power > 0).any =>
+        case PowerGatherAction(last) if nextReplayActionHint.exists(h => h.startsWith("MainGatesAction") || h.startsWith("PreMainAction") || h.startsWith("MainAction") || h.startsWith("NextPlayerAction")) =>
+            factions.foreach { f =>
+                f.active = f.power > 0 && f.hibernating.not
+            }
+
+            PreMainAction(last)
+
+        case PowerGatherAction(last) if factions.%!(_.hibernating).%(_.power > 0).any && !TSExpansion.shepherdDoneThisGather =>
             factions.foreach { f =>
                 f.active = f.power > 0 && f.hibernating.not
             }
@@ -2960,7 +2968,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // completes) doesn't loop. `last` is stashed into TSExpansion so
             // the re-entry can rebuild PowerGatherAction(last). See FactionTS.scala.
             if (factions.has(TS) && TS.onMap(Glaaki).any && TS.onMap(TombHerd).any && !TSExpansion.shepherdDoneThisGather) {
-                if (ElderThingMindControl.suppresses(TS.onMap(Glaaki).head)) {
+                val replayBlocksShepherd = nextReplayActionHint.exists(h => !h.startsWith("TSShepherdGather"))
+                if (replayBlocksShepherd) {
+                    // noop
+                } else if (ElderThingMindControl.suppresses(TS.onMap(Glaaki).head)) {
                     TS.log("Shepherd of the Crypt".styled("nt"), "blocked by", "Elder Thing".styled("nt"))
                 } else {
                     val regions = areas.nex.%(r => TS.at(r, TombHerd).any)
@@ -2994,6 +3005,31 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             gatherPowerPhase = false
 
             AfterPowerGatherAction // Then(...)
+
+        case TSShepherdDoneAction =>
+            TSExpansion.shepherdDoneThisGather = true
+
+            val max = factions./(_.power).max
+            val min = (max + 1) / 2
+
+            if (min == 0) {
+                log("Humanity won")
+                return GameOver($)
+            }
+
+            factions.foreach { f =>
+                if (f.power < min) {
+                   f.log("power increased to", min.power)
+                   f.power = min
+                }
+                f.active = true
+            }
+
+            gatherPowerPhase = true
+            triggers()
+            gatherPowerPhase = false
+
+            AfterPowerGatherAction
 
         // AfterPowerGatherAction runs AFTER raise-to-half.
         // MaoCeremony MUST be after raise-to-half — do not move it before.
