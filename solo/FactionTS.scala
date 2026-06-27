@@ -256,13 +256,8 @@ object TSExpansion extends Expansion {
             val n = self.at(r, TombHerd).num
             self.power += n
             self.log("Shepherd of the Crypt".styled("nt") + ": gained", n.power, "from", n, TombHerd.styled(TS), "in", r)
-            if (remaining.any)
-                Force(TSShepherdGatherPhaseAction(self, remaining))
-            else {
-                // Last region — mark and re-enter PowerGatherAction (see comment above).
-                TSExpansion.shepherdDoneThisGather = true
-                Force(PowerGatherAction(TSExpansion.pgrLastFaction))
-            }
+            TSExpansion.shepherdDoneThisGather = true
+            Force(PowerGatherAction(TSExpansion.pgrLastFaction))
 
         // DOOM PHASE
         case DoomAction(f) if f == TS =>
