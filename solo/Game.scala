@@ -3207,14 +3207,34 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             AfterPowerGatherAction // Then(...)
 
+        case TSShepherdDoneAction =>
+            TSExpansion.shepherdDoneThisGather = true
+
+            val max = factions./(_.power).max
+            val min = (max + 1) / 2
+
+            if (min == 0) {
+                log("Humanity won")
+                return GameOver($)
+            }
+
+            factions.foreach { f =>
+                if (f.power < min) {
+                   f.log("power increased to", min.power)
+                   f.power = min
+                }
+                f.active = true
+            }
+
+            gatherPowerPhase = true
+            triggers()
+            gatherPowerPhase = false
+
+            AfterPowerGatherAction
+
         // AfterPowerGatherAction runs AFTER raise-to-half.
         // MaoCeremony MUST be after raise-to-half — do not move it before.
         case AfterPowerGatherAction =>
-            // [2026-05-23] Reset the Shepherd guard so the NEXT gather-power
-            // round fires Shepherd again. The flag stayed true from Shepherd
-            // completion through the re-entry to PowerGatherAction so the
-            // inline dispatch could be skipped on re-entry; now we're past
-            // raise-to-half and can safely clear it.
             TSExpansion.shepherdDoneThisGather = false
             factions.foreach { f =>
                 if (f.want(MaoCeremony)) {

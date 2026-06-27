@@ -93,6 +93,7 @@ case class TSHecatombRitualCostAction(self : Faction, power : Int, dh : Int) ext
 // SHEPHERD OF THE CRYPT (Gather Power Phase)
 case class TSShepherdGatherMainAction(self : Faction) extends OptionFactionAction("Shepherd of the Crypt: gain " + 1.power + " per " + TombHerd.styled(TS)) with MainQuestion with PowerNeutral
 case class TSShepherdGatherPhaseAction(self : Faction, remaining : $[Region]) extends ForcedAction with PowerNeutral
+case object TSShepherdDoneAction extends ForcedAction
 // [2026-04-01 18:08] Show actual power gain per region
 case class TSShepherdGatherAction(self : Faction, r : Region, remaining : $[Region]) extends BaseFactionAction(
     implicit g => "Gain " + self.at(r, TombHerd).num.power + " from " + self.at(r, TombHerd).num + " " + TombHerd.styled(TS) + " in", r) with PowerNeutral
@@ -245,19 +246,14 @@ object TSExpansion extends Expansion {
                 remaining.foreach { r => + TSShepherdGatherAction(self, r, remaining.but(r)) }
                 asking
             }
-            else {
-                // Shepherd loop done — mark and re-enter PowerGatherAction so
-                // raise-to-half + triggers + AfterPowerGatherAction can run.
-                TSExpansion.shepherdDoneThisGather = true
-                Force(PowerGatherAction(TSExpansion.pgrLastFaction))
-            }
+            else
+                Force(TSShepherdDoneAction)
 
         case TSShepherdGatherAction(self, r, remaining) =>
             val n = self.at(r, TombHerd).num
             self.power += n
             self.log("Shepherd of the Crypt".styled("nt") + ": gained", n.power, "from", n, TombHerd.styled(TS), "in", r)
-            TSExpansion.shepherdDoneThisGather = true
-            Force(PowerGatherAction(TSExpansion.pgrLastFaction))
+            Force(TSShepherdDoneAction)
 
         // DOOM PHASE
         case DoomAction(f) if f == TS =>
