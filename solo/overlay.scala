@@ -1288,7 +1288,79 @@ object Overlays {
               </tbody>
             </table>"""
 
+        // The Burrowers Beneath (TB): Mantle overlay — shows units on the Mantle.
+        // Mirrors the BB Moon overlay pattern.
+        case $("TB", "Mantle", count : Int, unitList : String, adjAreas : String) =>
+            val mantleSrc = imageSource("tb-mantle")
+            val rawEntries = if (unitList.toString.trim.nonEmpty)
+                unitList.toString.split(";").toList
+            else List.empty
+            val parsed = rawEntries./(entry => {
+                val parts = entry.split("\\|", 3)
+                val assetId = if (parts.length > 0) parts(0).trim else ""
+                val display = if (parts.length > 1) parts(1).trim else assetId
+                val onMapH  = if (parts.length > 2)
+                    scala.util.Try(parts(2).trim.toDouble).getOrElse(60.0)
+                else 60.0
+                val src     = if (assetId.nonEmpty)
+                    hrf.web.getElem(assetId).as[dom.html.Image]./(_.src).|("")
+                else ""
+                (src, display, onMapH)
+            }).filter { case (src, _, _) => src.nonEmpty }
+            val n = parsed.length
+            val spriteScale = 12.0 / 60.0
+            def spriteHFor(onMapH : Double) : Double = onMapH * spriteScale
+            val positions : List[(Double, Double)] = if (n == 0) Nil else {
+                val step = 360.0 / n
+                (0 until n).toList./(i => {
+                    val angle = i * step * math.Pi / 180.0
+                    val radius = if (n <= 3) 20.0 else 28.0
+                    (50.0 + radius * math.cos(angle), 50.0 + radius * math.sin(angle))
+                })
+            }
+            val unitFigures = parsed.zip(positions)./({ case ((src, display, onMapH), (xPct, yPct)) =>
+                val spriteH = spriteHFor(onMapH)
+                f"""<img src="$src"
+                         title="$display"
+                         style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
+            }).mkString("")
+            val figureLayer = if (count > 0)
+                s"""<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;">$unitFigures</div>"""
+            else ""
+            val emptyCaption = if (count == 0)
+                s"""<div style="position: absolute; bottom: 6%; left: 0; right: 0; text-align: center; color: white; text-shadow: 0 0 4px black, 0 0 4px black; font-size: 0.35em;">The Mantle is empty.</div>"""
+            else ""
+            val adjCaption = if (adjAreas.toString.trim.nonEmpty)
+                s"""<div style="position: absolute; top: 4%; left: 0; right: 0; text-align: center; color: white; text-shadow: 0 0 4px black, 0 0 4px black; font-size: 0.275em;">to: ${adjAreas.toString.trim}</div>"""
+            else ""
+            s"""<table style="background: transparent; width: 100%; height: 100%; border-collapse: collapse;">
+              <tbody>
+                <tr>
+                  <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
+                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
+                      <img src="$mantleSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
+                      $figureLayer
+                      $emptyCaption
+                      $adjCaption
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>"""
 
+        case $("TB", "Mantle") =>
+            val mantleSrc = imageSource("tb-mantle")
+            s"""<table style="background: transparent; width: 100%; height: 100%; border-collapse: collapse;">
+              <tbody>
+                <tr>
+                  <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
+                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
+                      <img src="$mantleSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>"""
 
         // Tombstalker (TS): Cursed Tomes overlay for TS's own card — shows all 11 tomes (white=remaining, grey=given away)
         case $("cursed-tomes", fStyle) if fStyle.toString == "ts" =>

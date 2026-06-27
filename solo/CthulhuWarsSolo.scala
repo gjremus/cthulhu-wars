@@ -2341,6 +2341,21 @@ object CthulhuWarsSolo {
                     g.drawImage(getAsset("librarian-silhouette"), silX, 120, silSize, silSize)
                     g.globalAlpha = 1.0
                 }
+
+                // TB Mantle: draw "to mantle" text on areas adjacent to the Mantle
+                if (setup.seating.has(TB) && game.tbMantleInPlay && game.tbMantleAreas.any) {
+                    g.font = "bold " + (18 * board.unitScale).toInt + "px sans-serif"
+                    g.textAlign = "center"
+                    g.textBaseline = "top"
+                    g.lineWidth = 3.0
+                    g.strokeStyle = "rgba(0,0,0,0.8)"
+                    g.fillStyle = "white"
+                    game.tbMantleAreas.foreach { r =>
+                        val (gx, gy) = gateXY(r)
+                        g.strokeText("to mantle", gx, gy + (45 * board.unitScale).toInt)
+                        g.fillText("to mantle", gx, gy + (45 * board.unitScale).toInt)
+                    }
+                }
             }
 
             // Library: check if click hits a tome or silhouette on the map
@@ -3529,7 +3544,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     }
                     dom.document.getElementById("tb-mantle-hud-count").?.foreach(_.innerHTML = mantleCount.toString)
                     dom.document.getElementById("tb-mantle-hud-btn").?.foreach { el =>
-                        val s = s"""onExternalClick("TB","Mantle",$mantleCount,"$mantleList")"""
+                        val mantleAdjStr = safe(displayGame.tbMantleAreas./(_.name).mkString(", "))
+                        val s = s"""onExternalClick("TB","Mantle",$mantleCount,"$mantleList","$mantleAdjStr")"""
                         el.setAttribute("onclick", "event.stopPropagation(); " + s)
                         el.setAttribute("onpointerover", "event.stopPropagation(); " + s.replace("Click","Over"))
                         el.setAttribute("onpointerout",  "event.stopPropagation(); " + s.replace("Click","Out"))
@@ -3855,7 +3871,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     }
 
                                     if (a.isVoid.not) {
+                                        game.nextReplayActionHint = if (n + 1 < recorded.num) Some(serializer.write(recorded(n + 1))) else None
                                         val (l, c) = game.perform(a.unwrap)
+                                        game.nextReplayActionHint = None
 
                                         l.foreach(s => log(s, showUndo(actions.num)))
 
@@ -3897,8 +3915,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 if (a.isRecorded)
                                     actions +:= a
 
+                                game.nextReplayActionHint = if (recorded.any && hash == "" && localReplay.not && recorded.num > actions.num) Some(recorded(actions.num).replace("&gt;", ">")) else None
                                 try {
                                 val (l, c) = g.perform(a.unwrap)
+                                game.nextReplayActionHint = None
 
                                 l.foreach { s =>
                                     queue :+= UILog(s)
@@ -5581,7 +5601,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         // body mid-write the persisted log can have only 2 lines, and the
                         // logs(2) read further down will throw IndexOutOfBoundsException.
                         // Show a clear page-level error instead of an uncaught throw so the
-                        // owner can act (delete the broken game in the admin console).
+                        // owner can act (recreate the game).
                         if (logs.size < 3) {
                             val err = dom.document.createElement("div")
                             err.asInstanceOf[html.Element].setAttribute("style",
@@ -5592,8 +5612,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 "<b>Game log header is incomplete.</b><br/>" +
                                 "Only " + logs.size + " of the required 3 header lines were written. " +
                                 "This game was created but lost data mid-write and cannot be loaded.<br/><br/>" +
-                                "Use the admin console at /admin.html to delete the broken game " +
-                                "(its game id and master secret are visible there)."
+                                "This game is unrecoverable and will need to be recreated."
                             dom.document.body.appendChild(err)
                             return
                         }
