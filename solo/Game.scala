@@ -2049,7 +2049,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // a stale arrow-overlay calculation during undo replay) would have
         // thrown "Unknown region". Return 0 as a safe default — Moon moves
         // are rendered without direction arrows by callers anyway.
-        if (from.is[MoonHold] || to.is[MoonHold]) 0
+        if (from.is[MoonHold] || to.is[MoonHold] || from.is[MantleHold] || to.is[MantleHold]) 0
         else {
             val (ax, ay) = board.gateXYO(from)
             val (bx, by) = board.gateXYO(to)
@@ -4374,9 +4374,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     destinations = destinations :+ BB.moon
             }
 
-            // TB: Mantle adjacency — TB units can move to/from the Mantle via
-            // tbMantleAreas (always) and Tentacle areas (with Subterrane SB).
-            if (self == TB && tbMantleInPlay) {
+            // TB: Mantle adjacency — any faction's units can move to/from the
+            // Mantle via tbMantleAreas (always) and Tentacle areas (with Subterrane SB).
+            if (tbMantleInPlay) {
                 val mantleEdges = TBExpansion.tbMantleEdges(from)
                 if (mantleEdges.any)
                     destinations = (destinations ++ mantleEdges).distinct
@@ -4386,8 +4386,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             val l1 = destinations.%(arriving.contains) ++ destinations.%!(arriving.contains)
 
-            val isMoonMove = from == BB.moon || destinations.has(BB.moon)
-            val l2 = isMoonMove.?(destinations).|( destinations.sortBy(to => direction(from, to)) )
+            val isOffMapMove = from == BB.moon || destinations.has(BB.moon) || from.is[MantleHold] || destinations.exists(_.is[MantleHold])
+            val l2 = isOffMapMove.?(destinations).|( destinations.sortBy(to => direction(from, to)) )
 
             // HB Fix 108 (2026-06-10): during a Tenebrosum Move repeat, Sin (not
             // Power) funds the move, so the per-destination Power affordability
@@ -4400,7 +4400,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Ask(self)
                 .each(l3)(to => MoveAction(self, u, from, to, cost).as
                     (ConnectionGlyph(from, to) + to.toString, self.iced(to),
-                     (isMoonMove || to == BB.moon).?("").|( s"""<img class=direction src="${Overlays.imageSource("move-deg-" + direction(from, to))}" />""" ))
+                     (isOffMapMove || to == BB.moon || to.is[MantleHold]).?("").|( s"""<img class=direction src="${Overlays.imageSource("move-deg-" + direction(from, to))}" />""" ))
                     ("Move", u, (cost == 0).??("for free"), "from", from, "to")
                 )
                 .cancelIf(cost > 0)
