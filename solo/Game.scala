@@ -2285,7 +2285,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def battles(f : Faction)(implicit w : AskWrapper) {
         val enough = nexed.any.?(queue.%(_.attacker == f).%(_.effect.has(EnergyNexus))./(_.arena)).|(f.battled)
 
-        areas.nex.%(f.affords(1)).diff(enough).%(r => factionlike.but(f).exists(f.canAttack(r))).some.foreach { r =>
+        val battleAreas = areas.nex ++ tbMantleInPlay.??($(TB.mantle))
+        battleAreas.%(f.affords(1)).diff(enough).%(r => factionlike.but(f).exists(f.canAttack(r))).some.foreach { r =>
             + AttackMainAction(f, r, nexed.any.?(EnergyNexus))
         }
     }
@@ -2301,7 +2302,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def captures(f : Faction)(implicit w : AskWrapper) {
-        areas.nex.%(f.affords(1)).%(r => factionlike.but(f).%(f.canCapture(r)).any).some.foreach { l =>
+        val captureAreas = areas.nex ++ tbMantleInPlay.??($(TB.mantle))
+        captureAreas.%(f.affords(1)).%(r => factionlike.but(f).%(f.canCapture(r)).any).some.foreach { l =>
             + CaptureMainAction(f, l, None)
         }
         // Mind Parasite: separate capture action for parasitized cultists
