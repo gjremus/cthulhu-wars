@@ -821,6 +821,16 @@ case object UnspeakableOathThreatOfAttackOnGOO extends UnspeakableOathPlan("...c
 case object UnspeakableOathThreatOfCatnapping extends UnspeakableOathPlan("...threat of Catnapping to the Moon") with UnspeakableThreat
 
 
+sealed abstract class TBStalkPlan(val label : String) extends Plan {
+    val group = "Stalk".styled(TB)
+}
+case object TBStalkPrompt extends TBStalkPlan("Always prompt") with DefaultPlan with OneOfPlan
+case object TBStalkSkipAll extends TBStalkPlan("Skip, unless...") with OneOfPlan { override val followers = $(TBStalkThreatToGate) }
+trait TBStalkThreat extends TBStalkPlan { override val requires = $($(TBStalkSkipAll)) }
+case object TBStalkThreatToGate extends TBStalkPlan("...enemy moves to a Gated Area") with TBStalkThreat
+case object TBStalkThreatToGOO extends TBStalkPlan("...enemy moves to GOO's Area") with TBStalkThreat
+case object TBStalkThreatOfCapture extends TBStalkPlan("...threat of capture to a Cultist") with TBStalkThreat
+
 sealed abstract class TBRemoveGatePlan(val label : String) extends Plan {
     val group = "Remove Gate, Place Chthonian".styled(TB)
 }
@@ -919,6 +929,8 @@ class Player(private val f : Faction)(implicit game : Game) {
             f.unfulfilled = f.unfulfilled.but(rq)
             f.log("achieved", text.styled(f), ((es + rq.es) > 0).??("and gained " + (es + rq.es).es))
             f.takeES(es + rq.es)
+            if (f == DC)
+                game.dcLastFulfilledSBR = Some(rq)
         }
     }
 
@@ -959,7 +971,7 @@ class Player(private val f : Faction)(implicit game : Game) {
         // Also blocks Yog-Sothoth gate-stacking, Cathedrals, Chaos Gates, Craters,
         // Pyramids (when added), Glaciers, Worms of Groth, Insects from Shaggai,
         // Mother Hydra Acolytes (Zygote), Hounds, Moonbeasts, etc. on Moon.
-        if (f != BB && r == BB.moon) {
+        if (f != BB && !game.tsInDeathMarch && r == BB.moon) {
             f.log("placement of", uc.styled(f), "on", BB.moon, "blocked: only BB units may enter the Moon (Catnapping is the sole exception)")
         }
         else {
@@ -1603,6 +1615,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Reserved Acolyte tracking — each SB starts with a reserved Acolyte on its
     // requirement slot; on SB acquisition, the Acolyte enters play.
     var dcReservedSpellbookAcolytes : $[Spellbook] = $
+    var dcLastFulfilledSBR : |[Requirement] = None
     // Dark Bargain face-down state — flips back face-up at Gather Power.
     var dcDarkBargainFacedown : Boolean = false
     // Tenebrosum afterAction tracking — records the just-resolved Common/SB
@@ -1658,6 +1671,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var slPermanentBorrowed : $[Spellbook] = $
 
     // Tombstalker (TS) state: Death's Head counter, Cursed Tome stack index, and per-faction tome ownership
+    var tsInDeathMarch : Boolean = false
     var deathsHead : Int = 0
     var tsTomesOnCard : Int = 0
     var cursedTomesOwned : Map[Faction, $[(Int, Boolean)]] = Map()
@@ -2964,8 +2978,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val disasterLooms = f.can(DisasterLooms)
                 val yogGateSuppressed = f.unitGate.any && f.unitGate.exists(u => ElderThingMindControl.suppresses(u))
                 val yogGateCount = f.unitGate.any.??(if (yogGateSuppressed) 0 else 1)
-                val ownGates = if (disasterLooms) 0 else f.gates.num + yogGateCount
-                val disasterLoomsGates = if (disasterLooms) f.gates.num + yogGateCount else 0
+                val mantleGateCount = (f == TB && f.gates.has(TB.mantle)).??(1)
+                val ownGates = if (disasterLooms) 0 else f.gates.num - mantleGateCount + yogGateCount
+                val disasterLoomsGates = if (disasterLooms) f.gates.num - mantleGateCount + yogGateCount else 0
                 val oceanGates = (f.can(YhaNthlei) && f.has(Cthulhu)).??(f.enemies./(f => f.allGates.%(_.glyph == Ocean).num).sum)
                 val darkYoungs = f.can(RedSign).??(f.all(DarkYoung).num)
                 val feast = f.has(Feast).??(desecrated.%(r => f.at(r).any).num)
@@ -4093,6 +4108,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case MainGatesAction(f) =>
             checkGatesGained(f)
 
+            // TB: immediately trigger Mantle overlay if 2 adjacent gates now exist
+            if (f == TB && TB.needs(OverlayMantleReq) && !tbMantleInPlay) {
+                val ownGates = TB.gates
+                val adjacentPairs = ownGates./~(r1 =>
+                    ownGates.%(r2 => r1 != r2 && board.connected(r1).has(r2))./(r2 => (r1, r2)))
+                    .map { case (a, b) => if (a.hashCode <= b.hashCode) (a, b) else (b, a) }.distinct
+                if (adjacentPairs.any)
+                    return Force(TBOverlayMantleMainAction(TB))
+            }
+
             CheckSpellbooksAction(MainAction(f))
 
         case MainAction(f) if f.active.not =>
@@ -4126,6 +4151,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case AfterAction(self) =>
             checkGatesGained(self)
+
+            // TB: immediately trigger Mantle overlay if 2 adjacent gates now exist
+            if (self == TB && TB.needs(OverlayMantleReq) && !tbMantleInPlay) {
+                val ownGates = TB.gates
+                val adjacentPairs = ownGates./~(r1 =>
+                    ownGates.%(r2 => r1 != r2 && board.connected(r1).has(r2))./(r2 => (r1, r2)))
+                    .map { case (a, b) => if (a.hashCode <= b.hashCode) (a, b) else (b, a) }.distinct
+                if (adjacentPairs.any)
+                    return Force(TBOverlayMantleMainAction(TB))
+            }
 
             if (self.power == 0) {
                 self.log("ran out of power")
@@ -4446,8 +4481,24 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             self.units.foreach(_.remove(MovedForExtra))
 
             // Fire Stalk prompt if TB has the spellbook and units moved
-            if (tbStalkDests.any)
-                TBStalkMainAction(TB, tbStalkDests, self)
+            // Respects command options: Always prompt, or Skip unless conditions met
+            if (tbStalkDests.any) {
+                val shouldPrompt = TB.commands.has(TBStalkPrompt) || {
+                    val f = TB
+                    var reasons = false
+                    if (f.commands.has(TBStalkThreatToGate))
+                        reasons = reasons || tbStalkDests.exists(r => f.gates.has(r))
+                    if (f.commands.has(TBStalkThreatToGOO))
+                        reasons = reasons || tbStalkDests.exists(r => f.all(GOO).exists(_.region == r))
+                    if (f.commands.has(TBStalkThreatOfCapture))
+                        reasons = reasons || tbStalkDests.exists(r => f.at(r).%(_.uclass.utype == Cultist).any && self != f)
+                    reasons
+                }
+                if (shouldPrompt)
+                    TBStalkMainAction(TB, tbStalkDests, self)
+                else
+                    EndAction(self)
+            }
             else
                 EndAction(self)
 
@@ -4967,6 +5018,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Also re-init plans if they were cleared when last HP was eliminated but commands were not (HP re-acquired via Hierophants).
             if (options.has(HighPriests) && f.onMap(HighPriest).any && (f.commands.of[UnspeakableOathPlan].none || f.plans.of[UnspeakableOathPlan].none))
                 initHighPriestPlans(f)
+
+            // Safety: init TB Stalk plans for games saved before they existed
+            if (f == TB && f.plans.of[TBStalkPlan].none) {
+                f.plans ++= $(TBStalkPrompt, TBStalkSkipAll, TBStalkThreatToGate, TBStalkThreatToGOO, TBStalkThreatOfCapture)
+                f.commands :+= TBStalkPrompt
+            }
 
             val visiblePlans = f.plans
                 .%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)

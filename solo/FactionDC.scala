@@ -813,8 +813,8 @@ object DCExpansion extends Expansion {
                     val sbToClear = game.dcReservedSpellbookAcolytes.%(sb => self.spellbooks.has(sb)).headOption
                     sbToClear.foreach { sb =>
                         game.dcReservedSpellbookAcolytes = game.dcReservedSpellbookAcolytes.but(sb)
-                        val sbr = dcSBRForSB(sb)
-                        self.log("placed", Acolyte.styled(DC), "for fulfilled SBR", sbr.text.styled(DC), "in", r)
+                        val sbrText = game.dcLastFulfilledSBR./(_.text).|(sb.name)
+                        self.log("placed", Acolyte.styled(DC), "for fulfilled SBR", sbrText.styled(DC), "in", r)
                     }
                     if (sbToClear.isEmpty)
                         self.log("placed", Acolyte.styled(DC), "from Faction Card in", r)
@@ -847,12 +847,10 @@ object DCExpansion extends Expansion {
             placed match {
                 case Some(u) =>
                     u.region = r
-                    // Clear this specific SB's reserved-Acolyte marker and credit
-                    // the matching SBR in the log (per HB Fix 97.F convention).
                     if (game.dcReservedSpellbookAcolytes.has(sb)) {
                         game.dcReservedSpellbookAcolytes = game.dcReservedSpellbookAcolytes.but(sb)
-                        val sbr = dcSBRForSB(sb)
-                        self.log("placed", Acolyte.styled(DC), "for fulfilled SBR", sbr.text.styled(DC), "in", r)
+                        val sbrText = game.dcLastFulfilledSBR./(_.text).|(sb.name)
+                        self.log("placed", Acolyte.styled(DC), "for fulfilled SBR", sbrText.styled(DC), "in", r)
                     } else {
                         self.log("placed", Acolyte.styled(DC), "from Faction Card in", r)
                     }
@@ -1421,10 +1419,10 @@ object DCExpansion extends Expansion {
         case _ : SummonAction =>
             val summonAreas = areas ++ ((self == BB).??($(BB.moon)))
             val accessibleAreas = summonAreas.nex.%(self.canAccessGate)
-            if (accessibleAreas.none) recordedCost
+            if (accessibleAreas.none) Int.MaxValue
             else {
                 val candidates = self.pool.monsterly./(_.uclass).distinct.%(_.canBeSummoned(self))
-                if (candidates.none) recordedCost
+                if (candidates.none) Int.MaxValue
                 else candidates./(uc => accessibleAreas./(r => self.summonCost(uc, r)).min).min
             }
         case _ : AwakenAction | _ : IndependentGOOAction | _ : CthughaAwakenAction =>
@@ -1436,7 +1434,7 @@ object DCExpansion extends Expansion {
                 ) else $()) ++
                 heldIGOOs./(_.power)
             }
-            if (costs.any) costs.min else recordedCost
+            if (costs.any) costs.min else Int.MaxValue
         case _ => recordedCost
     }
 

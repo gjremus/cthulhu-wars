@@ -713,12 +713,14 @@ object IGOOsExpansion extends Expansion {
         // Cthugha: custom awakening — replace specific GOO, pay per-GOO cost
         case CthughaAwakenMainAction(self) =>
             // Sub-menu: list all GOOs (faction + iGOO) with costs
-            val allGOOs = self.allInPlay.%(_.uclass.utype == GOO).%(u => u.uclass != Cthugha)
+            // HB Fix 129: use isGOO (includes ElderGod/Bastet) to match tenebrosumIndependentAwakensOnly
+            val allGOOs = self.allInPlay.%(_.uclass.isGOO).%(u => u.uclass != Cthugha)
             var ask = Ask(self)
             allGOOs.foreach { goo =>
                 val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) self.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
                 val cthughaCost = 6 - gooCost
-                if (self.power >= cthughaCost && self.gates.has(goo.region))
+                // HB Fix 129: bypass power check under Tenebrosum guard (Sin-paid)
+                if ((game.dcTenebrosumGuard || self.power >= cthughaCost) && self.gates.has(goo.region))
                     ask = ask.add(CthughaAwakenAction(self, goo.region, goo.uclass, cthughaCost))
             }
             ask.cancel
@@ -741,7 +743,10 @@ object IGOOsExpansion extends Expansion {
                 game.dcTenebrosumPrefixCost = cost
             }
             self.units :+= new UnitFigure(self, Cthugha, 1, r)
-            self.log("awakened", "Cthugha".styled("nt"), "in", r, (if (cost >= 0) "for" else "gaining"), (if (cost >= 0) cost else -cost).power, "(replacing", replacedGOO.styled(self) + ")")
+            if (game.dcTenebrosumGuard)
+                self.log("awakened", "Cthugha".styled("nt"), "in", r, "(replacing", replacedGOO.styled(self) + ")")
+            else
+                self.log("awakened", "Cthugha".styled("nt"), "in", r, (if (cost >= 0) "for" else "gaining"), (if (cost >= 0) cost else -cost).power, "(replacing", replacedGOO.styled(self) + ")")
 
             // [2026-05-24] If the replaced GOO is an IGOO, fully eliminate it
             // (revoke its LC + SBs, return LC to game pool) per user direction:
@@ -776,24 +781,25 @@ object IGOOsExpansion extends Expansion {
             // used to be top-level entries — now ride here too, sorted by
             // name alongside the others.
             val standardAvailable = game.loyaltyCards.of[IGOOLoyaltyCard]
-                .%(igoo => game.igooCost(self, igoo) <= self.power)
+                .%(igoo => game.dcTenebrosumGuard || game.igooCost(self, igoo) <= self.power)
                 .%(igoo => igoo != AzathothIGOOCard)
                 .%(igoo => igoo != CthughaCard)
                 .%(igoo => {
                     val cost = game.igooCost(self, igoo)
-                    areas.nex.%(self.canAwakenIGOO).%(self.affords(cost)).any
+                    areas.nex.%(self.canAwakenIGOO).%(r => game.dcTenebrosumGuard || self.affords(cost)(r)).any
                 })
 
             val cthughaAvailable = game.loyaltyCards.has(CthughaCard) && {
-                val allGOOs = self.allInPlay.%(_.uclass.utype == GOO).%(u => u.uclass != Cthugha)
+                // HB Fix 129: use isGOO (includes ElderGod/Bastet) to match tenebrosumIndependentAwakensOnly
+                val allGOOs = self.allInPlay.%(_.uclass.isGOO).%(u => u.uclass != Cthugha)
                 allGOOs.%(goo => {
                     val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) self.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
                     val cthughaCost = 6 - gooCost
-                    self.power >= cthughaCost && self.gates.has(goo.region)
+                    (game.dcTenebrosumGuard || self.power >= cthughaCost) && self.gates.has(goo.region)
                 }).any
             }
 
-            val azathothAvailable = game.loyaltyCards.has(AzathothIGOOCard) && self.power >= 8 &&
+            val azathothAvailable = game.loyaltyCards.has(AzathothIGOOCard) && (game.dcTenebrosumGuard || self.power >= 8) &&
                 self.allGates.onMap.%(r => self.at(r).goos.any).any
 
             // Build name-keyed entries (Entry case class) and sort by name.
@@ -801,7 +807,7 @@ object IGOOsExpansion extends Expansion {
             case class IGOOEntry(name : String, action : Action)
             val standardEntries : $[IGOOEntry] = standardAvailable./(igoo => {
                 val cost = game.igooCost(self, igoo)
-                val gates = areas.nex.%(self.canAwakenIGOO).%(self.affords(cost))
+                val gates = areas.nex.%(self.canAwakenIGOO).%(r => game.dcTenebrosumGuard || self.affords(cost)(r))
                 IGOOEntry(igoo.name, IndependentGOOMainAction(self, igoo, gates))
             })
             val cthughaEntry : $[IGOOEntry] =
@@ -810,7 +816,10 @@ object IGOOsExpansion extends Expansion {
                 azathothAvailable.?($(IGOOEntry("Azathoth", AzathothAwakenMainAction(self)))).|($)
             val sorted = (standardEntries ++ cthughaEntry ++ azathothEntry).sortBy(_.name)
 
-            Ask(self).each(sorted)(_.action).cancel
+            if (sorted.none)
+                Force(MainAction(self))
+            else
+                Ask(self).each(sorted)(_.action).cancel
 
         case IndependentGOOMainAction(self, lc, l) =>
             val cost = game.igooCost(self, lc)
@@ -834,7 +843,10 @@ object IGOOsExpansion extends Expansion {
                 game.dcTenebrosumPrefixCost = cost
             }
 
-            self.log("awakened", lc.unit.name.styled("nt"), "in", r, "for", cost.power)
+            if (game.dcTenebrosumGuard)
+                self.log("awakened", lc.unit.name.styled("nt"), "in", r)
+            else
+                self.log("awakened", lc.unit.name.styled("nt"), "in", r, "for", cost.power)
 
             // Bokrug re-awakening: move existing pool unit instead of creating new
             if (lc == BokrugCard && self.pool(Bokrug).any) {
