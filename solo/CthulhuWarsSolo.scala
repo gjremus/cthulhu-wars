@@ -2352,8 +2352,8 @@ object CthulhuWarsSolo {
                     g.fillStyle = "white"
                     game.tbMantleAreas.foreach { r =>
                         val (gx, gy) = gateXY(r)
-                        g.strokeText("to mantle", gx, gy + (45 * board.unitScale).toInt)
-                        g.fillText("to mantle", gx, gy + (45 * board.unitScale).toInt)
+                        g.strokeText("to Mantle", gx, gy + (45 * board.unitScale).toInt)
+                        g.fillText("to Mantle", gx, gy + (45 * board.unitScale).toInt)
                     }
                 }
             }
