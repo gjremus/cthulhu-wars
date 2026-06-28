@@ -2268,7 +2268,7 @@ object Overlays {
                     units./{ case (uc, n, c, b, t) => s"""
                         <tr>
                             <td>
-                                <img class="img" src=${imageSource("info:" + f.short.toLowerCase + "-" + uc.name.toLowerCase.replace(" ", "-"))}>
+                                <img class="img" src=${imageSource("info:" + f.short.toLowerCase + "-" + uc.name.toLowerCase.replace(" ", "-").replace("'", "").replace("(", "").replace(")", ""))}>
                             </td>
                             <td>
                                 <div class="unit-desc">

@@ -283,7 +283,7 @@ case class TBOverlayMantleAreasAction(self : Faction, r1 : Region, r2 : Region, 
     override def question(implicit game : Game) = "Choose Areas " + TB.mantle + " is touching (must include " + r1 + " and " + r2 + ")"
 }
 case class TBOverlayMantleAreaToggleAction(self : Faction, r : Region, r1 : Region, r2 : Region, chosen : $[Region], remaining : $[Region])
-    extends BaseFactionAction("Add Area to " + TB.mantle + " adjacency (the Mantle is ~size of 3P Australia):", r)
+    extends BaseFactionAction("Add Area to " + TB.mantle + " adjacency (FYI: Mantle sized to just fit within 3P Australia, but can be placed to overlap a number of Areas):", r)
 case class TBOverlayMantleDoneAction(self : Faction, r1 : Region, r2 : Region, chosen : $[Region])
     extends OptionFactionAction("Done".styled("power")) with Soft {
     override def question(implicit game : Game) = "Confirm " + TB.mantle + " adjacency"

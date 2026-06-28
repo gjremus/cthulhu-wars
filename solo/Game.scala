@@ -4306,7 +4306,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             } else None
 
             Ask(f)
-                .some(areas.%(r => f.gates.has(r) || (abandonedGates.has(r) && (DS.chaosGateRegions.has(r).not || f == DS) && !libraryBlockedRegions.has(r)))) { r =>
+                .some((areas ++ tbMantleInPlay.??($(TB.mantle))).%(r => f.gates.has(r) || (abandonedGates.has(r) && (DS.chaosGateRegions.has(r).not || f == DS) && !libraryBlockedRegions.has(r)))) { r =>
                     val blocked = libraryBlockedRegions.has(r)
                     val l = f.at(r).%(_.canControlGate).sortBy(_.onGate.not).distinctBy(_.uclass)
                     val g = $[Any](f.gates.has(r).not.?("Abandoned gate").|("Gate"), "in", r)
