@@ -126,10 +126,11 @@ object SLExpansion extends Expansion {
 
             game.hires(f)
 
-            if (f.has(AncientSorcery) && f.at(SL.sorcery, SerpentMan).any)
+            val hasSorcery = f.has(AncientSorcery) && f.at(SL.sorcery, SerpentMan).any
+            if (hasSorcery)
                 + AncientSorceryDoomAction(f)
-            else
-                + DoomDoneAction(f)
+
+            game.doomDone(f, blockDone = hasSorcery)
 
             asking
 

@@ -1350,6 +1350,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var queue : $[Battle] = $
     var anyIceAge : Boolean = false
     var lastDaolothRegion : |[Region] = None
+    var nextReplayActionHint : |[String] = None
     var tulzschaFlameTurn : Int = 1
     var neutralSpellbooks : $[Spellbook] = options.contains(NeutralSpellbooks).$(MaoCeremony, Recriminations, Shriveling, StarsAreRight, UmrAtTawil, Undimensioned)
     var loyaltyCards : $[LoyaltyCard] = options.of[LoyaltyCardGameOption]./(_.lc)
@@ -2191,6 +2192,36 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             + LoyaltyCardDoomAction(f)
     }
 
+    // Mandatory iGOO doom-phase actions (Innsmouth Look, Messenger of Yig) + conditional Done.
+    // Called from every faction's DoomAction handler. Replaces bare `+ DoomDoneAction(f)`.
+    // blockDone: extra condition that suppresses Done (e.g. SL's AncientSorcery still pending)
+    def doomDone(f : Faction, blockDone : Boolean = false)(implicit w : AskWrapper) {
+        // Ghatanothoa IGOO: doom-phase SBR auto-satisfy — fewer than 6 total Gates + Cultists
+        if (f.has(GhatanotoaIGOO) && f.upgrades.has(ExecrationOfMu).not) {
+            val gatesOnMap = f.allGates.onMap.num
+            val cultistsOnMap = f.units.%(u => u.region.onMap && u.uclass.utype == Cultist).num
+            if (gatesOnMap + cultistsOnMap < 6) {
+                f.upgrades :+= ExecrationOfMu
+                f.log("gained", ExecrationOfMu.styled(f), "for", GhatanotoaIGOO.styled(f), "(" + (gatesOnMap + cultistsOnMap) + " Gates + Cultists on map)")
+            }
+        }
+
+        // Innsmouth Look (mandatory if this faction controls Father Dagon)
+        val hasInnsmouth = f.has(TheInnsmouthLook) && !f.oncePerGame.has(TheInnsmouthLook) && f.has(FatherDagon) && f.allInPlay.%(_.uclass == Acolyte).any && !f.oncePerTurn.has(TheInnsmouthLook)
+        if (hasInnsmouth)
+            + InnsmouthLookDoomAction(f)
+
+        // Messenger of Yig (mandatory if an enemy controls Yig)
+        val yigOwner = factions.but(f).find(yf => yf.has(MessengerOfYig) && !yf.oncePerGame.has(MessengerOfYig) && yf.has(Yig))
+        val hasMessenger = yigOwner.isDefined && !f.oncePerTurn.has(MessengerOfYig)
+        if (hasMessenger)
+            + MessengerOfYigDoomAction(f, yigOwner.get)
+
+        // Done only available when all mandatory choices resolved
+        if (!hasInnsmouth && !hasMessenger && !blockDone)
+            + DoomDoneAction(f)
+    }
+
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
         // INIT
         case StartAction =>
@@ -2278,6 +2309,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // and skips raise-to-half + AfterPowerGatherAction + FirstPlayer/PlayDir
         // + DoomPhaseAction entirely. shepherdDoneThisGather is true on exactly
         // those re-entries and false on every normal first entry.
+        case PowerGatherAction(last) if nextReplayActionHint.exists(h => h.startsWith("MainGatesAction") || h.startsWith("PreMainAction") || h.startsWith("MainAction") || h.startsWith("NextPlayerAction")) =>
+            factions.foreach { f =>
+                f.active = f.power > 0 && f.hibernating.not
+            }
+
+            PreMainAction(last)
+
         case PowerGatherAction(last) if factions.%!(_.hibernating).%(_.power > 0).any && !TSExpansion.shepherdDoneThisGather =>
             factions.foreach { f =>
                 f.active = f.power > 0 && f.hibernating.not
@@ -2453,7 +2491,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // completes) doesn't loop. `last` is stashed into TSExpansion so
             // the re-entry can rebuild PowerGatherAction(last). See FactionTS.scala.
             if (factions.has(TS) && TS.onMap(Glaaki).any && TS.onMap(TombHerd).any && !TSExpansion.shepherdDoneThisGather) {
-                if (ElderThingMindControl.suppresses(TS.onMap(Glaaki).head)) {
+                val replayBlocksShepherd = nextReplayActionHint.exists(h => !h.startsWith("TSShepherdGather"))
+                if (replayBlocksShepherd) {
+                    // noop
+                } else if (ElderThingMindControl.suppresses(TS.onMap(Glaaki).head)) {
                     TS.log("Shepherd of the Crypt".styled("nt"), "blocked by", "Elder Thing".styled("nt"))
                 } else {
                     val regions = areas.nex.%(r => TS.at(r, TombHerd).any)
@@ -2851,30 +2892,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             game.hires(f)
 
-            // Ghatanothoa IGOO: doom-phase SBR auto-satisfy — fewer than 6 total Gates + Cultists
-            if (f.has(GhatanotoaIGOO) && f.upgrades.has(ExecrationOfMu).not) {
-                val gatesOnMap = f.allGates.onMap.num
-                val cultistsOnMap = f.units.%(u => u.region.onMap && u.uclass.utype == Cultist).num
-                if (gatesOnMap + cultistsOnMap < 6) {
-                    f.upgrades :+= ExecrationOfMu
-                    f.log("gained", ExecrationOfMu.styled(f), "for", GhatanotoaIGOO.styled(f), "(" + (gatesOnMap + cultistsOnMap) + " Gates + Cultists on map)")
-                }
-            }
-
-            // Innsmouth Look (mandatory if this faction controls Father Dagon)
-            val hasInnsmouth = f.has(TheInnsmouthLook) && !f.oncePerGame.has(TheInnsmouthLook) && f.has(FatherDagon) && f.allInPlay.%(_.uclass == Acolyte).any && !f.oncePerTurn.has(TheInnsmouthLook)
-            if (hasInnsmouth)
-                + InnsmouthLookDoomAction(f)
-
-            // Messenger of Yig (mandatory if an enemy controls Yig)
-            val yigOwner = factions.but(f).find(yf => yf.has(MessengerOfYig) && !yf.oncePerGame.has(MessengerOfYig) && yf.has(Yig))
-            val hasMessenger = yigOwner.isDefined && !f.oncePerTurn.has(MessengerOfYig)
-            if (hasMessenger)
-                + MessengerOfYigDoomAction(f, yigOwner.get)
-
-            // Done only available when all mandatory choices resolved
-            if (!hasInnsmouth && !hasMessenger)
-                + DoomDoneAction(f)
+            game.doomDone(f)
 
             asking
 

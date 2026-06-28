@@ -1039,7 +1039,7 @@ object IGOOsExpansion extends Expansion {
             val perFaction = factions./(f => (f, f.at(r).%(_.uclass.utype == Cultist)./(_.ref))).%{ case (_, units) => units.any }
             self.log("Tsunami".styled("nt") + ": all Cultists in", r, "must move to adjacent Ocean")
             if (perFaction.num > 1)
-                Ask(self).each(perFaction./(f => f._1))(f => ForcedCultistMoveOrderAction(self, f, r, perFaction, true, EndAction(self)))
+                Ask(self).each(perFaction./{ case (f, _) => f })(f => ForcedCultistMoveOrderAction(self, f, r, perFaction, true, EndAction(self)))
             else
                 ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = true, EndAction(self))
 
@@ -1053,12 +1053,12 @@ object IGOOsExpansion extends Expansion {
             val perFaction = self.enemies./(f => (f, f.at(r).%(_.uclass.utype == Cultist)./(_.ref))).%{ case (_, units) => units.any }
             self.log("The Agony Sting".styled("nt") + ": all enemy Cultists in", r, "must move to adjacent Land")
             if (perFaction.num > 1)
-                Ask(self).each(perFaction./(f => f._1))(f => ForcedCultistMoveOrderAction(self, f, r, perFaction, false, EndAction(self)))
+                Ask(self).each(perFaction./{ case (f, _) => f })(f => ForcedCultistMoveOrderAction(self, f, r, perFaction, false, EndAction(self)))
             else
                 ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = false, EndAction(self))
 
         case ForcedCultistMoveOrderAction(self, chosenFaction, sourceRegion, remaining, oceanDest, then) =>
-            val reordered = remaining.%(f => f._1 == chosenFaction) ++ remaining.%(f => f._1 != chosenFaction)
+            val reordered = remaining.%{ case (f, _) => f == chosenFaction } ++ remaining.%{ case (f, _) => f != chosenFaction }
             ForcedCultistMoveProcessAction(self, sourceRegion, reordered, oceanDest, then)
 
         // Forced cultist move: shared between Tsunami and Agony Sting
@@ -1080,7 +1080,8 @@ object IGOOsExpansion extends Expansion {
                             u.onGate = false
                         }
                     }
-                    faction.log("moved", cultists.num, "cultist".s(cultists.num), "to", adj.head)
+                    val powerName = if (oceanDest) "Tsunami" else "The Agony Sting"
+                    faction.log(cultists.num, "cultist".s(cultists.num), "forcibly moved by", powerName.styled("nt"), "to", adj.head)
                     ForcedCultistMoveProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
                 } else {
                     val u = cultists.head
@@ -1096,7 +1097,7 @@ object IGOOsExpansion extends Expansion {
                     uf.region = dest
                     uf.onGate = false
                 }
-                self.log("moved", u.uclass.styled(self), "to", dest)
+                self.log(u.uclass.styled(self), "forcibly moved to", dest)
             }
             Force(then)
 

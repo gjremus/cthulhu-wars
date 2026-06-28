@@ -580,7 +580,7 @@ object FBExpansion extends Expansion {
 
             game.hires(f)
 
-            + DoomDoneAction(f)
+            game.doomDone(f)
 
             if (ipBoost > 0)
                 f.power -= ipBoost
