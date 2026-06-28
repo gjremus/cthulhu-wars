@@ -3063,6 +3063,16 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                           pointer-events: none;
                                       ">5</span>
                             </span>
+                        </div>
+                        <div id="bb-moon-hud-row" style="
+                            position: absolute;
+                            top: max(2.5em, 8vmin);
+                            right: 0;
+                            display: flex;
+                            align-items: center;
+                            pointer-events: none;
+                            filter: drop-shadow(rgb(0, 0, 0) 0px 0px 6px) drop-shadow(rgb(0, 0, 0) 0px 0px 6px) drop-shadow(rgb(0, 0, 0) 0px 0px 6px);
+                        ">
                             ${bbMoonHudButton}
                         </div>
                     </div>"""
@@ -3214,18 +3224,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         val asset   = safe(moonSpriteAssetId(u))
                         val display = safe(u.uclass.name) + " (" + safe(u.faction.short) + ")"
                         val hp      = hpTag(u)
-                        // BB Moon sizing fix: pass each unit's ACTUAL on-map sprite
-                        // height (the same DrawRect.height the canvas map renders)
-                        // so the Moon overlay can size each sprite proportionally,
-                        // exactly like the regular map — instead of a flat 14%-tall
-                        // sprite that made a Bastet the same size as an Earth Cat.
-                        // Reuse DrawItem.proto (the canonical per-class size table)
-                        // so the Moon sizing never drifts from the map sizing.
                         val onMapH  = {
                             val ph = DrawItem(BB.moon, u.faction, u.uclass, u.health, u.state, 0, 0).proto
                             if (ph != null) ph.height else 70
                         }
-                        asset + "|" + display + "|" + hp + "|" + onMapH
+                        val fShort  = safe(u.faction.short)
+                        asset + "|" + display + "|" + hp + "|" + onMapH + "|" + fShort
                     }).mkString(";")
                     // BB Fix 31 (v2.4.8): if the HUD button is missing for any
                     // reason (orphaned by a map-small clear), recreate it now so
@@ -3578,7 +3582,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         // are logged inline and the replay continues from the last
                                         // good Continue.
                                         try {
+                                            game.nextReplayActionHint = if (n + 1 < recorded.num) Some(serializer.write(recorded(n + 1))) else None
                                             val (l, c) = game.perform(a.unwrap)
+                                            game.nextReplayActionHint = None
 
                                             l.foreach(s => log(s, showUndo(actions.num)))
 
@@ -3638,7 +3644,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 if (a.isRecorded)
                                     actions +:= a
 
+                                game.nextReplayActionHint = if (recorded.any && hash == "" && localReplay.not && recorded.num > actions.num) Some(recorded(actions.num).replace("&gt;", ">")) else None
                                 val (l, c) = g.perform(a.unwrap)
+                                game.nextReplayActionHint = None
 
                                 l.foreach { s =>
                                     queue :+= UILog(s)
@@ -5251,7 +5259,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         // body mid-write the persisted log can have only 2 lines, and the
                         // logs(2) read further down will throw IndexOutOfBoundsException.
                         // Show a clear page-level error instead of an uncaught throw so the
-                        // owner can act (delete the broken game in the admin console).
+                        // owner can act (recreate the game).
                         if (logs.size < 3) {
                             val err = dom.document.createElement("div")
                             err.asInstanceOf[html.Element].setAttribute("style",
@@ -5262,8 +5270,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 "<b>Game log header is incomplete.</b><br/>" +
                                 "Only " + logs.size + " of the required 3 header lines were written. " +
                                 "This game was created but lost data mid-write and cannot be loaded.<br/><br/>" +
-                                "Use the admin console at /admin.html to delete the broken game " +
-                                "(its game id and master secret are visible there)."
+                                "This game is unrecoverable and will need to be recreated."
                             dom.document.body.appendChild(err)
                             return
                         }
