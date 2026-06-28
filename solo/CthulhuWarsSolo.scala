@@ -3344,6 +3344,16 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                           pointer-events: none;
                                       ">5</span>
                             </span>
+                        </div>
+                        <div id="bb-moon-hud-row" style="
+                            position: absolute;
+                            top: max(2.5em, 8vmin);
+                            right: 0;
+                            display: flex;
+                            align-items: center;
+                            pointer-events: none;
+                            filter: drop-shadow(rgb(0, 0, 0) 0px 0px 6px) drop-shadow(rgb(0, 0, 0) 0px 0px 6px) drop-shadow(rgb(0, 0, 0) 0px 0px 6px);
+                        ">
                             ${bbMoonHudButton}
                         </div>
                         <div style="
