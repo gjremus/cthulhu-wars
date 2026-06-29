@@ -43,6 +43,8 @@ class Serialize(val game : Game) {
         case x : FBWritheKillEntry => "FBWritheKillEntry(" + x.productIterator.$./(write).mkString(", ") + ")"
         case x : FBWrithePainEntry => "FBWrithePainEntry(" + x.productIterator.$./(write).mkString(", ") + ")"
 
+        case m : Map[_, _] => "Map(" + m.toList./({ case (k, v) => "Pair(" + write(k) + ", " + write(v) + ")" }).mkString(", ") + ")"
+
         case x => x.getClass.getSimpleName.stripSuffix("$")
     }
 
@@ -143,6 +145,7 @@ class Serialize(val game : Game) {
         case ESymbol("UnspeakableOathOfAttackOnGate") => UnspeakableOathThreatOfAttackOnGate
         case ESymbol("Tuple2") => null
         case ESymbol("UnitFigure") => null
+        case ESymbol("EmptyMap") => Map.empty
         case ESymbol(s) =>
             parseFaction(s).map(_.asInstanceOf[Any])
                 .orElse(parseRegion(s).map(_.asInstanceOf[Any]))
@@ -160,6 +163,7 @@ class Serialize(val game : Game) {
         case ENone => None
         case EList(l) => l.map(parseExpr)
         case EApply("Pair", ps) => (parseExpr(ps(0)), parseExpr(ps(1)))
+        case EApply("Map", ps) => ps.map({ case EApply("Pair", kv) => (parseExpr(kv(0)), parseExpr(kv(1))) case e => parseExpr(e).asInstanceOf[(Any, Any)] }).toMap
         case EApply("AzathothOffer", ps) => AzathothOffer(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[Int])
         // Firstborn (FB) helper case classes — explicit parser cases mirror the
         // writer cases in Serialize.write. Same pattern as AzathothOffer above.
@@ -173,8 +177,8 @@ class Serialize(val game : Game) {
         // the 4-param form to the current action (catch-all also handles it), and the 5-param form to
         // TSPlaceTomeUnitActionLegacy5 so the flipper's turn ends (EndAction(flipper)) — dropping the
         // 5th param would do EndAction(TS) and desync replays such as game 454.
-        case EApply("TSPlaceTomeUnitAction", ps) if ps.num == 4 => TSPlaceTomeUnitAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitClass], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int])
-        case EApply("TSPlaceTomeUnitAction", ps) if ps.num == 5 => TSPlaceTomeUnitActionLegacy5(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitClass], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[Faction])
+        case EApply("TSPlaceTomeUnitAction", ps) if ps.num == 4 => TSPlaceTomeUnitAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitClass], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int], TS)
+        case EApply("TSPlaceTomeUnitAction", ps) if ps.num == 5 => TSPlaceTomeUnitAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitClass], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[Faction])
         case EApply("TsunamiMoveCultistAction", ps) => ForcedCultistMoveAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[$[UnitRef]], parseExpr(ps(4)).asInstanceOf[Action])
         case EApply("TsunamiProcessAction", ps) => ForcedCultistMoveProcessAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[$[(Faction, $[UnitRef])]], parseExpr(ps(3)).asInstanceOf[Boolean], parseExpr(ps(4)).asInstanceOf[Action])
         case EApply("ForcedCultistMoveAction", ps) => ForcedCultistMoveAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[$[UnitRef]], parseExpr(ps(4)).asInstanceOf[Action])
@@ -182,11 +186,11 @@ class Serialize(val game : Game) {
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 
-    def parseRegion(s : String) : |[Region] = (game.board.regions :+ SL.slumber :+ GC.deep).find(_.id == s)
+    def parseRegion(s : String) : |[Region] = (game.board.regions :+ SL.slumber :+ GC.deep :+ BB.moon).find(_.id == s)
 }
 
 object Serialize {
-    val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS) ++ $(NeutralAbhoth, LibraryFaction)
+    val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT, BB) ++ $(NeutralAbhoth, LibraryFaction)
 
     val loyaltyCards = $(
         // Base neutral monsters

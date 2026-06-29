@@ -345,7 +345,7 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
         val hasDaoloth = foes.exists(_.uclass == Daoloth)
         if (!hasDaoloth) return ownStr
 
-        val allyGOOs = allies.filter(_.uclass.utype == GOO)
+        val allyGOOs = allies.filter(_.uclass.isGOO)
         if (allyGOOs.none) return ownStr
 
         val nyogthas = allies.filter(_.uclass == Nyogtha)

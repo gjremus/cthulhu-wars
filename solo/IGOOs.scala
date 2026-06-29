@@ -491,8 +491,8 @@ object IGOOsExpansion extends Expansion {
         // Mother Hydra: "Have no GOOs in Ocean, or AN enemy has no GOOs in Ocean"
         factions.foreach { f =>
             if (f.has(MotherHydra) && f.upgrades.has(TheZygote).not) {
-                val ownerGOOsInOcean = f.allInPlay.%(_.uclass.utype == GOO).%(_.region.glyph == Ocean).any
-                val anyEnemyNoGOOInOcean = f.enemies.exists(e => e.allInPlay.%(_.uclass.utype == GOO).%(_.region.glyph == Ocean).none)
+                val ownerGOOsInOcean = f.allInPlay.%(_.uclass.isGOO).%(_.region.glyph == Ocean).any
+                val anyEnemyNoGOOInOcean = f.enemies.exists(e => e.allInPlay.%(_.uclass.isGOO).%(_.region.glyph == Ocean).none)
                 if (!ownerGOOsInOcean || anyEnemyNoGOOInOcean) {
                     f.upgrades :+= TheZygote
                     f.log("gained", TheZygote.styled(f), "for", MotherHydra.styled(f))
@@ -713,7 +713,7 @@ object IGOOsExpansion extends Expansion {
         // Cthugha: custom awakening — replace specific GOO, pay per-GOO cost
         case CthughaAwakenMainAction(self) =>
             // Sub-menu: list all GOOs (faction + iGOO) with costs
-            val allGOOs = self.allInPlay.%(_.uclass.utype == GOO).%(u => u.uclass != Cthugha)
+            val allGOOs = self.allInPlay.%(_.uclass.isGOO).%(u => u.uclass != Cthugha)
             var ask = Ask(self)
             allGOOs.foreach { goo =>
                 val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) self.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
@@ -779,7 +779,7 @@ object IGOOsExpansion extends Expansion {
                 })
 
             val cthughaAvailable = game.loyaltyCards.has(CthughaCard) && {
-                val allGOOs = self.allInPlay.%(_.uclass.utype == GOO).%(u => u.uclass != Cthugha)
+                val allGOOs = self.allInPlay.%(_.uclass.isGOO).%(u => u.uclass != Cthugha)
                 allGOOs.%(goo => {
                     val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) self.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
                     val cthughaCost = 6 - gooCost

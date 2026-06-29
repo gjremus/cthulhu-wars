@@ -178,7 +178,7 @@ object DSExpansion extends Expansion {
             if (f.needs(PowerDoomOffer) && f.enemies.any)
                 + PowerDoomOfferAction(f)
 
-            + DoomDoneAction(f)
+            game.doomDone(f)
 
             asking
 

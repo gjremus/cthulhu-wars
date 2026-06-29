@@ -117,7 +117,7 @@ case class PrimeCauseChooseReplacementAction(self : Faction, oldRef : UnitRef, n
         // without Extinction → 6, with Extinction → 4, etc.). Replacing an
         // Elder Shoggoth itself still costs 0 (free swap-out).
         val cost = if (oldU.uclass == ElderShoggoth) 0
-                   else if (newUC.utype == GOO) self.awakenCost(newUC, r)(g).getOrElse(newUC.cost) / 2
+                   else if (newUC.isGOO) self.awakenCost(newUC, r)(g).getOrElse(newUC.cost) / 2
                    else self.summonCost(newUC, r)(g) / 2
         "Replace with " + newUC.styled(self) + (cost > 0).??(" (" + cost.power + ")")
     }) {
@@ -955,7 +955,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     val enemySide = if (s == attacker) defenders else attackers
                     val enemy = s.opponent
                     if (mySide.forces.%(_.uclass == Cthugha).any) {
-                        val enemyGOOs = enemySide.forces.%(_.uclass.utype == GOO)
+                        val enemyGOOs = enemySide.forces.%(_.uclass.isGOO)
                         if (enemyGOOs.num > 1) {
                             val gooTypes = enemyGOOs./(_.uclass).distinct
                             val combats = gooTypes./(goo => (goo, enemy.strength(enemySide.forces.%(_.uclass == goo), s)))
@@ -1002,9 +1002,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // resolution chain, BEFORE Leng Spider Bloodthirst and BEFORE Demand Sacrifice's
                 // Kills->Pains conversion (rulebook FAQ #3 and FAQ #17).
                 // Fix 27 (user directive 2026-06-02): Zagazig is NOT optional — auto-apply
-                // whenever BB is participating in the battle and has Zagazig researched.
+                // whenever BB is participating in the battle, has Zagazig researched,
+                // AND a Cat from Mars is present in BB's forces (per rulebook text).
                 // Per-faction roll-change line emitted to game log so the new totals are visible.
-                if (sides.has(BB) && BB.can(Zagazig)) {
+                if (sides.has(BB) && BB.can(Zagazig) && BB.forces.%(_.uclass == CatFromMars).any) {
                     sides.%(f => f == BB).foreach { bbSide =>
                         def swapRolls(side : Side) {
                             side.rolls = side.rolls./(r => if (r == Kill) Pain else if (r == Pain) Kill else r)
@@ -1795,8 +1796,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // for THIS region are met. `self.awakenCost(uc, r)` returns Some
             // only when the awaken conditions are satisfied; we filter on that.
             val battleRegion = game.unit(uRef).region
-            val poolNonGoo  = self.pool.%(_.uclass.utype != GOO)./(_.uclass).distinct
-            val poolGooKnown = self.pool.%(_.uclass.utype == GOO).%(u =>
+            val poolNonGoo  = self.pool.%(u => !u.uclass.isGOO)./(_.uclass).distinct
+            val poolGooKnown = self.pool.%(u => u.uclass.isGOO).%(u =>
                 u.uclass.isInstanceOf[FactionUnitClass] && self.awakenCost(u.uclass, battleRegion).nonEmpty
             )./(_.uclass).distinct
             val poolUnits = (poolNonGoo ++ poolGooKnown).distinct
@@ -1816,22 +1817,26 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             //   without Extinction → 3 = 6/2; with Extinction → 2 = 4/2; etc.).
             //   Replacing an Elder Shoggoth itself still costs 0.
             val cost = if (isES) 0
-                       else if (newUC.utype == GOO) self.awakenCost(newUC, r).getOrElse(newUC.cost) / 2
+                       else if (newUC.isGOO) self.awakenCost(newUC, r).getOrElse(newUC.cost) / 2
                        else self.summonCost(newUC, r) / 2
             // [2026-05-23] Prime Cause logs split into 4 separate events per user spec:
             //   1) unit removed, 2) unit replaced, 3) ES given (GOO penalty), 4) doom given (Terror penalty)
             //   Cost-paid log kept as a 5th (cost > 0 only).
             // Remove old unit
             game.eliminate(oldUnit)
+            self.forces :-= oldUnit
             log(self.full, "Prime Cause".styled("nt") + ": removed", oldUnit.uclass.styled(self), "from", r)
             // Place new unit (guard: ensure pool has the unit)
-            if (self.pool(newUC).any)
+            val newUnit = if (self.pool(newUC).any) {
+                val u = self.pool(newUC).first
                 self.place(newUC, r)
-            else {
-                // Pool empty — create the unit directly
+                u
+            } else {
                 val u = new UnitFigure(self, newUC, self.units.%(_.uclass == newUC).num + 1, r)
                 self.units :+= u
+                u
             }
+            self.forces :+= newUnit
             log(self.full, "Prime Cause".styled("nt") + ": replaced with", newUC.styled(self), "in", r)
             // Cost
             if (cost > 0) {
@@ -1845,7 +1850,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     enemy.doom += 1
                     log(enemy.full, "Prime Cause".styled("nt") + ": gained", 1.doom, "(Terror replaced)")
                 }
-                if (oldUnit.uclass.utype == GOO) {
+                if (oldUnit.uclass.isGOO) {
                     val enemy = self.opponent
                     enemy.takeES(1)
                     log(enemy.full, "Prime Cause".styled("nt") + ": gained", 1.es, "(GOO replaced)")

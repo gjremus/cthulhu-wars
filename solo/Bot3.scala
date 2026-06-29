@@ -150,7 +150,7 @@ case class Bot3(faction : Faction) {
             val hasDaoloth = foes.exists(_.uclass == Daoloth)
             if (!hasDaoloth) return ownStr
 
-            val allyGOOs = allies.filter(_.uclass.utype == GOO)
+            val allyGOOs = allies.filter(_.uclass.isGOO)
             if (allyGOOs.none) return ownStr
 
             val nyogthas = allies.filter(_.uclass == Nyogtha)
@@ -1527,7 +1527,7 @@ case class Bot3(faction : Faction) {
 
                     // ── Cthugha-specific awaken (replace own GOO) ──────────
                     case CthughaAwakenMainAction(_) =>
-                        self.allInPlay.%(_.uclass.utype == GOO).%(_.uclass != Cthugha).any |=> 1500 -> "use cthugha replace"
+                        self.allInPlay.%(_.uclass.isGOO).%(_.uclass != Cthugha).any |=> 1500 -> "use cthugha replace"
 
                     case CthughaAwakenAction(_, _, replacedGOO, cost) =>
                         // Replace cheapest GOO first
@@ -1599,15 +1599,13 @@ case class Bot3(faction : Faction) {
                         true |=> 800 -> "trigger nuclear chaos"
 
                     case NuclearChaosAdjustAction(_, rolls, adjust) =>
-                        // Owner adjusts own roll +/- 1; prefer adjusting up
-                        val myRoll = rolls.%(_.f == self).head.n
+                        val myRoll = rolls(self)
                         (adjust == 1 && myRoll <= 5) |=> 500 -> "nuclear chaos: bump roll up"
                         (adjust == -1 && myRoll == 6) |=> 300 -> "nuclear chaos: bump 6→5"
                         true |=> 0 -> "nuclear chaos adjust"
 
                     case NuclearChaosKeepAction(_, rolls) =>
-                        // Keep if my roll is already 5+
-                        val myRoll = rolls.%(_.f == self).head.n
+                        val myRoll = rolls(self)
                         myRoll >= 5 |=> 400 -> "nuclear chaos: keep high roll"
                         myRoll <= 2 |=> -200 -> "nuclear chaos: dont keep low roll"
                         true |=> 100 -> "nuclear chaos keep"
@@ -1687,7 +1685,7 @@ case class Bot3(faction : Faction) {
                         val u = game.unit(uRef)
                         val uc = u.uclass
                         // Prefer capturing high-value units
-                        (uc.utype == GOO) |=> 1500 -> "velvet fan: capture GOO"
+                        (uc.isGOO) |=> 1500 -> "velvet fan: capture GOO"
                         (uc.utype == Terror) |=> 1000 -> "velvet fan: capture Terror"
                         (uc.utype == Monster && uc.cost >= 2) |=> 500 -> "velvet fan: capture good Monster"
                         true |=> 200 -> "velvet fan: capture"
@@ -1703,7 +1701,7 @@ case class Bot3(faction : Faction) {
                         (uc.utype == Cultist) |=> 600 -> "spare cultist for 1 power"
                         (uc.utype == Monster && uc.cost <= 2) |=> 400 -> "spare cheap monster"
                         // Don't spare high-value — they should die
-                        (uc.utype == GOO) |=> -500 -> "dont spare enemy GOO"
+                        (uc.isGOO) |=> -500 -> "dont spare enemy GOO"
                         (uc.utype == Terror) |=> -300 -> "dont spare enemy Terror"
 
                     case FireVampiresSkipAction(_) =>
@@ -1722,7 +1720,7 @@ case class Bot3(faction : Faction) {
 
                     case PrimeCauseChooseReplacementAction(_, _, newUC) =>
                         // Pick highest-value replacement
-                        (newUC.utype == GOO) |=> 1000 -> "prime cause: bring GOO"
+                        (newUC.isGOO) |=> 1000 -> "prime cause: bring GOO"
                         (newUC.utype == Terror) |=> 600 -> "prime cause: bring Terror"
                         (newUC.utype == Monster && newUC.cost >= 2) |=> 300 -> "prime cause: bring Monster"
                         true |=> 100 -> "prime cause: replacement"
@@ -1766,7 +1764,7 @@ case class Bot3(faction : Faction) {
                     // ── Yig Snakebite (battle, Yig owner picks Kill target) ─
                     case YigSnakebiteAssignAction(_, _, uc) =>
                         // Assign extra Kill to highest-value enemy unit
-                        (uc.utype == GOO) |=> 1500 -> "snakebite: kill GOO"
+                        (uc.isGOO) |=> 1500 -> "snakebite: kill GOO"
                         (uc.utype == Terror) |=> 1000 -> "snakebite: kill Terror"
                         (uc.utype == Monster && uc.cost >= 2) |=> 500 -> "snakebite: kill good Monster"
                         true |=> 200 -> "snakebite: kill"

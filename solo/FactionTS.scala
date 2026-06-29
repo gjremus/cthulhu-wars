@@ -282,14 +282,15 @@ object TSExpansion extends Expansion {
 
                 game.hires(f)
 
-                + DoomDoneAction(f)
+                game.doomDone(f)
 
                 asking
             }
 
         case TSDeathMarchDoomAction(self, _) =>
             // MANDATORY: must place TH, no cancel option
-            Ask(self).each(areas)(r => TSDeathMarchAction(self, r))
+            val destinations = areas
+            Ask(self).each(destinations)(r => TSDeathMarchAction(self, r))
 
         case TSDeathMarchAction(self, r) =>
             game.deathsHead -= 1

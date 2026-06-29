@@ -332,7 +332,7 @@ object TTExpansion extends Expansion {
         if (!game.setup.has(TT)) return
 
         // TTGOOKilledInBattle: any GOO killed in battle
-        if (u.uclass.utype == GOO && game.battle.any && game.battle.get.eliminated.contains(u))
+        if (u.uclass.isGOO && game.battle.any && game.battle.get.eliminated.contains(u))
             TT.satisfy(TTGOOKilledInBattle, "GOO killed in battle")
 
         // Fulmination fires in Battle.scala's AssignKillAction when Ubbo is killed — no action needed here
@@ -388,7 +388,7 @@ object TTExpansion extends Expansion {
             if (f.pool(UbboSathla).any && f.gates.any && f.all(HighPriest).onMap.any)
                 + TTAwakenUbboDoomMainAction(f)
 
-            + DoomDoneAction(f)
+            game.doomDone(f)
             asking
 
         case TTHellsBanquetRollAction(f) =>
@@ -406,8 +406,19 @@ object TTExpansion extends Expansion {
         case MainAction(f) if f == TT && f.active.not =>
             UnknownContinue
 
-        case MainAction(f) if f == TT && f.acted =>
-            UnknownContinue
+        case MainAction(f) if f == TT && (f.acted || f.battled.any) =>
+            implicit val asking = Asking(f)
+
+            game.controls(f)
+
+            if (f.hasAllSB)
+                game.battles(f)
+
+            game.reveals(f)
+
+            game.endTurn(f)(true)
+
+            asking
 
         case MainAction(f) if f == TT =>
             implicit val asking = Asking(f)
