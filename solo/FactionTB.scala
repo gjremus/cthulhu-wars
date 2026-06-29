@@ -427,7 +427,7 @@ object TBExpansion extends Expansion {
 
             game.hires(f)
 
-            + DoomDoneAction(f)
+            game.doomDone(f)
 
             asking
 
@@ -640,6 +640,7 @@ object TBExpansion extends Expansion {
             val from = u.region
             u.region = dest
             self.log(Stalk.styled(TB) + ": relocated", u.uclass.styled(TB), "from", from, "to", dest)
+            game.checkGatesGained(self)
             EndAction(mover)
 
         // ====================================================================
