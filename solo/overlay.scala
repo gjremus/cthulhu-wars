@@ -1329,27 +1329,45 @@ object Overlays {
                 val src     = if (assetId.nonEmpty)
                     hrf.web.getElem(assetId).as[dom.html.Image]./(_.src).|("")
                 else ""
-                (src, display, onMapH)
-            }).filter { case (src, _, _) => src.nonEmpty }
-            val n = parsed.length
+                (assetId, src, display, onMapH)
+            }).filter { case (_, src, _, _) => src.nonEmpty }
             val spriteScale = 12.0 / 60.0
             def spriteHFor(onMapH : Double) : Double = onMapH * spriteScale
+            val gateEntries = parsed.filter(_._1 == "gate")
+            val unitEntries = parsed.filter(_._1 != "gate")
+            val gateControllerEntries = unitEntries.filter(e => e._3.contains("Cadavolyte") || e._3.contains("Acolyte"))
+            val otherUnits = unitEntries.filter(e => !e._3.contains("Cadavolyte") && !e._3.contains("Acolyte"))
+            val gateFigure = gateEntries.headOption./({ case (_, src, display, onMapH) =>
+                val spriteH = spriteHFor(onMapH)
+                f"""<img src="$src"
+                         title="$display"
+                         style="position: absolute; left: 50.00%%; top: 50.00%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
+            }).|("")
+            val controllerFigure = gateControllerEntries.headOption./({ case (_, src, display, onMapH) =>
+                val spriteH = spriteHFor(onMapH)
+                f"""<img src="$src"
+                         title="$display"
+                         style="position: absolute; left: 50.00%%; top: 45.00%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95)); z-index: 1;" />"""
+            }).|("")
+            val remainingControllers = if (gateControllerEntries.nonEmpty) gateControllerEntries.drop(1) else $[( String, String, String, Double)]()
+            val allOther = (remainingControllers ++ otherUnits).toList
+            val n = allOther.length
             val positions : List[(Double, Double)] = if (n == 0) Nil else {
                 val step = 360.0 / n
                 (0 until n).toList./(i => {
-                    val angle = i * step * math.Pi / 180.0
-                    val radius = if (n <= 3) 20.0 else 28.0
+                    val angle = (i * step - 90.0) * math.Pi / 180.0
+                    val radius = if (n <= 3) 25.0 else 30.0
                     (50.0 + radius * math.cos(angle), 50.0 + radius * math.sin(angle))
                 })
             }
-            val unitFigures = parsed.zip(positions)./({ case ((src, display, onMapH), (xPct, yPct)) =>
+            val otherFigures = allOther.zip(positions)./({ case ((_, src, display, onMapH), (xPct, yPct)) =>
                 val spriteH = spriteHFor(onMapH)
                 f"""<img src="$src"
                          title="$display"
                          style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
             }).mkString("")
             val figureLayer = if (count > 0)
-                s"""<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;">$unitFigures</div>"""
+                s"""<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;">$gateFigure$controllerFigure$otherFigures</div>"""
             else ""
             val emptyCaption = if (count == 0)
                 s"""<div style="position: absolute; bottom: 6%; left: 0; right: 0; text-align: center; color: white; text-shadow: 0 0 4px black, 0 0 4px black; font-size: 0.35em;">The Mantle is empty.</div>"""

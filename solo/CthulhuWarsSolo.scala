@@ -114,6 +114,14 @@ object CthulhuWarsSolo {
     def getTintedAsset(k : String, processing : Processing) : html.Canvas = {
         val source = dom.document.getElementById(k).asInstanceOf[html.Image]
 
+        if (source == null || source.width == 0) {
+            dom.console.warn("[getTintedAsset] missing asset: " + k)
+            val fallback = dom.document.createElement("canvas").asInstanceOf[html.Canvas]
+            fallback.width = 1
+            fallback.height = 1
+            return fallback
+        }
+
         val result = new Bitmap(source.width, source.height)
         result.context.drawImage(source, 0, 0)
 
@@ -3478,9 +3486,46 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             case Ghatanothoa   => "fb-ghatanothoa"
                             case ProtoShoggoth => "tt-proto-shoggoth"
                             case UbboSathla    => "tt-ubbo-sathla"
-                            // Neutral monsters (Moonbeast etc. — Moonbeasts return to map at end of doom phase
-                            // so they shouldn't sit on the Moon, but cover the case anyway).
-                            case other         => f.short.toLowerCase + "-" + other.name.toLowerCase.replace(" ", "-").replace("'", "")
+                            case Ghast              => "n-ghast"
+                            case Gug                => "n-gug"
+                            case Shantak            => "n-shantak"
+                            case StarVampire        => "n-star-vampire"
+                            case Voonith            => "n-voonith"
+                            case DimensionalShamblerUnit => "n-dimensional-shambler"
+                            case Gnorri             => "n-gnorri"
+                            case Ygolonac           => "n-ygolonac"
+                            case Byatis             => "n-byatis"
+                            case Abhoth             => "n-abhoth"
+                            case Filth              => "n-filth"
+                            case Daoloth            => "n-daoloth"
+                            case Nyogtha            => "n-nyogtha"
+                            case Tulzscha           => "n-tulzscha"
+                            case Dhole              => "n-dhole"
+                            case GreatRaceOfYith    => "n-great-race-of-yith"
+                            case QuachilUttaus      => "n-quachil-uttaus"
+                            case ShadowPharaoh      => "n-the-shadow-pharaoh"
+                            case HoundOfTindalos    => "n-hound-of-tindalos"
+                            case BrownJenkin        => "n-brown-jenkin"
+                            case ElderShoggoth      => "n-elder-shoggoth"
+                            case MoonbeastUnit      => "n-moonbeast"
+                            case AlbinoPenguins     => "n-giant-blind-albino-penguins"
+                            case ElderThing         => "n-elder-thing"
+                            case LengSpiderUnit     => "n-leng-spider"
+                            case Satyr              => "n-satyr"
+                            case InsectsFromShaggai => "n-insects-from-shaggai"
+                            case ServitorUnit       => "n-servitor-of-the-outer-gods"
+                            case AzathothIGOO       => "n-azathoth"
+                            case Cthugha            => "n-cthugha"
+                            case MotherHydra        => "n-mother-hydra"
+                            case Yig                => "n-yig"
+                            case FatherDagon        => "n-father-dagon"
+                            case GhatanotoaIGOO     => "n-ghatanothoa"
+                            case BloatedWoman       => "n-the-bloated-woman"
+                            case AtlachNacha        => "n-atlach-nacha"
+                            case Bokrug             => "n-bokrug"
+                            case GlaakiIGOO         => "n-glaaki-igoo"
+                            case MindParasiteCultist => "ts-acolyte"
+                            case other              => f.short.toLowerCase + "-" + other.name.toLowerCase.replace(" ", "-").replace("'", "")
                         }
                     }
                     val moonFigs = displayGame.factions./~(ff => ff.at(BB.moon))
@@ -3525,7 +3570,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     implicit val g : Game = displayGame
                     val mantleInPlay = displayGame.tbMantleInPlay
                     val mantleFigs : $[UnitFigure] = if (mantleInPlay) displayGame.factions./~(ff => ff.at(TB.mantle)) else $
-                    val mantleGatePresent = TB.gates.has(TB.mantle)
+                    val mantleGatePresent = displayGame.gates.has(TB.mantle)
                     val mantleCount = mantleFigs.num + (if (mantleGatePresent) 1 else 0)
                     def mantleSpriteAssetId(u : UnitFigure) : String = {
                         val f = u.faction
