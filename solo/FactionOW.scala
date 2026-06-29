@@ -192,7 +192,7 @@ object OWExpansion extends Expansion {
             game.moves(f)
 
             if (f.can(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(f.affords(1)).any)
-                game.gates.%(r => f.enemies.%(_.at(r, GOO).any).none).%(r => f.at(r).%(_.uclass.cost >= 3).%(_.canMove).any).some.foreach {
+                game.gates.%(r => f.enemies.%(_.at(r, GOO).any).none).%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
                     + BeyondOneMainAction(f, _)
                 }
 
@@ -262,7 +262,7 @@ object OWExpansion extends Expansion {
 
         // BEYOND ONE
         case BeyondOneMainAction(self, l) =>
-            Ask(self).each(l./~(r => self.at(r).%(_.uclass.cost >= 3)).%(_.canMove))(u => BeyondOneUnitAction(self, u.region, u.uclass)).cancel
+            Ask(self).each(l./~(r => self.at(r).%(_.uclass.cost >= 3)).%(u => u.canMove || u.uclass == HoundOfTindalos))(u => BeyondOneUnitAction(self, u.region, u.uclass)).cancel
 
         case BeyondOneUnitAction(self, o, uc) =>
             Ask(self).each(areas.diff(game.gates).%(self.affords(1)))(r => BeyondOneAction(self, o, uc, r)).cancel
