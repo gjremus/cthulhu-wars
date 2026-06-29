@@ -130,6 +130,7 @@ object RitualTrackOverlay {
     var numPlayers : Int = 4
     var markerIndex : Int = 0
     var trackLength : Int = 9
+    var ritualCost : Int = 5
     var ritualHistory : $[String] = $          // faction style strings, in order
     var ritualHistoryCeremony : $[Boolean] = $ // true when that ritual was a Ceremony of Annihilation
     // Tombstalker (TS): indices on the ritual track where pure Death's Head hecatomb rituals occurred (no marker advance)
@@ -218,6 +219,12 @@ object TSCursedTomesOverlay {
         10 -> s"Gain $P1. $TS gains an $ES.",
         11 -> s"Gain $P1. $TS gains $D equal to the $RT marker minus 5."
     )
+}
+
+object FactionCombatOverlay {
+    var glaakiCombat : Int = 0
+    var ghatoCombat : Int = 0
+    var acolyteCounts : scala.collection.immutable.Map[String, Int] = scala.collection.immutable.Map()
 }
 
 object Overlays {
@@ -754,7 +761,7 @@ object Overlays {
             (Acolyte,    6, "1",   "0", s""""""),
             (TombHerd,   6, "2",   "3", s"""<div class=p>The first Tomb-Herd in an Area has 3 Combat. Any others have 0 Combat.</div>"""),
             (DeepTendril, 3, "3", "1-3", s"""<div class=p>Combat: 1, +1 if Gla'aki is in the same Area, +1 if in an Ocean/Sea Area.</div>"""),
-            (Glaaki,     1, "7",   "?", s"""<div class=p>Combat: equals double the number of Deep Tendrils in play.</div><div class=p>Awaken: control an Ocean/Sea gate. May spend Death's Head as Power.</div><div class=p><span class=ability-color>Shepherd of the Crypt</span> (Gather Power Phase): choose an Area and gain 1 Power per Tomb-Herd there.</div>""")
+            (Glaaki,     1, "7",   s"?(${FactionCombatOverlay.glaakiCombat})", s"""<div class=p>Combat: equals double the number of Deep Tendrils in play.</div><div class=p>Awaken: control an Ocean/Sea gate. May spend Death's Head as Power.</div><div class=p><span class=ability-color>Shepherd of the Crypt</span> (Gather Power Phase): choose an Area and gain 1 Power per Tomb-Herd there.</div>""")
         ))
 
         // Tombstalker (TS): spellbook requirement info card overlays
@@ -775,13 +782,15 @@ object Overlays {
 
 
         // Firstborn (FB): faction info card showing unique ability (Writhe), units, and Crater building
-        case $("FB") => faction(FB, "info:fb-background", Writhe, "Action: Cost 2",
+        case $("FB") =>
+            val ghatoCost = math.max(1, 11 - RitualTrackOverlay.ritualCost)
+            faction(FB, "info:fb-background", Writhe, "Action: Cost 2",
             "Roll dice equal to your Power. For each Kill: Eliminate a Unit you control, any of your Acolytes Eliminated are instead replaced with Desiccated. For each Pain, relocate your Unit to any Area. Before applying these results, you may reroll ALL these dice once.<br/><br/><span class=ability-color>Crater</span> <span class=cost-color>(Building):</span> Any Gate (other than Yog-Sothoth) that coexists in an Area with a Crater is immediately destroyed.",
             $(), $(
             (Acolyte,        6, "1", "0", s""""""),
             (Desiccated,     6, "2", "0+", s"""<div class=p>Combat is 1 if in a land Area, 0 if in a sea Area.</div>"""),
             (RevenantOfKnaa, 2, "3", "?", s"""<div class=p>Combat equals the number of Desiccated in play.</div>"""),
-            (Ghatanothoa,    1, "?", "?", s"""<div class=p>Cost: 11 minus Ritual cost. Combat equals your Power.</div><div class=p><span class=ability-color>Infernal Pact</span> (Ongoing): You may discount the cost of any Action you perform by flipping any number of your faceup spellbooks, reducing that cost by 1 per spellbook flipped.</div>""")
+            (Ghatanothoa,    1, s"?(${ghatoCost})", s"?(${FactionCombatOverlay.ghatoCombat})", s"""<div class=p>Cost: 11 minus Ritual cost. Combat equals your Power.</div><div class=p><span class=ability-color>Infernal Pact</span> (Ongoing): You may discount the cost of any Action you perform by flipping any number of your faceup spellbooks, reducing that cost by 1 per spellbook flipped.</div>""")
         ))
 
         // Firstborn (FB): spellbook requirement info card overlays
@@ -1423,14 +1432,16 @@ object Overlays {
                     </td>
                 </tr>
                 ${
-                    units./{ case (uc, n, c, b, t) => s"""
+                    units./{ case (uc, n, c, b, t) =>
+                        val displayN = if (uc == Acolyte) FactionCombatOverlay.acolyteCounts.getOrElse(f.short, n) else n
+                        s"""
                         <tr>
                             <td>
-                                <img class="img" src=${imageSource("info:" + f.short.toLowerCase + "-" + uc.name.toLowerCase.replace(" ", "-"))}>
+                                <img class="img" src=${imageSource("info:" + f.short.toLowerCase + "-" + uc.name.toLowerCase.replace("'", "").replace(" ", "-"))}>
                             </td>
                             <td>
                                 <div class="unit-desc">
-                                    <div class="p"><span class=unit-name>${uc.name}${(n > 1).??(s"""<sup>(${n})</sup>""")}</div>
+                                    <div class="p"><span class=unit-name>${uc.name}${(displayN > 1).??(s"""<sup>(${displayN})</sup>""")}</div>
                                     <div class="p"><span class=unit-type>${uc.utype.name.replace("GOO", "Great Old One")}</div>
                                 </div>
                             </td>

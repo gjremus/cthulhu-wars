@@ -2960,6 +2960,15 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 TSCursedTomesOverlay.factionTomes = displayGame.cursedTomesOwned.map { case (f, tomes) => f.style -> tomes }
                 TSCursedTomesOverlay.tomesOnCard = displayGame.tsTomesOnCard
 
+                RitualTrackOverlay.ritualCost = displayGame.ritualCost
+
+                locally {
+                    implicit val g : Game = displayGame
+                    FactionCombatOverlay.glaakiCombat = if (g.factions.has(TS)) TS.onMap(DeepTendril).not(Zeroed).num * 2 else 0
+                    FactionCombatOverlay.ghatoCombat = if (g.factions.has(FB)) FB.power else 0
+                    FactionCombatOverlay.acolyteCounts = g.factions./(f => f.short -> f.units.%(_.uclass == Acolyte).num).toSeq.toMap
+                }
+
                 dom.document.getElementById("roa-cost-num").?.foreach(_.innerHTML = displayGame.ritualCost.toString)
 
                 mapWest.innerHTML = (board.west :+ GC.deep)./(r => processStatus(displayGame.regionStatus(r), "p8")).mkString("")
