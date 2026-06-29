@@ -3391,7 +3391,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             doomPhase = false
             endActionPhasePrompts = false
             fbGhatoLastMoveOrigin = None
-            factions = doomOrder
+            if (doomOrder.any)
+                factions = doomOrder
 
             // Nuclear Chaos (Azathoth spellbook): flip back face-up at start of Action Phase
             factions.foreach { f =>
@@ -3684,13 +3685,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             f.acted = false
             f.hired = false
 
-            // Use saved doomOrder to find the next doom player. The action phase
-            // rotates `factions` via NextPlayerAction; by the time the doom phase
-            // runs, factions can be in a corrupted order. doomOrder is set once
-            // per turn by PlayDirectionAction and never mutated.
-            val doomIdx = doomOrder.indexOf(f)
-            val next = doomOrder((doomIdx + 1) % doomOrder.size)
-            factions = doomOrder.drop(doomIdx + 1) ++ doomOrder.take(doomIdx + 1)
+            val order = if (doomOrder.any) doomOrder else factions
+            val doomIdx = order.indexOf(f)
+            val next = order((doomIdx + 1) % order.size)
+            factions = order.drop(doomIdx + 1) ++ order.take(doomIdx + 1)
 
             if (next != game.first) {
                 pendingLine = |(CthulhuWarsSolo.DottedLine)
