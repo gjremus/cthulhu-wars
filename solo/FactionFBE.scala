@@ -330,7 +330,7 @@ object FBEExpansion extends Expansion {
             if (f.can(Succor) && f.units.%(_.region.onMap).any && !f.oncePerAction.has(Succor))
                 + SuccorMainAction(f)
 
-            + DoomDoneAction(f)
+            game.doomDone(f)
 
             asking
 

@@ -265,7 +265,7 @@ object BBExpansion extends Expansion {
 
             game.hires(f)
 
-            + DoomDoneAction(f)
+            game.doomDone(f)
 
             asking
 

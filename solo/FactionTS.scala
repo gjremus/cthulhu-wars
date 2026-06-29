@@ -279,18 +279,21 @@ object TSExpansion extends Expansion {
 
                 game.hires(f)
 
-                + DoomDoneAction(f)
+                game.doomDone(f)
 
                 asking
             }
 
         case TSDeathMarchDoomAction(self, _) =>
             // MANDATORY: must place TH, no cancel option
-            Ask(self).each(areas)(r => TSDeathMarchAction(self, r))
+            val destinations = areas ++ game.factions.has(BB).$(BB.moon)
+            Ask(self).each(destinations)(r => TSDeathMarchAction(self, r))
 
         case TSDeathMarchAction(self, r) =>
             game.deathsHead -= 1
+            game.tsInDeathMarch = true
             self.place(TombHerd, r)
+            game.tsInDeathMarch = false
             self.log("Death March: placed", TombHerd.styled(TS), "in", r, "(Death's Head now", game.deathsHead.toString.styled("kill") + ")")
 
             // If Hecatomb is available and DH > 0, can spend remainder toward ritual after placing all Tomb-Herds

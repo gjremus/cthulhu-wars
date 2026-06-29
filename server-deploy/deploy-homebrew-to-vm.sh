@@ -53,6 +53,7 @@ cp "$HB_ROOT/solo/index.html" "$TMP_INDEX"
 sed -i '' \
     -e 's|###SERVER-URL###|https://cwo.freeddns.org/HB/|g' \
     -e "s|main\\.js?v=[A-Za-z0-9-]*|main.js?v=$CACHE_TAG|g" \
+    -e 's|<head>|<head>\n        <base href="/HB/" />|' \
     "$TMP_INDEX"
 
 echo "==> [remote] ensure $REMOTE_ROOT/target tree exists ..."
