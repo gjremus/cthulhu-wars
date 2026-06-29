@@ -300,25 +300,50 @@ object MoonPlacement {
         pointsVertical.get
     }
 
-    // Pick `n` scatter positions for sprites. Returns (pixelX, pixelY) pairs
-    // in moon-image pixel space (0..moonImageW, 0..moonImageH). Caller converts
-    // to CSS % of the displayed moon image. Greedy farthest-point sampling:
-    // each next point maximises the minimum distance to already-placed points
-    // — no straight rows, minimal overlap, every result guaranteed inside the
-    // magenta disc.
     def scatter(n : Int, useHorizontal : Boolean, seed : Int) : Array[(Double, Double)] = {
         val pool = if (useHorizontal) horizontal else vertical
         if (pool.isEmpty || n <= 0) return Array.empty
         val rng = new scala.util.Random(seed)
         val out = scala.collection.mutable.ArrayBuffer.empty[(Double, Double)]
-        out += pool(rng.nextInt(pool.length))
+
+        val cx = moonImageW / 2.0
+        val cy = moonImageH / 2.0
+        val maxR = Math.min(cx, cy)
+
+        val textZones : Array[(Double, Double, Double, Double)] = Array(
+            (130.0, 500.0, 900.0, 790.0)
+        )
+
+        def inTextZone(px : Double, py : Double) : Boolean = {
+            var z = 0
+            while (z < textZones.length) {
+                val (x1, y1, x2, y2) = textZones(z)
+                if (px >= x1 && px <= x2 && py >= y1 && py <= y2) return true
+                z += 1
+            }
+            false
+        }
+
+        def centerWeight(px : Double, py : Double) : Double = {
+            val dx = (px - cx) / maxR
+            val dy = (py - cy) / maxR
+            val dist = Math.sqrt(dx * dx + dy * dy)
+            val w = 1.0 - 0.6 * dist * dist
+            if (w < 0.1) 0.1 else w
+        }
+
+        val innerPool = pool.filter { case (px, py) => !inTextZone(px, py) }
+        val usePool = if (innerPool.nonEmpty) innerPool else pool
+
+        val startIdx = rng.nextInt(usePool.length)
+        out += usePool(startIdx)
         var i = 1
         while (i < n) {
-            var best : (Double, Double) = pool(rng.nextInt(pool.length))
-            var bestMin = -1.0
+            var best : (Double, Double) = usePool(rng.nextInt(usePool.length))
+            var bestScore = -1.0
             var tries = 0
-            while (tries < 40) {
-                val cand = pool(rng.nextInt(pool.length))
+            while (tries < 60) {
+                val cand = usePool(rng.nextInt(usePool.length))
                 var minD2 = Double.MaxValue
                 var k = 0
                 while (k < out.length) {
@@ -329,8 +354,9 @@ object MoonPlacement {
                     if (d2 < minD2) minD2 = d2
                     k += 1
                 }
-                if (minD2 > bestMin) {
-                    bestMin = minD2
+                val score = minD2 * centerWeight(cand._1, cand._2)
+                if (score > bestScore) {
+                    bestScore = score
                     best = cand
                 }
                 tries += 1
@@ -1132,19 +1158,33 @@ object Overlays {
             // without a sprite mapping. Missing hp field defaults to "alive"
             // for backward compatibility.
             val parsed = rawEntries./(entry => {
-                val parts = entry.split("\\|", 4)
+                val parts = entry.split("\\|", 5)
                 val assetId = if (parts.length > 0) parts(0).trim else ""
                 val display = if (parts.length > 1) parts(1).trim else assetId
                 val hp      = if (parts.length > 2) parts(2).trim else "alive"
-                // 4th field (BB Moon sizing fix): the unit's on-map sprite height
-                // in map-pixel space. Defaults to 70 (Earth Cat height) for legacy
-                // 3-field entries so old cached payloads still render sensibly.
                 val onMapH  = if (parts.length > 3)
                     scala.util.Try(parts(3).trim.toDouble).getOrElse(70.0)
                 else 70.0
-                val src     = if (assetId.nonEmpty)
-                    hrf.web.getElem(assetId).as[dom.html.Image]./(_.src).|("")
-                else ""
+                val fShort  = if (parts.length > 4) parts(4).trim else ""
+                val src     = if (assetId.nonEmpty) {
+                    val tint = fShort match {
+                        case "GC" => CthulhuWarsSolo.Processing(|("#77a055"), |("#222222"), None)
+                        case "CC" => CthulhuWarsSolo.Processing(|("#4977b3"), |("#111111"), None)
+                        case "BG" => CthulhuWarsSolo.Processing(|("#cd3233"), None, |("#555555"))
+                        case "YS" => CthulhuWarsSolo.Processing(|("#ffd000"), |("#663344"), None)
+                        case "WW" => CthulhuWarsSolo.Processing(|("#88a9be"), |("#5577aa"), None)
+                        case "SL" => CthulhuWarsSolo.Processing(|("#db6a33"), |("#4a1a1a"), None)
+                        case "OW" => CthulhuWarsSolo.Processing(|("#6c4296"), None, |("#4c4c4c"))
+                        case "AN" => CthulhuWarsSolo.Processing(|("#47a5bc"), |("#333333"), None)
+                        case "TS" => CthulhuWarsSolo.Processing(|("#BDE0BC"), |("#333333"), None)
+                        case "FB" => CthulhuWarsSolo.Processing(|("#CB307E"), |("#333333"), None)
+                        case "DS" => CthulhuWarsSolo.Processing(|("#3A2825"), None, |("#120E0C"))
+                        case "TT" => CthulhuWarsSolo.Processing(|("#fc9ca0"), |("#333333"), None)
+                        case "BB" => CthulhuWarsSolo.Processing(|("#c8a84b"), |("#333333"), None)
+                        case _    => CthulhuWarsSolo.Processing(None, None, None)
+                    }
+                    CthulhuWarsSolo.getTintedAsset(assetId, tint).toDataURL("image/png")
+                } else ""
                 (src, display, hp, onMapH)
             }).filter { case (src, _, _, _) => src.nonEmpty }
             // Fix 58 (BB v2.4.24): use the standard map placement pipeline.
@@ -1931,7 +1971,7 @@ object Overlays {
                     units./{ case (uc, n, c, b, t) => s"""
                         <tr>
                             <td>
-                                <img class="img" src=${imageSource("info:" + f.short.toLowerCase + "-" + uc.name.toLowerCase.replace(" ", "-"))}>
+                                <img class="img" src=${imageSource("info:" + f.short.toLowerCase + "-" + uc.name.toLowerCase.replace("'", "").replace(" ", "-"))}>
                             </td>
                             <td>
                                 <div class="unit-desc">
