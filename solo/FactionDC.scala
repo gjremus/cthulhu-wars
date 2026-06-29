@@ -756,31 +756,31 @@ object DCExpansion extends Expansion {
             game.reveals(f)
             game.highPriests(f)
             game.hires(f)
-            + DoomDoneAction(f)
+            game.doomDone(f)
             asking
 
         // ── Doom-Phase SB-Requirement opt-ins (wrap in CheckSpellbooksAction per Item 9) ─
         case DCProselytizeReqOptInAction(self) =>
             val enemyGOOs = game.factions.but(self)./~(_.allInPlay).%(_.uclass.utype == GOO).num
-            self.satisfy(ProselytizeReq, "Took Proselytize in Doom Phase")
+            self.satisfy(ProselytizeReq, "Doom Phase SBR: gain 2 Sin per enemy GOO")
             // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
             val proselytizeWant   = 2 * enemyGOOs
             val proselytizeGained = game.grantDCSin(proselytizeWant)
-            self.log("Proselytize SBR: gained", proselytizeGained.toString.styled("dc"), "Sin (2 per", enemyGOOs, "enemy GOO)")
+            self.log("SBR: gained", proselytizeGained.toString.styled("dc"), "Sin (2 per", enemyGOOs, "enemy GOO)")
             if (proselytizeGained < proselytizeWant)
-                self.log("Proselytize SBR: Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.dcRitualMarkerPosition + ")")
+                self.log("SBR: Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.dcRitualMarkerPosition + ")")
             Force(CheckSpellbooksAction(DoomAction(self)))
 
         case DCSatiateReqOptInAction(self) =>
             val otherSBs = self.spellbooks.num
             val poolSBs  = self.unfulfilled.num
-            self.satisfy(SatiateReq, "Took Satiate in Doom Phase")
+            self.satisfy(SatiateReq, "Doom Phase SBR: +1 Power per other SB, +1 Sin per remaining pool SB")
             self.power += otherSBs
             // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
             val satiateGained = game.grantDCSin(poolSBs)
-            self.log("Satiate SBR: gained", otherSBs.power, "and", satiateGained.toString.styled("dc"), "Sin")
+            self.log("SBR: gained", otherSBs.power, "and", satiateGained.toString.styled("dc"), "Sin")
             if (satiateGained < poolSBs)
-                self.log("Satiate SBR: Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.dcRitualMarkerPosition + ")")
+                self.log("SBR: Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.dcRitualMarkerPosition + ")")
             Force(CheckSpellbooksAction(DoomAction(self)))
 
         // ── Reserved-Acolyte conditional unlimited delivery (HB Fix 83) ──────
