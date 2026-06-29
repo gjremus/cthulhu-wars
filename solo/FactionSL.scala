@@ -173,7 +173,7 @@ object SLExpansion extends Expansion {
             game.moves(f)
 
             if (f.has(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(f.affords(1)).any)
-                game.gates.%(r => f.enemies.%(_.at(r, GOO).any).none).%(r => f.at(r).%(_.uclass.cost >= 3).%(_.canMove).any).some.foreach {
+                game.gates.%(r => f.enemies.%(_.at(r, GOO).any).none).%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
                     + BeyondOneMainAction(f, _)
                 }
 
