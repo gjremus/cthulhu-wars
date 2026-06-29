@@ -1998,12 +1998,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 if (e == OW && e.can(DreadCurse)) {
                     val dreadDice = e.all(Abomination).num + e.all(SpawnOW).num
                     if (dreadDice > 0)
-                        f.onMap(GOO)./(_.region).%(r => e.at(r).any).%(r => dreadDice / 2 + 1 > f.at(r).notGOOs.num).some./{ l =>
+                        (f.onMap(GOO) ++ f.onMap(ElderGod))./(_.region).%(r => e.at(r).any).%(r => dreadDice / 2 + 1 > f.at(r).notGOOs.num).some./{ l =>
                             consider(1, "" + e + " might " + DreadCurse + " GOO " + ("in " + l.mkString(", ")).inline)
                         }
                 }
             if (f.commands.has(ShamblerThreatOfAttackOnGOO))
-                f.onMap(GOO)./(_.region).%(r => e.canAttack(r)(f)).%(r => e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.num).%{ r =>
+                (f.onMap(GOO) ++ f.onMap(ElderGod))./(_.region).%(r => e.canAttack(r)(f)).%(r => e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.num).%{ r =>
                     // Exclude Nyarlathotep with Emissary when no enemy GOO is in the battle
                     val nyaSafe = f == CC && f.can(Emissary) && e.at(r).goos.none
                     // Exclude Rhan-Tegoth with Eternal when WW has power to pay
@@ -3680,7 +3680,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                     if (f.commands.has(UnspeakableOathOpportunityOfDreadCurse))
                         if (f == OW && f.can(DreadCurse) && (f.all(Abomination).any || f.all(SpawnOW).any))
-                            if (e.onMap(GOO).exists(u => (f.all(Abomination).num + f.all(SpawnOW).num) / 2 + 1 > e.at(u.region).notGOOs.num))
+                            if ((e.onMap(GOO) ++ e.onMap(ElderGod)).exists(u => (f.all(Abomination).num + f.all(SpawnOW).num) / 2 + 1 > e.at(u.region).notGOOs.num))
                                 reasons :+= "" + f + " might " + DreadCurse + " a GOO of " + e
 
                     if (f == GC && canAct)
@@ -3692,7 +3692,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                             reasons :+= "" + e + " might whisk away the gate " + ("from " + game.starting(f)).inline
 
                     if (f.commands.has(UnspeakableOathThreatOfAttackOnGOO) && canBattle)
-                        f.onMap(GOO)./(_.region).%(r => canBattleIn(r) && e.canAttack(r)(f) && (e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.not(Yothan).not(HighPriest).num || e.at(r).got(Hastur))).some./{ l =>
+                        (f.onMap(GOO) ++ f.onMap(ElderGod))./(_.region).%(r => canBattleIn(r) && e.canAttack(r)(f) && (e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.not(Yothan).not(HighPriest).num || e.at(r).got(Hastur))).some./{ l =>
                             reasons :+= "GOO might be in danger from " + e + " " + ("in " + l.mkString(", ")).inline
                         }
                 }
@@ -3780,7 +3780,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         }
 
                     if (f.commands.has(DevolveThreatOfAttackOnGOO) && canBattle)
-                        f.onMap(GOO)./(_.region).intersect(areas).%(r => canBattleIn(r) && e.canAttack(r)(f) && (e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.not(Yothan).not(HighPriest).num || e.at(r).got(Hastur))).some./{ l =>
+                        (f.onMap(GOO) ++ f.onMap(ElderGod))./(_.region).intersect(areas).%(r => canBattleIn(r) && e.canAttack(r)(f) && (e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.not(Yothan).not(HighPriest).num || e.at(r).got(Hastur))).some./{ l =>
                             reasons :+= "GOO might be in danger from " + e + " " + ("in " + l.mkString(", ")).inline
                         }
 
