@@ -1626,7 +1626,7 @@ object Overlays {
             $(), $(
             (Cadavolyte,        6, "2", "0", s"""<div class=p>Acolyte, but Gathers 0 Power</div>"""),
             (Tentacle,         10, "2", "0", s"""<div class=p>Cultist. CANNOT Build/Control Gates nor be Captured; Gathers 1 Power per Area containing Tentacle.</div>"""),
-            (Chthonian,         5, "2", "1", s"""<div class=p>Monster. 1 Combat.</div>"""),
+            (Chthonian,         5, "2", "1", s"""<div class=p>Monster</div>"""),
             (ShuddeMellHead,    1, "8", "?", s"""
                 <div class=p>${cost("How to Awaken Shudde M'ell:")}</div>
                 <div class=p>${cost("1)")} The Mantle must be in play.</div>
