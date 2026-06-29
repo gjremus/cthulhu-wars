@@ -1631,9 +1631,8 @@ object Overlays {
                 <div class=p>${cost("How to Awaken Shudde M'ell:")}</div>
                 <div class=p>${cost("1)")} The Mantle must be in play.</div>
                 <div class=p>${cost("2)")} Pay ${power(8)}. Shudde M'ell (Head) appears on the Mantle.</div>
-                <div class=p>${combat} 3 per Part in play (Head + Segments). Up to 4 Parts = up to 12 Combat.</div>
-                <div class=p>Spellbooks: ${reference(TB, Autotomy)}, ${reference(TB, Grasp)}</div>"""),
-            (ShuddeMellSegment, 3, "0", "0", s"""<div class=p>GOO Part. Placed via Behemoth or Autotomy. Contributes to Head's Combat (3 per Part).</div>""")
+                <div class=p>${combat} 3 per Part in play (Head + Segments). Up to 4 Parts = up to 12 Combat.</div>"""),
+            (ShuddeMellSegment, 3, "0", "0", s"""<div class=p>GOO Part. Placed via Behemoth or Autotomy.</div>""")
         ))
         case $("TB", OverlayMantleReq.text) => requirement("Control Gates in 2 adjacent Areas, then overlay the Mantle.")
         case $("TB", TenTentaclesReq.text) => requirement("There are 10 Tentacles in play.")
