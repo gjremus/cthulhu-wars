@@ -33,6 +33,8 @@ class Serialize(val game : Game) {
 
         case ss : List[_] => ss./(write).mkString("[", ", ", "]")
 
+        case (a, b) => "Pair(" + write(a) + ", " + write(b) + ")"
+
         // Firstborn (FB) helper case classes (used as fields in FB actions and state).
         // Follow the AzathothOffer pattern: function-call form with productIterator.
         // Parser reconstructs via the reflection-based EApply catch-all.
@@ -40,6 +42,8 @@ class Serialize(val game : Game) {
         case x : FBCyclopeanGazeSource => "FBCyclopeanGazeSource(" + x.productIterator.$./(write).mkString(", ") + ")"
         case x : FBWritheKillEntry => "FBWritheKillEntry(" + x.productIterator.$./(write).mkString(", ") + ")"
         case x : FBWrithePainEntry => "FBWrithePainEntry(" + x.productIterator.$./(write).mkString(", ") + ")"
+
+        case m : Map[_, _] => "Map(" + m.toList./({ case (k, v) => "Pair(" + write(k) + ", " + write(v) + ")" }).mkString(", ") + ")"
 
         case x => x.getClass.getSimpleName.stripSuffix("$")
     }
@@ -139,6 +143,9 @@ class Serialize(val game : Game) {
         case ESymbol("UnspeakableOathThreatOfAttack") => UnspeakableOathThreatOfAttackOnHighPriest
         case ESymbol("UnspeakableOathOfAttackOnGOO") => UnspeakableOathThreatOfAttackOnGOO
         case ESymbol("UnspeakableOathOfAttackOnGate") => UnspeakableOathThreatOfAttackOnGate
+        case ESymbol("Tuple2") => null
+        case ESymbol("UnitFigure") => null
+        case ESymbol("EmptyMap") => Map.empty
         case ESymbol(s) =>
             parseFaction(s).map(_.asInstanceOf[Any])
                 .orElse(parseRegion(s).map(_.asInstanceOf[Any]))
@@ -155,6 +162,8 @@ class Serialize(val game : Game) {
         case ESome(e) => Some(parseExpr(e))
         case ENone => None
         case EList(l) => l.map(parseExpr)
+        case EApply("Pair", ps) => (parseExpr(ps(0)), parseExpr(ps(1)))
+        case EApply("Map", ps) => ps.map({ case EApply("Pair", kv) => (parseExpr(kv(0)), parseExpr(kv(1))) case e => parseExpr(e).asInstanceOf[(Any, Any)] }).toMap
         case EApply("AzathothOffer", ps) => AzathothOffer(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[Int])
         // Firstborn (FB) helper case classes — explicit parser cases mirror the
         // writer cases in Serialize.write. Same pattern as AzathothOffer above.
@@ -162,6 +171,18 @@ class Serialize(val game : Game) {
         case EApply("FBCyclopeanGazeSource", ps) => FBCyclopeanGazeSource(parseExpr(ps(0)).asInstanceOf[Region], parseExpr(ps(1)).asInstanceOf[UnitClass])
         case EApply("FBWritheKillEntry", ps) => FBWritheKillEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[UnitClass], parseExpr(ps(3)).asInstanceOf[|[UnitRef]])
         case EApply("FBWrithePainEntry", ps) => FBWrithePainEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Region])
+        // [LEGACY REPLAY] The abandoned MNU v2.0.1 engine (commit a779f68) logged a 5-param
+        // TSPlaceTomeUnitAction(self=TS, uc, r, tomeNum, flipper) where the 5th param is the faction
+        // that used the Cursed Tome and whose turn must end. Canonical v2.5 reverted to 4-param. Map
+        // the 4-param form to the current action (catch-all also handles it), and the 5-param form to
+        // TSPlaceTomeUnitActionLegacy5 so the flipper's turn ends (EndAction(flipper)) — dropping the
+        // 5th param would do EndAction(TS) and desync replays such as game 454.
+        case EApply("TSPlaceTomeUnitAction", ps) if ps.num == 4 => TSPlaceTomeUnitAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitClass], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int], TS)
+        case EApply("TSPlaceTomeUnitAction", ps) if ps.num == 5 => TSPlaceTomeUnitAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitClass], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[Faction])
+        case EApply("TsunamiMoveCultistAction", ps) => ForcedCultistMoveAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[$[UnitRef]], parseExpr(ps(4)).asInstanceOf[Action])
+        case EApply("TsunamiProcessAction", ps) => ForcedCultistMoveProcessAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[$[(Faction, $[UnitRef])]], parseExpr(ps(3)).asInstanceOf[Boolean], parseExpr(ps(4)).asInstanceOf[Action])
+        case EApply("ForcedCultistMoveAction", ps) => ForcedCultistMoveAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[$[UnitRef]], parseExpr(ps(4)).asInstanceOf[Action])
+        case EApply("ForcedCultistMoveProcessAction", ps) => ForcedCultistMoveProcessAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[$[(Faction, $[UnitRef])]], parseExpr(ps(3)).asInstanceOf[Boolean], parseExpr(ps(4)).asInstanceOf[Action])
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 
@@ -172,13 +193,17 @@ object Serialize {
     val factions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS, TT) ++ $(NeutralAbhoth, LibraryFaction)
 
     val loyaltyCards = $(
+        // Base neutral monsters
+        GhastCard, GugCard, ShantakCard, StarVampireCard, VoonithCard, DimensionalShamblerCard,
         HighPriestCard,
-        GhastCard, GugCard, ShantakCard, StarVampireCard, VoonithCard, DimensionalShamblerCard, GnorriCard,
+        // Base IGOOs
+        ByatisCard, AbhothCard, DaolothCard, NyogthaCard, TulzschaCard, GnorriCard, YgolonacCard,
+        // MNU neutral monsters
         MoonbeastCard, AlbinoPenguinsCard, ElderThingCard, LengSpiderCard, SatyrCard, ServitorCard, InsectsFromShaggaiCard,
+        // MNU neutral terrors
         DholeCard, GreatRaceOfYithCard, QuachilUttausCard, ShadowPharaohCard, HoundOfTindalosCard, BrownJenkinCard, ElderShoggothCard,
-        ByatisCard, AbhothCard, DaolothCard, NyogthaCard, TulzschaCard, YgolonacCard,
-        AzathothIGOOCard, CthughaCard, MotherHydraCard, YigCard, FatherDagonCard, GhatanotoaIGOOCard,
-        BloatedWomanCard, AtlachNachaCard, BokrugCard, GlaakiIGOOCard,
+        // MNU IGOOs
+        AzathothIGOOCard, CthughaCard, MotherHydraCard, YigCard, FatherDagonCard, GhatanotoaIGOOCard, BloatedWomanCard, AtlachNachaCard, BokrugCard, GlaakiIGOOCard
     )
 
     def parseFaction(s : String) : |[Faction] = factions.%(_.short == s).single
