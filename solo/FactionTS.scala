@@ -256,7 +256,10 @@ object TSExpansion extends Expansion {
             val n = self.at(r, TombHerd).num
             self.power += n
             self.log("Shepherd of the Crypt".styled("nt") + ": gained", n.power, "from", n, TombHerd.styled(TS), "in", r)
-            Force(TSShepherdDoneAction)
+            if (remaining.any && game.nextReplayActionHint.exists(_.startsWith("TSShepherdGather")))
+                Force(TSShepherdGatherPhaseAction(self, remaining))
+            else
+                Force(TSShepherdDoneAction)
 
         // DOOM PHASE
         case DoomAction(f) if f == TS =>
@@ -289,12 +292,14 @@ object TSExpansion extends Expansion {
 
         case TSDeathMarchDoomAction(self, _) =>
             // MANDATORY: must place TH, no cancel option
-            val destinations = areas
+            val destinations = areas ++ game.factions.has(BB).$(BB.moon)
             Ask(self).each(destinations)(r => TSDeathMarchAction(self, r))
 
         case TSDeathMarchAction(self, r) =>
             game.deathsHead -= 1
+            game.tsInDeathMarch = true
             self.place(TombHerd, r)
+            game.tsInDeathMarch = false
             self.log("Death March: placed", TombHerd.styled(TS), "in", r, "(Death's Head now", game.deathsHead.toString.styled("kill") + ")")
 
             // If Hecatomb is available and DH > 0, can spend remainder toward ritual after placing all Tomb-Herds
