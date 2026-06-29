@@ -186,8 +186,8 @@ object GCExpansion extends Expansion {
             Ask(f).some(areas)(r => f.at(r, Acolyte)./(c => DevolveAction(f, c.region, then))).cancel
 
         case DevolveAction(f, r, then) =>
-            if (f.at(r, Monster, GOO).none)
-                f.enemies.%(_.at(r, Monster, GOO).none).%(_.at(r, Cultist).any).foreach(_.oncePerAction :-= Devolve)
+            if ((f.at(r, Monster, GOO) ++ f.at(r, ElderGod)).none)
+                f.enemies.%(e => (e.at(r, Monster, GOO) ++ e.at(r, ElderGod)).none).%(_.at(r, Cultist).any).foreach(_.oncePerAction :-= Devolve)
 
             val c = f.at(r).one(Acolyte)
             game.eliminate(c)

@@ -91,7 +91,7 @@ trait GameImplicits {
         def monsters = l.%(_.uclass.utype == Monster)
         def monsterly = l.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror)
         def terrors = l.%(_.uclass.utype == Terror)
-        def notGOOs = l.%(_.uclass.utype != GOO)
+        def notGOOs = l.%(u => !u.uclass.isGOO)
         def notMonsters = l.%(_.uclass.utype != Monster)
         def notTerrors = l.%(_.uclass.utype != Terror)
         def notCultists = l.%(_.uclass.utype != Cultist)

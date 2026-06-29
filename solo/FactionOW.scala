@@ -192,7 +192,7 @@ object OWExpansion extends Expansion {
             game.moves(f)
 
             if (f.can(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(f.affords(1)).any)
-                game.gates.%(r => f.enemies.%(_.at(r, GOO).any).none).%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
+                game.gates.%(r => f.enemies.%(_.at(r, GOO, ElderGod).any).none).%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
                     + BeyondOneMainAction(f, _)
                 }
 
