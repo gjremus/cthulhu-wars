@@ -377,6 +377,7 @@ trait Faction { f =>
     def recruitCost(u : UnitClass, r : Region)(implicit game : Game) = u.cost
     def summonCost(u : UnitClass, r : Region)(implicit game : Game) = u.cost
     def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = None
+    def gooValue(u : UnitClass)(implicit game : Game) : Int = u.cost
     def awakenDesc(u : UnitClass) : |[String] = None
     def canAwakenIGOO(r : Region)(implicit game : Game) : Boolean = f.gates.has(r) && f.at(r, GOO, ElderGod).any
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int
@@ -1483,6 +1484,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var endActionPhasePrompts = false
     def inActionPhase : Boolean = !doomPhase && !gatherPowerPhase && !endActionPhasePrompts
     var factions : $[Faction] = $
+    var doomOrder : $[Faction] = $
     var first : Faction = setup.first
     var gates : $[Region] = $
     def allGates = gates ++ factions./~(_.unitGate)./(_.region)
@@ -2451,7 +2453,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case CthughaCard =>
             // HIGH-2 revised: ElderGod (Bastet) counts as GOO per spec §1.3.
             val factionGOOs = f.units./(_.uclass).%(_.isGOO).%(_.isInstanceOf[FactionUnitClass]).distinct
-            val gooCost = factionGOOs.headOption./~(uc => f.allGates.onMap.headOption./~(r => f.awakenCost(uc, r))).|(factionGOOs.headOption./(_.cost).|(0))
+            val gooCost = factionGOOs.headOption./~(uc => f.allGates.onMap.headOption./~(r => f.awakenCost(uc, r))).|(factionGOOs.headOption./(uc => f.gooValue(uc)).|(0))
             6 - gooCost
         case _ => igoo.power
     }
@@ -2482,7 +2484,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // HIGH-2 revised: ElderGod (Bastet) counts as GOO per spec §1.3.
             val allGOOs = f.allInPlay.%(_.uclass.isGOO).%(u => u.uclass != Cthugha)
             allGOOs.%(goo => {
-                val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) f.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
+                val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) f.awakenCost(goo.uclass, goo.region).|(f.gooValue(goo.uclass)) else goo.uclass.cost
                 val cthughaCost = 6 - gooCost
                 f.power >= cthughaCost && f.gates.has(goo.region)
             }).any
@@ -2606,7 +2608,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val cthughaAvailable = loyaltyCards.has(CthughaCard) && {
             val allGOOs = f.allInPlay.%(_.uclass.isGOO).%(u => u.uclass != Cthugha)
             allGOOs.%(goo => {
-                val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) f.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
+                val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) f.awakenCost(goo.uclass, goo.region).|(f.gooValue(goo.uclass)) else goo.uclass.cost
                 val cthughaCost = 6 - gooCost
                 (dcTenebrosumGuard || f.power >= cthughaCost) && f.gates.has(goo.region)
             }).any
@@ -2768,6 +2770,29 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             + LoyaltyCardDoomAction(f)
     }
 
+    def doomDone(f : Faction, blockDone : Boolean = false)(implicit w : AskWrapper) {
+        if (f.has(GhatanotoaIGOO) && f.upgrades.has(ExecrationOfMu).not) {
+            val gatesOnMap = f.allGates.onMap.num
+            val cultistsOnMap = f.units.%(u => u.region.onMap && u.uclass.utype == Cultist).num
+            if (gatesOnMap + cultistsOnMap < 6) {
+                f.upgrades :+= ExecrationOfMu
+                f.log("gained", ExecrationOfMu.styled(f), "for", GhatanotoaIGOO.styled(f), "(" + (gatesOnMap + cultistsOnMap) + " Gates + Cultists on map)")
+            }
+        }
+
+        val hasInnsmouth = f.has(TheInnsmouthLook) && !f.oncePerGame.has(TheInnsmouthLook) && f.has(FatherDagon) && f.allInPlay.%(_.uclass == Acolyte).any && !f.oncePerTurn.has(TheInnsmouthLook)
+        if (hasInnsmouth)
+            + InnsmouthLookDoomAction(f)
+
+        val yigOwner = factions.but(f).find(yf => yf.has(MessengerOfYig) && !yf.oncePerGame.has(MessengerOfYig) && yf.has(Yig))
+        val hasMessenger = yigOwner.isDefined && !f.oncePerTurn.has(MessengerOfYig)
+        if (hasMessenger)
+            + MessengerOfYigDoomAction(f, yigOwner.get)
+
+        if (!hasInnsmouth && !hasMessenger && !blockDone)
+            + DoomDoneAction(f)
+    }
+
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
         // INIT
         case StartAction =>
@@ -2900,14 +2925,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case PowerGatherAction(last) if nextReplayActionHint.exists(h => h.startsWith("MainGatesAction") || h.startsWith("PreMainAction") || h.startsWith("MainAction") || h.startsWith("NextPlayerAction")) =>
             factions.foreach { f =>
-                f.active = f.power > 0 && f.hibernating.not
-            }
-
-            PreMainAction(last)
-
-        case PowerGatherAction(last) if factions.%!(_.hibernating).%(_.power > 0).any && !TSExpansion.shepherdDoneThisGather =>
-            factions.foreach { f =>
-                f.active = f.power > 0 && f.hibernating.not
+                f.active = f.hibernating.not
             }
 
             PreMainAction(last)
@@ -3372,6 +3390,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             doomPhase = false
             endActionPhasePrompts = false
             fbGhatoLastMoveOrigin = None
+            factions = doomOrder
 
             // Nuclear Chaos (Azathoth spellbook): flip back face-up at start of Action Phase
             factions.foreach { f =>
@@ -3469,6 +3488,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case PlayDirectionAction(_, l) =>
             factions = l
+            doomOrder = l
 
             log("Play order", factions.mkString(", "))
 
@@ -3644,30 +3664,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             game.hires(f)
 
-            // Ghatanothoa IGOO: doom-phase SBR auto-satisfy — fewer than 6 total Gates + Cultists
-            if (f.has(GhatanotoaIGOO) && f.upgrades.has(ExecrationOfMu).not) {
-                val gatesOnMap = f.allGates.onMap.num
-                val cultistsOnMap = f.units.%(u => u.region.onMap && u.uclass.utype == Cultist).num
-                if (gatesOnMap + cultistsOnMap < 6) {
-                    f.upgrades :+= ExecrationOfMu
-                    f.log("gained", ExecrationOfMu.styled(f), "for", GhatanotoaIGOO.styled(f), "(" + (gatesOnMap + cultistsOnMap) + " Gates + Cultists on map)")
-                }
-            }
-
-            // Innsmouth Look (mandatory if this faction controls Father Dagon)
-            val hasInnsmouth = f.has(TheInnsmouthLook) && !f.oncePerGame.has(TheInnsmouthLook) && f.has(FatherDagon) && f.allInPlay.%(_.uclass == Acolyte).any && !f.oncePerTurn.has(TheInnsmouthLook)
-            if (hasInnsmouth)
-                + InnsmouthLookDoomAction(f)
-
-            // Messenger of Yig (mandatory if an enemy controls Yig)
-            val yigOwner = factions.but(f).find(yf => yf.has(MessengerOfYig) && !yf.oncePerGame.has(MessengerOfYig) && yf.has(Yig))
-            val hasMessenger = yigOwner.isDefined && !f.oncePerTurn.has(MessengerOfYig)
-            if (hasMessenger)
-                + MessengerOfYigDoomAction(f, yigOwner.get)
-
-            // Done only available when all mandatory choices resolved
-            if (!hasInnsmouth && !hasMessenger)
-                + DoomDoneAction(f)
+            game.doomDone(f)
 
             asking
 
@@ -3686,9 +3683,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             f.acted = false
             f.hired = false
 
-            factions = factions.drop(1) ++ factions.take(1)
-
-            val next = factions.first
+            // Use saved doomOrder to find the next doom player. The action phase
+            // rotates `factions` via NextPlayerAction; by the time the doom phase
+            // runs, factions can be in a corrupted order. doomOrder is set once
+            // per turn by PlayDirectionAction and never mutated.
+            val doomIdx = doomOrder.indexOf(f)
+            val next = doomOrder((doomIdx + 1) % doomOrder.size)
+            factions = doomOrder.drop(doomIdx + 1) ++ doomOrder.take(doomIdx + 1)
 
             if (next != game.first) {
                 pendingLine = |(CthulhuWarsSolo.DottedLine)

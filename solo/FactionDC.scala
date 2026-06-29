@@ -88,6 +88,11 @@ case object DC extends Faction { f =>
         case _ => None
     }
 
+    override def gooValue(u : UnitClass)(implicit game : Game) : Int = u match {
+        case YgolonacDC => f.spellbooks.num
+        case _ => u.cost
+    }
+
     // Strength: Mindless Husk = 1, Fallen Prophet handled in Battle.scala hook
     // (variable: enemy cultists in area during DC turn, own cultists otherwise),
     // Y'Golonac combat dice = ceil(Sin / 2) — also handled via Battle hook.
@@ -1429,8 +1434,8 @@ object DCExpansion extends Expansion {
             val hasPoolGOO = self.pool.%(_.uclass.isGOO).any
             val heldIGOOs = self.loyaltyCards.of[IGOOLoyaltyCard]
             val costs = {
-                (if (hasPoolGOO) self.pool.%(_.uclass.isGOO)./(_.uclass).distinct./~(uc =>
-                    self.allGates.onMap./(r => self.awakenCost(uc, r)).flatten
+                (if (hasPoolGOO) self.pool.%(_.uclass.isGOO)./(_.uclass).distinct./(uc =>
+                    areas./~(r => self.awakenCost(uc, r)).some./(_.min).|(self.gooValue(uc))
                 ) else $()) ++
                 heldIGOOs./(_.power)
             }

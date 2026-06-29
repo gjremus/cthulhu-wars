@@ -717,7 +717,7 @@ object IGOOsExpansion extends Expansion {
             val allGOOs = self.allInPlay.%(_.uclass.isGOO).%(u => u.uclass != Cthugha)
             var ask = Ask(self)
             allGOOs.foreach { goo =>
-                val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) self.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
+                val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) self.awakenCost(goo.uclass, goo.region).|(self.gooValue(goo.uclass)) else goo.uclass.cost
                 val cthughaCost = 6 - gooCost
                 // HB Fix 129: bypass power check under Tenebrosum guard (Sin-paid)
                 if ((game.dcTenebrosumGuard || self.power >= cthughaCost) && self.gates.has(goo.region))
@@ -793,7 +793,7 @@ object IGOOsExpansion extends Expansion {
                 // HB Fix 129: use isGOO (includes ElderGod/Bastet) to match tenebrosumIndependentAwakensOnly
                 val allGOOs = self.allInPlay.%(_.uclass.isGOO).%(u => u.uclass != Cthugha)
                 allGOOs.%(goo => {
-                    val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) self.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
+                    val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) self.awakenCost(goo.uclass, goo.region).|(self.gooValue(goo.uclass)) else goo.uclass.cost
                     val cthughaCost = 6 - gooCost
                     (game.dcTenebrosumGuard || self.power >= cthughaCost) && self.gates.has(goo.region)
                 }).any

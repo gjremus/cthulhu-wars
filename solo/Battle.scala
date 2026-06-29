@@ -118,7 +118,7 @@ case class PrimeCauseChooseReplacementAction(self : Faction, oldRef : UnitRef, n
         // without Extinction → 6, with Extinction → 4, etc.). Replacing an
         // Elder Shoggoth itself still costs 0 (free swap-out).
         val cost = if (oldU.uclass == ElderShoggoth) 0
-                   else if (newUC.utype == GOO) self.awakenCost(newUC, r)(g).getOrElse(newUC.cost) / 2
+                   else if (newUC.utype == GOO) self.awakenCost(newUC, r)(g).getOrElse(self.gooValue(newUC)(g)) / 2
                    else self.summonCost(newUC, r)(g) / 2
         "Replace with " + newUC.styled(self) + (cost > 0).??(" (" + cost.power + ")")
     }) {
@@ -1024,9 +1024,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // resolution chain, BEFORE Leng Spider Bloodthirst and BEFORE Demand Sacrifice's
                 // Kills->Pains conversion (rulebook FAQ #3 and FAQ #17).
                 // Fix 27 (user directive 2026-06-02): Zagazig is NOT optional — auto-apply
-                // whenever BB is participating in the battle and has Zagazig researched.
+                // whenever BB is participating in the battle, has Zagazig researched,
+                // AND a Cat from Mars is present in BB's forces (per rulebook text).
                 // Per-faction roll-change line emitted to game log so the new totals are visible.
-                if (sides.has(BB) && BB.can(Zagazig)) {
+                if (sides.has(BB) && BB.can(Zagazig) && BB.forces.%(_.uclass == CatFromMars).any) {
                     sides.%(f => f == BB).foreach { bbSide =>
                         def swapRolls(side : Side) {
                             side.rolls = side.rolls./(r => if (r == Kill) Pain else if (r == Pain) Kill else r)
@@ -1487,7 +1488,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Xyrious Storm (XSS) — Distant Thunderclap (§3.4.3):
                 // Fires before pain assignment (NecrophagyPhase window) so excess-pain count
                 // is computed against un-pained opponent forces. After XSS resolves, battle
-                // continues to AssignDefenderPains. ES check is independent (PostBattlePhase).
+                // continues to AssignDefenderPains. Pained XSS units retreat in the normal
+                // retreat phase. ES check is independent (PostBattlePhase).
                 if (factions.has(XSS) && sides.has(XSS) && !XSS.oncePerAction.has(Precipitation)) {
                     val xssSide = if (attacker == XSS) attackers else defenders
                     val opponentSide = if (attacker == XSS) defenders else attackers
@@ -1499,7 +1501,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         val excessPains = (xssPainRolls - opponentAvailableForPain).max(0)
                         val opponentHadNonCultist = (opponentSide.forces ++ eliminated.%(_.faction == opponent) ++ exempted.%(_.faction == opponent))
                             .%(_.uclass.utype != Cultist).any
-                        if (excessPains > 0 && XSS.at(arena).any) {
+                        val xssAlive = xssSide.forces.%(_.faction == XSS).%(_.health == Alive)
+                        if (excessPains > 0 && xssAlive.any) {
                             XSS.oncePerAction :+= Precipitation
                             return Ask(XSS)
                                 .add(DistantThunderclapOfferAction(XSS, excessPains, arena, opponent, opponentHadNonCultist))
@@ -2041,7 +2044,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             //   without Extinction → 3 = 6/2; with Extinction → 2 = 4/2; etc.).
             //   Replacing an Elder Shoggoth itself still costs 0.
             val cost = if (isES) 0
-                       else if (newUC.utype == GOO) self.awakenCost(newUC, r).getOrElse(newUC.cost) / 2
+                       else if (newUC.utype == GOO) self.awakenCost(newUC, r).getOrElse(self.gooValue(newUC)) / 2
                        else self.summonCost(newUC, r) / 2
             // [2026-05-23] Prime Cause logs split into 4 separate events per user spec:
             //   1) unit removed, 2) unit replaced, 3) ES given (GOO penalty), 4) doom given (Terror penalty)
