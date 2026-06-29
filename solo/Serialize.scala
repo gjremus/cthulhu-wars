@@ -43,6 +43,8 @@ class Serialize(val game : Game) {
         case x : FBWritheKillEntry => "FBWritheKillEntry(" + x.productIterator.$./(write).mkString(", ") + ")"
         case x : FBWrithePainEntry => "FBWrithePainEntry(" + x.productIterator.$./(write).mkString(", ") + ")"
 
+        case m : Map[_, _] => "Map(" + m.toList./({ case (k, v) => "Pair(" + write(k) + ", " + write(v) + ")" }).mkString(", ") + ")"
+
         case x => x.getClass.getSimpleName.stripSuffix("$")
     }
 
@@ -143,6 +145,7 @@ class Serialize(val game : Game) {
         case ESymbol("UnspeakableOathOfAttackOnGate") => UnspeakableOathThreatOfAttackOnGate
         case ESymbol("Tuple2") => null
         case ESymbol("UnitFigure") => null
+        case ESymbol("EmptyMap") => Map.empty
         case ESymbol(s) =>
             parseFaction(s).map(_.asInstanceOf[Any])
                 .orElse(parseRegion(s).map(_.asInstanceOf[Any]))
@@ -160,6 +163,7 @@ class Serialize(val game : Game) {
         case ENone => None
         case EList(l) => l.map(parseExpr)
         case EApply("Pair", ps) => (parseExpr(ps(0)), parseExpr(ps(1)))
+        case EApply("Map", ps) => ps.map({ case EApply("Pair", kv) => (parseExpr(kv(0)), parseExpr(kv(1))) case e => parseExpr(e).asInstanceOf[(Any, Any)] }).toMap
         case EApply("AzathothOffer", ps) => AzathothOffer(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[Int])
         // Firstborn (FB) helper case classes — explicit parser cases mirror the
         // writer cases in Serialize.write. Same pattern as AzathothOffer above.

@@ -2309,7 +2309,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // and skips raise-to-half + AfterPowerGatherAction + FirstPlayer/PlayDir
         // + DoomPhaseAction entirely. shepherdDoneThisGather is true on exactly
         // those re-entries and false on every normal first entry.
-        case PowerGatherAction(last) if nextReplayActionHint.exists(h => h.startsWith("MainGatesAction") || h.startsWith("PreMainAction") || h.startsWith("MainAction") || h.startsWith("NextPlayerAction")) =>
+        case PowerGatherAction(last) if factions.%!(_.hibernating).%(_.power > 0).any && nextReplayActionHint.exists(h => h.startsWith("MainGatesAction") || h.startsWith("PreMainAction") || h.startsWith("MainAction") || h.startsWith("NextPlayerAction")) =>
             factions.foreach { f =>
                 f.active = f.power > 0 && f.hibernating.not
             }
@@ -3206,6 +3206,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             CheckSpellbooksAction(MainAction(f))
 
         case MainAction(f) if f.active.not =>
+            f.log("passed (0 power)")
             implicit val asking = Asking(f)
 
             game.reveals(f)

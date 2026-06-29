@@ -1709,15 +1709,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             //   Cost-paid log kept as a 5th (cost > 0 only).
             // Remove old unit
             game.eliminate(oldUnit)
+            self.forces :-= oldUnit
             log(self.full, "Prime Cause".styled("nt") + ": removed", oldUnit.uclass.styled(self), "from", r)
             // Place new unit (guard: ensure pool has the unit)
-            if (self.pool(newUC).any)
+            val newUnit = if (self.pool(newUC).any) {
+                val u = self.pool(newUC).first
                 self.place(newUC, r)
-            else {
-                // Pool empty — create the unit directly
+                u
+            } else {
                 val u = new UnitFigure(self, newUC, self.units.%(_.uclass == newUC).num + 1, r)
                 self.units :+= u
+                u
             }
+            self.forces :+= newUnit
             log(self.full, "Prime Cause".styled("nt") + ": replaced with", newUC.styled(self), "in", r)
             // Cost
             if (cost > 0) {
