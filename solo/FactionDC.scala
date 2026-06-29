@@ -852,13 +852,15 @@ object DCExpansion extends Expansion {
             placed match {
                 case Some(u) =>
                     u.region = r
-                    if (game.dcReservedSpellbookAcolytes.has(sb)) {
-                        game.dcReservedSpellbookAcolytes = game.dcReservedSpellbookAcolytes.but(sb)
-                        val sbrText = game.dcLastFulfilledSBR./(_.text).|(sb.name)
-                        self.log("placed", Acolyte.styled(DC), "for fulfilled SBR", sbrText.styled(DC), "in", r)
-                    } else {
-                        self.log("placed", Acolyte.styled(DC), "from Faction Card in", r)
+                    // Pop one reservation entry: prefer the specific sb if it's a DC library SB,
+                    // otherwise pop the first satisfied SBR (covers neutral SB picks).
+                    val toClear = if (game.dcReservedSpellbookAcolytes.has(sb)) Some(sb)
+                                  else game.dcReservedSpellbookAcolytes.headOption
+                    toClear.foreach { cleared =>
+                        game.dcReservedSpellbookAcolytes = game.dcReservedSpellbookAcolytes.but(cleared)
                     }
+                    val sbrText = game.dcLastFulfilledSBR./(_.text).|(sb.name)
+                    self.log("placed", Acolyte.styled(DC), "for fulfilled SBR", sbrText.styled(DC), "in", r)
                 case None =>
                     self.log("no Faction Card Acolyte available to place")
             }
@@ -1632,14 +1634,11 @@ object DCExpansion extends Expansion {
         acolytesInFactionCard > 0 && earnedSBsStillPending > 0
     }
 
-    // HB Fix 104 (2026-06-10): true when DC has just earned library spellbook
-    // `sb` and that SB's reserved Acolyte is still on the Faction Card — i.e.
-    // an immediate forced placement is owed. Called by Game.scala's core
-    // SpellbookAction handler to force DCDeliverReservedAcolyteForceAction
-    // before the SB/ES loop continues. Only DC library SBs gate Acolytes;
-    // Tenebrosum/Depravity (abilities) and neutral SBs never do.
+    // HB Fix 104 (2026-06-10): true when DC has just earned a spellbook and
+    // still has unreleased Acolytes on the Faction Card. Per rules §1.6:
+    // acolytes sit on SBR SLOTS, so ANY earned spellbook (library OR neutral)
+    // releases one. The sb parameter is unused but kept for call-site compat.
     def dcShouldDeliverOnAcquire(sb : Spellbook)(implicit game : Game) : Boolean =
-        game.dcReservedSpellbookAcolytes.has(sb) &&
         DC.units.%(u => u.uclass == Acolyte && u.region == DCFactionCardHold(DC)).any
 
     // HB Fix 97.F (2026-06-07): Map a DC spellbook to its matching SBR so the
