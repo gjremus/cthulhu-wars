@@ -2333,8 +2333,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def recruits(f : Faction)(implicit w : AskWrapper) {
         // Firstborn (FB): FB cannot recruit High Priests, so filter them out of available cultists
         val availableCultists = if (f == FB) f.pool.cultists.%(_.uclass != HighPriest) else f.pool.cultists
+        val recruitAreas = areas ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))
         availableCultists./(_.uclass).distinct.reverse.foreach { uc =>
-            areas.%(f.present).some.|(areas).nex.%(r => f.affords(f.recruitCost(uc, r))(r)).some.foreach { l =>
+            recruitAreas.%(f.present).some.|(recruitAreas).nex.%(r => f.affords(f.recruitCost(uc, r))(r)).some.foreach { l =>
                 + RecruitMainAction(f, uc, l)
             }
         }
@@ -2373,7 +2374,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // block all non-terror monster summons (not ServitorUnit itself)
         // Blocking text shown inside summon sub-menu, not here in top-level menu
 
-        val summonAreas = areas ++ ((f == BB).??($(BB.moon)))
+        val summonAreas = areas ++ ((f == BB).??($(BB.moon))) ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))
 
         // HB Fix 113 (2026-06-13): under a DC/SL Tenebrosum repeat (dcTenebrosumGuard),
         // the action is paid in Sin, not Power — so the per-region power-affordability
