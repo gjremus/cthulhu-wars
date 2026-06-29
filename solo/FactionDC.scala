@@ -243,7 +243,7 @@ case class DCSatiateMainAction(self : Faction)
     extends OptionFactionAction(Satiate.styled(DC) + " (Cost " + 2.power + ")")
     with MainQuestion with Soft
 case class DCSatiateConfirmAction(self : Faction)
-    extends BaseFactionAction(Satiate.styled(DC), "Confirm".styled("power")) with Soft
+    extends BaseFactionAction(Satiate.styled(DC), "Confirm".styled("power"))
 // Per-faction Cultist pick (self=affectedFaction). Hard — once a faction has
 // committed to Satiate the captured unit is no longer cancelable.
 case class DCSatiateFactionPickAction(self : Faction, area : Region, remaining : $[Faction], capturedSoFar : Int)
@@ -259,7 +259,7 @@ case class DCLureMainAction(self : Faction)
     extends OptionFactionAction(Lure.styled(DC) + " (Cost " + 1.power + ")")
     with MainQuestion with Soft
 case class DCLureConfirmAction(self : Faction)
-    extends BaseFactionAction(Lure.styled(DC), "Confirm".styled("power")) with Soft
+    extends BaseFactionAction(Lure.styled(DC), "Confirm".styled("power"))
 case class DCLureFactionPickAction(self : Faction, area : Region, remaining : $[Faction])
     extends ForcedAction with PowerNeutral
 case class DCLurePickCultistAction(self : Faction, area : Region, cultist : UnitRef, remaining : $[Faction])
@@ -274,9 +274,9 @@ case class DCPilgrimageProphetAction(self : Faction, prophet : UnitRef)
     extends BaseFactionAction(
         Pilgrimage.styled(DC) + ": choose destination",
         implicit g => FallenProphet.styled(DC) + " in " + g.unit(prophet).region.toString)
-    with Soft with PowerNeutral
+    with PowerNeutral
 case class DCPilgrimageDestAction(self : Faction, prophet : UnitRef, dest : Region)
-    extends BaseFactionAction(Pilgrimage.styled(DC) + ": move other units to", implicit g => dest.toString) with Soft
+    extends BaseFactionAction(Pilgrimage.styled(DC) + ": move other units to", implicit g => dest.toString)
 // Per-unit opt-in chain (Fix HB-77): after the destination is chosen, prompt
 // the DC player for each OTHER DC unit in the Prophet's source area. Each unit
 // gets a Move/Stay choice; Done finishes the entire Pilgrimage early.
@@ -284,12 +284,12 @@ case class DCPilgrimageUnitContinueAction(self : Faction, prophet : UnitRef, des
     extends ForcedAction with PowerNeutral
 case class DCPilgrimageUnitMoveAction(self : Faction, prophet : UnitRef, dest : Region, unit : UnitRef, remaining : $[UnitRef])
     extends BaseFactionAction(Pilgrimage.styled(DC) + ": move", implicit g => g.unit(unit).uclass.styled(DC) + " to " + dest.toString)
-    with Soft with PowerNeutral
+    with PowerNeutral
 case class DCPilgrimageUnitStayAction(self : Faction, prophet : UnitRef, dest : Region, unit : UnitRef, remaining : $[UnitRef])
     extends BaseFactionAction(Pilgrimage.styled(DC) + ": leave", implicit g => g.unit(unit).uclass.styled(DC) + " in " + g.unit(unit).region.toString)
-    with Soft with PowerNeutral
+    with PowerNeutral
 case class DCPilgrimageDoneAction(self : Faction, prophet : UnitRef, dest : Region)
-    extends BaseFactionAction(Pilgrimage.styled(DC), "Done".styled("power")) with Soft with PowerNeutral
+    extends BaseFactionAction(Pilgrimage.styled(DC), "Done".styled("power")) with PowerNeutral
 
 // ── Dark Bargain (Action: Cost 0 — §1.10) ──────────────────────────────────
 // HB Fix 93 (2026-06-07): rewrote Dark Bargain per user spec.
