@@ -2349,14 +2349,19 @@ object CthulhuWarsSolo {
                 if (setup.seating.has(TB) && game.tbMantleInPlay && game.tbMantleAreas.any) {
                     g.font = "bold " + (18 * board.unitScale).toInt + "px sans-serif"
                     g.textAlign = "center"
-                    g.textBaseline = "top"
+                    g.textBaseline = "middle"
                     g.lineWidth = 3.0
                     g.strokeStyle = "rgba(0,0,0,0.8)"
                     g.fillStyle = "white"
+                    val mantleImg = getAsset("tb-mantle")
+                    val imgSize = (48 * board.unitScale).toInt
                     game.tbMantleAreas.foreach { r =>
                         val (gx, gy) = gateXY(r)
-                        g.strokeText("to Mantle", gx, gy + (45 * board.unitScale).toInt)
-                        g.fillText("to Mantle", gx, gy + (45 * board.unitScale).toInt)
+                        val imgY = gy + (45 * board.unitScale).toInt
+                        g.drawImage(mantleImg, gx - imgSize / 2, imgY, imgSize, imgSize)
+                        val textY = imgY + imgSize / 2
+                        g.strokeText("to Mantle", gx, textY)
+                        g.fillText("to Mantle", gx, textY)
                     }
                 }
             }
@@ -3716,6 +3721,21 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 }
             }
 
+            def isRollAction(a : Action) : Boolean = a.unwrap match {
+                case _ : BattleRollAction => true
+                case _ : DesecrateRollAction => true
+                case _ : GhrothRollAction => true
+                case _ : DreadCurseRollAction => true
+                case _ : ThousandFormsRollAction => true
+                case _ : AzathothCombatDieRollAction => true
+                case _ : AzathothSynthesisRollAction => true
+                case _ : FBWritheRollResultAction => true
+                case _ : CustodianAgonyRolledAction => true
+                case _ : LibrarianAgonyRolledAction => true
+                case _ : NuclearChaosRollAction => true
+                case _ => false
+            }
+
             def showUndo(n : Int) : () => Unit = () => {
                 show(undoDiv.parentElement.parentElement)
 
@@ -3725,7 +3745,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                 val style = None
 
-                if (hash != "")
+                val hasRollAfter = hash != "" && actions.reverse.drop(n).exists(isRollAction)
+
+                if (hasRollAfter)
+                    undoDiv.appendChild(newDiv("", "Cannot undo past a dice roll"))
+                else if (hash != "")
                     undoDiv.appendChild(newDiv("option" + style./(" " + _).|(""), "Undo to here".hl, () => { clear(undoDiv); performUndoOnline(n) }))
                 else
                     undoDiv.appendChild(newDiv("option" + style./(" " + _).|(""), "Undo to here".hl, () => { clear(undoDiv); performUndoLocal(n) }))
