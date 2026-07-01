@@ -170,15 +170,19 @@ case class TBWrithingMawsAction(self : Faction, uc : UnitClass, r1 : Region, r2 
 case class TBMovePartToMantleMainAction(self : Faction)
     extends OptionFactionAction(Behemoth.styled(TB) + ": move a Part to " + TB.mantle) with MainQuestion with Soft
 case class TBMovePartToMantlePickAction(self : Faction, parts : $[UnitRef])
-    extends ForcedAction with PowerNeutral with Soft {
+    extends ForcedAction with PowerNeutral {
     override def question(implicit game : Game) = Behemoth.styled(TB) + ": move which Part to " + TB.mantle
 }
 case class TBMovePartToMantleAction(self : Faction, part : UnitRef)
     extends ForcedAction with PowerNeutral
 
 // -- BEHEMOTH: Segment-on-zero-Power (automatic, §1.8 / §3.4.3) ---------------
-case class TBBehemothSegmentAction(self : Faction)
+case class TBBehemothSegmentAction(self : Faction, then : ForcedAction)
     extends ForcedAction
+case class TBEnsnareAfterBehemothAction(self : Faction, enemy : Faction, area : Region)
+    extends ForcedAction with Soft
+case class TBShriekAfterBehemothAction(self : Faction, enemy : Faction)
+    extends ForcedAction with Soft
 
 // -- STALK: Post-Move relocation (§1.10 SB1 / §3.10.1 / §4.4) ----------------
 // `mover` tracks which faction moved a unit so we can resume their MoveContinueAction.
@@ -321,6 +325,8 @@ case class TBGatesAtGOOsMainAction(self : Faction)
     extends OptionFactionAction(GatesAtGOOsReq.text.styled(TB) + " (" + 8.power + ")") with MainQuestion with Soft
 case class TBGatesAtGOOsAction(self : Faction)
     extends ForcedAction
+case class TBGatesAtGOOsPlaceAction(self : Faction)
+    extends ForcedAction with Soft
 
 // -- SBR-6: SHUDDE M'ELL IN THREE GLYPHS — alt 6-Power Action (§1.9 / §3.12.6 / §4.5) --
 case class TBThreeGlyphsPayAction(self : Faction)
@@ -545,20 +551,14 @@ object TBExpansion extends Expansion {
                 game.board.regions.%(r => self.at(r).any || self.gates.has(r))
             else
                 self.gates
-            if (areas.num == 1)
-                Force(TBWrithingMawsPlaceSecondAction(self, uc, areas.head))
-            else
-                Ask(self).each(areas)(r => TBWrithingMawsPlaceSecondAction(self, uc, r).as(r)(ThousandWrithingMaws.styled(TB), ": place first", uc.styled(TB), "in")).cancel
+            Ask(self).each(areas)(r => TBWrithingMawsPlaceSecondAction(self, uc, r).as(r)(ThousandWrithingMaws.styled(TB), ": place first", uc.styled(TB), "in")).cancel
 
         case TBWrithingMawsPlaceSecondAction(self, uc, r1) =>
             val areas = if (uc.utype == Cultist)
                 game.board.regions.%(r => self.at(r).any || self.gates.has(r))
             else
                 self.gates
-            if (areas.num == 1)
-                Force(TBWrithingMawsAction(self, uc, r1, areas.head))
-            else
-                Ask(self).each(areas)(r => TBWrithingMawsAction(self, uc, r1, r).as(r)(ThousandWrithingMaws.styled(TB), ": place second", uc.styled(TB), "in")).cancel
+            Ask(self).each(areas)(r => TBWrithingMawsAction(self, uc, r1, r).as(r)(ThousandWrithingMaws.styled(TB), ": place second", uc.styled(TB), "in")).cancel
 
         case TBWrithingMawsAction(self, uc, r1, r2) =>
             self.power -= 2
@@ -566,18 +566,14 @@ object TBExpansion extends Expansion {
             self.place(uc, r2)
             self.log(ThousandWrithingMaws.styled(TB) + ": placed two", uc.styled(TB), "in", r1, "and", r2)
             // Check Behemoth: if Power hit 0
-            tbCheckBehemoth()
-            EndAction(self)
+            tbCheckBehemoth(EndAction(self))
 
         // ====================================================================
         // BEHEMOTH: Move Part to Mantle (0-Cost Unlimited, §3.4.3)
         // ====================================================================
         case TBMovePartToMantleMainAction(self) =>
             val parts = (self.all(ShuddeMellHead) ++ self.all(ShuddeMellSegment)).%(_.region != TB.mantle)
-            if (parts.num == 1)
-                Force(TBMovePartToMantleAction(self, parts.head.ref))
-            else
-                Force(TBMovePartToMantlePickAction(self, parts./(_.ref)))
+            Force(TBMovePartToMantlePickAction(self, parts./(_.ref)))
 
         case TBMovePartToMantlePickAction(self, parts) =>
             implicit val asking = Asking(self)
@@ -596,12 +592,12 @@ object TBExpansion extends Expansion {
             Force(MainAction(self))
 
         // Behemoth: Segment-on-zero-Power (automatic)
-        case TBBehemothSegmentAction(self) =>
+        case TBBehemothSegmentAction(self, then) =>
             if (game.tbShuddeMellEverAwakened && game.tbMantleInPlay && self.pool(ShuddeMellSegment).any) {
                 self.place(ShuddeMellSegment, TB.mantle)
                 self.log(Behemoth.styled(TB) + ": Power reached 0 — placed", ShuddeMellSegment.styled(TB), "on", TB.mantle)
             }
-            UnknownContinue
+            Force(then)
 
         // ====================================================================
         // STALK: Post-Move relocation (§3.10.1)
@@ -728,7 +724,9 @@ object TBExpansion extends Expansion {
             game.tbEnsnareTargetedThisPhase :+= enemy
             self.log(Ensnare.styled(TB) + ": targeting", enemy.full, "in", area)
             // Check Behemoth
-            tbCheckBehemoth()
+            tbCheckBehemoth(TBEnsnareAfterBehemothAction(self, enemy, area))
+
+        case TBEnsnareAfterBehemothAction(self, enemy, area) =>
             // Roll 1 D6
             RollD6(g => Ensnare.styled(TB) + ": roll for " + enemy.full, roll => TBEnsnareRollAction(self, enemy, area, roll))
 
@@ -783,7 +781,9 @@ object TBExpansion extends Expansion {
             game.tbShriekTargetedThisPhase :+= enemy
             self.log(PsychicShriek.styled(TB) + ": targeting", enemy.full)
             // Check Behemoth
-            tbCheckBehemoth()
+            tbCheckBehemoth(TBShriekAfterBehemothAction(self, enemy))
+
+        case TBShriekAfterBehemothAction(self, enemy) =>
             // Roll 2 D6
             RollD6(g => PsychicShriek.styled(TB) + ": first die for " + enemy.full, roll1 =>
                 TBPsychicShriekRollAction(self, enemy, roll1))
@@ -973,8 +973,10 @@ object TBExpansion extends Expansion {
         case TBGatesAtGOOsAction(self) =>
             // Pay 8 Power
             self.power -= 8
-            // Check Behemoth
-            tbCheckBehemoth()
+            // Check Behemoth then continue with gate placement
+            tbCheckBehemoth(TBGatesAtGOOsPlaceAction(self))
+
+        case TBGatesAtGOOsPlaceAction(self) =>
             // Place a Gate in each Area containing a GOO Unit (any faction) without a TB Gate
             val gooAreas = game.factions./~(fx => fx.all(GOO)./(_.region)).distinct
             val ungated = gooAreas.%!(r => self.gates.has(r))
@@ -1001,10 +1003,9 @@ object TBExpansion extends Expansion {
         case TBThreeGlyphsPayConfirmAction(self) =>
             self.power -= 6
             self.log("Paid", 6.power, "to satisfy", ShuddeMellInThreeGlyphsReq.text.styled(TB))
-            // Check Behemoth
-            tbCheckBehemoth()
             self.satisfy(ShuddeMellInThreeGlyphsReq, "Shudde M'ell in three Glyph Areas (paid 6 Power)")
-            EndAction(self)
+            // Check Behemoth
+            tbCheckBehemoth(EndAction(self))
 
         // ====================================================================
         // AWAKEN SHUDDE M'ELL (§3.4.1)
@@ -1013,8 +1014,7 @@ object TBExpansion extends Expansion {
             game.tbShuddeMellEverAwakened = true
             self.satisfy(AwakenShuddeMellReq, "Awaken Shudde M'ell")
             // Check Behemoth: Power just dropped to pay 8
-            tbCheckBehemoth()
-            EndAction(self)
+            tbCheckBehemoth(EndAction(self))
 
         // ====================================================================
         // CATCH-ALL
@@ -1024,13 +1024,13 @@ object TBExpansion extends Expansion {
 
     // -- HELPER: Behemoth Segment-on-zero-Power (§3.4.3) ----------------------
     // Called after every TB Power debit. If Power == 0 and Head has ever been
-    // awakened and Mantle is in play and pool has Segments, place one Segment.
-    def tbCheckBehemoth()(implicit game : Game) : Unit = {
+    // awakened and Mantle is in play and pool has Segments, dispatch recorded action.
+    def tbCheckBehemoth(then : ForcedAction)(implicit game : Game) : Continue = {
         val f = TB
-        if (f.power == 0 && game.tbShuddeMellEverAwakened && game.tbMantleInPlay && f.pool(ShuddeMellSegment).any) {
-            f.place(ShuddeMellSegment, TB.mantle)
-            f.log(Behemoth.styled(TB) + ": Power reached 0 — placed", ShuddeMellSegment.styled(TB), "on", TB.mantle)
-        }
+        if (f.power == 0 && game.tbShuddeMellEverAwakened && game.tbMantleInPlay && f.pool(ShuddeMellSegment).any)
+            Force(TBBehemothSegmentAction(f, then))
+        else
+            Force(then)
     }
 
     // -- HELPER: Mantle adjacency edges (§2.3 / §3.2.2) -----------------------
