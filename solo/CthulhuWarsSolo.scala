@@ -688,9 +688,6 @@ object CthulhuWarsSolo {
                         else
                         if (confirm.not && actions.%!(_.isInfo).num == 1 && actions.has(NeedOk).not)
                             UIPerform(game, actions.%!(_.isInfo).only)
-                        else
-                        if (confirm.not && actions.%!(_.isInfo).any && actions.%!(_.isInfo)(0).isInstanceOf[SpellbookAction] && actions.%!(_.isInfo).num == faction.unclaimedSB)
-                            UIPerform(game, actions.%!(_.isInfo)(0))
                         else {
                             setup.difficulty(faction) match {
                                 case Human | Recorded =>
@@ -2769,8 +2766,7 @@ object CthulhuWarsSolo {
                             case (Nyogtha, DeepOne) => DrawItem(null, f, DeepOne, Alive, $, 62 + last.x, last.y)
                             case (Starspawn, DeepOne) => DrawItem(null, f, DeepOne, Alive, $, 51 + last.x, last.y)
                             case (Shoggoth, DeepOne) => DrawItem(null, f, DeepOne, Alive, $, 48 + last.x, last.y)
-                            case (DeepOne, DeepOne) if last.health == Alive => DrawItem(null, f, DeepOne, Pained, $, last.x, last.y - 31)
-                            case (DeepOne, DeepOne) if last.health == Pained => DrawItem(null, f, DeepOne, Alive, $, 35 + last.x, last.y + 31)
+                            case (DeepOne, DeepOne) => DrawItem(null, f, DeepOne, Alive, $, 35 + last.x, last.y)
 
                             case (Cthulhu, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 57 + last.x, 6 + last.y)
                             case (Abhoth, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 54 + last.x, last.y)
@@ -2778,8 +2774,7 @@ object CthulhuWarsSolo {
                             case (Nyogtha, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 60 + last.x, last.y)
                             case (Starspawn, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 52 + last.x, last.y)
                             case (Shoggoth, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 48 + last.x, last.y)
-                            case (DeepOne, Acolyte) if last.health == Alive => DrawItem(null, f, Acolyte, Alive, $, 36 + last.x, last.y)
-                            case (DeepOne, Acolyte) if last.health == Pained => DrawItem(null, f, Acolyte, Alive, $, 36 + last.x, last.y + 31)
+                            case (DeepOne, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 36 + last.x, last.y)
                             case (Acolyte, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 35 + last.x, last.y)
 
                             case (Cthulhu, HighPriest) => DrawItem(null, f, HighPriest, Alive, $, 75 + last.x, 6 + last.y)
@@ -2788,8 +2783,7 @@ object CthulhuWarsSolo {
                             case (Nyogtha, HighPriest) => DrawItem(null, f, HighPriest, Alive, $, 77 + last.x, last.y)
                             case (Starspawn, HighPriest) => DrawItem(null, f, HighPriest, Alive, $, 70 + last.x, last.y)
                             case (Shoggoth, HighPriest) => DrawItem(null, f, HighPriest, Alive, $, 66 + last.x, last.y)
-                            case (DeepOne, HighPriest) if last.health == Alive => DrawItem(null, f, HighPriest, Alive, $, 54 + last.x, last.y)
-                            case (DeepOne, HighPriest) if last.health == Pained => DrawItem(null, f, HighPriest, Alive, $, 54 + last.x, last.y + 31)
+                            case (DeepOne, HighPriest) => DrawItem(null, f, HighPriest, Alive, $, 54 + last.x, last.y)
                             case (Acolyte, HighPriest) => DrawItem(null, f, HighPriest, Alive, $, 53 + last.x, last.y)
 
                             case (Cthulhu, Ghast) => DrawItem(null, f, Ghast, Alive, $, 62 + last.x, 6 + last.y)
@@ -3582,6 +3576,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 def post() {
                                     if (position == actions.num) {
                                         hrf.web.postF(server + "write/" + hash + "/" + (position + 3), serializer.write(a.unwrap)) { _ =>
+                                            stopBackgroundCheck()
+
                                             queue :+= UIRead(g)
 
                                             startUI()
@@ -3589,6 +3585,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                             if (position == actions.num) {
                                                 hrf.web.getF(server + "read/" + hash + "/" + (position + 3)) { ll =>
                                                     if (ll.splt("\n").but("").any) {
+                                                        stopBackgroundCheck()
+
                                                         queue :+= UIRead(g)
 
                                                         startUI()
