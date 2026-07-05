@@ -109,7 +109,7 @@ object CthulhuWarsSolo {
 
     def getAsset(k : String) : html.Image = dom.document.getElementById(k).asInstanceOf[html.Image]
 
-    case class Processing(tint : |[String], screen : |[String], overlay : |[String]) extends GoodMatch
+    case class Processing(tint : |[String], screen : |[String], overlay : |[String], multiply : |[String] = None) extends GoodMatch
 
     def getTintedAsset(k : String, processing : Processing) : html.Canvas = {
         val source = dom.document.getElementById(k).asInstanceOf[html.Image]
@@ -140,6 +140,12 @@ object CthulhuWarsSolo {
         processing.overlay.foreach { overlay =>
             result.context.fillStyle = overlay
             result.context.globalCompositeOperation = "overlay"
+            result.context.fillRect(0, 0, source.width, source.height)
+        }
+
+        processing.multiply.foreach { multiply =>
+            result.context.fillStyle = multiply
+            result.context.globalCompositeOperation = "multiply"
             result.context.fillRect(0, 0, source.width, source.height)
         }
 
@@ -974,10 +980,11 @@ object CthulhuWarsSolo {
                     case BB => Processing(|("#c8a84b"), |("#333333"), None)
                     // Defilers Court (DC): gold tone per glyph
                     case DC => Processing(|("#F0EDA8"), |("#333333"), None)
-                    // Faceless Blight (FBE): deep mossy green #3d5f1c
-                    case FBE => Processing(|("#3d5f1c"), |("#333333"), None)
+                    // Faceless Blight (FBE): deep mossy green #3d5f1c — multiply-only
+                    // (source sprites are white silhouettes; multiply alone = exact color)
+                    case FBE => Processing(None, None, None, |("#3d5f1c"))
                     // Xyrious Storm (XSS): stormy blue-grey #4a6b7a
-                    case XSS => Processing(|("#4a6b7a"), |("#333333"), None)
+                    case XSS => Processing(|("#4a6b7a"), None, None)
                     // The Burrowers Beneath (TB): earthy brown #8b6914
                     case TB => Processing(|("#8b6914"), |("#333333"), None)
                     // Library map units: no tint (use original icon images)
@@ -1073,9 +1080,8 @@ object CthulhuWarsSolo {
                         case BB => DrawRect("bb-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // Defilers Court (DC): faction glyph sprite
                         case DC => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
-                        case FBE => DrawRect("fbe-glyph", |(tint), x - 50, y - 50, 100, 100)
-                        // Xyrious Storm (XSS): placeholder glyph (reuse dc-glyph tinted XSS blue-grey)
-                        case XSS => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
+                        case FBE => DrawRect("fbe-glyph", None, x - 50, y - 50, 100, 100)
+                        case XSS => DrawRect("xss-glyph", None, x - 50, y - 50, 100, 100)
                         case TB => DrawRect("tb-glyph", None, x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
@@ -2672,7 +2678,7 @@ object CthulhuWarsSolo {
                     if (isDCDarkBargainFacedown) d.styled("used")
                     else f.can(sb).?(d).|(d.styled("used"))
                 }.mkString("") +
-                (1.to(6 - f.spellbooks.num - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") +
+                (1.to(f.library.num - f.spellbooks.%(f.library.has).num - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") +
                 f.unfulfilled./{ r =>
                     // Check if any Moonbeast is on an SBR that maps to this requirement's spellbook
                     val reqSpellbooks = f.library.%(sb => !f.spellbooks.has(sb))
@@ -2821,6 +2827,7 @@ object CthulhuWarsSolo {
                     case SL => s""""${f.short}", ${game.options.has(SleeperEasierSBR)}, ${game.options.has(SleeperEnergyNexusPreBattle)}"""
                     case DS => s""""${f.short}", ${game.options.has(DSAlternateSpellbooks)}"""
                     case BB => s""""${f.short}", ${game.options.has(BBAlternateSpellbooks)}"""
+                    case AN => s""""${f.short}", ${game.options.has(ANAlternateSpellbooks)}"""
                     case _ => s""""${f.short}""""
                 }
                 // §3.11.1: BB Moon HUD trigger lives in the top-right MAP HUD now (sibling of the
@@ -2831,11 +2838,16 @@ object CthulhuWarsSolo {
                     onclick='event.stopPropagation(); onExternalClick($fClickArgs)'
                     onpointerover='event.stopPropagation(); onExternalOver("${f.short}")'
                     onpointerout='event.stopPropagation(); onExternalOut("${f.short}")'
+                    style='position:relative; z-index:2;'
                     >${div("top")(s) + sb + lcis}</div>"""
 
                 val bitmap = b.get(w, h)
 
                 bitmap.canvas.style.pointerEvents = "none"
+                bitmap.canvas.style.position = "absolute"
+                bitmap.canvas.style.top = "0"
+                bitmap.canvas.style.left = "0"
+                bitmap.canvas.style.zIndex = "1"
                 bitmap.canvas.style.width = "" + b.node.clientWidth + "px"
                 bitmap.canvas.style.height = "" + b.node.clientHeight + "px"
 
@@ -3593,7 +3605,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         }
                     }
                     def safe(s : String) : String = s.replace("\"", "").replace("'", "").replace(";", "").replace("|", "")
-                    val gateEntry = if (mantleGatePresent) $("gate|Gate (TB)|76") else $[String]()
+                    val mantleGateControlled = mantleGatePresent && mantleFigs.exists(_.uclass == Cadavolyte)
+                    val gateEntry = if (mantleGatePresent) $(if (mantleGateControlled) "gate|Gate (controlled)|76" else "gate|Gate (abandoned)|76") else $[String]()
                     val unitEntries = mantleFigs./(u => {
                         val asset   = safe(mantleSpriteAssetId(u))
                         val display = safe(u.uclass.name) + " (" + safe(u.faction.short) + ")"
@@ -3962,6 +3975,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                     if (a.isVoid.not) {
                                         game.nextReplayActionHint = if (n + 1 < recorded.num) Some(serializer.write(recorded(n + 1))) else None
+                                        try {
                                         val (l, c) = game.perform(a.unwrap)
                                         game.nextReplayActionHint = None
 
@@ -3975,6 +3989,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                                 case Then(OutOfTurnRepeat(f, action)) if self.has(f).not =>
                                                 case c => cc = |(c)
                                             }
+                                        } catch { case e : Throwable =>
+                                            game.nextReplayActionHint = None
+                                            val msg = "REPLAY CRASH at action " + actions.num + "/" + recorded.num + ": " + e.getMessage + " | Action: " + serializer.write(a.unwrap)
+                                            println(msg)
+                                            throw new Error(msg)
+                                        }
                                     }
                                 }
 
@@ -4274,7 +4294,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             }
         }
 
-        def startOnlineSetup(factions : $[Faction], bbAlt : Boolean = false) {
+        def startOnlineSetup(factions : $[Faction], bbAlt : Boolean = false, anAlt : Boolean = false) {
             val all = allSeatings(factions)
 
             val seatings = all.%(s => all.indexOf(s) <= all.indexOf(s.take(1) ++ s.drop(1).reverse))
@@ -4295,6 +4315,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // The user can still toggle it from the Variants row if they want.
             if (bbAlt && factions.has(BB))
                 setup.options :+= BBAlternateSpellbooks
+            if (anAlt && factions.has(AN))
+                setup.options :+= ANAlternateSpellbooks
 
             // [2026-05-31] Apply any pending Random Neutrals selection from the
             // alt faction picker, then clear so it doesn't leak to a later setup.
@@ -4412,6 +4434,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         .$("Variants" -> ("" + DS + " Alternate Spellbooks (" + setup.get(DSAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"DSAlternateSpellbooks\")'>?</span>")) ++
                     (factions.has(BB))
                         .$("Variants" -> ("" + BB + " Alternate Spellbooks (" + setup.get(BBAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"BBAlternateSpellbooks\")'>?</span>")) ++
+                    (factions.has(AN))
+                        .$("Variants" -> ("" + AN + " Alternate Spellbooks (" + setup.get(ANAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"ANAlternateSpellbooks\")'>?</span>")) ++
                     $("Map" -> ("Map Configuration (" + setup.options.of[MapOption].lastOption.?(_.toString.hl) + ")")) ++
                     $("Done" -> "Start game".styled("power")),
                     nn => {
@@ -4585,6 +4609,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 setupQuestions()
                             }
                         }
+                        if (factions.has(AN)) {
+                            n -= 1
+                            if (n == 0) {
+                                setup.toggle(ANAlternateSpellbooks)
+                                setupQuestions()
+                            }
+                        }
                         n -= 1
                         if (n == 0) {
                             val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55, MapLibrary33, MapLibrary35, MapLibrary53, MapLibrary55)
@@ -4618,7 +4649,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             askTop()
         }
 
-        def startSetup(factions : $[Faction], bbAlt : Boolean = false) {
+        def startSetup(factions : $[Faction], bbAlt : Boolean = false, anAlt : Boolean = false) {
             val all = allSeatings(factions)
 
             val seatings = all.%(s => all.indexOf(s) <= all.indexOf(s.take(1) ++ s.drop(1).reverse))
@@ -4630,6 +4661,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // via the Variants row in the setup screen.
             if (bbAlt && factions.has(BB))
                 setup.options :+= BBAlternateSpellbooks
+            if (anAlt && factions.has(AN))
+                setup.options :+= ANAlternateSpellbooks
 
             // [2026-05-31] Apply any pending Random Neutrals selection from the
             // alt faction picker, then clear so it doesn't leak to a later setup.
@@ -4747,6 +4780,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         .$("Variants" -> ("" + DS + " Alternate Spellbooks (" + setup.get(DSAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"DSAlternateSpellbooks\")'>?</span>")) ++
                     (factions.has(BB))
                         .$("Variants" -> ("" + BB + " Alternate Spellbooks (" + setup.get(BBAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"BBAlternateSpellbooks\")'>?</span>")) ++
+                    (factions.has(AN))
+                        .$("Variants" -> ("" + AN + " Alternate Spellbooks (" + setup.get(ANAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"ANAlternateSpellbooks\")'>?</span>")) ++
                     $("Map" -> ("Map Configuration (" + setup.options.of[MapOption].lastOption.?(_.toString.hl) + ")")) ++
                     $("Options" -> ("Dice rolls (" + setup.dice.?("auto").|("manual").hl + ")")) ++
                     $("Options" -> ("Elder Signs (" + setup.es.?("auto").|("manual").hl + ")")) ++
@@ -4923,6 +4958,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 setupQuestions()
                             }
                         }
+                        if (factions.has(AN)) {
+                            n -= 1
+                            if (n == 0) {
+                                setup.toggle(ANAlternateSpellbooks)
+                                setupQuestions()
+                            }
+                        }
                         n -= 1
                         if (n == 0) {
                             val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55, MapLibrary33, MapLibrary35, MapLibrary53, MapLibrary55)
@@ -4994,6 +5036,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB)
         val altPickerEntries : $[PickerEntry] =
             altPickerFactions./(f => PickerEntry(f, false)).flatMap {
+                // Insert the AN-alt entry immediately after standard AN.
+                case e if e.faction == AN => $(e, PickerEntry(AN, true))
                 // Insert the BB-alt entry immediately after standard BB.
                 case e if e.faction == BB => $(e, PickerEntry(BB, true))
                 case e                    => $(e)
@@ -5007,7 +5051,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // the desired seating order) is fed to startSetup, which builds the
         // standard Setup object and proceeds to the normal player-order +
         // game-flags + start flow.
-        def altFactionPicker(pn : Int, onContinue : ($[Faction], Boolean) => Unit = (fs, bbAlt) => startSetup(fs, bbAlt)) {
+        def altFactionPicker(pn : Int, onContinue : ($[Faction], Boolean, Boolean) => Unit = (fs, bbAlt, anAlt) => startSetup(fs, bbAlt, anAlt)) {
             clear(actionDiv)
             // Inject the alt-picker stylesheet once per page load — keyed by id
             // so subsequent picker entries don't duplicate it.
@@ -5207,6 +5251,17 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     val player = bbIdx
                     val wantsAlt      = enabledEntries(player).exists(e => e.faction == BB && e.alt)
                     val wantsStandard = enabledEntries(player).exists(e => e.faction == BB && !e.alt)
+                    wantsAlt && !wantsStandard
+                }
+            }
+
+            def anAltForAssignment(picked : $[Faction]) : Boolean = {
+                val anIdx = picked.indexOf(AN)
+                if (anIdx < 0) false
+                else {
+                    val player = anIdx
+                    val wantsAlt      = enabledEntries(player).exists(e => e.faction == AN && e.alt)
+                    val wantsStandard = enabledEntries(player).exists(e => e.faction == AN && !e.alt)
                     wantsAlt && !wantsStandard
                 }
             }
@@ -5507,6 +5562,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         // seating and reorder the PAIRS so the factions match
                         // it (carrying each player name with its faction).
                         val bbAlt = bbAltForAssignment(picked)
+                        val anAlt = anAltForAssignment(picked)
                         val pairs : $[(String, Faction)] =
                             picked.zipWithIndex.map { case (f, idx) => (playerNames(idx), f) }
                         val orderedPairs : $[(String, Faction)] =
@@ -5518,11 +5574,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     chosen.map(f => pairs.find(_._2 == f).get)
                                 } else pairs
                             } else pairs
-                        showConfirmation(orderedPairs, bbAlt)
+                        showConfirmation(orderedPairs, bbAlt, anAlt)
                 }
             }
 
-            def showConfirmation(ordered : $[(String, Faction)], bbAlt : Boolean) {
+            def showConfirmation(ordered : $[(String, Faction)], bbAlt : Boolean, anAlt : Boolean = false) {
                 clear(actionDiv)
                 val box = dom.document.createElement("div").asInstanceOf[html.Div]
                 // [2026-05-23] Per user: each player is centered, name above
@@ -5542,10 +5598,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     block.appendChild(nm)
                     val gImg = dom.document.createElement("img").asInstanceOf[html.Image]
                     // [2026-06-02] §3.13.3: confirmation screen mirrors the
-                    // picker glyph — when BB-alt was the chosen entry, show
+                    // picker glyph — when BB-alt or AN-alt was the chosen entry, show
                     // the homebrew glyph here too.
                     gImg.src = if (f == BB && bbAlt) "webp/images/bb-glyph-hb.webp" else glyphSrc(f)
-                    val labelTxt = if (f == BB && bbAlt) f.full + " (alt SBs)" else f.full
+                    val labelTxt = if (f == BB && bbAlt) f.full + " (alt SBs)" else if (f == AN && anAlt) f.full + " (alt SBs)" else f.full
                     gImg.alt = labelTxt
                     gImg.title = labelTxt
                     gImg.style.cssText = "width:64px;height:64px;object-fit:contain;"
@@ -5583,7 +5639,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             setup.options ++= (IGOOs +: picks)
                         }
                     })
-                    onContinue(ordered.map(_._2), bbAlt)
+                    onContinue(ordered.map(_._2), bbAlt, anAlt)
                 }
                 val backBtn = dom.document.createElement("button").asInstanceOf[html.Button]
                 backBtn.innerHTML = "Back to picker"
@@ -5854,7 +5910,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 val opts = (("Alt faction picker".hl) +: combinations./(_.mkString(", "))./(smaller).toList) :+ "Back"
                                 ask("Choose factions", opts, n2 => {
                                     if (n2 == 0)
-                                        altFactionPicker(pn, (fs, bbAlt) => startOnlineSetup(fs, bbAlt))
+                                        altFactionPicker(pn, (fs, bbAlt, anAlt) => startOnlineSetup(fs, bbAlt, anAlt))
                                     else if (n2 - 1 < combinations.num)
                                         startOnlineSetup(combinations(n2 - 1))
                                     else
