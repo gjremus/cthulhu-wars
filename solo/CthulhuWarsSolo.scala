@@ -2108,6 +2108,13 @@ object CthulhuWarsSolo {
 
                 draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate).?(-2000).|(0) + (d.unit == DesecrationToken).?(-1000).|(0))./(_.rect).foreach { d =>
                     g.globalAlpha = d.alpha
+                    val needsOutline = d.key == "custodian-icon" || d.key == "librarian-icon"
+                    if (needsOutline) {
+                        g.shadowColor = "white"
+                        g.shadowBlur = 8
+                        g.shadowOffsetX = 0
+                        g.shadowOffsetY = 0
+                    }
                     if (d.rotation != 0.0) {
                         g.save()
                         g.translate(d.x + d.width / 2.0, d.y + d.height / 2.0)
@@ -2116,6 +2123,11 @@ object CthulhuWarsSolo {
                         g.restore()
                     } else
                         g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
+                    if (needsOutline) {
+                        g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
+                        g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
+                        g.shadowBlur = 0
+                    }
                     g.globalAlpha = 1.0
                 }
 
