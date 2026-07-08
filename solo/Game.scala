@@ -1792,7 +1792,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         (l, c)
     }
 
+    var pcCounter = 0
+
     def performContinue(action : Action) : Continue = {
+        pcCounter += 1
+
         if (action == CancelAction)
             return continue
 
@@ -3575,6 +3579,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
             barrierPaid = false
 
+            if (f.at(r).none) {
+                return AfterAction(self)
+            }
+
             // Round 8 Bug 60: snapshot FB.power BEFORE the 1-power attack cost is deducted,
             // so Ghatanothoa's combat strength uses the pre-battle power (not post-cost).
             // The original snapshot was in ProceedBattlesAction (line ~2570), but that runs
@@ -3620,7 +3628,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             queue = queue.drop(1)
 
-            if (game.nexed.any) {
+            if (game.nexed.any && game.nexed.has(battle.get.arena)) {
                 game.nexed = $
 
                 battle.get.attacker.log("proceeded to battle", battle.get.defender, "in", battle.get.arena)
@@ -4035,15 +4043,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case action if battle.any =>
             battle.get.perform(action)
 
-        // Defensive: battle-context actions performed when game.battle is None.
-        // Replay or out-of-order continuation can leave a PreBattleQuestion-typed
-        // action queued after the battle that owned it has already cleared. Logging
-        // it and continuing is safer than an uncaught MatchError that kills the
-        // whole engine on a fresh page load. Real bug remains: figure out WHY the
-        // battle was cleared before the continuation ran, but at least the
-        // remaining log replays.
         case action : PreBattleQuestion =>
-            log("[warn] battle action " + action.getClass.getSimpleName + " skipped — no active battle")
+            UnknownContinue
+
+        case action =>
             UnknownContinue
     }
 

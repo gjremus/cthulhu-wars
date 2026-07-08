@@ -1622,7 +1622,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
     }
 
-    def perform(a : Action) : Continue = a match {
+    def perform(a : Action) : Continue = {
+        a match {
         // PROCEED
         case VelvetFanCaptureAction(self, uRef) =>
             val u = game.unit(uRef)
@@ -1859,6 +1860,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     game.nexed = $(arena)
                     game.battleResumePhase = |("PreRoll")
                     f.log("used", EnergyNexus, "in", arena)
+                    game.queue = $(game.battle.get) ++ game.queue
+                    game.battle = None
                     return Force(PreMainAction(f))
                 }
             }
@@ -2340,5 +2343,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case FBCyclopeanGazeBattleDoneAction(self) =>
             proceed()
 
+    }
     }
 }
