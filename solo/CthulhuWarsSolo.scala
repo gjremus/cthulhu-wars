@@ -109,7 +109,7 @@ object CthulhuWarsSolo {
 
     def getAsset(k : String) : html.Image = dom.document.getElementById(k).asInstanceOf[html.Image]
 
-    case class Processing(tint : |[String], screen : |[String], overlay : |[String]) extends GoodMatch
+    case class Processing(tint : |[String], screen : |[String], overlay : |[String], multiply : |[String] = None) extends GoodMatch
 
     def getTintedAsset(k : String, processing : Processing) : html.Canvas = {
         val source = dom.document.getElementById(k).asInstanceOf[html.Image]
@@ -132,6 +132,12 @@ object CthulhuWarsSolo {
         processing.overlay.foreach { overlay =>
             result.context.fillStyle = overlay
             result.context.globalCompositeOperation = "overlay"
+            result.context.fillRect(0, 0, source.width, source.height)
+        }
+
+        processing.multiply.foreach { multiply =>
+            result.context.fillStyle = multiply
+            result.context.globalCompositeOperation = "multiply"
             result.context.fillRect(0, 0, source.width, source.height)
         }
 
@@ -933,6 +939,23 @@ object CthulhuWarsSolo {
                     case _  => defaultProcessing
                 }
 
+                val neutralTint = faction @@ {
+                    case GC => Processing(|("#77a055"), |("#444444"), None)
+                    case CC => Processing(|("#4977b3"), |("#444444"), None)
+                    case BG => Processing(|("#cd3233"), None, |("#555555"))
+                    case YS => Processing(|("#ffd000"), |("#444444"), None)
+                    case WW => Processing(|("#88a9be"), |("#444444"), None)
+                    case SL => Processing(|("#db6a33"), |("#444444"), None)
+                    case OW => Processing(|("#6c4296"), None, |("#555555"))
+                    case AN => Processing(|("#47a5bc"), |("#444444"), None)
+                    case TS => Processing(|("#BDE0BC"), |("#444444"), None)
+                    case FB => Processing(|("#CB307E"), |("#444444"), None)
+                    case DS => Processing(|("#3A2825"), None, |("#333333"))
+                    case TT => Processing(|("#f9c2c5"), |("#aaaaaa"), None)
+                    case LibraryFaction => defaultProcessing
+                    case _  => defaultProcessing
+                }
+
                 def proto : DrawRect = unit match {
                     case Gate => DrawRect("gate", None, x - 38, y - 38, 76, 76)
 
@@ -1069,58 +1092,58 @@ object CthulhuWarsSolo {
                     case UbboSathla      => DrawRect("tt-ubbo-sathla",    |(tint), x - 48, y - 107, 96, 107)
 
                     case DesecrationToken => DrawRect("ys-desecration", None, x - 20, y - 20, 41, 40)
-                    case WebToken         => DrawRect("web-token", |(tint), x - 31, y - 30, 62, 60)
+                    case WebToken         => DrawRect("web-token", |(neutralTint), x - 31, y - 30, 62, 60)
                     case IceAgeToken      => DrawRect("ww-ice-age", None, x - 44, y - 67, 91, 75)
                     case Cathedral        => DrawRect("an-cathedral", None, x - 39, y - 90, 78, 110)
                     case ChaosGate        => DrawRect("gate", |(Processing(|("#3C2E18"), None, |("#130E08"))), x - 38, y - 38, 76, 76)
 
-                    case Ghast         => DrawRect("n-ghast", |(tint), x - 17, y - 53, 35, 59)
-                    case Gug           => DrawRect("n-gug", |(tint), x - 36, y - 78, 73, 90)
-                    case Shantak       => DrawRect("n-shantak", |(tint), x - 39, y - 89, 79, 100)
-                    case StarVampire   => DrawRect("n-star-vampire", |(tint), x - 35, y - 75, 70, 85)
-                    case Voonith       => if (region != null) DrawRect("n-voonith", |(tint), x - 35, y - 75, 70, 85)
-                                          else DrawRect("n-voonith", |(tint), x - 22, y - 52, 45, 57)
-                    case DimensionalShamblerUnit => if (region != null) DrawRect("n-dimensional-shambler", |(tint), x - 35, y - 75, 70, 85)
-                                                    else DrawRect("n-dimensional-shambler", |(tint), x - 29, y - 60, 58, 70)
-                    case Gnorri            => if (region != null) DrawRect("n-gnorri", |(tint), x - 50, y - 90, 100, 100)
-                                              else DrawRect("n-gnorri", |(tint), x - 30, y - 54, 60, 60)
-                    case Ygolonac      => DrawRect("n-ygolonac", |(tint), x - 37, y - 90, 75, 100)
-                    case Byatis        => DrawRect("n-byatis", |(tint), x - 47, y - 90, 95, 90)
-                    case Abhoth        => DrawRect("n-abhoth", |(tint), x - 47, y - 110, 95, 120)
-                    case Filth         => DrawRect("n-filth", |(tint), x - 20, y - 20, 40, 40)
-                    case Daoloth       => DrawRect("n-daoloth", |(tint), x - 59, y - 91, 118, 99)
-                    case Nyogtha       => DrawRect("n-nyogtha", |(tint), x - 40, y - 69, 81, 80)
-                    case Tulzscha         => if (region != null) DrawRect("n-tulzscha", |(tint), x - 69, y - 127, 137, 137)
-                                             else DrawRect("n-tulzscha", |(tint), x - 50, y - 90, 100, 100)
+                    case Ghast         => DrawRect("n-ghast", |(neutralTint), x - 17, y - 53, 35, 59)
+                    case Gug           => DrawRect("n-gug", |(neutralTint), x - 36, y - 78, 73, 90)
+                    case Shantak       => DrawRect("n-shantak", |(neutralTint), x - 39, y - 89, 79, 100)
+                    case StarVampire   => DrawRect("n-star-vampire", |(neutralTint), x - 35, y - 75, 70, 85)
+                    case Voonith       => if (region != null) DrawRect("n-voonith", |(neutralTint), x - 35, y - 75, 70, 85)
+                                          else DrawRect("n-voonith", |(neutralTint), x - 22, y - 52, 45, 57)
+                    case DimensionalShamblerUnit => if (region != null) DrawRect("n-dimensional-shambler", |(neutralTint), x - 35, y - 75, 70, 85)
+                                                    else DrawRect("n-dimensional-shambler", |(neutralTint), x - 29, y - 60, 58, 70)
+                    case Gnorri            => if (region != null) DrawRect("n-gnorri", |(neutralTint), x - 50, y - 90, 100, 100)
+                                              else DrawRect("n-gnorri", |(neutralTint), x - 30, y - 54, 60, 60)
+                    case Ygolonac      => DrawRect("n-ygolonac", |(neutralTint), x - 37, y - 90, 75, 100)
+                    case Byatis        => DrawRect("n-byatis", |(neutralTint), x - 47, y - 90, 95, 90)
+                    case Abhoth        => DrawRect("n-abhoth", |(neutralTint), x - 47, y - 110, 95, 120)
+                    case Filth         => DrawRect("n-filth", |(neutralTint), x - 20, y - 20, 40, 40)
+                    case Daoloth       => DrawRect("n-daoloth", |(neutralTint), x - 59, y - 91, 118, 99)
+                    case Nyogtha       => DrawRect("n-nyogtha", |(neutralTint), x - 40, y - 69, 81, 80)
+                    case Tulzscha         => if (region != null) DrawRect("n-tulzscha", |(neutralTint), x - 69, y - 127, 137, 137)
+                                             else DrawRect("n-tulzscha", |(neutralTint), x - 50, y - 90, 100, 100)
 
                     // New Terrors
                     // Terrors (sized relative to cultist from docx thumbnails)
-                    case Dhole             => DrawRect("n-dhole", |(tint), x - 50, y - 112, 100, 122)
-                    case GreatRaceOfYith   => DrawRect("n-great-race-of-yith", |(tint), x - 64, y - 146, 128, 156)
-                    case QuachilUttaus     => DrawRect("n-quachil-uttaus", |(tint), x - 65, y - 150, 131, 160)
-                    case ShadowPharaoh     => DrawRect("n-the-shadow-pharaoh", |(tint), x - 63, y - 175, 126, 185)
-                    case HoundOfTindalos   => DrawRect("n-hound-of-tindalos", |(tint), x - 48, y - 109, 95, 116)
-                    case BrownJenkin       => DrawRect("n-brown-jenkin", |(tint), x - 43, y - 117, 86, 127)
-                    case ElderShoggoth     => DrawRect("n-elder-shoggoth", |(tint), x - 50, y - 112, 100, 122)
+                    case Dhole             => DrawRect("n-dhole", |(neutralTint), x - 50, y - 112, 100, 122)
+                    case GreatRaceOfYith   => DrawRect("n-great-race-of-yith", |(neutralTint), x - 64, y - 146, 128, 156)
+                    case QuachilUttaus     => DrawRect("n-quachil-uttaus", |(neutralTint), x - 65, y - 150, 131, 160)
+                    case ShadowPharaoh     => DrawRect("n-the-shadow-pharaoh", |(neutralTint), x - 63, y - 175, 126, 185)
+                    case HoundOfTindalos   => DrawRect("n-hound-of-tindalos", |(neutralTint), x - 48, y - 109, 95, 116)
+                    case BrownJenkin       => DrawRect("n-brown-jenkin", |(neutralTint), x - 43, y - 117, 86, 127)
+                    case ElderShoggoth     => DrawRect("n-elder-shoggoth", |(neutralTint), x - 50, y - 112, 100, 122)
                     // Monsters (sized relative to cultist from docx thumbnails)
-                    case MoonbeastUnit     => DrawRect("n-moonbeast", |(tint), x - 38, y - 76, 77, 86)
-                    case AlbinoPenguins    => DrawRect("n-giant-blind-albino-penguins", |(tint), x - 49, y - 130, 99, 140)
-                    case ElderThing        => DrawRect("n-elder-thing", |(tint), x - 50, y - 103, 101, 113)
-                    case LengSpiderUnit    => DrawRect("n-leng-spider", |(tint), x - 47, y - 95, 94, 105)
-                    case Satyr             => DrawRect("n-satyr", |(tint), x - 44, y - 88, 88, 98)
-                    case InsectsFromShaggai => DrawRect("n-insects-from-shaggai", |(tint), x - 38, y - 97, 76, 107)
-                    case ServitorUnit      => DrawRect("n-servitor-of-the-outer-gods", |(tint), x - 35, y - 75, 70, 85)
+                    case MoonbeastUnit     => DrawRect("n-moonbeast", |(neutralTint), x - 38, y - 76, 77, 86)
+                    case AlbinoPenguins    => DrawRect("n-giant-blind-albino-penguins", |(neutralTint), x - 49, y - 130, 99, 140)
+                    case ElderThing        => DrawRect("n-elder-thing", |(neutralTint), x - 50, y - 103, 101, 113)
+                    case LengSpiderUnit    => DrawRect("n-leng-spider", |(neutralTint), x - 47, y - 95, 94, 105)
+                    case Satyr             => DrawRect("n-satyr", |(neutralTint), x - 44, y - 88, 88, 98)
+                    case InsectsFromShaggai => DrawRect("n-insects-from-shaggai", |(neutralTint), x - 38, y - 97, 76, 107)
+                    case ServitorUnit      => DrawRect("n-servitor-of-the-outer-gods", |(neutralTint), x - 35, y - 75, 70, 85)
                     // IGOOs (sized relative to cultist from docx thumbnails)
-                    case AzathothIGOO      => DrawRect("n-azathoth", |(tint), x - 59, y - 128, 119, 138)
-                    case Cthugha           => DrawRect("n-cthugha", |(tint), x - 52, y - 112, 105, 122)
-                    case MotherHydra       => DrawRect("n-mother-hydra", |(tint), x - 62, y - 97, 124, 107)
-                    case Yig               => DrawRect("n-yig", |(tint), x - 52, y - 112, 105, 122)
-                    case FatherDagon       => DrawRect("n-father-dagon", |(tint), x - 60, y - 95, 121, 105)
-                    case GhatanotoaIGOO    => DrawRect("n-ghatanothoa", |(tint), x - 62, y - 135, 125, 145)
-                    case BloatedWoman      => DrawRect("n-the-bloated-woman", |(tint), x - 68, y - 147, 136, 157)
-                    case AtlachNacha       => DrawRect("n-atlach-nacha", |(tint), x - 62, y - 110, 125, 110)
-                    case Bokrug            => DrawRect("n-bokrug", |(tint), x - 55, y - 115, 110, 125)
-                    case GlaakiIGOO        => DrawRect("n-glaaki-igoo", |(tint), x - 55, y - 115, 110, 125)
+                    case AzathothIGOO      => DrawRect("n-azathoth", |(neutralTint), x - 59, y - 128, 119, 138)
+                    case Cthugha           => DrawRect("n-cthugha", |(neutralTint), x - 52, y - 112, 105, 122)
+                    case MotherHydra       => DrawRect("n-mother-hydra", |(neutralTint), x - 62, y - 97, 124, 107)
+                    case Yig               => DrawRect("n-yig", |(neutralTint), x - 52, y - 112, 105, 122)
+                    case FatherDagon       => DrawRect("n-father-dagon", |(neutralTint), x - 60, y - 95, 121, 105)
+                    case GhatanotoaIGOO    => DrawRect("n-ghatanothoa", |(neutralTint), x - 62, y - 135, 125, 145)
+                    case BloatedWoman      => DrawRect("n-the-bloated-woman", |(neutralTint), x - 68, y - 147, 136, 157)
+                    case AtlachNacha       => DrawRect("n-atlach-nacha", |(neutralTint), x - 62, y - 110, 125, 110)
+                    case Bokrug            => DrawRect("n-bokrug", |(neutralTint), x - 55, y - 115, 110, 125)
+                    case GlaakiIGOO        => DrawRect("n-glaaki-igoo", |(neutralTint), x - 55, y - 115, 110, 125)
 
                     case GhastIcon        => DrawRect("ghast-icon", None, x - 17, y - 55, 50, 50)
                     case GugIcon          => DrawRect("gug-icon", None, x - 17, y - 55, 50, 50)
@@ -2389,7 +2412,7 @@ object CthulhuWarsSolo {
                     val moonbeastImg = moonbeastOnThis./(t => {
                         val mbOwner = displayGame.moonbeastOnSpellbook.find(_._2 == t)./(e => displayGame.unit(e._1).faction).|(f)
                         // Use faction-tinted image (same tint as map units)
-                        val tint = DrawItem(null, mbOwner, MoonbeastUnit, Alive, $, 0, 0).tint
+                        val tint = DrawItem(null, mbOwner, MoonbeastUnit, Alive, $, 0, 0).neutralTint
                         val tintedSrc = getTintedAsset("n-moonbeast", tint).toDataURL("image/png")
                         s"<img src='${tintedSrc}' style='height:1.4em;vertical-align:middle;opacity:0.9;margin-right:0.3em;' />"
                     }).|("")
@@ -2408,7 +2431,7 @@ object CthulhuWarsSolo {
                         >${full}</div>"""
                     f.can(sb).?(d).|(d.styled("used"))
                 }.mkString("") +
-                (1.to(6 - f.spellbooks.num - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") +
+                (1.to(f.library.num - f.spellbooks.%(f.library.has).num - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") +
                 f.unfulfilled./{ r =>
                     // Check if any Moonbeast is on an SBR that maps to this requirement's spellbook
                     val reqSpellbooks = f.library.%(sb => !f.spellbooks.has(sb))
@@ -2417,7 +2440,7 @@ object CthulhuWarsSolo {
                         // Find the moonbeast owner for tinting
                         val mbEntry = displayGame.moonbeastOnSpellbook.find { case (_, (target, sb)) => target == f && reqSpellbooks.contains(sb) }
                         val mbOwner = mbEntry./(e => displayGame.unit(e._1).faction).|(f)
-                        val tint = DrawItem(null, mbOwner, MoonbeastUnit, Alive, $, 0, 0).tint
+                        val tint = DrawItem(null, mbOwner, MoonbeastUnit, Alive, $, 0, 0).neutralTint
                         val tintedSrc = getTintedAsset("n-moonbeast", tint).toDataURL("image/png")
                         s"<img src='${tintedSrc}' style='height:1.4em;vertical-align:middle;opacity:0.9;margin-right:0.3em;' />"
                     } else ""
@@ -2551,11 +2574,16 @@ object CthulhuWarsSolo {
                     onclick='event.stopPropagation(); onExternalClick($fClickArgs)'
                     onpointerover='event.stopPropagation(); onExternalOver("${f.short}")'
                     onpointerout='event.stopPropagation(); onExternalOut("${f.short}")'
+                    style='position:relative; z-index:2;'
                     >${div("top")(s) + sb + lcis}</div>"""
 
                 val bitmap = b.get(w, h)
 
                 bitmap.canvas.style.pointerEvents = "none"
+                bitmap.canvas.style.position = "absolute"
+                bitmap.canvas.style.top = "0"
+                bitmap.canvas.style.left = "0"
+                bitmap.canvas.style.zIndex = "1"
                 bitmap.canvas.style.width = "" + b.node.clientWidth + "px"
                 bitmap.canvas.style.height = "" + b.node.clientHeight + "px"
 
@@ -3120,6 +3148,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 case _ : ThousandFormsRollAction => true
                 case _ : AzathothCombatDieRollAction => true
                 case _ : AzathothSynthesisRollAction => true
+                case _ : AzathothDaemonSultanKillRollAction => true
                 case _ : FBWritheRollResultAction => true
                 case _ : CustodianAgonyRolledAction => true
                 case _ : LibrarianAgonyRolledAction => true
