@@ -1189,6 +1189,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var libraryFirstDoomGatesDone : Boolean = false
     var custodianRegion : |[Region] = None
     var librarianRegion : |[Region] = None
+    var gateBlockedLog : $[String] = $
+
+    def gateControlBlockers(r : Region) : $[String] = {
+        if (board.isLibraryMap) {
+            $(librarianRegion.has(r).?("The Librarian"), custodianRegion.has(r).?("The Custodian")).flatten
+        } else $()
+    }
+
     var barrierPaid : Boolean = false
     var fbWritheUsedUnits : $[UnitRef] = $
     var fbWritheRerolled : Boolean = false
@@ -1423,15 +1431,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (self.abandoned.has(r).not) {
                 if (DS.chaosGateRegions.has(r).not || self == DS) {
                     if (factions.%(_.gates.has(r)).none) {
-                        // Library at Celaeno: custodian/librarian block gate control
-                        val libraryBlocker : |[String] = if (board.isLibraryMap) {
-                            if (librarianRegion.has(r)) |("Librarian")
-                            else if (custodianRegion.has(r)) |("Custodian")
-                            else None
-                        } else None
+                        val blockers = gateControlBlockers(r)
 
-                        if (libraryBlocker.any) {
-                            // Silently block — don't log repeatedly (checkGatesGained is called every action cycle)
+                        if (blockers.any) {
+                            val key = self.name + "|" + r.name
+                            if (self.at(r).%(_.canControlGate).any && gateBlockedLog.has(key).not) {
+                                gateBlockedLog :+= key
+                                self.log("gate control in", r, "blocked by", blockers.mkString(" and ").styled("nt"))
+                            }
                         }
                         else {
                             self.at(r).%(_.canControlGate).sortBy(_.uclass @@ {
@@ -1445,7 +1452,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                                 if (self.oncePerAction.has(UmrAtTawil).not)
                                     self.log("gained control of the gate in", r)
 
-                                // Library at Celaeno: check tome acquisition on auto gate control
                                 if (board.isLibraryMap)
                                     LibraryExpansion.checkTomeAcquisition()
                             }
@@ -1809,13 +1815,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             f.log("started in", r)
 
             SetupFactionsAction
-
-        case PowerGatherAction(last) if factions.%!(_.hibernating).%(_.power > 0).any =>
-            factions.foreach { f =>
-                f.active = f.power > 0 && f.hibernating.not
-            }
-
-            PreMainAction(last)
 
         case PowerGatherAction(last) =>
             turn += 1
@@ -2556,6 +2555,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             MainGatesAction(f)
 
         case MainGatesAction(f) =>
+            gateBlockedLog = $
             checkGatesGained(f)
 
             CheckSpellbooksAction(MainAction(f))
@@ -2606,14 +2606,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             factions.foreach(_.oncePerAction = $)
 
+            triggers()
+
             // Two-pass CG: fire pending CG sources AFTER triggers/SBRs resolved
             if (fbCyclopeanGazePendingSources.any && fbCyclopeanGazePendingActor.isDefined) {
                 val sources = fbCyclopeanGazePendingSources
                 val actor = fbCyclopeanGazePendingActor.get
                 fbCyclopeanGazePendingSources = $
                 fbCyclopeanGazePendingActor = None
-                Force(FBCyclopeanGazePhaseAction(FB, actor, sources, fromBattle = false))
+                CheckSpellbooksAction(FBCyclopeanGazePhaseAction(FB, actor, sources, fromBattle = false))
             }
+            else if (game.nexed.any)
+                NextPlayerAction(self)
             else
                 CheckSpellbooksAction(PreMainAction(self))
 
@@ -2622,7 +2626,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             NextPlayerAction(f)
 
-        case NextPlayerAction(_) if queue.any =>
+        case NextPlayerAction(_) if queue.any || game.nexed.any =>
             ProceedBattlesAction
 
         case NextPlayerAction(_) if factions.%(_.doom >= 30).any =>
@@ -2969,6 +2973,19 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             if (game.nexed.any) {
                 game.nexed = $
+
+                // Re-validate battle after Energy Nexus action (units may have been captured/removed)
+                val b = battle.get
+                val attackerUnits = b.attacker.at(b.arena)
+                val defenderUnits = b.defender.at(b.arena)
+                if (attackerUnits.none || defenderUnits.none) {
+                    if (attackerUnits.none)
+                        b.attacker.log("had no units remaining in", b.arena, "after", EnergyNexus)
+                    if (defenderUnits.none)
+                        b.defender.log("had no units remaining in", b.arena, "after", EnergyNexus)
+                    battle = None
+                    return Force(AfterAction(b.attacker))
+                }
 
                 battle.get.attacker.log("proceeded to battle", battle.get.defender, "in", battle.get.arena)
             }
