@@ -3892,7 +3892,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val actor = fbCyclopeanGazePendingActor.get
                 fbCyclopeanGazePendingSources = $
                 fbCyclopeanGazePendingActor = None
-                Force(FBCyclopeanGazePhaseAction(FB, actor, sources, fromBattle = false))
+                CheckSpellbooksAction(FBCyclopeanGazePhaseAction(FB, actor, sources, fromBattle = false))
             }
             else {
                 // Brown Jenkin Familiar: forced respawn for any faction with BJ in pool + 2 Power
