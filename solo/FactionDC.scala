@@ -943,6 +943,7 @@ object DCExpansion extends Expansion {
                     // Auto-capture the only cultist
                     val c = cultists.first
                     c.region = self.prison
+                    c.onGate = false
                     ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(only one in", area, ")")
                     Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1))
                 } else if (cultists.num > 1) {
@@ -952,6 +953,7 @@ object DCExpansion extends Expansion {
                         // All equivalent (same type, none on gate) — auto-capture one
                         val c = cultists.first
                         c.region = self.prison
+                        c.onGate = false
                         ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(all equivalent in", area, ")")
                         Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1))
                     } else {
@@ -970,6 +972,7 @@ object DCExpansion extends Expansion {
         case DCSatiatePickCultistAction(self, area, cultistRef, remaining, capturedSoFar) =>
             val c = game.unit(cultistRef)
             c.region = DC.prison
+            c.onGate = false
             self.log(Satiate.styled(DC) + ":", self.short.styled(self), "loses", c.uclass.styled(self), "to", DC.full)
             Force(DCSatiateFactionPickAction(DC, area, remaining, capturedSoFar + 1))
 
@@ -1054,6 +1057,7 @@ object DCExpansion extends Expansion {
                     val c = eligible.first
                     val from = c.region
                     c.region = area
+                    c.onGate = false
                     e.log(Lure.styled(DC) + ":", e.short.styled(e), "moves", c.uclass.styled(e), "from", from, "to", area)
                     Force(DCLureFactionPickAction(self, area, remaining.dropStarting))
                 } else {
@@ -1070,6 +1074,7 @@ object DCExpansion extends Expansion {
             val c = game.unit(cultistRef)
             val from = c.region
             c.region = area
+            c.onGate = false
             self.log(Lure.styled(DC) + ":", self.short.styled(self), "moves", c.uclass.styled(self), "from", from, "to", area)
             Force(DCLureFactionPickAction(DC, area, remaining))
 
@@ -1129,6 +1134,7 @@ object DCExpansion extends Expansion {
             val u = game.unit(unitRef)
             val src = u.region
             u.region = dest
+            u.onGate = false
             self.log(Pilgrimage.styled(DC) + ": moved", u.uclass.styled(DC), "from", src, "to", dest)
             // Track moved Acolytes for aggregated Proselytize (no per-unit trigger).
             if (u.uclass == Acolyte && self == DC)
@@ -1400,6 +1406,7 @@ object DCExpansion extends Expansion {
                     // Drag all of them (no choice needed).
                     acolytes.foreach { c =>
                         c.region = to
+                        c.onGate = false
                     }
                     faction.log(Proselytize.styled(DC) + ":", faction.short.styled(faction), acolytes.num.toString, Acolyte.styled(faction),
                         "dragged from", from, "to", to)
@@ -1412,6 +1419,7 @@ object DCExpansion extends Expansion {
                         // All same gate status: no meaningful choice — take first N.
                         acolytes.take(count).foreach { c =>
                             c.region = to
+                            c.onGate = false
                         }
                         faction.log(Proselytize.styled(DC) + ":", faction.short.styled(faction), count.toString, Acolyte.styled(faction),
                             "dragged from", from, "to", to)
@@ -1430,8 +1438,9 @@ object DCExpansion extends Expansion {
         case DCProselytizeEnemyPickAction(self, from, to, cultistRef, remainingForFaction, assignments, then) =>
             val c = game.unit(cultistRef)
             c.region = to
+            c.onGate = false
             self.log(Proselytize.styled(DC) + ":", self.short.styled(self), c.uclass.styled(self),
-                if (c.onGate) "(on gate)" else "", "dragged from", from, "to", to)
+                "dragged from", from, "to", to)
             if (remainingForFaction <= 1) {
                 Force(DCProselytizeExecuteDragAction(DC, from, to, assignments, then))
             } else {
@@ -1443,6 +1452,7 @@ object DCExpansion extends Expansion {
                     // Not enough left for choice — take all remaining.
                     remaining.foreach { u =>
                         u.region = to
+                        u.onGate = false
                     }
                     self.log(Proselytize.styled(DC) + ":", self.short.styled(self), remaining.num.toString, Acolyte.styled(self),
                         "dragged from", from, "to", to)
@@ -1454,6 +1464,7 @@ object DCExpansion extends Expansion {
                         // All same status — no meaningful choice, take first N.
                         remaining.take(remainingForFaction - 1).foreach { u =>
                             u.region = to
+                            u.onGate = false
                         }
                         self.log(Proselytize.styled(DC) + ":", self.short.styled(self), (remainingForFaction - 1).toString, Acolyte.styled(self),
                             "dragged from", from, "to", to)
@@ -1478,8 +1489,9 @@ object DCExpansion extends Expansion {
             // Legacy: route through execution.
             val c = game.unit(cultistRef)
             c.region = to
+            c.onGate = false
             self.log(Proselytize.styled(DC) + ":", self.short.styled(self), Acolyte.styled(self),
-                if (c.onGate) "(on gate)" else "(off gate)", "dragged from", area, "to", to)
+                "dragged from", area, "to", to)
             Force(DCProselytizeAggregatedAction(area, to, 1, MoveContinueAction(DC, true)))
 
         // ── LureReq / EscharReq pool-check satisfaction (Item 7) ─────────────
