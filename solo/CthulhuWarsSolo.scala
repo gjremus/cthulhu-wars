@@ -940,18 +940,18 @@ object CthulhuWarsSolo {
                 }
 
                 val neutralTint = faction @@ {
-                    case GC => Processing(|("#77a055"), |("#444444"), None)
-                    case CC => Processing(|("#4977b3"), |("#444444"), None)
+                    case GC => Processing(|("#77a055"), |("#222222"), None)
+                    case CC => Processing(|("#4977b3"), |("#111111"), None)
                     case BG => Processing(|("#cd3233"), None, |("#555555"))
-                    case YS => Processing(|("#ffd000"), |("#444444"), None)
-                    case WW => Processing(|("#88a9be"), |("#444444"), None)
-                    case SL => Processing(|("#db6a33"), |("#444444"), None)
-                    case OW => Processing(|("#6c4296"), None, |("#555555"))
-                    case AN => Processing(|("#47a5bc"), |("#444444"), None)
-                    case TS => Processing(|("#BDE0BC"), |("#444444"), None)
-                    case FB => Processing(|("#CB307E"), |("#444444"), None)
-                    case DS => Processing(|("#3A2825"), None, |("#333333"))
-                    case TT => Processing(|("#f9c2c5"), |("#aaaaaa"), None)
+                    case YS => Processing(|("#ffd000"), |("#663344"), None)
+                    case WW => Processing(|("#88a9be"), |("#5577aa"), None)
+                    case SL => Processing(|("#db6a33"), |("#4a1a1a"), None)
+                    case OW => Processing(|("#6c4296"), None, |("#4c4c4c"))
+                    case AN => Processing(|("#47a5bc"), |("#333333"), None)
+                    case TS => Processing(|("#BDE0BC"), |("#333333"), None)
+                    case FB => Processing(|("#CB307E"), |("#333333"), None)
+                    case DS => Processing(|("#3A2825"), None, |("#120E0C"))
+                    case TT => Processing(|("#fc9ca0"), |("#333333"), None)
                     case LibraryFaction => defaultProcessing
                     case _  => defaultProcessing
                 }
