@@ -162,9 +162,9 @@ trait PreBattleQuestion extends FactionAction {
 }
 
 case class BattleDoneAction(self : Faction) extends ForcedAction
-// Dhole: Planetary Destruction — opponent chooses 2 Doom or 2 Power
-case class DholePlanetaryDestructionDoomAction(self : Faction, owner : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "Opponent gains " + 2.doom) { override def question(implicit game : Game) = "Planetary Destruction".styled("nt") + " — choose what opponent gains" }
-case class DholePlanetaryDestructionPowerAction(self : Faction, owner : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "Opponent gains " + "2 Power".styled("power")) { override def question(implicit game : Game) = "Planetary Destruction".styled("nt") + " — choose what opponent gains" }
+// Dhole: Planetary Destruction — owner chooses whether opponent gains 2 Doom or 2 Power
+case class DholePlanetaryDestructionDoomAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "Opponent gains " + 2.doom) { override def question(implicit game : Game) = "Planetary Destruction".styled("nt") + " — choose what opponent gains" }
+case class DholePlanetaryDestructionPowerAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "Opponent gains " + "2 Power".styled("power")) { override def question(implicit game : Game) = "Planetary Destruction".styled("nt") + " — choose what opponent gains" }
 // Leng Spider: Bloodthirst — choose which faction's pains to convert
 case class BloodthirstChooseFactionAction(self : Faction, target : Faction) extends BaseFactionAction(implicit g => "Bloodthirst".styled("nt"), implicit g => "Convert " + target.full + "'s 2 " + Pain + " → 1 " + Kill) { override def question(implicit game : Game) = self.full + " — " + "Bloodthirst".styled("nt") + ": choose faction" }
 case class BloodthirstDoneAction(self : Faction) extends BaseFactionAction(implicit g => "Bloodthirst".styled("nt"), "Skip") { override def question(implicit game : Game) = self.full + " — " + "Bloodthirst".styled("nt") }
@@ -176,6 +176,7 @@ case class PreBattleDoneAction(self : Faction, next : BattlePhase) extends Optio
 case class BattleProceedAction(next : BattlePhase) extends ForcedAction
 
 case class BattleRollAction(f : Faction, rolls : $[BattleRoll], next : BattlePhase) extends ForcedAction
+case class AzathothDaemonSultanKillRollAction(self : Faction, roll : Int) extends ForcedAction
 
 case class AssignKillAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Kill" + (count > 1).??("s")).styled("kill"), implicit g => g.unit(ur).full + (ur.faction == TT && ur.uclass == HighPriest && TT.can(Martyrdom)).??(" — all other kills to Pains with " + Martyrdom.styled(TT)))
 case class AssignPainAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Pain" + (count > 1).??("s")).styled("pain"), ur.full)
@@ -308,6 +309,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // Cthugha: track sides that already saw the Fire Vampires prompt this battle
     // (so Done/Skip properly advances past the phase instead of re-offering the same units)
     var fireVampiresUsed : $[Faction] = $
+    // Dhole: track sides that already triggered Planetary Destruction (prevents re-trigger on proceed)
+    var dholePlanetaryProcessed : $[Faction] = $
+    // Azathoth: track whether Azathoth received a kill this battle (Daemon Sultan absorbed it).
+    // If so, Azathoth cannot also be assigned a pain in the same battle.
+    var azathothReceivedKill : Boolean = false
+    var azathothNeedsKillRoll : Boolean = false
 
     // Round 8 Bug 45: flag preventing the post-battle Cyclopean Gaze hook from
     // re-firing each time the battle re-enters PostBattlePhase. After CG completes,
@@ -339,7 +346,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     def assignedKills(unit : UnitFigure) : Int =
-        unit.health match {
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill && unit.health != Killed) 1
+        else unit.health match {
             case Killed => 1
             case DoubleHP(Killed, Killed) => 2
             case DoubleHP(Killed, _) => 1
@@ -350,6 +358,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     def canAssignKills(unit : UnitFigure) : Int =
         // Hound of Tindalos: Angles of Time — cannot be assigned a Kill
         if (unit.uclass == HoundOfTindalos) 0
+        else if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
         else unit.health match {
             case DoubleHP(Killed, Killed) => 0
             case DoubleHP(Killed, _) => 1
@@ -366,19 +375,28 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log("ERROR: Kill assigned to Hound of Tindalos — Angles of Time should prevent this")
             return
         }
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill) return
         // Azathoth IGOO: Daemon Sultan — roll 1d6, lower glyph position instead of Kill
         // Elder Thing suppresses Daemon Sultan — Azathoth "can be killed with one kill result"
         if (unit.uclass == AzathothIGOO && ElderThingMindControl.suppresses(unit)) {
             log("Daemon Sultan".styled("nt"), "blocked by", "Elder Thing".styled("nt"), "—", "Azathoth".styled(unit.faction), "can be killed normally")
         }
         if (unit.uclass == AzathothIGOO && !ElderThingMindControl.suppresses(unit)) {
-            val roll = (1::2::3::4::5::6).shuffle.first
-            game.azathothGlyphPosition -= roll
-            log("Daemon Sultan".styled("nt") + ":", "Azathoth".styled(unit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
-            if (game.azathothGlyphPosition <= 0) {
-                game.azathothGlyphPosition = 0
-                log("Azathoth".styled(unit.faction), "glyph reached 0 — eliminated!")
-                unit.health = Killed
+            azathothReceivedKill = true
+            // If replaying an old game (next action isn't AzathothDaemonSultanKillRollAction),
+            // do inline roll for backward compat. Otherwise set flag for hard roll via RollD6.
+            if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
+                val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
+                game.azathothGlyphPosition -= roll
+                log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(unit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+                if (game.azathothGlyphPosition <= 0) {
+                    game.azathothGlyphPosition = 0
+                    log("Azathoth".styled(unit.faction), "glyph reached 0 — eliminated!")
+                    unit.health = Killed
+                }
+            }
+            else {
+                azathothNeedsKillRoll = true
             }
             return
         }
@@ -415,7 +433,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
     def canAssignPains(unit : UnitFigure) : Int =
-        unit.health match {
+        // Azathoth: if it already received a kill this battle (Daemon Sultan absorbed it),
+        // it cannot also be assigned a pain in the same battle.
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
+        else unit.health match {
             case DoubleHP(Alive, Alive) => 2
             case DoubleHP(Alive, _) => 1
             case DoubleHP(_, Alive) => 1
@@ -424,6 +445,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
     def assignPain(unit : UnitFigure) {
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill) return
          unit.health = unit.health match {
             case Killed => log("ERROR - Assign PAIN to KILLED"); Pained
             case Spared(_) => log("ERROR - Assign PAIN to SPARED"); Killed
@@ -577,7 +599,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s.can(MillionFavoredOnes))
             s.add(MillionFavoredOnes)
 
-        if (s.can(UnholyGround))
+        if (s.has(UnholyGround))
             s.add(UnholyGround)
 
         // TT Terror: apply Proto-Shoggoth combat modifier
@@ -625,6 +647,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         if (kills >= assigned + canAssign) {
             s.forces.foreach(u => 1.to(canAssignKills(u)).foreach(_ => assignKill(u)))
+            if (azathothNeedsKillRoll) {
+                azathothNeedsKillRoll = false
+                val azUnit = s.forces.%(_.uclass == AzathothIGOO).head
+                if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
+                    val roll = (1::2::3::4::5::6).shuffle.first
+                    game.azathothGlyphPosition -= roll
+                    log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(azUnit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+                    if (game.azathothGlyphPosition <= 0) {
+                        game.azathothGlyphPosition = 0
+                        log("Azathoth".styled(azUnit.faction), "glyph reached 0 — eliminated!")
+                        azUnit.health = Killed
+                    }
+                }
+                else {
+                    return RollD6(_ => "Daemon Sultan — roll for Azathoth glyph reduction", roll => AzathothDaemonSultanKillRollAction(azUnit.faction, roll))
+                }
+            }
             return DelayedContinue(100, Then(BattleProceedAction(next)))
         }
 
@@ -633,7 +672,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (f != s && assigned == 0)
             log(f, "assigned kills with", Vengeance)
 
-        return DelayedContinue(50, Ask(f, s.forces.%(u => canAssignKills(u) > 0).sortP./(u => AssignKillAction(f, kills - assigned, s, u))))
+        val eligible = s.forces.%(u => canAssignKills(u) > 0)
+        return DelayedContinue(50, Ask(f, eligible.sortP./(u => AssignKillAction(f, kills - assigned, s, u))))
     }
 
     def assignPains(s : Faction, next : BattlePhase) : Continue = {
@@ -671,6 +711,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         if (refugees.none)
             return proceed()
+
+        if (s.can(Oleaginous)) {
+            val oleagPained = refugees.%(u => u.uclass == Glaaki || u.uclass == DeepTendril)
+            if (oleagPained.any) {
+                val u = oleagPained.first
+                val destinations = arena.connected
+                if (destinations.any)
+                    return Ask(s).each(destinations)(r => OleaginousRetreatAction(TS, u, r))
+            }
+        }
 
         val destinations = arena.connectedForRetreat.%(r => s.opponent.at(r).none)
 
@@ -844,6 +894,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         return jump(PostBattlePhase)
                     }
                 }
+
+                sides.foreach(s => s.forces.foreach(u => u.health = Alive))
 
                 sides.foreach(s => s.str = s.strength(s.forces, s.opponent))
 
@@ -1072,6 +1124,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                     // Only one target — auto-assign
                                     assignKill(eligible.head)
                                     log(eligible.head.uclass.styled(enemy), "was", "killed".styled("kill"), "by", "Snakebite".styled("nt"))
+                                    if (azathothNeedsKillRoll) {
+                                        azathothNeedsKillRoll = false
+                                        val azUnit = enemy.forces.%(_.uclass == AzathothIGOO).head
+                                        if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
+                                            val roll = (1::2::3::4::5::6).shuffle.first
+                                            game.azathothGlyphPosition -= roll
+                                            log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(azUnit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+                                            if (game.azathothGlyphPosition <= 0) {
+                                                game.azathothGlyphPosition = 0
+                                                log("Azathoth".styled(azUnit.faction), "glyph reached 0 — eliminated!")
+                                                azUnit.health = Killed
+                                            }
+                                        }
+                                        else {
+                                            return RollD6(_ => "Daemon Sultan — roll for Azathoth glyph reduction", roll => AzathothDaemonSultanKillRollAction(azUnit.faction, roll))
+                                        }
+                                    }
                                     return jump(HarbingerKillPhase)
                                 } else {
                                     // Multiple targets — enemy chooses
@@ -1081,8 +1150,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         }
                     }
                 }
-                jump(HarbingerKillPhase)
-
                 jump(HarbingerKillPhase)
 
             case HarbingerKillPhase =>
@@ -1146,11 +1213,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 if (sides.has(DS) && DS.all(AvatarSynthesis).any && DS.all(AvatarSynthesis).exists(u => ElderThingMindControl.suppresses(u)))
                     log(DS, "Cosmic Ruler".styled("nt"), "blocked by", "Elder Thing".styled("nt"))
                 if (sides.has(DS) && DS.all(AvatarSynthesis).any && !DS.all(AvatarSynthesis).exists(u => ElderThingMindControl.suppresses(u))) {
-                    val killedAvatars = DS.forces.%(u => u.goo && u.health == Killed)
+                    val killedAvatars = DS.forces.%(u => u.goo && u.health == Killed && u.uclass.isInstanceOf[FactionUnitClass])
                     if (killedAvatars.any) {
                         // Exclude already-killed/eliminated units — a GOO sacrificed in a prior CR trigger
                         // this same battle is no longer Alive and must not be offered again
-                        val sacrificeOptions = DS.goos.%(o => killedAvatars.has(o).not && o.health == Alive)
+                        val sacrificeOptions = DS.goos.%(o => killedAvatars.has(o).not && o.health == Alive && o.uclass.isInstanceOf[FactionUnitClass])
                         if (sacrificeOptions.any) {
                             val options = killedAvatars./~(saved =>
                                 sacrificeOptions./(sacrificed =>
@@ -1210,6 +1277,32 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             .add(PrimeCauseSkipAction(s))
                     }
                 }
+                jump(DholePlanetaryDestructionPhase)
+
+            case DholePlanetaryDestructionPhase =>
+                // Card: "If the Dhole is Killed or Eliminated in Battle"
+                // Check forces (Killed by dice) AND eliminated list (Eliminated by Devour/Abduct)
+                sides.foreach { s =>
+                    if (!dholePlanetaryProcessed.has(s)) {
+                        val killedDholes = s.forces(Dhole).%(_.health == Killed)
+                        val eliminatedDholes = eliminated.%(u => u.uclass == Dhole && u.faction == s)
+                        val allDead = killedDholes ++ eliminatedDholes
+                        if (allDead.any) {
+                            val dholeOwner = s
+                            val opponent = s.opponent
+                            dholePlanetaryProcessed :+= s
+                            // Owner gains 2 ES
+                            dholeOwner.takeES(2)
+                            log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
+                            // Exempt killed Dholes from forces to prevent re-trigger on re-entry
+                            killedDholes.foreach(exempt)
+                            // OWNER chooses what opponent gains (card: "your opponent gains your choice")
+                            return Ask(dholeOwner)
+                                .add(DholePlanetaryDestructionDoomAction(dholeOwner, opponent))
+                                .add(DholePlanetaryDestructionPowerAction(dholeOwner, opponent))
+                        }
+                    }
+                }
                 jump(QuachilDustToDustPhase)
 
             case QuachilDustToDustPhase =>
@@ -1225,27 +1318,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                 .add(QuachilDustToDustRemoveAction(victim, u.ref, quOwner))
                                 .add(QuachilDustToDustESAction(victim, u.ref, quOwner))
                         }
-                    }
-                }
-                jump(DholePlanetaryDestructionPhase)
-
-            case DholePlanetaryDestructionPhase =>
-                // Check if any Dhole was killed in this battle
-                sides.foreach { s =>
-                    val killedDholes = s.forces(Dhole).%(_.health == Killed)
-                    if (killedDholes.any) {
-                        val dholeOwner = s
-                        val opponent = s.opponent
-                        // Owner gains 2 ES
-                        dholeOwner.takeES(2)
-                        log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
-                        // Exempt Dhole from forces to prevent re-trigger on re-entry
-                        // Don't eliminate yet — EliminatePhase will handle that (avoids stale UnitRef crash)
-                        killedDholes.foreach(exempt)
-                        // OWNER chooses what opponent gains (card: "your opponent gains your choice")
-                        return Ask(dholeOwner)
-                            .add(DholePlanetaryDestructionDoomAction(opponent, dholeOwner))
-                            .add(DholePlanetaryDestructionPowerAction(opponent, dholeOwner))
                     }
                 }
                 jump(EliminatePhase)
@@ -1356,18 +1428,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(OleaginousPhase)
 
             case OleaginousPhase =>
-                // Tombstalker (TS) Oleaginous: pains on Gla'aki and Deep Tendrils become free retreats to any adjacent area
-                sides.foreach { s =>
-                    if (s.can(Oleaginous)) {
-                        val oleagPained = s.forces.%(u => u.health == Pained && (u.uclass == Glaaki || u.uclass == DeepTendril))
-                        if (oleagPained.any) {
-                            val u = oleagPained.first
-                            val destinations = arena.connected // ANY adjacent area, no enemy restriction
-                            if (destinations.any)
-                                return Ask(s).each(destinations)(r => OleaginousRetreatAction(TS, u, r))
-                        }
-                    }
-                }
+                // Oleaginous now handled during normal retreat phase (attacker-first ordering preserved)
                 jump(HarbingerPainPhase)
 
             case HarbingerPainPhase =>
@@ -1779,14 +1840,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             dustToDustProcessed :+= uRef
             proceed()
 
-        case DholePlanetaryDestructionDoomAction(self, owner) =>
-            self.doom += 2
-            log(self.full, "chose", 2.doom, "from", "Planetary Destruction".styled(owner))
+        case DholePlanetaryDestructionDoomAction(self, opponent) =>
+            opponent.doom += 2
+            log(self.full, "chose", 2.doom, "for", opponent.full, "from", "Planetary Destruction".styled(self))
             proceed()
 
-        case DholePlanetaryDestructionPowerAction(self, owner) =>
-            self.power += 2
-            log(self.full, "chose", "2 Power".styled("power"), "from", "Planetary Destruction".styled(owner))
+        case DholePlanetaryDestructionPowerAction(self, opponent) =>
+            opponent.power += 2
+            log(self.full, "chose", "2 Power".styled("power"), "for", opponent.full, "from", "Planetary Destruction".styled(self))
             proceed()
 
         case BloodthirstChooseFactionAction(self, target) =>
@@ -1920,10 +1981,26 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // That covers both this AssignKillAction path AND the bulk auto-assign path (assignKills line ~618).
             // v2.5.4 fix: previously this case-only check missed bulk kills, so Fulmination silently failed
             // when an enemy rolled enough kills to wipe out the side without prompting per-unit assignment.
-            proceed()
+            if (azathothNeedsKillRoll) {
+                azathothNeedsKillRoll = false
+                RollD6(_ => "Daemon Sultan — roll for Azathoth glyph reduction", roll => AzathothDaemonSultanKillRollAction(u.faction, roll))
+            }
+            else
+                proceed()
 
         case AssignPainAction(_, _, _, u) =>
             assignPain(u)
+            proceed()
+
+        case AzathothDaemonSultanKillRollAction(self, roll) =>
+            game.azathothGlyphPosition -= roll
+            log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(self), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+            if (game.azathothGlyphPosition <= 0) {
+                game.azathothGlyphPosition = 0
+                log("Azathoth".styled(self), "glyph reached 0 — eliminated!")
+                val azUnit = sides.flatMap(_.forces).%(_.uclass == AzathothIGOO).head
+                azUnit.health = Killed
+            }
             proceed()
 
         // RETREAT
@@ -1962,11 +2039,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val u = game.unit(ur)
             retreat(u, r)
             log(u, "retreated to", r, "with", Oleaginous, "(Pain became Retreat)")
-            jump(OleaginousPhase)
+            proceed()
 
         case EliminateNoWayAction(self, u) =>
-            if (self == DS && u.goo && DS.all(AvatarSynthesis).any) {
-                val sacrificeOptions = DS.goos.%(o => o.ref != u && o.health == Alive)
+            if (self == DS && u.goo && u.uclass.isInstanceOf[FactionUnitClass] && DS.all(AvatarSynthesis).any) {
+                val sacrificeOptions = DS.goos.%(o => o.ref != u && o.health == Alive && o.uclass.isInstanceOf[FactionUnitClass])
                 if (sacrificeOptions.any) {
                     val options = sacrificeOptions./(sacrificed =>
                         CosmicRulerSacrificeAction(DS, u, sacrificed)
@@ -1986,7 +2063,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case CosmicRulerDeclineAction(_) =>
-            jump(EliminatePhase)
+            jump(BloatedWomanVelvetFanPhase)
 
         case CosmicRulerDeclineNoWayAction(self, u) =>
             self.log("had nowhere to retreat and eliminated", u)
@@ -2069,7 +2146,25 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val u = self.forces.%(_.uclass == uc).%(u => canAssignKills(u) > 0).sortBy(_.uclass.cost).head
             assignKill(u)
             log(u.uclass.styled(self), "was", "killed".styled("kill"), "by", "Snakebite".styled("nt"))
-            jump(HarbingerKillPhase)
+            if (azathothNeedsKillRoll) {
+                azathothNeedsKillRoll = false
+                if (game.nextReplayActionHint.exists(h => h.contains("AzathothDaemonSultanKillRoll"))) {
+                    RollD6(_ => "Daemon Sultan — roll for Azathoth glyph reduction", roll => AzathothDaemonSultanKillRollAction(u.faction, roll))
+                }
+                else {
+                    val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
+                    game.azathothGlyphPosition -= roll
+                    log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(u.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+                    if (game.azathothGlyphPosition <= 0) {
+                        game.azathothGlyphPosition = 0
+                        log("Azathoth".styled(u.faction), "glyph reached 0 — eliminated!")
+                        u.health = Killed
+                    }
+                    jump(HarbingerKillPhase)
+                }
+            }
+            else
+                jump(HarbingerKillPhase)
 
         // CTHUGHA COMBAT CHOICE (pre-battle)
         case CthughaCombatChooseGOOAction(self, enemy, goo, combat) =>
