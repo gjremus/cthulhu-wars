@@ -703,8 +703,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         val assigned = s.forces./(assignedPains).sum
         val canAssign = s.forces./(canAssignPains).sum
 
-        println(s"[PAIN TRACE] assignPains: defender=$s opponent=${s.opponent} pains=$pains assigned=$assigned canAssign=$canAssign opponentRolls=${s.opponent.rolls}")
-
         if (pains <= assigned)
             return BattleProceedAction(next)
 
@@ -942,6 +940,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         return jump(PostBattlePhase)
                     }
                 }
+
+                sides.foreach(s => s.forces.foreach(u => u.health = Alive))
 
                 sides.foreach(s => s.str = s.strength(s.forces, s.opponent))
 
