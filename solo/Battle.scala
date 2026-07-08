@@ -470,6 +470,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (refugees.none)
             return proceed()
 
+        if (s.can(Oleaginous)) {
+            val oleagPained = refugees.%(u => u.uclass == Glaaki || u.uclass == DeepTendril)
+            if (oleagPained.any) {
+                val u = oleagPained.first
+                val destinations = arena.connected
+                if (destinations.any)
+                    return Ask(s).each(destinations)(r => OleaginousRetreatAction(TS, u, r))
+            }
+        }
+
         val destinations = arena.connectedForRetreat.%(r => s.opponent.at(r).none)
 
         val chooser : Faction = retreater(s)
@@ -592,6 +602,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         return jump(PostBattlePhase)
                     }
                 }
+
+                sides.foreach(s => s.forces.foreach(u => u.health = Alive))
 
                 sides.foreach(s => s.str = s.strength(s.forces, s.opponent))
 
@@ -787,11 +799,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Daemon Sultan (DS): Cosmic Ruler phase
             case CosmicRulerPhase =>
                 if (sides.has(DS) && DS.all(AvatarSynthesis).any) {
-                    val killedAvatars = DS.forces.%(u => u.goo && u.health == Killed)
+                    val killedAvatars = DS.forces.%(u => u.factionGOO && u.health == Killed)
                     if (killedAvatars.any) {
                         // Exclude already-killed/eliminated units — a GOO sacrificed in a prior CR trigger
                         // this same battle is no longer Alive and must not be offered again
-                        val sacrificeOptions = DS.goos.%(o => killedAvatars.has(o).not && o.health == Alive)
+                        val sacrificeOptions = DS.goos.factionGOOs.%(o => killedAvatars.has(o).not && o.health == Alive)
                         if (sacrificeOptions.any) {
                             val options = killedAvatars./~(saved =>
                                 sacrificeOptions./(sacrificed =>
@@ -908,18 +920,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(OleaginousPhase)
 
             case OleaginousPhase =>
-                // Tombstalker (TS) Oleaginous: pains on Gla'aki and Deep Tendrils become free retreats to any adjacent area
-                sides.foreach { s =>
-                    if (s.has(Oleaginous)) {
-                        val oleagPained = s.forces.%(u => u.health == Pained && (u.uclass == Glaaki || u.uclass == DeepTendril))
-                        if (oleagPained.any) {
-                            val u = oleagPained.first
-                            val destinations = arena.connected // ANY adjacent area, no enemy restriction
-                            if (destinations.any)
-                                return Ask(s).each(destinations)(r => OleaginousRetreatAction(TS, u, r))
-                        }
-                    }
-                }
+                // Oleaginous now handled during normal retreat phase (attacker-first ordering preserved)
                 jump(HarbingerPainPhase)
 
             case HarbingerPainPhase =>
@@ -1227,11 +1228,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val u = game.unit(ur)
             retreat(u, r)
             log(u, "retreated to", r, "with", Oleaginous, "(Pain became Retreat)")
-            jump(OleaginousPhase)
+            proceed()
 
         case EliminateNoWayAction(self, u) =>
-            if (self == DS && u.goo && DS.all(AvatarSynthesis).any) {
-                val sacrificeOptions = DS.goos.%(o => o.ref != u && o.health == Alive)
+            if (self == DS && u.factionGOO && DS.all(AvatarSynthesis).any) {
+                val sacrificeOptions = DS.goos.factionGOOs.%(o => o.ref != u && o.health == Alive)
                 if (sacrificeOptions.any) {
                     val options = sacrificeOptions./(sacrificed =>
                         CosmicRulerSacrificeAction(DS, u, sacrificed)
