@@ -1479,6 +1479,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Azathoth IGOO: awakening state (enemy choices accumulated + gate region)
     var azathothAwakenChoices : Map[Faction, Int] = Map()
     var azathothAwakenGateRegion : |[Region] = None
+    var azathothAwakenCostCharged : Boolean = false
     // Messenger of Yig: track which enemies have been asked this Doom Phase
     var messengerOfYigAsked : $[Faction] = $
     // Mind Parasite: track original faction for each parasitized cultist
@@ -1521,6 +1522,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Fix 30: Elder Thing passive-block movement logging.
     // Fire-once guard: (mover ref, suppressed-GOO ref, ability label) triples already logged this tick.
     var elderThingBlockGuard : $[(UnitRef, UnitRef, String)] = $
+
 
     def elderThingBlockedAbilities(uc : UnitClass) : $[String] = uc match {
         case Cthulhu        => $("Devour")
@@ -1746,6 +1748,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         }
     }
 
+    def gateControlBlockers(r : Region) : $[String] = {
+        val library : $[String] = if (board.isLibraryMap) {
+            $(librarianRegion.has(r).?("The Librarian"), custodianRegion.has(r).?("The Custodian")).flatten
+        } else $()
+
+        val sp : $[String] = factions.exists(f2 => f2.allInPlay.%(_.uclass == ShadowPharaoh).exists(_.region == r)).?($("The Shadow Pharaoh")).|($())
+
+        library ++ sp
+    }
+
     def triggers() {
         expansions.foreach(_.triggers())
     }
@@ -1798,6 +1810,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         bestReason
     }
 
+    var gateBlockedLog : $[String] = $
+
     def checkGatesGained(self : Faction) {
         checkGatesLost()
 
@@ -1807,18 +1821,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (self.abandoned.has(r).not) {
                 if (DS.chaosGateRegions.has(r).not || self == DS) {
                     if (factions.%(_.gates.has(r)).none) {
-                        // Library at Celaeno: custodian/librarian block gate control
-                        val libraryBlocker : |[String] = if (board.isLibraryMap) {
-                            if (librarianRegion.has(r)) |("Librarian")
-                            else if (custodianRegion.has(r)) |("Custodian")
-                            else None
-                        } else None
+                        val blockers = gateControlBlockers(r)
 
-                        // Shadow Pharaoh: Hebephrenia — gates in SP's area cannot be controlled
-                        val shadowPharaohBlocks = factions.exists(f2 => f2.allInPlay.%(_.uclass == ShadowPharaoh).exists(_.region == r))
-
-                        if (libraryBlocker.any || shadowPharaohBlocks) {
-                            // Silently block — don't log repeatedly (checkGatesGained is called every action cycle)
+                        if (blockers.any) {
+                            val key = self.name + "|" + r.name
+                            if (self.at(r).%(_.canControlGate).any && gateBlockedLog.has(key).not) {
+                                gateBlockedLog :+= key
+                                self.log("gate control in", r, "blocked by", blockers.mkString(" and ").styled("nt"))
+                            }
                         }
                         else {
                             self.at(r).%(_.canControlGate).sortBy(_.uclass @@ {
@@ -1832,7 +1842,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                                 if (self.oncePerAction.has(UmrAtTawil).not)
                                     self.log("gained control of the gate in", r)
 
-                                // Library at Celaeno: check tome acquisition on auto gate control
                                 if (board.isLibraryMap)
                                     LibraryExpansion.checkTomeAcquisition()
                             }
@@ -2556,11 +2565,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         val r = bj.region
                         val enemyGateOwner = factions.but(f).find(_.gates.has(r))
                         enemyGateOwner.foreach { _ =>
-                            // Card: "+1 more power for each enemy Cultist in the area" — ALL enemies
                             val enemyCultists = factions.but(f)./~(_.at(r).%(_.uclass.utype == Cultist)).num
                             val bonus = 2 + enemyCultists
                             f.power += bonus
-                            f.log("Loathsome Titter".styled("nt") + ":", bonus.power, "in", r)
+                            f.log("rose to", f.power.power, "(" + bonus.power, "from", "Brown Jenkin's Loathsome Titter".styled("nt"), "in", r.toString + ")")
                         }
                     }
                 }
@@ -2570,7 +2578,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     val groyBonus = allCaptured
                     if (groyBonus > 0) {
                         f.power += groyBonus
-                        f.log("Possession".styled("nt") + ":", groyBonus.power, "from", groyBonus, "captive".s(groyBonus))
+                        f.log("rose to", f.power.power, "(" + groyBonus.power, "from", "Great Race of Yith's Possession".styled("nt"), "(" + groyBonus, "captive".s(groyBonus) + "))")
                     }
                 }
             }
@@ -2581,7 +2589,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     val poolCultists = f.pool.%(_.uclass.utype == Cultist).num
                     if (poolCultists > 0) {
                         f.power += poolCultists
-                        f.log("gained", poolCultists.power, "from", poolCultists, "cultist".s(poolCultists), "in their pool via", "Tomb Herd".styled("nt"))
+                        f.log("rose to", f.power.power, "(" + poolCultists.power, "from", "Gla'aki's Tomb Herd".styled("nt"), "(" + poolCultists, "cultist".s(poolCultists), "in pool))")
                     }
                 }
             }
@@ -3385,6 +3393,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             MainGatesAction(f)
 
         case MainGatesAction(f) =>
+            gateBlockedLog = $
             checkGatesGained(f)
 
             CheckSpellbooksAction(MainAction(f))
@@ -3441,6 +3450,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             factions.foreach(_.oncePerAction = $)
 
+            triggers()
+
             // Atlach-Nacha: Cosmic Web — immediate victory
             factions.find(f => f.upgrades.has(CosmicWeb)).foreach { winner =>
                 log(winner.full, "won the game via", "Cosmic Web".styled("nt"))
@@ -3453,7 +3464,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val actor = fbCyclopeanGazePendingActor.get
                 fbCyclopeanGazePendingSources = $
                 fbCyclopeanGazePendingActor = None
-                Force(FBCyclopeanGazePhaseAction(FB, actor, sources, fromBattle = false))
+                CheckSpellbooksAction(FBCyclopeanGazePhaseAction(FB, actor, sources, fromBattle = false))
+            }
+            else if (game.nexed.any) {
+                NextPlayerAction(self)
             }
             else {
                 // Brown Jenkin Familiar: forced respawn for any faction with BJ in pool + 2 Power
@@ -3469,7 +3483,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             NextPlayerAction(f)
 
-        case NextPlayerAction(_) if queue.any =>
+        case NextPlayerAction(_) if queue.any || game.nexed.any || game.battleResumePhase.any =>
             ProceedBattlesAction
 
         case NextPlayerAction(_) if factions.%(_.doom >= 30).any =>
@@ -3541,22 +3555,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (changed) Force(then) else UnknownContinue
 
         case AdjustGateControlAction(f, changed, then) =>
-            // Library at Celaeno: custodian/librarian block control of uncontrolled gates
-            val libraryBlockedRegions : $[Region] = if (board.isLibraryMap) $(custodianRegion, librarianRegion).flatten else $()
-            // Determine which neutral unit blocks each region (for abandon warning)
-            def libraryBlockerName(r : Region) : |[String] = if (board.isLibraryMap) {
-                if (librarianRegion.has(r)) |("Librarian")
-                else if (custodianRegion.has(r)) |("Custodian")
-                else None
-            } else None
-
             Ask(f)
-                .some(areas.%(r => f.gates.has(r) || (abandonedGates.has(r) && (DS.chaosGateRegions.has(r).not || f == DS) && !libraryBlockedRegions.has(r)))) { r =>
-                    val blocked = libraryBlockedRegions.has(r)
+                .some(areas.%(r => f.gates.has(r) || (abandonedGates.has(r) && (DS.chaosGateRegions.has(r).not || f == DS) && gateControlBlockers(r).none))) { r =>
+                    val blockers = gateControlBlockers(r)
+                    val blocked = blockers.any
                     val l = f.at(r).%(_.canControlGate).sortBy(_.onGate.not).distinctBy(_.uclass)
                     val g = $[Any](f.gates.has(r).not.?("Abandoned gate").|("Gate"), "in", r)
 
-                    // Don't show ControlGateAction if custodian/librarian blocks this region
                     val controlOptions = if (blocked) l./(u => Info(u.ref.full)(g : _*))
                     else l./(u =>
                         if (l.%(_.onGate).single./(_.uclass).has(u.uclass))
@@ -3568,11 +3573,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                             ControlGateAction(f, r, u, then).as(u.ref.full)(g : _*)
                     )
 
-                    // Abandon option: add warning if custodian/librarian would block re-control
-                    val abandonLabel = libraryBlockerName(r) match {
-                        case Some(name) => "Abandon - " + name.styled("lb") + " blocks taking control again"
-                        case None => "Abandon"
-                    }
+                    val abandonLabel = if (blockers.any) "Abandon - " + blockers.mkString(" & ").styled("lb") + " blocks taking control again"
+                        else "Abandon"
                     controlOptions ++
                     (f.gates.has(r) && f.clings.not && f.commands.has(GateDiplomacySkipAbandon).not).$(AbandonGateAction(f, r, then).as(abandonLabel)(""))
                 }
@@ -3782,35 +3784,79 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             ProceedBattlesAction
 
         case ProceedBattlesAction =>
-            factions.%(f => game.nexed.none && f.can(EnergyNexus) && queue.exists(b => f.at(b.arena)(Wizard).any) && f.acted.not).foreach { f =>
-                game.nexed = queue.%(_.attacker == queue.first.attacker)./(_.arena).%(r => f.at(r)(Wizard).any)
-                f.log("interrupted battle", queue.exists(_.effect.has(EnergyNexus)).??("again"), "with", EnergyNexus)
-                return Force(PreMainAction(f))
-            }
-
-            battle = queue.starting
-
-            // Round 8 Bug 60: removed the fbPowerAtBattleStart snapshot here. It used to
-            // capture FB.power at battle proceed time, but that's AFTER AttackAction deducted
-            // the 1 power for the attack. The snapshot is now taken in AttackAction BEFORE
-            // the deduct (line ~2537), giving the correct pre-battle value.
-
-            queue = queue.drop(1)
-
-            if (game.nexed.any) {
+            if (game.nexed.any && battle.any) {
                 game.nexed = $
 
-                battle.get.attacker.log("proceeded to battle", battle.get.defender, "in", battle.get.arena)
-
-                // Energy Nexus PB: resume at PreRoll (skip pre-battle to avoid double Devour)
+                // Re-validate battle after Energy Nexus action (units may have been captured/removed)
+                val b = battle.get
+                val attackerUnits = b.attacker.at(b.arena)
+                val defenderUnits = b.defender.at(b.arena)
+                if (attackerUnits.none || defenderUnits.none) {
+                    if (attackerUnits.none)
+                        b.attacker.log("had no units remaining in", b.arena, "after", EnergyNexus)
+                    if (defenderUnits.none)
+                        b.defender.log("had no units remaining in", b.arena, "after", EnergyNexus)
+                    game.battleResumePhase = None
+                    battle = None
+                    return Force(AfterAction(b.attacker))
+                }
+                b.attacker.log("proceeded to battle", b.defender, "in", b.arena)
                 if (game.battleResumePhase.any) {
                     game.battleResumePhase = None
-                    battle.get.jump(PreRoll)
+                    b.attackers.forces = attackerUnits
+                    b.defenders.forces = defenderUnits
+                    return b.jump(PreRoll)
+                } else {
+                    return b.proceed()
+                }
+            } else {
+                factions.%(f => game.nexed.none && f.can(EnergyNexus) && queue.exists(b => f.at(b.arena)(Wizard).any) && f.acted.not).foreach { f =>
+                    game.nexed = queue.%(_.attacker == queue.first.attacker)./(_.arena).%(r => f.at(r)(Wizard).any)
+                    f.log("interrupted battle", queue.exists(_.effect.has(EnergyNexus)).??("again"), "with", EnergyNexus)
+                    return Force(PreMainAction(f))
+                }
+
+                battle = queue.starting
+
+                // Round 8 Bug 60: removed the fbPowerAtBattleStart snapshot here. It used to
+                // capture FB.power at battle proceed time, but that's AFTER AttackAction deducted
+                // the 1 power for the attack. The snapshot is now taken in AttackAction BEFORE
+                // the deduct (line ~2537), giving the correct pre-battle value.
+
+                queue = queue.drop(1)
+
+                if (game.nexed.any) {
+                    game.nexed = $
+
+                    // Re-validate battle after Energy Nexus action
+                    val b = battle.get
+                    val attackerUnits = b.attacker.at(b.arena)
+                    val defenderUnits = b.defender.at(b.arena)
+                    if (attackerUnits.none || defenderUnits.none) {
+                        if (attackerUnits.none)
+                            b.attacker.log("had no units remaining in", b.arena, "after", EnergyNexus)
+                        if (defenderUnits.none)
+                            b.defender.log("had no units remaining in", b.arena, "after", EnergyNexus)
+                        game.battleResumePhase = None
+                        battle = None
+                        Force(AfterAction(b.attacker))
+                    }
+                    else {
+                        b.attacker.log("proceeded to battle", b.defender, "in", b.arena)
+
+                        // Energy Nexus PB: resume at PreRoll (skip pre-battle to avoid double Devour)
+                        if (game.battleResumePhase.any) {
+                            game.battleResumePhase = None
+                            b.attackers.forces = attackerUnits
+                            b.defenders.forces = defenderUnits
+                            b.jump(PreRoll)
+                        } else {
+                            b.proceed()
+                        }
+                    }
                 } else {
                     battle.get.proceed()
                 }
-            } else {
-                battle.get.proceed()
             }
 
         // CAPTURE
@@ -3987,11 +4033,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     self.log("recruited", uc.styled(self), "in", r, "from", "Velvet Fan".styled("nt"), "— Bloated Woman out of play, no payment")
                 }
             } else {
-                self.place(uc, r)
-                self.log("recruited", uc.styled(self), "in", r)
+                if (self.pool(uc).none) {
+                    self.log("recruit failed:", uc.styled(self), "— none in pool")
+                    self.power += cost
+                } else {
+                    self.place(uc, r)
+                    self.log("recruited", uc.styled(self), "in", r)
+                }
             }
 
-            if (uc === HighPriest)
+            if (uc === HighPriest && self.onMap(HighPriest).any)
                 initHighPriestPlans(self)
 
             EndAction(self)
