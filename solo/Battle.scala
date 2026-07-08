@@ -180,6 +180,7 @@ case class PreBattleDoneAction(self : Faction, next : BattlePhase) extends Optio
 case class BattleProceedAction(next : BattlePhase) extends ForcedAction
 
 case class BattleRollAction(f : Faction, rolls : $[BattleRoll], next : BattlePhase) extends ForcedAction
+case class AzathothDaemonSultanKillRollAction(self : Faction, roll : Int) extends ForcedAction
 
 case class AssignKillAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Kill" + (count > 1).??("s")).styled("kill"), implicit g => g.unit(ur).full + (ur.faction == TT && ur.uclass == HighPriest && TT.can(Martyrdom)).??(" — all other kills to Pains with " + Martyrdom.styled(TT)))
 case class AssignPainAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Pain" + (count > 1).??("s")).styled("pain"), ur.full)
@@ -312,6 +313,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // Cthugha: track sides that already saw the Fire Vampires prompt this battle
     // (so Done/Skip properly advances past the phase instead of re-offering the same units)
     var fireVampiresUsed : $[Faction] = $
+    // Azathoth: track whether Azathoth received a kill this battle (Daemon Sultan absorbed it).
+    // If so, Azathoth cannot also be assigned a pain in the same battle.
+    var azathothReceivedKill : Boolean = false
+    var azathothNeedsKillRoll : Boolean = false
 
     // Round 8 Bug 45: flag preventing the post-battle Cyclopean Gaze hook from
     // re-firing each time the battle re-enters PostBattlePhase. After CG completes,
@@ -343,7 +348,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     def assignedKills(unit : UnitFigure) : Int =
-        unit.health match {
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill && unit.health != Killed) 1
+        else unit.health match {
             case Killed => 1
             case DoubleHP(Killed, Killed) => 2
             case DoubleHP(Killed, _) => 1
@@ -354,6 +360,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     def canAssignKills(unit : UnitFigure) : Int =
         // Hound of Tindalos: Angles of Time — cannot be assigned a Kill
         if (unit.uclass == HoundOfTindalos) 0
+        else if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
         else unit.health match {
             case DoubleHP(Killed, Killed) => 0
             case DoubleHP(Killed, _) => 1
@@ -370,19 +377,28 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log("ERROR: Kill assigned to Hound of Tindalos — Angles of Time should prevent this")
             return
         }
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill) return
         // Azathoth IGOO: Daemon Sultan — roll 1d6, lower glyph position instead of Kill
         // Elder Thing suppresses Daemon Sultan — Azathoth "can be killed with one kill result"
         if (unit.uclass == AzathothIGOO && ElderThingMindControl.suppresses(unit)) {
             log("Daemon Sultan".styled("nt"), "blocked by", "Elder Thing".styled("nt"), "—", "Azathoth".styled(unit.faction), "can be killed normally")
         }
         if (unit.uclass == AzathothIGOO && !ElderThingMindControl.suppresses(unit)) {
-            val roll = (1::2::3::4::5::6).shuffle.first
-            game.azathothGlyphPosition -= roll
-            log("Daemon Sultan".styled("nt") + ":", "Azathoth".styled(unit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
-            if (game.azathothGlyphPosition <= 0) {
-                game.azathothGlyphPosition = 0
-                log("Azathoth".styled(unit.faction), "glyph reached 0 — eliminated!")
-                unit.health = Killed
+            azathothReceivedKill = true
+            // If replaying an old game (next action isn't AzathothDaemonSultanKillRollAction),
+            // do inline roll for backward compat. Otherwise set flag for hard roll via RollD6.
+            if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
+                val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
+                game.azathothGlyphPosition -= roll
+                log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(unit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+                if (game.azathothGlyphPosition <= 0) {
+                    game.azathothGlyphPosition = 0
+                    log("Azathoth".styled(unit.faction), "glyph reached 0 — eliminated!")
+                    unit.health = Killed
+                }
+            }
+            else {
+                azathothNeedsKillRoll = true
             }
             return
         }
@@ -410,7 +426,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
     def canAssignPains(unit : UnitFigure) : Int =
-        unit.health match {
+        // Azathoth: if it already received a kill this battle (Daemon Sultan absorbed it),
+        // it cannot also be assigned a pain in the same battle.
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
+        else unit.health match {
             case DoubleHP(Alive, Alive) => 2
             case DoubleHP(Alive, _) => 1
             case DoubleHP(_, Alive) => 1
@@ -651,6 +670,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         if (kills >= assigned + canAssign) {
             s.forces.foreach(u => 1.to(canAssignKills(u)).foreach(_ => assignKill(u)))
+            if (azathothNeedsKillRoll) {
+                azathothNeedsKillRoll = false
+                val azUnit = s.forces.%(_.uclass == AzathothIGOO).head
+                if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
+                    val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
+                    game.azathothGlyphPosition -= roll
+                    log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(azUnit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+                    if (game.azathothGlyphPosition <= 0) {
+                        game.azathothGlyphPosition = 0
+                        log("Azathoth".styled(azUnit.faction), "glyph reached 0 — eliminated!")
+                        azUnit.health = Killed
+                    }
+                }
+                else {
+                    return RollD6(_ => "Daemon Sultan — roll for Azathoth glyph reduction", roll => AzathothDaemonSultanKillRollAction(azUnit.faction, roll))
+                }
+            }
             return DelayedContinue(100, Then(BattleProceedAction(next)))
         }
 
@@ -666,6 +702,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         val pains = s.opponent.rolls.count(_ == Pain)
         val assigned = s.forces./(assignedPains).sum
         val canAssign = s.forces./(canAssignPains).sum
+
+        println(s"[PAIN TRACE] assignPains: defender=$s opponent=${s.opponent} pains=$pains assigned=$assigned canAssign=$canAssign opponentRolls=${s.opponent.rolls}")
 
         if (pains <= assigned)
             return BattleProceedAction(next)
@@ -697,6 +735,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         if (refugees.none)
             return proceed()
+
+        if (s.can(Oleaginous)) {
+            val oleagPained = refugees.%(u => u.uclass == Glaaki || u.uclass == DeepTendril)
+            if (oleagPained.any) {
+                val u = oleagPained.first
+                val destinations = arena.connected
+                if (destinations.any)
+                    return Ask(s).each(destinations)(r => OleaginousRetreatAction(TS, u, r))
+            }
+        }
 
         val moonDest = (s == BB && arena != BB.moon).??($(BB.moon))
         // Fix 55 (v2.4.21): pain retreat from a Moon battle.
@@ -1161,6 +1209,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                     // Only one target — auto-assign
                                     assignKill(eligible.head)
                                     log(eligible.head.uclass.styled(enemy), "was", "killed".styled("kill"), "by", "Snakebite".styled("nt"))
+                                    if (azathothNeedsKillRoll) {
+                                        azathothNeedsKillRoll = false
+                                        val azUnit = enemy.forces.%(_.uclass == AzathothIGOO).head
+                                        if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
+                                            val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
+                                            game.azathothGlyphPosition -= roll
+                                            log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(azUnit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+                                            if (game.azathothGlyphPosition <= 0) {
+                                                game.azathothGlyphPosition = 0
+                                                log("Azathoth".styled(azUnit.faction), "glyph reached 0 — eliminated!")
+                                                azUnit.health = Killed
+                                            }
+                                        }
+                                        else {
+                                            return RollD6(_ => "Daemon Sultan — roll for Azathoth glyph reduction", roll => AzathothDaemonSultanKillRollAction(azUnit.faction, roll))
+                                        }
+                                    }
                                     return jump(HarbingerKillPhase)
                                 } else {
                                     // Multiple targets — enemy chooses
@@ -1445,18 +1510,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(OleaginousPhase)
 
             case OleaginousPhase =>
-                // Tombstalker (TS) Oleaginous: pains on Gla'aki and Deep Tendrils become free retreats to any adjacent area
-                sides.foreach { s =>
-                    if (s.can(Oleaginous)) {
-                        val oleagPained = s.forces.%(u => u.health == Pained && (u.uclass == Glaaki || u.uclass == DeepTendril))
-                        if (oleagPained.any) {
-                            val u = oleagPained.first
-                            val destinations = arena.connected // ANY adjacent area, no enemy restriction
-                            if (destinations.any)
-                                return Ask(s).each(destinations)(r => OleaginousRetreatAction(TS, u, r))
-                        }
-                    }
-                }
+                // Oleaginous now handled during normal retreat phase (attacker-first ordering preserved)
                 jump(HarbingerPainPhase)
 
             case HarbingerPainPhase =>
@@ -2008,6 +2062,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // ASSIGN
         case AssignKillAction(_, _, _, u) =>
             assignKill(u)
+            if (azathothNeedsKillRoll) {
+                azathothNeedsKillRoll = false
+                RollD6(_ => "Daemon Sultan — roll for Azathoth glyph reduction", roll => AzathothDaemonSultanKillRollAction(u.faction, roll))
+            }
+            else {
             // TT Martyrdom: if TT's High Priest is killed, convert all kills on TT's other units to pains
             // Bug fix: also convert any UNASSIGNED Kill rolls on the attacker's side to Pain rolls so the
             // assign-kills loop does not re-prompt for the remaining Kill rolls. Without this, dropping
@@ -2032,6 +2091,18 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // so totalKills includes all kills assigned this battle, not just those assigned before Ubbo
             if (u.faction == TT && u.uclass == UbboSathla && (u : UnitFigure).health == Killed && TT.can(Fulmination) && !TTExpansion.ttUbboFulminated) {
                 TTExpansion.ttFulminationPending = true
+            }
+            proceed()
+            }
+
+        case AzathothDaemonSultanKillRollAction(self, roll) =>
+            game.azathothGlyphPosition -= roll
+            log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(self), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+            if (game.azathothGlyphPosition <= 0) {
+                game.azathothGlyphPosition = 0
+                log("Azathoth".styled(self), "glyph reached 0 — eliminated!")
+                val azUnit = sides.flatMap(_.forces).%(_.uclass == AzathothIGOO).head
+                azUnit.health = Killed
             }
             proceed()
 
@@ -2075,7 +2146,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val u = game.unit(ur)
             retreat(u, r)
             log(u, "retreated to", r, "with", Oleaginous, "(Pain became Retreat)")
-            jump(OleaginousPhase)
+            proceed()
 
         case EliminateNoWayAction(self, u) =>
             if (self == DS && u.goo && DS.all(AvatarSynthesis).any) {
@@ -2182,7 +2253,25 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val u = self.forces.%(_.uclass == uc).%(u => canAssignKills(u) > 0).sortBy(_.uclass.cost).head
             assignKill(u)
             log(u.uclass.styled(self), "was", "killed".styled("kill"), "by", "Snakebite".styled("nt"))
-            jump(HarbingerKillPhase)
+            if (azathothNeedsKillRoll) {
+                azathothNeedsKillRoll = false
+                if (game.nextReplayActionHint.exists(h => h.contains("AzathothDaemonSultanKillRoll"))) {
+                    RollD6(_ => "Daemon Sultan — roll for Azathoth glyph reduction", roll => AzathothDaemonSultanKillRollAction(u.faction, roll))
+                }
+                else {
+                    val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
+                    game.azathothGlyphPosition -= roll
+                    log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(u.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+                    if (game.azathothGlyphPosition <= 0) {
+                        game.azathothGlyphPosition = 0
+                        log("Azathoth".styled(u.faction), "glyph reached 0 — eliminated!")
+                        u.health = Killed
+                    }
+                    jump(HarbingerKillPhase)
+                }
+            }
+            else
+                jump(HarbingerKillPhase)
 
         // CTHUGHA COMBAT CHOICE (pre-battle)
         case CthughaCombatChooseGOOAction(self, enemy, goo, combat) =>
