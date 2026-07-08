@@ -83,7 +83,7 @@ case object OW extends Faction { f =>
         units(Mutant).num * 1 +
         units(Abomination).num * 2 +
         units(SpawnOW).num * 3 +
-        units(YogSothoth).not(Zeroed).num * (2 * factions.but(f)./(_.factionGOOs.num).sum) +
+        units(YogSothoth).not(Zeroed).num * (2 * factions.but(f)./(e => if (e == TB) e.goos.factionGOOs.any.??(1) else e.factionGOOs.num).sum) +
         neutralStrength(units, opponent)
 }
 
@@ -122,6 +122,15 @@ case class DragonAscendingCancelAction(self : OW, then : ForcedAction) extends B
 
 
 object OWExpansion extends Expansion {
+    override def afterAction()(implicit game : Game) {
+        if (!game.setup.has(OW)) return
+        val f = OW
+        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.at(r).goos.any).any).any)
+        val unitsAtEnemyGatesThreshold = if (game.options.has(OpenerCheapMutants)) 3 else 2
+        val unitsAtEnemyGatesLabel = if (game.options.has(OpenerCheapMutants)) "Units at three enemy Gates" else "Units at two enemy Gates"
+        f.satisfyIf(UnitsAtEnemyGates, unitsAtEnemyGatesLabel, areas.%(r => f.at(r).any && f.enemies.%(_.gates.has(r)).any).num >= unitsAtEnemyGatesThreshold)
+    }
+
     override def triggers()(implicit game : Game) {
         val f = OW
         f.satisfyIf(EightGates, "Eight Gates on the map", game.allGates.onMap.num >= 8)
