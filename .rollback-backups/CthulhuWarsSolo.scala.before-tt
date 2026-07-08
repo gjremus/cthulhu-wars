@@ -92,12 +92,6 @@ case class GameOverAction(winners : $[Faction], msg : String) extends Action wit
 object CthulhuWarsSolo {
     val original = dom.document.documentElement.outerHTML
 
-    // [2026-06-15] Random Neutrals (alt faction picker). Picker arms this
-    // closure; startSetup and startOnlineSetup invoke + clear it immediately
-    // after creating their local Setup so the picked Use* options are added
-    // before the Variants menu renders.
-    var pendingRandomNeutrals : Option[Setup => Unit] = None
-
     def main(args : Array[String]) {
         if (dom.document.readyState == dom.DocumentReadyState.complete)
             setupUI()
@@ -109,18 +103,10 @@ object CthulhuWarsSolo {
 
     def getAsset(k : String) : html.Image = dom.document.getElementById(k).asInstanceOf[html.Image]
 
-    case class Processing(tint : |[String], screen : |[String], overlay : |[String], multiply : |[String] = None) extends GoodMatch
+    case class Processing(tint : |[String], screen : |[String], overlay : |[String]) extends GoodMatch
 
     def getTintedAsset(k : String, processing : Processing) : html.Canvas = {
         val source = dom.document.getElementById(k).asInstanceOf[html.Image]
-
-        if (source == null || source.width == 0) {
-            dom.console.warn("[getTintedAsset] missing asset: " + k)
-            val fallback = dom.document.createElement("canvas").asInstanceOf[html.Canvas]
-            fallback.width = 1
-            fallback.height = 1
-            return fallback
-        }
 
         val result = new Bitmap(source.width, source.height)
         result.context.drawImage(source, 0, 0)
@@ -143,12 +129,6 @@ object CthulhuWarsSolo {
             result.context.fillRect(0, 0, source.width, source.height)
         }
 
-        processing.multiply.foreach { multiply =>
-            result.context.fillStyle = multiply
-            result.context.globalCompositeOperation = "multiply"
-            result.context.fillRect(0, 0, source.width, source.height)
-        }
-
         result.context.globalCompositeOperation = "destination-in"
         result.context.drawImage(source, 0, 0)
         result.canvas
@@ -159,12 +139,7 @@ object CthulhuWarsSolo {
         p.className = cl
         p.innerHTML = content
         if (click != null)
-            p.onclick = (e) => {
-                val t = e.target
-                val tClass = if (t != null) t.asInstanceOf[html.Element].className else ""
-                if (tClass == null || !tClass.contains("explain"))
-                    click()
-            }
+            p.onclick = (e) => click()
         p
     }
 
@@ -245,7 +220,7 @@ object CthulhuWarsSolo {
             case _ =>
                 val path = dom.window.location.pathname
 
-                if (path.startsWith("/play/quick") || path.startsWith("/mnu/play/quick") || path.startsWith("/TchoTcho/play/quick") || path.startsWith("/BB/play/quick"))
+                if (path.startsWith("/play/quick") || path.startsWith("/mnu/play/quick"))
                     ("", true)
                 else
                 if (path.startsWith("/play/"))
@@ -253,12 +228,6 @@ object CthulhuWarsSolo {
                 else
                 if (path.startsWith("/mnu/play/"))
                     (path.drop("/mnu/play/".length), false)
-                else
-                if (path.startsWith("/TchoTcho/play/"))
-                    (path.drop("/TchoTcho/play/".length), false)
-                else
-                if (path.startsWith("/BB/play/"))
-                    (path.drop("/BB/play/".length), false)
                 else
                     ("", false)
         }
@@ -694,6 +663,9 @@ object CthulhuWarsSolo {
                         else
                         if (confirm.not && actions.%!(_.isInfo).num == 1 && actions.has(NeedOk).not)
                             UIPerform(game, actions.%!(_.isInfo).only)
+                        else
+                        if (confirm.not && actions(0).isInstanceOf[SpellbookAction] && actions.num == faction.unclaimedSB)
+                            UIPerform(game, actions(0))
                         else {
                             setup.difficulty(faction) match {
                                 case Human | Recorded =>
@@ -719,9 +691,6 @@ object CthulhuWarsSolo {
                                         case FB => BotFB   .ask(actions, 0.0)(game)
                                         // Daemon Sultan (DS): AI bot decision-making at Easy difficulty
                                         case DS => BotDS   .ask(actions, 0.3)(game)
-                                        // Tcho-Tcho (TT): AI bot decision-making at Easy difficulty
-                                        case TT => BotTT   .ask(actions, 0.2)(game)
-                                        case BB => BotBB   .ask(actions, 0.2)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -739,9 +708,6 @@ object CthulhuWarsSolo {
                                         case FB => BotFB   .ask(actions, 0.03)(game)
                                         // Daemon Sultan (DS): AI bot decision-making at Normal difficulty
                                         case DS => BotDS   .ask(actions, 0.03)(game)
-                                        // Tcho-Tcho (TT): AI bot decision-making at Normal difficulty
-                                        case TT => BotTT   .ask(actions, 0.03)(game)
-                                        case BB => BotBB   .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -762,10 +728,6 @@ object CthulhuWarsSolo {
                                         case FB => BotFB   .ask(as, 0.03)(game)
                                         // Daemon Sultan (DS): AI bot decision-making at AllVsHuman difficulty
                                         case DS => BotDS   .ask(as, 0.03)(game)
-                                        // Tcho-Tcho (TT): AI bot decision-making at AllVsHuman difficulty
-                                        case TT => BotTT   .ask(as, 0.03)(game)
-                                        // Bubastis (BB): placeholder until BotBB is implemented (Task 3.16.1)
-                                        case BB => Bot3(BB).ask(as, 0.03)(game)
                                     })
 
 
@@ -944,29 +906,8 @@ object CthulhuWarsSolo {
                     case FB => Processing(|("#CB307E"), |("#333333"), None)
                     // Daemon Sultan (DS): faction color
                     case DS => Processing(|("#3A2825"), None, |("#120E0C"))
-                    // Tcho-Tcho (TT): dominant pink from faction glyph
-                    case TT => Processing(|("#fc9ca0"), |("#333333"), None)
-                    // Bubastis (BB): gold tone (placeholder until final art, Task 3.9.1)
-                    case BB => Processing(|("#c8a84b"), |("#333333"), None)
                     // Library map units: no tint (use original icon images)
                     case LibraryFaction => defaultProcessing
-                    case _  => defaultProcessing
-                }
-
-                val neutralTint = faction @@ {
-                    case GC => Processing(|("#77a055"), |("#222222"), None)
-                    case CC => Processing(|("#4977b3"), |("#111111"), None)
-                    case BG => Processing(|("#cd3233"), None, |("#555555"))
-                    case YS => Processing(|("#ffd000"), |("#663344"), None)
-                    case WW => Processing(|("#88a9be"), |("#5577aa"), None)
-                    case SL => Processing(|("#db6a33"), |("#4a1a1a"), None)
-                    case OW => Processing(|("#6c4296"), None, |("#4c4c4c"))
-                    case AN => Processing(|("#47a5bc"), |("#333333"), None)
-                    case TS => Processing(|("#BDE0BC"), |("#333333"), None)
-                    case FB => Processing(|("#CB307E"), |("#333333"), None)
-                    case DS => Processing(|("#3A2825"), None, |("#120E0C"))
-                    case TT => Processing(|("#fc9ca0"), |("#333333"), None)
-                    case BB => Processing(|("#c8a84b"), |("#333333"), None)
                     case _  => defaultProcessing
                 }
 
@@ -984,13 +925,10 @@ object CthulhuWarsSolo {
                         case AN => DrawRect("an-acolyte", None, x - 17, y - 54, 39, 60)
                         // Tombstalker (TS): acolyte unit sprite
                         case TS => DrawRect("ts-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                        case TT => DrawRect("tt-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Firstborn (FB): acolyte unit sprite
                         case FB => DrawRect("fb-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Daemon Sultan (DS): acolyte unit sprite
                         case DS => DrawRect("ds-acolyte", None, x - 17, y - 54, 38, 60)
-                        // Bubastis (BB): acolyte unit sprite (placeholder until Task 3.9.1)
-                        case BB => DrawRect("bb-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -1018,7 +956,6 @@ object CthulhuWarsSolo {
                         case DS => DrawRect("ds-high-priest", None, x - 35, y - 60, 70, 66)
                         // Tombstalker (TS): high priest unit sprite
                         case TS => DrawRect("ts-high-priest", |(tint), x - 35, y - 60, 70, 66)
-                        case TT => DrawRect("tt-high-priest", |(tint), x - 35, y - 60, 70, 68)
                         case _ => DrawRect("gc-high-priest", |(tint), x - 35, y - 60, 70, 66)
                     }
 
@@ -1039,16 +976,7 @@ object CthulhuWarsSolo {
                         case FB => DrawRect("fb-glyph", None, x - 50, y - 50, 100, 100)
                         // Daemon Sultan (DS): faction glyph sprite
                         case DS => DrawRect("ds-glyph", None, x - 50, y - 50, 100, 100)
-                        // Tcho-Tcho (TT): faction glyph sprite (placeholder: n-star-vampire)
-                        case TT => DrawRect("tt-glyph", |(tint), x - 50, y - 50, 100, 100)
-                        // Bubastis (BB): faction glyph sprite (placeholder until Task 3.9.3).
-                        // BB Implementation Guide ¶217: bb-glyph-hb is ONLY FOR THE FACTION PICKER,
-                        // NOT FOR THE GAME ITSELF. In-game rendering always uses the standard
-                        // bb-glyph regardless of the BBAlternateSpellbooks option.
-                        case BB => DrawRect("bb-glyph", |(tint), x - 50, y - 50, 100, 100)
-                        // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
-                        // instead of crashing the canvas pipeline. GC glyph is the conventional default.
-                        case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
+                        case _ => null
                     }
 
                         case Ghoul         => DrawRect("bg-ghoul", None, x - 20, y - 40, 39, 47)
@@ -1110,73 +1038,59 @@ object CthulhuWarsSolo {
                     case AvatarAntithesis => DrawRect("ds-avatar-antithesis", None, x - 70, y - 89, 139, 104)
                     case AvatarSynthesis  => DrawRect("ds-avatar-synthesis", None, x - 70, y - 170, 141, 187, rotation = 10.0)
 
-                    // Tcho-Tcho (TT): unit sprites (placeholder: n-star-vampire for all)
-                    case ProtoShoggoth   => DrawRect("tt-proto-shoggoth", |(tint), x - 30, y - 108, 60, 108)
-                    case UbboSathla      => DrawRect("tt-ubbo-sathla",    |(tint), x - 48, y - 107, 96, 107)
-
-                    // Bubastis (BB): unit sprites — strength-readable scaling (v2.4.32).
-                    // Formula: x = Bastet - EarthCat (140); y = EarthCat (70).
-                    // Mars = y + 0.25x = 105; Saturn = y + 0.5x = 140; Uranus = y + 0.75x = 175.
-                    // Bastet (210) and EarthCat (70) anchor the scale; widths scale with height to preserve aspect.
-                    case EarthCat      => DrawRect("bb-earth-cat",      |(tint), x - 33, y - 70,  65,  70)
-                    case CatFromMars   => DrawRect("bb-cat-from-mars",  |(tint), x - 41, y - 105, 82, 105)
-                    case CatFromSaturn => DrawRect("bb-cat-from-saturn",|(tint), x - 53, y - 140, 105, 140)
-                    case CatFromUranus => DrawRect("bb-cat-from-uranus",|(tint), x - 71, y - 175, 142, 175)
-                    case Bastet        => DrawRect("bb-bastet",         |(tint), x - 64, y - 210, 128, 210)
-
                     case DesecrationToken => DrawRect("ys-desecration", None, x - 20, y - 20, 41, 40)
-                    case WebToken         => DrawRect("web-token", |(neutralTint), x - 31, y - 30, 62, 60)
+                    case WebToken         => DrawRect("web-token", |(tint), x - 31, y - 30, 62, 60)
                     case IceAgeToken      => DrawRect("ww-ice-age", None, x - 44, y - 67, 91, 75)
                     case Cathedral        => DrawRect("an-cathedral", None, x - 39, y - 90, 78, 110)
                     case ChaosGate        => DrawRect("gate", |(Processing(|("#3C2E18"), None, |("#130E08"))), x - 38, y - 38, 76, 76)
 
-                    case Ghast         => DrawRect("n-ghast", |(neutralTint), x - 17, y - 53, 35, 59)
-                    case Gug           => DrawRect("n-gug", |(neutralTint), x - 36, y - 78, 73, 90)
-                    case Shantak       => DrawRect("n-shantak", |(neutralTint), x - 39, y - 89, 79, 100)
-                    case StarVampire   => DrawRect("n-star-vampire", |(neutralTint), x - 35, y - 75, 70, 85)
-                    case Voonith       => if (region != null) DrawRect("n-voonith", |(neutralTint), x - 35, y - 75, 70, 85)
-                                          else DrawRect("n-voonith", |(neutralTint), x - 22, y - 52, 45, 57)
-                    case DimensionalShamblerUnit => if (region != null) DrawRect("n-dimensional-shambler", |(neutralTint), x - 35, y - 75, 70, 85)
-                                                    else DrawRect("n-dimensional-shambler", |(neutralTint), x - 29, y - 60, 58, 70)
-                    case Gnorri            => if (region != null) DrawRect("n-gnorri", |(neutralTint), x - 50, y - 90, 100, 100)
-                                              else DrawRect("n-gnorri", |(neutralTint), x - 30, y - 54, 60, 60)
-                    case Ygolonac      => DrawRect("n-ygolonac", |(neutralTint), x - 37, y - 90, 75, 100)
-                    case Byatis        => DrawRect("n-byatis", |(neutralTint), x - 47, y - 90, 95, 90)
-                    case Abhoth        => DrawRect("n-abhoth", |(neutralTint), x - 47, y - 110, 95, 120)
-                    case Filth         => DrawRect("n-filth", |(neutralTint), x - 20, y - 20, 40, 40)
-                    case Daoloth       => DrawRect("n-daoloth", |(neutralTint), x - 59, y - 91, 118, 99)
-                    case Nyogtha       => DrawRect("n-nyogtha", |(neutralTint), x - 40, y - 69, 81, 80)
-                    case Tulzscha         => if (region != null) DrawRect("n-tulzscha", |(neutralTint), x - 69, y - 127, 137, 137)
-                                             else DrawRect("n-tulzscha", |(neutralTint), x - 50, y - 90, 100, 100)
+                    case Ghast         => DrawRect("n-ghast", |(tint), x - 17, y - 53, 35, 59)
+                    case Gug           => DrawRect("n-gug", |(tint), x - 36, y - 78, 73, 90)
+                    case Shantak       => DrawRect("n-shantak", |(tint), x - 39, y - 89, 79, 100)
+                    case StarVampire   => DrawRect("n-star-vampire", |(tint), x - 35, y - 75, 70, 85)
+                    case Voonith       => if (region != null) DrawRect("n-voonith", |(tint), x - 35, y - 75, 70, 85)
+                                          else DrawRect("n-voonith", |(tint), x - 22, y - 52, 45, 57)
+                    case DimensionalShamblerUnit => if (region != null) DrawRect("n-dimensional-shambler", |(tint), x - 35, y - 75, 70, 85)
+                                                    else DrawRect("n-dimensional-shambler", |(tint), x - 29, y - 60, 58, 70)
+                    case Gnorri            => if (region != null) DrawRect("n-gnorri", |(tint), x - 50, y - 90, 100, 100)
+                                              else DrawRect("n-gnorri", |(tint), x - 30, y - 54, 60, 60)
+                    case Ygolonac      => DrawRect("n-ygolonac", |(tint), x - 37, y - 90, 75, 100)
+                    case Byatis        => DrawRect("n-byatis", |(tint), x - 47, y - 90, 95, 90)
+                    case Abhoth        => DrawRect("n-abhoth", |(tint), x - 47, y - 110, 95, 120)
+                    case Filth         => DrawRect("n-filth", |(tint), x - 20, y - 20, 40, 40)
+                    case Daoloth       => DrawRect("n-daoloth", |(tint), x - 59, y - 91, 118, 99)
+                    case Nyogtha       => DrawRect("n-nyogtha", |(tint), x - 40, y - 69, 81, 80)
+                    case Tulzscha         => if (region != null) DrawRect("n-tulzscha", |(tint), x - 69, y - 127, 137, 137)
+                                             else DrawRect("n-tulzscha", |(tint), x - 50, y - 90, 100, 100)
 
                     // New Terrors
                     // Terrors (sized relative to cultist from docx thumbnails)
-                    case Dhole             => DrawRect("n-dhole", |(neutralTint), x - 50, y - 112, 100, 122)
-                    case GreatRaceOfYith   => DrawRect("n-great-race-of-yith", |(neutralTint), x - 64, y - 146, 128, 156)
-                    case QuachilUttaus     => DrawRect("n-quachil-uttaus", |(neutralTint), x - 65, y - 150, 131, 160)
-                    case ShadowPharaoh     => DrawRect("n-the-shadow-pharaoh", |(neutralTint), x - 63, y - 175, 126, 185)
-                    case HoundOfTindalos   => DrawRect("n-hound-of-tindalos", |(neutralTint), x - 48, y - 109, 95, 116)
-                    case BrownJenkin       => DrawRect("n-brown-jenkin", |(neutralTint), x - 43, y - 117, 86, 127)
-                    case ElderShoggoth     => DrawRect("n-elder-shoggoth", |(neutralTint), x - 50, y - 112, 100, 122)
+                    case Dhole             => DrawRect("n-dhole", |(tint), x - 50, y - 112, 100, 122)
+                    case GreatRaceOfYith   => DrawRect("n-great-race-of-yith", |(tint), x - 64, y - 146, 128, 156)
+                    case QuachilUttaus     => DrawRect("n-quachil-uttaus", |(tint), x - 65, y - 150, 131, 160)
+                    case ShadowPharaoh     => DrawRect("n-the-shadow-pharaoh", |(tint), x - 63, y - 175, 126, 185)
+                    case HoundOfTindalos   => DrawRect("n-hound-of-tindalos", |(tint), x - 48, y - 109, 95, 116)
+                    case BrownJenkin       => DrawRect("n-brown-jenkin", |(tint), x - 43, y - 117, 86, 127)
+                    case ElderShoggoth     => DrawRect("n-elder-shoggoth", |(tint), x - 50, y - 112, 100, 122)
                     // Monsters (sized relative to cultist from docx thumbnails)
-                    case MoonbeastUnit     => DrawRect("n-moonbeast", |(neutralTint), x - 38, y - 76, 77, 86)
-                    case AlbinoPenguins    => DrawRect("n-giant-blind-albino-penguins", |(neutralTint), x - 49, y - 130, 99, 140)
-                    case ElderThing        => DrawRect("n-elder-thing", |(neutralTint), x - 50, y - 103, 101, 113)
-                    case LengSpiderUnit    => DrawRect("n-leng-spider", |(neutralTint), x - 47, y - 95, 94, 105)
-                    case Satyr             => DrawRect("n-satyr", |(neutralTint), x - 44, y - 88, 88, 98)
-                    case InsectsFromShaggai => DrawRect("n-insects-from-shaggai", |(neutralTint), x - 38, y - 97, 76, 107)
-                    case ServitorUnit      => DrawRect("n-servitor-of-the-outer-gods", |(neutralTint), x - 35, y - 75, 70, 85)
-                    // IGOOs (sized relative to custist from docx thumbnails)
-                    case AzathothIGOO      => DrawRect("n-azathoth", |(neutralTint), x - 59, y - 128, 119, 138)
-                    case Cthugha           => DrawRect("n-cthugha", |(neutralTint), x - 52, y - 112, 105, 122)
-                    case MotherHydra       => DrawRect("n-mother-hydra", |(neutralTint), x - 62, y - 97, 124, 107)
-                    case Yig               => DrawRect("n-yig", |(neutralTint), x - 52, y - 112, 105, 122)
-                    case FatherDagon       => DrawRect("n-father-dagon", |(neutralTint), x - 60, y - 95, 121, 105)
-                    case GhatanotoaIGOO    => DrawRect("n-ghatanothoa", |(neutralTint), x - 62, y - 135, 125, 145)
-                    case BloatedWoman      => DrawRect("n-the-bloated-woman", |(neutralTint), x - 68, y - 147, 136, 157)
-                    case AtlachNacha       => DrawRect("n-atlach-nacha", |(neutralTint), x - 62, y - 110, 125, 110)
-                    case Bokrug            => DrawRect("n-bokrug", |(neutralTint), x - 55, y - 115, 110, 125)
-                    case GlaakiIGOO        => DrawRect("n-glaaki-igoo", |(neutralTint), x - 55, y - 115, 110, 125)
+                    case MoonbeastUnit     => DrawRect("n-moonbeast", |(tint), x - 38, y - 76, 77, 86)
+                    case AlbinoPenguins    => DrawRect("n-giant-blind-albino-penguins", |(tint), x - 49, y - 130, 99, 140)
+                    case ElderThing        => DrawRect("n-elder-thing", |(tint), x - 50, y - 103, 101, 113)
+                    case LengSpiderUnit    => DrawRect("n-leng-spider", |(tint), x - 47, y - 95, 94, 105)
+                    case Satyr             => DrawRect("n-satyr", |(tint), x - 44, y - 88, 88, 98)
+                    case InsectsFromShaggai => DrawRect("n-insects-from-shaggai", |(tint), x - 38, y - 97, 76, 107)
+                    case ServitorUnit      => DrawRect("n-servitor-of-the-outer-gods", |(tint), x - 35, y - 75, 70, 85)
+                    // IGOOs (sized relative to cultist from docx thumbnails)
+                    case AzathothIGOO      => DrawRect("n-azathoth", |(tint), x - 59, y - 128, 119, 138)
+                    case Cthugha           => DrawRect("n-cthugha", |(tint), x - 52, y - 112, 105, 122)
+                    case MotherHydra       => DrawRect("n-mother-hydra", |(tint), x - 62, y - 97, 124, 107)
+                    case Yig               => DrawRect("n-yig", |(tint), x - 52, y - 112, 105, 122)
+                    case FatherDagon       => DrawRect("n-father-dagon", |(tint), x - 60, y - 95, 121, 105)
+                    case GhatanotoaIGOO    => DrawRect("n-ghatanothoa", |(tint), x - 62, y - 135, 125, 145)
+                    case BloatedWoman      => DrawRect("n-the-bloated-woman", |(tint), x - 68, y - 147, 136, 157)
+                    case AtlachNacha       => DrawRect("n-atlach-nacha", |(tint), x - 62, y - 110, 125, 110)
+                    case Bokrug            => DrawRect("n-bokrug", |(tint), x - 55, y - 115, 110, 125)
+                    case GlaakiIGOO        => DrawRect("n-glaaki-igoo", |(tint), x - 55, y - 115, 110, 125)
 
                     case GhastIcon        => DrawRect("ghast-icon", None, x - 17, y - 55, 50, 50)
                     case GugIcon          => DrawRect("gug-icon", None, x - 17, y - 55, 50, 50)
@@ -1228,7 +1142,6 @@ object CthulhuWarsSolo {
                     case StartingGlyph if faction == TS => DrawRect("ts-glyph", None, x - 33, y - 33, 66, 66)
                     case StartingGlyph if faction == AN => DrawRect("an-glyph", None, x - 33, y - 33, 66, 66)
                     case StartingGlyph if faction == OW => DrawRect("ow-glyph", None, x - 33, y - 33, 66, 66, alpha = 0.55)
-                    case StartingGlyph if faction == TT => DrawRect("tt-glyph", None, x - 33, y - 33, 66, 66)
 
                     // Library map units — larger than monsters, smaller than GOOs
                     case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 52, y - 104, 104, 104)
@@ -1928,7 +1841,7 @@ object CthulhuWarsSolo {
                         }
                     }
 
-                    if (free.num > sticking.num * 0 + 3 || free.%(_.unit.isGOO).any || (oldGates.has(r).not && game.gates.has(r)) || tomeStateChangedHere) {
+                    if (free.num > sticking.num * 0 + 3 || free.%(_.unit.utype == GOO).any || (oldGates.has(r).not && game.gates.has(r)) || tomeStateChangedHere) {
                         free = free ++ sticking
                         sticking = $
                     }
@@ -1941,7 +1854,6 @@ object CthulhuWarsSolo {
                         case Monster => 2
                         case Terror => 3
                         case GOO => 4
-                        case ElderGod => 4
                     }
 
                     // Library maps: perspective-aware placement. Sprites are bottom-
@@ -2147,21 +2059,13 @@ object CthulhuWarsSolo {
 
                 // DS starting region glyph (DS isn't in the DrawItem loop above because
                 // it only shows when cultists are present, unlike FB/TS/AN/OW which show always)
-                game.starting.get(DS).filter(_ => DS.cultists.any).foreach { r =>
-                    val size = (60 * board.unitScale).toInt
-                    val (sx, sy) = if (!horizontal && !board.isLibraryMap) {
-                        // Parallel-guide Fix 24 partial: portrait Earth — pass canonical
-                        // EarthRegionPalette color so findStaticGlyphPos doesn't sample the
-                        // bitmap at the rotated gate XY (gap-pixel risk → wrong region).
-                        val (ox, oy) = gateXYO(r)
-                        val rc = EarthRegionPalette.get(board.id, r).getOrElse(-1)
-                        val (fx, fy) = findStaticGlyphPos(ox, oy, rc)
-                        (mp.height - fy, fx)
-                    } else {
+                if (game.setup.has(DS) && DS.cultists.any) {
+                    game.starting.get(DS).foreach { r =>
                         val (gx, gy) = gateXY(r)
-                        findStaticGlyphPos(gx, gy)
+                        val size = (60 * board.unitScale).toInt
+                        val (sx, sy) = findStaticGlyphPos(gx, gy)
+                        g.drawImage(getAsset("ds-glyph"), sx - size / 2, sy - size / 2, size, size)
                     }
-                    g.drawImage(getAsset("ds-glyph"), sx - size / 2, sy - size / 2, size, size)
                 }
 
                 // Library at Celaeno: draw tomes on the map for unclaimed tomes
@@ -2199,13 +2103,6 @@ object CthulhuWarsSolo {
 
                 draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0))./(_.rect).foreach { d =>
                     g.globalAlpha = d.alpha
-                    val needsOutline = d.key == "custodian-icon" || d.key == "librarian-icon"
-                    if (needsOutline) {
-                        g.shadowColor = "white"
-                        g.shadowBlur = 8
-                        g.shadowOffsetX = 0
-                        g.shadowOffsetY = 0
-                    }
                     if (d.splitTint.any) {
                         val leftImg = d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key))
                         val rightImg = getTintedAsset(d.key, d.splitTint.get)
@@ -2230,11 +2127,6 @@ object CthulhuWarsSolo {
                         g.restore()
                     } else
                         g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
-                    if (needsOutline) {
-                        g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
-                        g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
-                        g.shadowBlur = 0
-                    }
                     g.globalAlpha = 1.0
                 }
 
@@ -2387,13 +2279,8 @@ object CthulhuWarsSolo {
                 // renders when discount > 0 (i.e. during an active IP session).
                 val fbIPDiscStr = (f == FB && game.fbInfernalPactDiscount > 0).?(" | " + (game.fbInfernalPactDiscount.toString + " IP Disc").styled(FB)).|("")
                 val fbIPDiscSStr = (f == FB && game.fbInfernalPactDiscount > 0).?(" " + (game.fbInfernalPactDiscount.toString + "IP").styled(FB)).|("")
-                // Tcho-Tcho (TT): append Growth counter to faction status panel
-                val ttGrowthStr  = (f == TT).?(" | " + ("Growth " + game.ubboGrowth.toString).styled(TT)).|("")
-                val ttGrowthMStr = (f == TT).?(" | " + ("G" + game.ubboGrowth.toString).styled(TT)).|("")
-                val ttGrowthSStr = (f == TT).?(" " + ("G" + game.ubboGrowth.toString).styled(TT)).|("")
-                val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr)
-                val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr)
-                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr)
+                val power = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr)
+                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr)
                 // Firstborn (FB): read Infernal Pact discount and stored Augury kills for the faction panel display
                 val fbIPDiscount = if (f == FB) game.fbInfernalPactDiscount else 0
                 val fbAugury = if (f == FB) game.fbAuguryKills else 0
@@ -2458,7 +2345,7 @@ object CthulhuWarsSolo {
                     val moonbeastImg = moonbeastOnThis./(t => {
                         val mbOwner = displayGame.moonbeastOnSpellbook.find(_._2 == t)./(e => displayGame.unit(e._1).faction).|(f)
                         // Use faction-tinted image (same tint as map units)
-                        val tint = DrawItem(null, mbOwner, MoonbeastUnit, Alive, $, 0, 0).neutralTint
+                        val tint = DrawItem(null, mbOwner, MoonbeastUnit, Alive, $, 0, 0).tint
                         val tintedSrc = getTintedAsset("n-moonbeast", tint).toDataURL("image/png")
                         s"<img src='${tintedSrc}' style='height:1.4em;vertical-align:middle;opacity:0.9;margin-right:0.3em;' />"
                     }).|("")
@@ -2467,7 +2354,6 @@ object CthulhuWarsSolo {
                     // Pass option state for conditional overlay text
                     val sbExtra = (f, sb) match {
                         case (SL, EnergyNexus) if game.options.has(SleeperEnergyNexusPreBattle) => ", true"
-                        case (OW, DreadCurse) if game.options.has(OpenerYogCurseDie) => ", true"
                         case _ => ""
                     }
                     val d = s"""<div class='spellbook'
@@ -2486,7 +2372,7 @@ object CthulhuWarsSolo {
                         // Find the moonbeast owner for tinting
                         val mbEntry = displayGame.moonbeastOnSpellbook.find { case (_, (target, sb)) => target == f && reqSpellbooks.contains(sb) }
                         val mbOwner = mbEntry./(e => displayGame.unit(e._1).faction).|(f)
-                        val tint = DrawItem(null, mbOwner, MoonbeastUnit, Alive, $, 0, 0).neutralTint
+                        val tint = DrawItem(null, mbOwner, MoonbeastUnit, Alive, $, 0, 0).tint
                         val tintedSrc = getTintedAsset("n-moonbeast", tint).toDataURL("image/png")
                         s"<img src='${tintedSrc}' style='height:1.4em;vertical-align:middle;opacity:0.9;margin-right:0.3em;' />"
                     } else ""
@@ -2496,13 +2382,7 @@ object CthulhuWarsSolo {
                         case Pay3EverybodyGains1 => "Pay your last 2 power"
                         case Pay3EverybodyLoses1 => "Pay your last 3 power"
                         case _ => r.text
-                    }
-                    // OW variant (OpenerCheapMutants): UnitsAtEnemyGates SBR threshold
-                    // raises from 2 to 3. Defer to Requirement.displayText which subclasses
-                    // override (see FactionOW.scala UnitsAtEnemyGates.displayText). Send the
-                    // dynamic text through the overlay click handler too so the popup matches.
-                    else if (f == OW) r.displayText(game)
-                    else r.text
+                    } else r.text
                     val s = displayText.replace("\\", "\\\\").replace("'", "&#39;") // "
                     val d = s"""<div class='spellbook'
                         onclick='event.stopPropagation(); onExternalClick("${f.short}", "${s}")'
@@ -2603,7 +2483,7 @@ object CthulhuWarsSolo {
                     name + power + doomL
                 else
                 if (w > 420)
-                    name + powerM + doom
+                    name + power + doom
                 else
                 if (w > 300)
                     nameS + powerS + doomS
@@ -2614,13 +2494,8 @@ object CthulhuWarsSolo {
                     case OW => s""""${f.short}", ${game.options.has(OpenerCheapMutants)}, ${game.options.has(OpenerYogCurseDie)}"""
                     case SL => s""""${f.short}", ${game.options.has(SleeperEasierSBR)}, ${game.options.has(SleeperEnergyNexusPreBattle)}"""
                     case DS => s""""${f.short}", ${game.options.has(DSAlternateSpellbooks)}"""
-                    case BB => s""""${f.short}", ${game.options.has(BBAlternateSpellbooks)}"""
                     case _ => s""""${f.short}""""
                 }
-                // §3.11.1: BB Moon HUD trigger lives in the top-right MAP HUD now (sibling of the
-                // RoA button in the localTitle block), not in the faction status panel. Faction-panel
-                // moon button/tile retired so the Moon disc + cat list only opens via the map HUD.
-
                 b.node.innerHTML = s"""<div class='full-height'
                     onclick='event.stopPropagation(); onExternalClick($fClickArgs)'
                     onpointerover='event.stopPropagation(); onExternalOver("${f.short}")'
@@ -2672,16 +2547,11 @@ object CthulhuWarsSolo {
                     }
                 }
 
-                // §3.11.1: BB Moon disc + stacked Earth Cats now render in the top-right MAP HUD
-                // (see localTitle block in startGame), not in this faction status panel.
-
                 var smx = 0
-                f.abilities.headOption.foreach { ab =>
-                    game.setup.but(f).foreach { e =>
-                        if (e.borrowed.has(ab)) {
-                            dd(DrawItem(null, e, SerpentMan, Alive, $, w - 46 + smx, 86).rect)
-                            smx -= 20
-                        }
+                game.setup.but(f).foreach { e =>
+                    if (e.borrowed.has(f.abilities.head)) {
+                        dd(DrawItem(null, e, SerpentMan, Alive, $, w - 46 + smx, 86).rect)
+                        smx -= 20
                     }
                 }
 
@@ -2801,7 +2671,8 @@ object CthulhuWarsSolo {
                             case (Nyogtha, DeepOne) => DrawItem(null, f, DeepOne, Alive, $, 62 + last.x, last.y)
                             case (Starspawn, DeepOne) => DrawItem(null, f, DeepOne, Alive, $, 51 + last.x, last.y)
                             case (Shoggoth, DeepOne) => DrawItem(null, f, DeepOne, Alive, $, 48 + last.x, last.y)
-                            case (DeepOne, DeepOne) => DrawItem(null, f, DeepOne, Alive, $, 35 + last.x, last.y)
+                            case (DeepOne, DeepOne) if last.health == Alive => DrawItem(null, f, DeepOne, Pained, $, last.x, last.y - 31)
+                            case (DeepOne, DeepOne) if last.health == Pained => DrawItem(null, f, DeepOne, Alive, $, 35 + last.x, last.y + 31)
 
                             case (Cthulhu, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 57 + last.x, 6 + last.y)
                             case (Abhoth, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 54 + last.x, last.y)
@@ -2809,7 +2680,8 @@ object CthulhuWarsSolo {
                             case (Nyogtha, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 60 + last.x, last.y)
                             case (Starspawn, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 52 + last.x, last.y)
                             case (Shoggoth, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 48 + last.x, last.y)
-                            case (DeepOne, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 36 + last.x, last.y)
+                            case (DeepOne, Acolyte) if last.health == Alive => DrawItem(null, f, Acolyte, Alive, $, 36 + last.x, last.y)
+                            case (DeepOne, Acolyte) if last.health == Pained => DrawItem(null, f, Acolyte, Alive, $, 36 + last.x, last.y + 31)
                             case (Acolyte, Acolyte) => DrawItem(null, f, Acolyte, Alive, $, 35 + last.x, last.y)
 
                             case (Cthulhu, HighPriest) => DrawItem(null, f, HighPriest, Alive, $, 75 + last.x, 6 + last.y)
@@ -2818,7 +2690,8 @@ object CthulhuWarsSolo {
                             case (Nyogtha, HighPriest) => DrawItem(null, f, HighPriest, Alive, $, 77 + last.x, last.y)
                             case (Starspawn, HighPriest) => DrawItem(null, f, HighPriest, Alive, $, 70 + last.x, last.y)
                             case (Shoggoth, HighPriest) => DrawItem(null, f, HighPriest, Alive, $, 66 + last.x, last.y)
-                            case (DeepOne, HighPriest) => DrawItem(null, f, HighPriest, Alive, $, 54 + last.x, last.y)
+                            case (DeepOne, HighPriest) if last.health == Alive => DrawItem(null, f, HighPriest, Alive, $, 54 + last.x, last.y)
+                            case (DeepOne, HighPriest) if last.health == Pained => DrawItem(null, f, HighPriest, Alive, $, 54 + last.x, last.y + 31)
                             case (Acolyte, HighPriest) => DrawItem(null, f, HighPriest, Alive, $, 53 + last.x, last.y)
 
                             case (Cthulhu, Ghast) => DrawItem(null, f, Ghast, Alive, $, 62 + last.x, 6 + last.y)
@@ -3009,46 +2882,42 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 }
             }
 
-            // BB Fix 31 (v2.4.8): the small clickable Moon HUD button kept "going
-            // missing" between sessions because it was only appended once at game
-            // start. Any DOM clear of map-small (canvas resize, view toggle, etc.)
-            // could orphan it with no recovery path. Wrap the whole HUD localTitle
-            // render in a function and call it from both the once-at-start setup
-            // AND the per-tick refresh — if the bb-moon-hud-btn element is gone
-            // for any reason, the next refresh tick re-creates it.
-            def renderMapHud() {
-                val bbMoonHudButton = if (setup.seating.has(BB)) s"""
-                    <span id="bb-moon-hud-btn"
-                        style="
-                            margin-left: auto;
-                            pointer-events: auto;
-                            cursor: pointer;
-                            display: inline-flex;
-                            align-items: center;
-                            position: relative;
-                            vertical-align: middle;
-                            flex-shrink: 0;
-                        "
-                        onclick="event.stopPropagation(); onExternalClick('BB','Moon',0,'')"
-                        onpointerover="event.stopPropagation(); onExternalOver('BB','Moon',0,'')"
-                        onpointerout="event.stopPropagation(); onExternalOut('BB','Moon',0,'')">
-                        <img src="${Overlays.imageSource("bb-moon-tile")}"
-                             style="height: max(2.5em, 7vmin); width: auto; display: block;" />
-                        <span id="bb-moon-hud-count"
-                              style="
-                                  position: absolute;
-                                  top: 50%;
-                                  left: 50%;
-                                  transform: translate(-50%, -50%);
-                                  color: white;
-                                  font-size: max(1.1em, 3vmin);
-                                  font-weight: bold;
-                                  line-height: 1;
-                                  text-shadow: 0 0 3px black, 0 0 3px black, 0 0 3px black;
-                                  pointer-events: none;
-                              ">0</span>
-                    </span>"""
-                else ""
+            def updateStatus() {
+                0.until(seating.num).foreach { n =>
+                    factionStatus(displayGame.setup(n), statusBitmaps(n))(displayGame)
+                }
+
+                val prevHistLen = RitualTrackOverlay.ritualHistory.length
+                val prevMarker = RitualTrackOverlay.markerIndex
+                val prevPureDH = RitualTrackOverlay.tsPureDHMarkerIndices.length // Tombstalker (TS): track pure DH marker changes for overlay refresh
+                RitualTrackOverlay.numPlayers = seating.num
+                RitualTrackOverlay.markerIndex = displayGame.ritualMarker
+                RitualTrackOverlay.trackLength = displayGame.ritualTrack.length
+                RitualTrackOverlay.ritualHistory = displayGame.ritualHistory./(_.style)
+                RitualTrackOverlay.ritualHistoryCeremony = displayGame.ritualHistoryCeremony
+                // Tombstalker (TS): sync pure Death's Head hecatomb ritual markers for RoA track overlay
+                RitualTrackOverlay.tsPureDHMarkerIndices = TSExpansion.pureDHMarkerIndices
+                // [2026-04-03] Auto-refresh overlay when ritual data changes
+                if (RitualTrackOverlay.ritualHistory.length != prevHistLen ||
+                    RitualTrackOverlay.markerIndex != prevMarker ||
+                    RitualTrackOverlay.tsPureDHMarkerIndices.length != prevPureDH)
+                    Overlays.refreshIfShowing()
+
+                // Tombstalker (TS): populate Cursed Tomes overlay with per-faction tome ownership and stack state
+                TSCursedTomesOverlay.factionTomes = displayGame.cursedTomesOwned.map { case (f, tomes) => f.style -> tomes }
+                TSCursedTomesOverlay.tomesOnCard = displayGame.tsTomesOnCard
+
+                dom.document.getElementById("roa-cost-num").?.foreach(_.innerHTML = displayGame.ritualCost.toString)
+
+                mapWest.innerHTML = (board.west :+ GC.deep)./(r => processStatus(displayGame.regionStatus(r), "p8")).mkString("")
+                mapEast.innerHTML = board.east./(r => processStatus(displayGame.regionStatus(r), "p8")).mkString("")
+
+                drawMap(displayGame)
+            }
+
+            dom.window.onresize = e => { invalidateMapSize(); updateStatus() }
+
+            if (hash == "") {
                 val localTitle = dom.document.createElement("div")
                 localTitle.innerHTML = s"""
                     <div style="
@@ -3069,7 +2938,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             display: flex;
                             align-items: center;
                             flex-wrap: nowrap;
-                            width: 100%;
                         ">
                             <span
                                 style="
@@ -3101,247 +2969,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                       ">5</span>
                             </span>
                         </div>
-                        <div id="bb-moon-hud-row" style="
-                            position: absolute;
-                            top: max(2.5em, 8vmin);
-                            right: 0;
-                            display: flex;
-                            align-items: center;
-                            pointer-events: none;
-                            filter: drop-shadow(rgb(0, 0, 0) 0px 0px 6px) drop-shadow(rgb(0, 0, 0) 0px 0px 6px) drop-shadow(rgb(0, 0, 0) 0px 0px 6px);
-                        ">
-                            ${bbMoonHudButton}
-                        </div>
                     </div>"""
                 mapSmall.appendChild(localTitle)
-            }
-
-            def updateStatus() {
-                0.until(seating.num).foreach { n =>
-                    factionStatus(displayGame.setup(n), statusBitmaps(n))(displayGame)
-                }
-
-                val prevHistLen = RitualTrackOverlay.ritualHistory.length
-                val prevMarker = RitualTrackOverlay.markerIndex
-                val prevPureDH = RitualTrackOverlay.tsPureDHMarkerIndices.length // Tombstalker (TS): track pure DH marker changes for overlay refresh
-                RitualTrackOverlay.numPlayers = seating.num
-                RitualTrackOverlay.markerIndex = displayGame.ritualMarker
-                RitualTrackOverlay.trackLength = displayGame.ritualTrack.length
-                RitualTrackOverlay.ritualHistory = displayGame.ritualHistory./(_.style)
-                RitualTrackOverlay.ritualHistoryCeremony = displayGame.ritualHistoryCeremony
-                // Tombstalker (TS): sync pure Death's Head hecatomb ritual markers for RoA track overlay
-                RitualTrackOverlay.tsPureDHMarkerIndices = TSExpansion.pureDHMarkerIndices
-                // [2026-04-03] Auto-refresh overlay when ritual data changes
-                if (RitualTrackOverlay.ritualHistory.length != prevHistLen ||
-                    RitualTrackOverlay.markerIndex != prevMarker ||
-                    RitualTrackOverlay.tsPureDHMarkerIndices.length != prevPureDH)
-                    Overlays.refreshIfShowing()
-
-                // Tombstalker (TS): populate Cursed Tomes overlay with per-faction tome ownership and stack state
-                TSCursedTomesOverlay.factionTomes = displayGame.cursedTomesOwned.map { case (f, tomes) => f.style -> tomes }
-                TSCursedTomesOverlay.tomesOnCard = displayGame.tsTomesOnCard
-
-                dom.document.getElementById("roa-cost-num").?.foreach(_.innerHTML = displayGame.ritualCost.toString)
-
-                // §3.11.1: Bubastis Moon HUD — refresh top-right map HUD button each tick so
-                // the displayed count and the click-overlay's unit list stay current.
-                //
-                // The big-Moon overlay renders each unit on the Moon as the SAME map sprite
-                // image used elsewhere on the board (per user spec: unit IMAGES, not text).
-                // We compute the map sprite asset id here (where DrawRect-equivalent context
-                // is available) and pass a packed list to the overlay handler. Each entry is
-                // assetId|displayName, separated by `;`.
-                if (setup.seating.has(BB)) {
-                    implicit val g : Game = displayGame
-                    // Map a Moon-resident unit to the same image asset id its map sprite uses.
-                    // This mirrors the DrawRect mapping above for the unit classes that can
-                    // realistically appear on the Moon (BB's own Cats + Bastet, plus enemy
-                    // units pulled there via Catnapping / Yog-Sothoth Catnapping).
-                    def moonSpriteAssetId(u : UnitFigure) : String = {
-                        val f = u.faction
-                        u.uclass match {
-                            case EarthCat      => "bb-earth-cat"
-                            case CatFromMars   => "bb-cat-from-mars"
-                            case CatFromSaturn => "bb-cat-from-saturn"
-                            case CatFromUranus => "bb-cat-from-uranus"
-                            case Bastet        => "bb-bastet"
-                            case Acolyte       => f.short.toLowerCase + "-acolyte"
-                            case HighPriest    => f.short.toLowerCase + "-high-priest"
-                            case Ghoul         => "bg-ghoul"
-                            case Fungi         => "bg-fungi"
-                            case DarkYoung     => "bg-dark-young"
-                            case ShubNiggurath => "bg-shub"
-                            case Nightgaunt    => "cc-nightgaunt"
-                            case FlyingPolyp   => "cc-flying-polyp"
-                            case HuntingHorror => "cc-hunting-horror"
-                            case Nyarlathotep  => "cc-nyarly"
-                            case DeepOne       => "gc-deep-one"
-                            case Shoggoth      => "gc-shoggoth"
-                            case Starspawn     => "gc-starspawn"
-                            case Cthulhu       => "gc-cthulhu"
-                            case Undead        => "ys-undead"
-                            case Byakhee       => "ys-byakhee"
-                            case KingInYellow  => "ys-king-in-yellow"
-                            case Hastur        => "ys-hastur"
-                            case Wizard        => "sl-wizard"
-                            case SerpentMan    => "sl-serpent-man"
-                            case FormlessSpawn => "sl-formless-spawn"
-                            case Tsathoggua    => "sl-tsathoggua"
-                            case Wendigo       => "ww-wendigo"
-                            case GnophKeh      => "ww-gnoph-keh"
-                            case RhanTegoth    => "ww-rhan-tegoth"
-                            case Ithaqua       => "ww-ithaqua"
-                            case Mutant        => "ow-mutant"
-                            case Abomination   => "ow-abomination"
-                            case SpawnOW       => "ow-spawn-of-yog-sothoth"
-                            case YogSothoth    => "ow-yog-sothoth"
-                            case UnMan         => "an-un-man"
-                            case Reanimated    => "an-reanimated"
-                            case Yothan        => "an-yothan"
-                            case TombHerd      => "ts-tomb-herd"
-                            case DeepTendril   => "ts-tendril"
-                            case Glaaki        => "ts-glaaki"
-                            case Desiccated    => "fb-desiccated"
-                            case RevenantOfKnaa=> "fb-revenant"
-                            case Ghatanothoa   => "fb-ghatanothoa"
-                            case ProtoShoggoth => "tt-proto-shoggoth"
-                            case UbboSathla    => "tt-ubbo-sathla"
-                            // Neutral monsters/terrors/IGOOs (can end up on Moon via Catnapping)
-                            case Ghast              => "n-ghast"
-                            case Gug                => "n-gug"
-                            case Shantak            => "n-shantak"
-                            case StarVampire        => "n-star-vampire"
-                            case Voonith            => "n-voonith"
-                            case DimensionalShamblerUnit => "n-dimensional-shambler"
-                            case Gnorri             => "n-gnorri"
-                            case Ygolonac           => "n-ygolonac"
-                            case Byatis             => "n-byatis"
-                            case Abhoth             => "n-abhoth"
-                            case Filth              => "n-filth"
-                            case Daoloth            => "n-daoloth"
-                            case Nyogtha            => "n-nyogtha"
-                            case Tulzscha           => "n-tulzscha"
-                            case Dhole              => "n-dhole"
-                            case GreatRaceOfYith    => "n-great-race-of-yith"
-                            case QuachilUttaus      => "n-quachil-uttaus"
-                            case ShadowPharaoh      => "n-the-shadow-pharaoh"
-                            case HoundOfTindalos    => "n-hound-of-tindalos"
-                            case BrownJenkin        => "n-brown-jenkin"
-                            case ElderShoggoth      => "n-elder-shoggoth"
-                            case MoonbeastUnit      => "n-moonbeast"
-                            case AlbinoPenguins     => "n-giant-blind-albino-penguins"
-                            case ElderThing         => "n-elder-thing"
-                            case LengSpiderUnit     => "n-leng-spider"
-                            case Satyr              => "n-satyr"
-                            case InsectsFromShaggai => "n-insects-from-shaggai"
-                            case ServitorUnit       => "n-servitor-of-the-outer-gods"
-                            case AzathothIGOO       => "n-azathoth"
-                            case Cthugha            => "n-cthugha"
-                            case MotherHydra        => "n-mother-hydra"
-                            case Yig                => "n-yig"
-                            case FatherDagon        => "n-father-dagon"
-                            case GhatanotoaIGOO     => "n-ghatanothoa"
-                            case BloatedWoman       => "n-the-bloated-woman"
-                            case AtlachNacha        => "n-atlach-nacha"
-                            case Bokrug             => "n-bokrug"
-                            case GlaakiIGOO         => "n-glaaki-igoo"
-                            case MindParasiteCultist => "ts-acolyte"
-                            case other              => f.short.toLowerCase + "-" + other.name.toLowerCase.replace(" ", "-").replace("'", "")
-                        }
-                    }
-                    // Fix 55 (v2.4.21): dedupe Moon overlay unit list by UnitRef.
-                    // Per Game 499 user report: "The moon shows four Shoggoths from
-                    // the GC faction on it. GC only has two Shoggoths total. A
-                    // battle with GC on the moon showed only 2 Shoggoths in the
-                    // battle, so this is a visual error." Apologies for the visual
-                    // double-count — this dedupe pass guarantees one entry per
-                    // UnitRef regardless of any upstream double-bookkeeping in the
-                    // faction `units` list (e.g., transient battle-side residuals,
-                    // post-battle replace/regenerate transient duplicates, etc.).
-                    val moonFigs = displayGame.factions./~(ff => ff.at(BB.moon)).distinctBy(_.ref)
-                    val moonCount = moonFigs.num
-                    // Fix 56 (v2.4.22): Moon overlay visual cleanup of units killed
-                    // or pain-retreated in a Moon battle. The user reported that
-                    // even though the game state correctly removed dead / pain-
-                    // retreated non-BB units after a Moon battle, the Moon overlay
-                    // kept showing those unit images. Two visible problems were
-                    // mashed together: (a) standard map cleanup paints a red-X
-                    // over killed/pained unit sprites mid-battle and then drops
-                    // the sprite once region changes — the Moon overlay was
-                    // missing both the X marker AND the live re-render after the
-                    // region changes, so it looked frozen on the post-battle
-                    // image; (b) the overlay HTML packed at click time never re-
-                    // rendered while showing, so a battle that resolved with the
-                    // overlay open kept stale sprites onscreen until the user
-                    // closed and re-opened the overlay. Apologies for the long
-                    // gap between Fix 25 (initial Moon overlay) and now; please
-                    // forgive the oversight that left non-BB pain-retreat units
-                    // visually stuck on the Moon overlay.
-                    //
-                    // Encoding: each entry is "assetId|Display Name (FAC)|hp"
-                    // where hp is one of "alive", "killed", "pained" so the
-                    // overlay renderer can paint the same red-X / yellow-X
-                    // marker the standard map uses (DrawRect("kill"|"pain")).
-                    // Strip any chars that would break the JS string literal we splice into
-                    // the onclick attribute.
-                    def safe(s : String) : String = s.replace("\"", "").replace("'", "").replace(";", "").replace("|", "")
-                    def hpTag(u : UnitFigure) : String = u.health match {
-                        case Killed                          => "killed"
-                        case DoubleHP(Killed, Killed)        => "killed"
-                        case DoubleHP(Killed, _)             => "killed"
-                        case DoubleHP(_, Killed)             => "killed"
-                        case Pained                          => "pained"
-                        case DoubleHP(Pained, _)             => "pained"
-                        case DoubleHP(_, Pained)             => "pained"
-                        case _                               => "alive"
-                    }
-                    val moonList = moonFigs./(u => {
-                        val asset   = safe(moonSpriteAssetId(u))
-                        val display = safe(u.uclass.name) + " (" + safe(u.faction.short) + ")"
-                        val hp      = hpTag(u)
-                        val onMapH  = {
-                            val ph = DrawItem(BB.moon, u.faction, u.uclass, u.health, u.state, 0, 0).proto
-                            if (ph != null) ph.height else 70
-                        }
-                        val fShort  = safe(u.faction.short)
-                        asset + "|" + display + "|" + hp + "|" + onMapH + "|" + fShort
-                    }).mkString(";")
-                    // BB Fix 31 (v2.4.8): if the HUD button is missing for any
-                    // reason (orphaned by a map-small clear), recreate it now so
-                    // the user always has a clickable Moon entry-point.
-                    if (dom.document.getElementById("bb-moon-hud-btn") == null)
-                        renderMapHud()
-                    dom.document.getElementById("bb-moon-hud-count").?.foreach(_.innerHTML = moonCount.toString)
-                    dom.document.getElementById("bb-moon-hud-btn").?.foreach { el =>
-                        val s = s"""onExternalClick("BB","Moon",$moonCount,"$moonList")"""
-                        el.setAttribute("onclick", "event.stopPropagation(); " + s)
-                        el.setAttribute("onpointerover", "event.stopPropagation(); " + s.replace("Click","Over"))
-                        el.setAttribute("onpointerout",  "event.stopPropagation(); " + s.replace("Click","Out"))
-                    }
-                    // Fix 56 (v2.4.22): live re-render of the Moon overlay if it
-                    // is currently showing. Without this, the overlay HTML is
-                    // frozen at the time the user clicked the HUD button, so
-                    // mid-battle kills / pain assignments and post-battle pain
-                    // retreats / eliminations never updated the visible sprites.
-                    // Overlays.refreshMoonIfShowing() compares the latest packed
-                    // (count, list) to what is on screen and replaces the body
-                    // when they differ. See overlay.scala for the cache key.
-                    Overlays.refreshMoonIfShowing(moonCount, moonList)
-                }
-
-                mapWest.innerHTML = (board.west :+ GC.deep)./(r => processStatus(displayGame.regionStatus(r), "p8")).mkString("")
-                mapEast.innerHTML = board.east./(r => processStatus(displayGame.regionStatus(r), "p8")).mkString("")
-
-                drawMap(displayGame)
-            }
-
-            dom.window.onresize = e => { invalidateMapSize(); updateStatus() }
-
-            if (hash == "") {
-                // BB Fix 31 (v2.4.8): HUD render extracted to renderMapHud() above
-                // so it can be re-called from updateStatus refresh tick if the
-                // button ever goes missing.
-                renderMapHud()
             }
 
             var token : Double = 0.0
@@ -3435,22 +3064,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 }
             }
 
-            def isRollAction(a : Action) : Boolean = a.unwrap match {
-                case _ : BattleRollAction => true
-                case _ : DesecrateRollAction => true
-                case _ : GhrothRollAction => true
-                case _ : DreadCurseRollAction => true
-                case _ : ThousandFormsRollAction => true
-                case _ : AzathothCombatDieRollAction => true
-                case _ : AzathothSynthesisRollAction => true
-                case _ : AzathothDaemonSultanKillRollAction => true
-                case _ : FBWritheRollResultAction => true
-                case _ : CustodianAgonyRolledAction => true
-                case _ : LibrarianAgonyRolledAction => true
-                case _ : NuclearChaosRollAction => true
-                case _ => false
-            }
-
             def showUndo(n : Int) : () => Unit = () => {
                 show(undoDiv.parentElement.parentElement)
 
@@ -3460,11 +3073,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                 val style = None
 
-                val hasRollAfter = hash != "" && actions.reverse.drop(n).exists(isRollAction)
-
-                if (hasRollAfter)
-                    undoDiv.appendChild(newDiv("", "Cannot undo past a dice roll"))
-                else if (hash != "")
+                if (hash != "")
                     undoDiv.appendChild(newDiv("option" + style./(" " + _).|(""), "Undo to here".hl, () => { clear(undoDiv); performUndoOnline(n) }))
                 else
                     undoDiv.appendChild(newDiv("option" + style./(" " + _).|(""), "Undo to here".hl, () => { clear(undoDiv); performUndoLocal(n) }))
@@ -3612,8 +3221,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 def post() {
                                     if (position == actions.num) {
                                         hrf.web.postF(server + "write/" + hash + "/" + (position + 3), serializer.write(a.unwrap)) { _ =>
-                                            stopBackgroundCheck()
-
                                             queue :+= UIRead(g)
 
                                             startUI()
@@ -3621,8 +3228,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                             if (position == actions.num) {
                                                 hrf.web.getF(server + "read/" + hash + "/" + (position + 3)) { ll =>
                                                     if (ll.splt("\n").but("").any) {
-                                                        stopBackgroundCheck()
-
                                                         queue :+= UIRead(g)
 
                                                         startUI()
@@ -3672,77 +3277,24 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     }
 
                                     if (a.isVoid.not) {
-                                        // BB v2.4.16 (game 498 full-crash fix): wrap the recorded-replay
-                                        // perform in a try/catch so any single bad action — typically a
-                                        // version-drift serialization mismatch where a game saved on an
-                                        // older build replays into a newer build that has changed an
-                                        // action signature — does not abort the entire replay rebuild
-                                        // and leave the game stuck on a blank screen. Failed actions
-                                        // are logged inline and the replay continues from the last
-                                        // good Continue.
-                                        try {
-                                            game.nextReplayActionHint = if (n + 1 < recorded.num) Some(serializer.write(recorded(n + 1))) else None
-                                            val (l, c) = game.perform(a.unwrap)
-                                            game.nextReplayActionHint = None
+                                        val (l, c) = game.perform(a.unwrap)
 
-                                            l.foreach(s => log(s, showUndo(actions.num)))
+                                        l.foreach(s => log(s, showUndo(actions.num)))
 
-                                            if (a.isOutOfTurn.not)
-                                                cc = |(c)
-                                            else
-                                                c @@ {
-                                                    case Then(OutOfTurnRepeat(f, action)) if self.has(f) => cc = |(c)
-                                                    case Then(OutOfTurnRepeat(f, action)) if self.has(f).not =>
-                                                    case c => cc = |(c)
-                                                }
-                                        }
-                                        catch {
-                                            case t : Throwable =>
-                                                println("[BB v2.4.16 replay-tolerance] skipping action " + actions.num + " (" + a + "): " + t.getClass.getSimpleName + ": " + t.getMessage)
-                                                log("Replay: skipped action " + actions.num + " due to " + t.getClass.getSimpleName, showUndo(actions.num))
-                                        }
+                                        if (a.isOutOfTurn.not)
+                                            cc = |(c)
+                                        else
+                                            c @@ {
+                                                case Then(OutOfTurnRepeat(f, action)) if self.has(f) => cc = |(c)
+                                                case Then(OutOfTurnRepeat(f, action)) if self.has(f).not =>
+                                                case c => cc = |(c)
+                                            }
                                     }
                                 }
 
                                 savedContinue = cc
 
-                                // Post-replay spellbook check: if any faction earned an SBR
-                                // during replay but never picked a spellbook (version drift),
-                                // force the spellbook prompt now.
-                                {
-                                    implicit val ig : Game = game
-                                    val sbOwed = game.factions.%(f => f.unfulfilled.num + f.spellbooks.num < f.library.num)
-                                    if (sbOwed.any) {
-                                        val f = sbOwed(0)
-                                        val effectiveLibrary = f.library.map { sb => (f, sb) match {
-                                            case (BB, Catabolism)   if game.options.has(BBAlternateSpellbooks) => Syzygy
-                                            case (BB, Ailurophobia) if game.options.has(BBAlternateSpellbooks) => Carnivore
-                                            case _ => sb
-                                        }}
-                                        val bs = (effectiveLibrary.%!(f.has) ++ game.neutralSpellbooks).diff(f.ignorePerInstant)
-                                        if (bs.any) {
-                                            val currentFaction = cc.get match {
-                                                case Ask(af, _) => af
-                                                case _ => game.factions(0)
-                                            }
-                                            cc = |(Ask(f).each(bs)(b => SpellbookAction(f, b, CheckSpellbooksAction(MainAction(currentFaction)))))
-                                        }
-                                    }
-                                }
-
-                                // BB v2.4.16 (game 498 full-crash fix): also harden the post-replay
-                                // askFaction call. If the last Continue's menu builder throws (e.g.
-                                // a faction's MainAction case crashes when computing the menu after
-                                // a version-drift load), catch it so the user at least sees the
-                                // game state and can fall back to manual edit/rollback.
-                                try {
-                                    queue :+= askFaction(cc.get)(game)
-                                }
-                                catch {
-                                    case t : Throwable =>
-                                        println("[BB v2.4.16 replay-tolerance] askFaction crashed on resumed continue: " + t.getClass.getSimpleName + ": " + t.getMessage)
-                                        log("Replay: menu-build crash on resume — " + t.getClass.getSimpleName + ": " + t.getMessage, showUndo(actions.num))
-                                }
+                                queue :+= askFaction(cc.get)(game)
 
                                 Some((true, 0))
                             }
@@ -3767,9 +3319,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 if (a.isRecorded)
                                     actions +:= a
 
-                                game.nextReplayActionHint = if (recorded.any && hash == "" && localReplay.not && recorded.num > actions.num) Some(recorded(actions.num).replace("&gt;", ">")) else None
                                 val (l, c) = g.perform(a.unwrap)
-                                game.nextReplayActionHint = None
 
                                 l.foreach { s =>
                                     queue :+= UILog(s)
@@ -3858,8 +3408,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     case _ if l.has(OutOfTurnDone) => false
                                     case _ : DragonAscendingOutOfTurnAction if l.of[DragonAscendingPromptAction].any => false
                                     case _ : SacrificeHighPriestOutOfTurnMainAction if l.of[SacrificeHighPriestPromptAction].any => false
-                                    case _ : SacrificeHighPriestOutOfTurnMainAction if l.of[SacrificeHighPriestMainAction].any => false
-                                    case _ : SacrificeHighPriestOutOfTurnMainAction if l.of[SacrificeHighPriestDoomAction].any => false
                                     case _ => true
                                 })
 
@@ -3897,9 +3445,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                 val aa = Explode.explode(g, actions)
 
-                                // Tombstalker (TS), BG, and BB: use Bot3 evaluation for debug action sorting
+                                // Tombstalker (TS) and BG: use Bot3 evaluation for debug action sorting
                                 // NOTE: only fires in Debug difficulty mode, not during normal bot play
-                                val sorted = if (f == BG || f == TS || f == BB)
+                                val sorted = if (f == BG || f == TS)
                                     Bot3(f).eval(aa)(g).sortBy(-_.evaluations.map(_.weight).sum)
                                 else
                                 if (f == null) {
@@ -4015,7 +3563,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             }
         }
 
-        def startOnlineSetup(factions : $[Faction], bbAlt : Boolean = false) {
+        def startOnlineSetup(factions : $[Faction]) {
             val all = allSeatings(factions)
 
             val seatings = all.%(s => all.indexOf(s) <= all.indexOf(s.take(1) ++ s.drop(1).reverse))
@@ -4030,17 +3578,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 setup.options :+= Opener4P10Gates
             if (factions.has(SL))
                 setup.options :+= DemandTsathoggua
-            // [2026-06-02] §3.13.3: alt-faction picker can pre-select the BB
-            // homebrew variant. When that picker entry was chosen, plumb the
-            // flag through so BBAlternateSpellbooks is on from the start.
-            // The user can still toggle it from the Variants row if they want.
-            if (bbAlt && factions.has(BB))
-                setup.options :+= BBAlternateSpellbooks
-
-            // [2026-06-15] Apply any pending Random Neutrals selection from the
-            // alt faction picker, then clear so it doesn't leak to a later setup.
-            pendingRandomNeutrals.foreach(_(setup))
-            pendingRandomNeutrals = None
 
             def showMapPreview() {
                 val mapDiv = getElem("map-small")
@@ -4151,8 +3688,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         .$("Variants" -> ("" + SL + " Energy Nexus - Pre Battle (" + setup.get(SleeperEnergyNexusPreBattle).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"SleeperEnergyNexusPreBattle\")'>?</span>")) ++
                     (factions.has(DS))
                         .$("Variants" -> ("" + DS + " Alternate Spellbooks (" + setup.get(DSAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"DSAlternateSpellbooks\")'>?</span>")) ++
-                    (factions.has(BB))
-                        .$("Variants" -> ("" + BB + " Alternate Spellbooks (" + setup.get(BBAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"BBAlternateSpellbooks\")'>?</span>")) ++
                     $("Map" -> ("Map Configuration (" + setup.options.of[MapOption].lastOption.?(_.toString.hl) + ")")) ++
                     $("Done" -> "Start game".styled("power")),
                     nn => {
@@ -4319,13 +3854,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 setupQuestions()
                             }
                         }
-                        if (factions.has(BB)) {
-                            n -= 1
-                            if (n == 0) {
-                                setup.toggle(BBAlternateSpellbooks)
-                                setupQuestions()
-                            }
-                        }
                         n -= 1
                         if (n == 0) {
                             val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55, MapLibrary33, MapLibrary35, MapLibrary53, MapLibrary55)
@@ -4334,21 +3862,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         }
                         n -= 1
                         if (n == 0) {
-                            // §1.1 / §2.0a / §3.1.1: BB cannot be played 2-player vs CC.
-                            // CC's capture-from-BB Spellbook requirement is unsatisfiable in that matchup,
-                            // so the matchup is barred outright. Gate sits before any game state init.
-                            if (factions.num == 2 && factions.has(BB) && factions.has(CC)) {
-                                log(BB.full + " cannot be played 2-player vs " + CC.full)
-                                setupQuestions()
-                            }
+                            val hasHuman = setup.seating.exists(f => setup.difficulty(f) == Human)
+                            if (hasHuman)
+                                startOnlineGame(setup)
                             else {
-                                val hasHuman = setup.seating.exists(f => setup.difficulty(f) == Human)
-                                if (hasHuman)
-                                    startOnlineGame(setup)
-                                else {
-                                    log("Online games must have at least one human player")
-                                    setupQuestions()
-                                }
+                                log("Online games must have at least one human player")
+                                setupQuestions()
                             }
                         }
                     }
@@ -4359,23 +3878,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             askTop()
         }
 
-        def startSetup(factions : $[Faction], bbAlt : Boolean = false) {
+        def startSetup(factions : $[Faction]) {
             val all = allSeatings(factions)
 
             val seatings = all.%(s => all.indexOf(s) <= all.indexOf(s.take(1) ++ s.drop(1).reverse))
 
             val setup = new Setup(seatings(0), Human)
-            // [2026-06-02] §3.13.3: alt-faction picker can pre-select the BB
-            // homebrew variant. When that picker entry was chosen, the option
-            // is auto-set on the new setup. The user can still toggle it later
-            // via the Variants row in the setup screen.
-            if (bbAlt && factions.has(BB))
-                setup.options :+= BBAlternateSpellbooks
-
-            // [2026-06-15] Apply any pending Random Neutrals selection from the
-            // alt faction picker, then clear so it doesn't leak to a later setup.
-            pendingRandomNeutrals.foreach(_(setup))
-            pendingRandomNeutrals = None
 
             def showMapPreview() {
                 val mapDiv = getElem("map-small")
@@ -4486,8 +3994,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         .$("Variants" -> ("" + SL + " Energy Nexus - Pre Battle (" + setup.get(SleeperEnergyNexusPreBattle).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"SleeperEnergyNexusPreBattle\")'>?</span>")) ++
                     (factions.has(DS))
                         .$("Variants" -> ("" + DS + " Alternate Spellbooks (" + setup.get(DSAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"DSAlternateSpellbooks\")'>?</span>")) ++
-                    (factions.has(BB))
-                        .$("Variants" -> ("" + BB + " Alternate Spellbooks (" + setup.get(BBAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"BBAlternateSpellbooks\")'>?</span>")) ++
                     $("Map" -> ("Map Configuration (" + setup.options.of[MapOption].lastOption.?(_.toString.hl) + ")")) ++
                     $("Options" -> ("Dice rolls (" + setup.dice.?("auto").|("manual").hl + ")")) ++
                     $("Options" -> ("Elder Signs (" + setup.es.?("auto").|("manual").hl + ")")) ++
@@ -4657,13 +4163,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 setupQuestions()
                             }
                         }
-                        if (factions.has(BB)) {
-                            n -= 1
-                            if (n == 0) {
-                                setup.toggle(BBAlternateSpellbooks)
-                                setupQuestions()
-                            }
-                        }
                         n -= 1
                         if (n == 0) {
                             val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55, MapLibrary33, MapLibrary35, MapLibrary53, MapLibrary55)
@@ -4686,17 +4185,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             setupQuestions()
                         }
                         n -= 1
-                        if (n == 0) {
-                            // §1.1 / §2.0a / §3.1.1: BB cannot be played 2-player vs CC.
-                            // CC's capture-from-BB Spellbook requirement is unsatisfiable in that matchup,
-                            // so the matchup is barred outright. Gate sits before any game state init.
-                            if (factions.num == 2 && factions.has(BB) && factions.has(CC)) {
-                                log(BB.full + " cannot be played 2-player vs " + CC.full)
-                                setupQuestions()
-                            }
-                            else
-                                startGame(setup)
-                        }
+                        if (n == 0)
+                            startGame(setup)
                     }
                 )
             }
@@ -4705,33 +4195,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             askTop()
         }
 
-        // Master faction list — drives existing faction picker, replay parsing, and expansion dispatch order.
-        // Order: GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB)
-
-        // Alt picker display order (may differ from allFactions).
-        // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB.
-        //
-        // [2026-06-02] §3.13.3: a SECOND BB entry sits at picker position 12,
-        // immediately after standard BB. Picking it auto-toggles
-        // BBAlternateSpellbooks (Catabolism→Syzygy, Ailurophobia→Carnivore) on
-        // the resulting setup. Standard BB and BB-alt resolve to the same
-        // Faction (BB), so picking either one blocks both for every other
-        // player — you cannot have both BB and the BB variant in the same
-        // game. Picker entries are modelled as (Faction, alt : Boolean) so the
-        // BB-alt entry can show the homebrew glyph (bb-glyph-hb) while still
-        // building setup.factions as a plain $[Faction].
-        case class PickerEntry(faction : Faction, alt : Boolean) {
-            def short : String = if (alt) faction.short + "-alt" else faction.short
-            def label : String = if (alt) faction.full + " (alt SBs)" else faction.full
-        }
-        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB)
-        val altPickerEntries : $[PickerEntry] =
-            altPickerFactions./(f => PickerEntry(f, false)).flatMap {
-                // Insert the BB-alt entry immediately after standard BB.
-                case e if e.faction == BB => $(e, PickerEntry(BB, true))
-                case e                    => $(e)
-            }
+        // Tombstalker (TS), Firstborn (FB), and Daemon Sultan (DS): included in the master faction list for game setup and replay parsing
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS)
 
         // [2026-05-23] MNU alt faction picker. Replaces the combinations dropdown
         // for users who want to: (a) lock specific factions onto specific player
@@ -4741,7 +4206,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // the desired seating order) is fed to startSetup, which builds the
         // standard Setup object and proceeds to the normal player-order +
         // game-flags + start flow.
-        def altFactionPicker(pn : Int, onContinue : ($[Faction], Boolean) => Unit = (fs, bbAlt) => startSetup(fs, bbAlt)) {
+        def altFactionPicker(pn : Int, onContinue : $[Faction] => Unit = startSetup) {
             clear(actionDiv)
             // Inject the alt-picker stylesheet once per page load — keyed by id
             // so subsequent picker entries don't duplicate it.
@@ -4757,44 +4222,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             }
             val playerNames = scala.collection.mutable.ArrayBuffer.fill(pn)("")
             for (i <- 0 until pn) playerNames(i) = "Player " + (i + 1)
-            // [2026-06-02] §3.13.3: per-player checkbox state is now keyed on
-            // PickerEntry, not Faction. Two entries (BB and BB-alt) collapse
-            // to the same Faction (BB) for the matching constraint, so picking
-            // either form blocks both for every other player.
-            val enabledEntries = scala.collection.mutable.ArrayBuffer.fill(pn)(scala.collection.mutable.Set[PickerEntry]())
-            for (i <- 0 until pn) altPickerEntries.foreach(e => enabledEntries(i) += e)
-            // Helper: which Factions does this player still consider eligible
-            // (BB-standard and BB-alt both contribute Faction = BB).
-            def enabledFactionsFor(i : Int) : Set[Faction] = enabledEntries(i).iterator.map(_.faction).toSet
+            val enabledFactions = scala.collection.mutable.ArrayBuffer.fill(pn)(scala.collection.mutable.Set[Faction]())
+            for (i <- 0 until pn) allFactions.foreach(f => enabledFactions(i) += f)
             var randomizeOrder = false
-
-            // [2026-06-15] Random Neutrals: optional random subset of Monsters /
-            // Terrors / iGOOs to include in the game. Each category has an
-            // enable checkbox and a count; on Continue we shuffle that
-            // category's Use* option list, take the first N, add the umbrella
-            // option (NeutralMonsters / NeutralTerrors / IGOOs) + the picked
-            // Use* options to setup.options.
-            val randMonsterPool : $[GameOption] = $(
-                UseDimensionalShamblers, UseElderThing, UseGhast, UseAlbinoPenguins,
-                UseGnorri, UseGug, UseInsectsFromShaggai, UseLengSpider, UseMoonbeast,
-                UseSatyr, UseServitor, UseShantak, UseStarVampire, UseVoonith
-            )
-            val randTerrorPool : $[GameOption] = $(
-                UseBrownJenkin, UseDhole, UseElderShoggoth, UseGreatRaceOfYith,
-                UseHoundOfTindalos, UseQuachilUttaus, UseShadowPharaoh
-            )
-            val randIGOOPool : $[GameOption] = $(
-                UseAbhoth, UseAtlachNacha, UseAzathothIGOO, UseBokrug, UseByatis,
-                UseCthugha, UseDaoloth, UseFatherDagon, UseGhatanotoaIGOO,
-                UseGlaakiIGOO, UseMotherHydra, UseNyogtha, UseBloatedWoman,
-                UseTulzscha, UseYgolonac, UseYig
-            )
-            var randMonsters = false
-            var randTerrors = false
-            var randIGOOs = false
-            var randMonsterCount = math.max(1, pn)
-            var randTerrorCount = math.max(1, pn)
-            var randIGOOCount = math.max(1, pn)
 
             // [2026-05-23] Per user: HIDE the other screen sections (map halves,
             // faction status panels, game log) for the duration of the alt
@@ -4847,7 +4277,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             def computeLocks() : Map[Faction, Int] = {
                 // Repeat until stable.
                 val effective = scala.collection.mutable.ArrayBuffer[scala.collection.mutable.Set[Faction]]()
-                for (i <- 0 until pn) effective += scala.collection.mutable.Set[Faction]() ++ enabledFactionsFor(i)
+                for (i <- 0 until pn) effective += enabledFactions(i).clone()
                 var locked : Map[Faction, Int] = Map()
                 var changed = true
                 while (changed) {
@@ -4874,8 +4304,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     case Nil => true
                     case _ =>
                         // Pick the most-constrained player first for efficiency.
-                        val p = remaining.minBy(i => (enabledFactionsFor(i) -- used).size)
-                        val pool = (enabledFactionsFor(p) -- used).toList
+                        val p = remaining.minBy(i => (enabledFactions(i) -- used).size)
+                        val pool = (enabledFactions(p) -- used).toList
                         if (pool.isEmpty) false
                         else pool.exists(f => search(remaining.filterNot(_ == p), used + f))
                 }
@@ -4898,8 +4328,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 def backtrack(rem : List[Int]) : Boolean = rem match {
                     case Nil => true
                     case _ =>
-                        val p = rem.minBy(i => (enabledFactionsFor(i) -- usedFactions -- locked.keySet).size)
-                        val pool = (enabledFactionsFor(p).toList.diff(locked.keySet.toList).diff(usedFactions.toList))
+                        val p = rem.minBy(i => (enabledFactions(i) -- usedFactions -- locked.keySet).size)
+                        val pool = (enabledFactions(p).toList.diff(locked.keySet.toList).diff(usedFactions.toList))
                         if (pool.isEmpty) false
                         else {
                             val shuffled = scala.util.Random.shuffle(pool)
@@ -4916,32 +4346,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 else |((0 until pn).toList.map(assignment))
             }
 
-            // [2026-06-02] §3.13.3: figure out whether the resulting setup
-            // should have BBAlternateSpellbooks pre-toggled. If the player who
-            // ended up with BB had their BB-alt entry checked AND not their
-            // standard BB entry, they specifically picked the homebrew
-            // variant — set the flag. If both forms were checked we default
-            // to standard BB (the unambiguous case wins).
-            def bbAltForAssignment(picked : $[Faction]) : Boolean = {
-                val bbIdx = picked.indexOf(BB)
-                if (bbIdx < 0) false
-                else {
-                    val player = bbIdx
-                    val wantsAlt      = enabledEntries(player).exists(e => e.faction == BB && e.alt)
-                    val wantsStandard = enabledEntries(player).exists(e => e.faction == BB && !e.alt)
-                    wantsAlt && !wantsStandard
-                }
-            }
-
             def glyphSrc(f : Faction) : String =
                 "webp/images/" + f.short.toLowerCase + "-glyph.webp"
-            // [2026-06-02] §3.13.3 / §3.13.4: BB-alt picker entry uses the
-            // homebrew glyph (bb-glyph-hb) so users can tell the two BB rows
-            // apart at a glance. Standard BB keeps the regular glyph. Other
-            // entries fall through to the by-Faction glyph.
-            def entryGlyphSrc(e : PickerEntry) : String =
-                if (e.faction == BB && e.alt) "webp/images/bb-glyph-hb.webp"
-                else glyphSrc(e.faction)
 
             def render() {
                 clear(root)
@@ -4988,19 +4394,16 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     allLbl.style.cssText = "display:inline-flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5pt;color:#8c95a0;"
                     val allCb = dom.document.createElement("input").asInstanceOf[html.Input]
                     allCb.`type` = "checkbox"
-                    // "Locked elsewhere" is a Faction-level concept (BB and BB-alt
-                    // share Faction = BB; if BB is locked to another player, BOTH
-                    // BB entries are blocked here).
-                    val unlockableForThisPlayer = altPickerEntries.filter(e => !lockedFactions.contains(e.faction) || locked(e.faction) == i)
-                    allCb.checked = unlockableForThisPlayer.forall(enabledEntries(i).contains)
+                    val unlockableForThisPlayer = allFactions.filter(f => !lockedFactions.contains(f) || locked(f) == i)
+                    allCb.checked = unlockableForThisPlayer.forall(enabledFactions(i).contains)
                     allCb.style.cssText = "margin:0;cursor:pointer;"
                     allLbl.appendChild(newDiv("", "All"))
                     allLbl.appendChild(allCb)
                     cbWrap.appendChild(allLbl)
 
-                    val entryCbs = scala.collection.mutable.ArrayBuffer[(PickerEntry, html.Input)]()
-                    altPickerEntries.foreach { e =>
-                        val lockedElsewhere = lockedFactions.contains(e.faction) && locked(e.faction) != i
+                    val factionCbs = scala.collection.mutable.ArrayBuffer[(Faction, html.Input)]()
+                    allFactions.foreach { f =>
+                        val lockedElsewhere = lockedFactions.contains(f) && locked(f) != i
                         val lbl = dom.document.createElement("label").asInstanceOf[html.Label]
                         lbl.style.cssText =
                             "display:inline-flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5pt;color:#8c95a0;" +
@@ -5008,36 +4411,38 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                         // Glyph image instead of acronym text.
                         val glyph = dom.document.createElement("img").asInstanceOf[html.Image]
-                        glyph.src = entryGlyphSrc(e)
-                        glyph.alt = e.short
+                        glyph.src = glyphSrc(f)
+                        glyph.alt = f.short
                         glyph.style.cssText = "width:32px;height:32px;object-fit:contain;"
-                        glyph.title = e.label
+                        glyph.title = f.full
 
                         val cb = dom.document.createElement("input").asInstanceOf[html.Input]
                         cb.`type` = "checkbox"
-                        cb.checked = enabledEntries(i).contains(e) && !lockedElsewhere
+                        cb.checked = enabledFactions(i).contains(f) && !lockedElsewhere
                         cb.disabled = lockedElsewhere
                         cb.style.cssText = "margin:0;cursor:" + (if (lockedElsewhere) "not-allowed" else "pointer") + ";"
                         cb.onchange = (_) => {
-                            if (cb.checked) enabledEntries(i) += e else enabledEntries(i) -= e
+                            if (cb.checked) enabledFactions(i) += f else enabledFactions(i) -= f
                             render()  // re-cascade
                         }
                         lbl.appendChild(glyph)
                         lbl.appendChild(cb)
                         cbWrap.appendChild(lbl)
-                        entryCbs += ((e, cb))
+                        factionCbs += ((f, cb))
                     }
                     allCb.onchange = (_) => {
                         // [2026-05-23] All-toggle has clean semantics now:
-                        //   ON  → enabledEntries(i) = altPickerEntries minus those
-                        //         whose Faction is locked to OTHER players.
-                        //   OFF → enabledEntries(i) = empty.
-                        // Never touches any other player's set.
-                        enabledEntries(i).clear()
+                        //   ON  → enabledFactions(i) = allFactions minus those
+                        //         locked to OTHER players (their lock wins).
+                        //   OFF → enabledFactions(i) = empty.
+                        // Never touches any other player's set. The locked-
+                        // elsewhere check guarantees that flipping All on player
+                        // B cannot dislodge player A's single-faction lock.
+                        enabledFactions(i).clear()
                         if (allCb.checked) {
-                            altPickerEntries.foreach { e =>
-                                if (!lockedFactions.contains(e.faction) || locked(e.faction) == i)
-                                    enabledEntries(i) += e
+                            allFactions.foreach { f =>
+                                if (!lockedFactions.contains(f) || locked(f) == i)
+                                    enabledFactions(i) += f
                             }
                         }
                         render()
@@ -5046,100 +4451,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     row.appendChild(cbWrap)
                     root.appendChild(row)
                 }
-
-                // [2026-06-15] Random Neutrals section. Three checkbox+count
-                // rows under a small heading, one each for Monsters / Terrors /
-                // iGOOs.
-                var rnHardBlock = false
-                val rnHeading = dom.document.createElement("div").asInstanceOf[html.Div]
-                rnHeading.style.cssText = "margin-top:14px;font-size:12pt;font-weight:600;color:#fff;border-top:1px solid #2a2e36;padding-top:10px;"
-                rnHeading.innerHTML = "Random Neutrals"
-                root.appendChild(rnHeading)
-
-                def renderRandRow(
-                    label : String,
-                    poolSize : Int,
-                    getEnabled : () => Boolean,
-                    setEnabled : Boolean => Unit,
-                    getCount : () => Int,
-                    setCount : Int => Unit
-                ) {
-                    val r = dom.document.createElement("div").asInstanceOf[html.Div]
-                    r.style.cssText = "padding:6px 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"
-                    val cb = dom.document.createElement("input").asInstanceOf[html.Input]
-                    cb.`type` = "checkbox"
-                    cb.checked = getEnabled()
-                    cb.style.cssText = "margin:0;cursor:pointer;"
-                    val lbl = dom.document.createElement("label").asInstanceOf[html.Label]
-                    lbl.style.cssText = "color:#e6edf3;font-size:10.5pt;cursor:pointer;"
-                    lbl.innerHTML = label + " (from " + poolSize + " total)"
-                    lbl.onclick = (_) => { cb.checked = !cb.checked; setEnabled(cb.checked); render() }
-                    cb.onchange = (_) => { setEnabled(cb.checked); render() }
-
-                    val stepWrap = dom.document.createElement("div").asInstanceOf[html.Div]
-                    stepWrap.style.cssText = "display:inline-flex;align-items:center;gap:0;border:1px solid #30363d;border-radius:5px;background:#0d1117;overflow:hidden;"
-
-                    val btnStyle =
-                        "padding:4px 10px;background:#161b22;color:#e6edf3;border:none;" +
-                        "cursor:pointer;font-family:inherit;font-size:11pt;font-weight:600;" +
-                        "user-select:none;line-height:1;"
-
-                    val downBtn = dom.document.createElement("button").asInstanceOf[html.Button]
-                    downBtn.`type` = "button"
-                    downBtn.innerHTML = "&#9660;"  // down arrow
-                    downBtn.style.cssText = btnStyle
-                    downBtn.title = "Decrease"
-                    downBtn.onclick = (_) => {
-                        val n = math.max(0, getCount() - 1)
-                        setCount(n)
-                        if (n <= 0) setEnabled(false)
-                        render()
-                    }
-
-                    val valSpan = dom.document.createElement("span").asInstanceOf[html.Span]
-                    valSpan.style.cssText = "min-width:32px;padding:4px 8px;text-align:center;color:#e6edf3;font-family:inherit;font-size:10.5pt;background:#0d1117;border-left:1px solid #30363d;border-right:1px solid #30363d;"
-                    valSpan.innerHTML = getCount().toString
-
-                    val upBtn = dom.document.createElement("button").asInstanceOf[html.Button]
-                    upBtn.`type` = "button"
-                    upBtn.innerHTML = "&#9650;"  // up arrow
-                    upBtn.style.cssText = btnStyle
-                    upBtn.title = "Increase"
-                    upBtn.onclick = (_) => {
-                        val n = math.min(poolSize, getCount() + 1)
-                        setCount(n)
-                        render()
-                    }
-
-                    stepWrap.appendChild(downBtn)
-                    stepWrap.appendChild(valSpan)
-                    stepWrap.appendChild(upBtn)
-
-                    r.appendChild(cb)
-                    r.appendChild(lbl)
-                    r.appendChild(stepWrap)
-                    if (getEnabled()) {
-                        val n = getCount()
-                        if (n >= poolSize) {
-                            val warn = dom.document.createElement("span").asInstanceOf[html.Span]
-                            warn.style.cssText = "color:#f85149;font-size:10pt;font-weight:600;"
-                            warn.innerHTML = "Only " + poolSize + " units available, choose a number less than " + poolSize
-                            r.appendChild(warn)
-                            rnHardBlock = true
-                        }
-                    }
-                    root.appendChild(r)
-                }
-
-                renderRandRow("Monsters", randMonsterPool.num,
-                    () => randMonsters, v => randMonsters = v,
-                    () => randMonsterCount, v => randMonsterCount = v)
-                renderRandRow("Terrors", randTerrorPool.num,
-                    () => randTerrors, v => randTerrors = v,
-                    () => randTerrorCount, v => randTerrorCount = v)
-                renderRandRow("iGOOs", randIGOOPool.num,
-                    () => randIGOOs, v => randIGOOs = v,
-                    () => randIGOOCount, v => randIGOOCount = v)
 
                 // Randomize-order row
                 val rndRow = dom.document.createElement("div").asInstanceOf[html.Div]
@@ -5158,7 +4469,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 root.appendChild(rndRow)
 
                 // Feasibility warning + button row
-                val feasible = isFeasible() && !rnHardBlock
+                val feasible = isFeasible()
                 if (!feasible) {
                     val warn = dom.document.createElement("div").asInstanceOf[html.Div]
                     warn.style.cssText = "color:#f85149;font-weight:600;font-size:11pt;margin-top:10px;"
@@ -5200,7 +4511,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         // first, then if randomizeOrder is on pick a valid
                         // seating and reorder the PAIRS so the factions match
                         // it (carrying each player name with its faction).
-                        val bbAlt = bbAltForAssignment(picked)
                         val pairs : $[(String, Faction)] =
                             picked.zipWithIndex.map { case (f, idx) => (playerNames(idx), f) }
                         val orderedPairs : $[(String, Faction)] =
@@ -5212,11 +4522,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     chosen.map(f => pairs.find(_._2 == f).get)
                                 } else pairs
                             } else pairs
-                        showConfirmation(orderedPairs, bbAlt)
+                        showConfirmation(orderedPairs)
                 }
             }
 
-            def showConfirmation(ordered : $[(String, Faction)], bbAlt : Boolean) {
+            def showConfirmation(ordered : $[(String, Faction)]) {
                 clear(actionDiv)
                 val box = dom.document.createElement("div").asInstanceOf[html.Div]
                 // [2026-05-23] Per user: each player is centered, name above
@@ -5235,13 +4545,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     nm.innerHTML = name
                     block.appendChild(nm)
                     val gImg = dom.document.createElement("img").asInstanceOf[html.Image]
-                    // [2026-06-02] §3.13.3: confirmation screen mirrors the
-                    // picker glyph — when BB-alt was the chosen entry, show
-                    // the homebrew glyph here too.
-                    gImg.src = if (f == BB && bbAlt) "webp/images/bb-glyph-hb.webp" else glyphSrc(f)
-                    val labelTxt = if (f == BB && bbAlt) f.full + " (alt SBs)" else f.full
-                    gImg.alt = labelTxt
-                    gImg.title = labelTxt
+                    gImg.src = glyphSrc(f)
+                    gImg.alt = f.full
+                    gImg.title = f.full
                     gImg.style.cssText = "width:64px;height:64px;object-fit:contain;"
                     block.appendChild(gImg)
                     box.appendChild(block)
@@ -5255,29 +4561,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 cont.onclick = (_) => {
                     restoreOtherSections()
                     clear(actionDiv)
-                    // [2026-06-15] Arm Random Neutrals closure (consumed by
-                    // startSetup / startOnlineSetup right after they create
-                    // their local Setup). For each enabled category, shuffle
-                    // the pool, take the requested count, add umbrella +
-                    // picks to setup.options.
-                    pendingRandomNeutrals = Some({ setup =>
-                        if (randMonsters && randMonsterCount > 0) {
-                            val picks = scala.util.Random.shuffle(randMonsterPool.toList).take(randMonsterCount)
-                            setup.options = (setup.options.notOf[NeutralMonsterOption]).but(NeutralMonsters)
-                            setup.options ++= (NeutralMonsters +: picks)
-                        }
-                        if (randTerrors && randTerrorCount > 0) {
-                            val picks = scala.util.Random.shuffle(randTerrorPool.toList).take(randTerrorCount)
-                            setup.options = (setup.options.notOf[NeutralTerrorOption]).but(NeutralTerrors)
-                            setup.options ++= (NeutralTerrors +: picks)
-                        }
-                        if (randIGOOs && randIGOOCount > 0) {
-                            val picks = scala.util.Random.shuffle(randIGOOPool.toList).take(randIGOOCount)
-                            setup.options = (setup.options.notOf[IGOOOption]).but(IGOOs)
-                            setup.options ++= (IGOOs +: picks)
-                        }
-                    })
-                    onContinue(ordered.map(_._2), bbAlt)
+                    onContinue(ordered.map(_._2))
                 }
                 val backBtn = dom.document.createElement("button").asInstanceOf[html.Button]
                 backBtn.innerHTML = "Back to picker"
@@ -5326,16 +4610,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     val targetPath =
                         if (curPath.startsWith("/mnu/play/")) "/mnu/play/" + hash
                         else if (curPath.startsWith("/mnu/")) "/mnu/play/" + hash
-                        else if (curPath.startsWith("/TchoTcho/play/")) "/TchoTcho/play/" + hash
-                        else if (curPath.startsWith("/TchoTcho/")) "/TchoTcho/play/" + hash
-                        else if (curPath.startsWith("/BB/play/")) "/BB/play/" + hash
-                        else if (curPath.startsWith("/BB/")) "/BB/play/" + hash
                         else "/play/" + hash
                     val needsRewrite =
                         !curPath.startsWith("/play/") &&
-                        !curPath.startsWith("/mnu/play/") &&
-                        !curPath.startsWith("/TchoTcho/play/") &&
-                        !curPath.startsWith("/BB/play/")
+                        !curPath.startsWith("/mnu/play/")
                     if (needsRewrite)
                         dom.window.history.pushState("initilaize", "", targetPath)
                 }
@@ -5350,10 +4628,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                         val oldVersion = logs(0)
                         if (oldVersion != version)
-                            // Purely informational — game's recorded build version doesn't match the
-                            // current build because a new version shipped while the game was in flight.
-                            // NOT an error. The `oldVersion @@ {...}` block below handles migration.
-                            log("Game version updated mid-game (was " + oldVersion.hl + ")")
+                            log("Incorrect game version: " + oldVersion.hl)
 
                         oldVersion @@ {
                             case "Cthulhu Wars Solo HRF 1.8"
@@ -5382,7 +4657,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         // body mid-write the persisted log can have only 2 lines, and the
                         // logs(2) read further down will throw IndexOutOfBoundsException.
                         // Show a clear page-level error instead of an uncaught throw so the
-                        // owner can act (recreate the game).
+                        // owner can act (delete the broken game in the admin console).
                         if (logs.size < 3) {
                             val err = dom.document.createElement("div")
                             err.asInstanceOf[html.Element].setAttribute("style",
@@ -5393,7 +4668,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 "<b>Game log header is incomplete.</b><br/>" +
                                 "Only " + logs.size + " of the required 3 header lines were written. " +
                                 "This game was created but lost data mid-write and cannot be loaded.<br/><br/>" +
-                                "This game is unrecoverable and will need to be recreated."
+                                "Use the admin console at /admin.html to delete the broken game " +
+                                "(its game id and master secret are visible there)."
                             dom.document.body.appendChild(err)
                             return
                         }
@@ -5545,7 +4821,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 val opts = (("Alt faction picker".hl) +: combinations./(_.mkString(", "))./(smaller).toList) :+ "Back"
                                 ask("Choose factions", opts, n2 => {
                                     if (n2 == 0)
-                                        altFactionPicker(pn, (fs, bbAlt) => startOnlineSetup(fs, bbAlt))
+                                        altFactionPicker(pn, startOnlineSetup)
                                     else if (n2 - 1 < combinations.num)
                                         startOnlineSetup(combinations(n2 - 1))
                                     else
@@ -5587,13 +4863,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             "Back"
                         ), { _ => topMenu() })
                     case 6 =>
-                        // "Beta builds" — links to all other builds.
-                        // Colors: TT=faction pink, BB=faction gold, MNU=light grey, HB=rainbow per-letter
+                        // "Beta builds" — same menu in the MNU build. Link points back to root.
                         ask("Beta builds", $(
                             "<a href='/' target='_blank'><div>Library at Celaeno (main)</div></a>",
-                            "<a href='/mnu/' target='_blank'><div><span style='color:#b8b8b8'>More Neutral Units (MNU)</span></div></a>",
-                            "<a href='/TchoTcho/' target='_blank'><div><span style='color:#fc9ca0'>TchoTcho</span></div></a>",
-                            "<a href='/HB/' target='_blank'><div><span style='color:#ff4444'>H</span><span style='color:#ff8c00'>o</span><span style='color:#ffd700'>m</span><span style='color:#44cc44'>e</span><span style='color:#4488ff'>b</span><span style='color:#8844ff'>r</span><span style='color:#cc44cc'>e</span><span style='color:#ff4444'>w</span></div></a>",
                             "Cancel"
                         ), { _ => topMenu() })
                     case 5 =>
