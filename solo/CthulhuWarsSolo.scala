@@ -954,19 +954,19 @@ object CthulhuWarsSolo {
                 }
 
                 val neutralTint = faction @@ {
-                    case GC => Processing(|("#77a055"), |("#87c653"), None)
-                    case CC => Processing(|("#4977b3"), |("#5385c6"), None)
-                    case BG => Processing(|("#cd3233"), |("#d24747"), None)
-                    case YS => Processing(|("#ffd000"), |("#ffd51a"), None)
-                    case WW => Processing(|("#88a9be"), |("#5399c6"), None)
-                    case SL => Processing(|("#db6a33"), |("#dd713c"), None)
-                    case OW => Processing(|("#6c4296"), |("#8c53c6"), None)
-                    case AN => Processing(|("#47a5bc"), |("#53afc6"), None)
-                    case TS => Processing(|("#BDE0BC"), |("#56c653"), None)
-                    case FB => Processing(|("#CB307E"), |("#d3458d"), None)
-                    case DS => Processing(|("#3A2825"), |("#c66353"), None)
-                    case TT => Processing(|("#fc9ca0"), |("#f82029"), None)
-                    case BB => Processing(|("#c8a84b"), |("#c9aa4f"), None)
+                    case GC => Processing(|("#77a055"), |("#444444"), None)
+                    case CC => Processing(|("#4977b3"), |("#444444"), None)
+                    case BG => Processing(|("#cd3233"), None, |("#555555"))
+                    case YS => Processing(|("#ffd000"), |("#444444"), None)
+                    case WW => Processing(|("#88a9be"), |("#444444"), None)
+                    case SL => Processing(|("#db6a33"), |("#444444"), None)
+                    case OW => Processing(|("#6c4296"), None, |("#555555"))
+                    case AN => Processing(|("#47a5bc"), |("#444444"), None)
+                    case TS => Processing(|("#BDE0BC"), |("#444444"), None)
+                    case FB => Processing(|("#CB307E"), |("#444444"), None)
+                    case DS => Processing(|("#3A2825"), None, |("#333333"))
+                    case TT => Processing(|("#f9c2c5"), |("#aaaaaa"), None)
+                    case BB => Processing(|("#c8a84b"), |("#444444"), None)
                     case _  => defaultProcessing
                 }
 
