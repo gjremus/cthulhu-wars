@@ -1108,6 +1108,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                sides.foreach(_.forces.foreach(u => u.health = Alive))
                 sides.foreach(_.forces.foreach(_.remove(Retreated)))
                 sides.foreach(_.forces.foreach(_.remove(Zeroed)))
 
