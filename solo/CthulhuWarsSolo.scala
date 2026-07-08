@@ -103,7 +103,7 @@ object CthulhuWarsSolo {
 
     def getAsset(k : String) : html.Image = dom.document.getElementById(k).asInstanceOf[html.Image]
 
-    case class Processing(tint : |[String], screen : |[String], overlay : |[String]) extends GoodMatch
+    case class Processing(tint : |[String], screen : |[String], overlay : |[String], multiply : |[String] = None) extends GoodMatch
 
     def getTintedAsset(k : String, processing : Processing) : html.Canvas = {
         val source = dom.document.getElementById(k).asInstanceOf[html.Image]
@@ -126,6 +126,12 @@ object CthulhuWarsSolo {
         processing.overlay.foreach { overlay =>
             result.context.fillStyle = overlay
             result.context.globalCompositeOperation = "overlay"
+            result.context.fillRect(0, 0, source.width, source.height)
+        }
+
+        processing.multiply.foreach { multiply =>
+            result.context.fillStyle = multiply
+            result.context.globalCompositeOperation = "multiply"
             result.context.fillRect(0, 0, source.width, source.height)
         }
 
@@ -884,7 +890,10 @@ object CthulhuWarsSolo {
             // Pick a sub-rectangle weighted by its area pct, sample a candidate inside it
             // via GlyphPlacement.findAnotherInBox. Falls back to the standard find if the
             // region has no partition entry for the current board.
-            def findWeighted(ox : Int, oy : Int, r : Region) : (Int, Int) = {
+            // `isH` parameter: true when the active placement bitmap is horizontal,
+            // so LtPartitions coordinates (always in vertical bitmap space) get
+            // transformed to horizontal before sampling.
+            def findWeighted(ox : Int, oy : Int, r : Region, isH : Boolean) : (Int, Int) = {
                 LtPartitions.get((board.id, r.name)) match {
                     case Some(parts) =>
                         val totalPct = parts.map(_._5).sum
@@ -897,7 +906,15 @@ object CthulhuWarsSolo {
                             else i += 1
                         }
                         val (x1, y1, x2, y2, _) = chosen
-                        activeGlyphPlacer.findAnotherInBox(ox, oy, x1, y1, x2, y2)
+                        // LtPartitions coordinates are in vertical bitmap space.
+                        // Transform to horizontal when the active placer is the H bitmap.
+                        val (hx1, hy1, hx2, hy2) = if (isH && board.isLibraryMap) {
+                            if (y1 < 1792)
+                                (x1 + 1791, y1, x2 + 1791, y2)   // upper floor → RIGHT side
+                            else
+                                (x1, y1 - 1792, x2, y2 - 1792)   // lower floor → LEFT side
+                        } else (x1, y1, x2, y2)
+                        activeGlyphPlacer.findAnotherInBox(ox, oy, hx1, hy1, hx2, hy2)
                     case None => activeGlyphPlacer.findAnother(ox, oy)
                 }
             }
@@ -924,6 +941,21 @@ object CthulhuWarsSolo {
                     case DS => Processing(|("#3A2825"), None, |("#120E0C"))
                     // Library map units: no tint (use original icon images)
                     case LibraryFaction => defaultProcessing
+                    case _  => defaultProcessing
+                }
+
+                val neutralTint = faction @@ {
+                    case GC => Processing(|("#77a055"), |("#222222"), None)
+                    case CC => Processing(|("#4977b3"), |("#111111"), None)
+                    case BG => Processing(|("#cd3233"), None, |("#555555"))
+                    case YS => Processing(|("#ffd000"), |("#663344"), None)
+                    case WW => Processing(|("#88a9be"), |("#5577aa"), None)
+                    case SL => Processing(|("#db6a33"), |("#4a1a1a"), None)
+                    case OW => Processing(|("#6c4296"), None, |("#4c4c4c"))
+                    case AN => Processing(|("#47a5bc"), |("#333333"), None)
+                    case TS => Processing(|("#BDE0BC"), |("#333333"), None)
+                    case FB => Processing(|("#CB307E"), |("#333333"), None)
+                    case DS => Processing(|("#3A2825"), None, |("#120E0C"))
                     case _  => defaultProcessing
                 }
 
@@ -1054,24 +1086,24 @@ object CthulhuWarsSolo {
                     case Cathedral        => DrawRect("an-cathedral", None, x - 39, y - 90, 78, 110)
                     case ChaosGate        => DrawRect("gate", |(Processing(|("#3C2E18"), None, |("#130E08"))), x - 38, y - 38, 76, 76)
 
-                    case Ghast         => DrawRect("n-ghast", |(tint), x - 17, y - 53, 35, 59)
-                    case Gug           => DrawRect("n-gug", |(tint), x - 36, y - 78, 73, 90)
-                    case Shantak       => DrawRect("n-shantak", |(tint), x - 39, y - 89, 79, 100)
-                    case StarVampire   => DrawRect("n-star-vampire", |(tint), x - 35, y - 75, 70, 85)
-                    case Voonith       => if (region != null) DrawRect("n-voonith", |(tint), x - 35, y - 75, 70, 85)
-                                          else DrawRect("n-voonith", |(tint), x - 22, y - 52, 45, 57)
-                    case DimensionalShamblerUnit => if (region != null) DrawRect("n-dimensional-shambler", |(tint), x - 35, y - 75, 70, 85)
-                                                    else DrawRect("n-dimensional-shambler", |(tint), x - 29, y - 60, 58, 70)
-                    case Gnorri            => if (region != null) DrawRect("n-gnorri", |(tint), x - 50, y - 90, 100, 100)
-                                              else DrawRect("n-gnorri", |(tint), x - 30, y - 54, 60, 60)
-                    case Ygolonac      => DrawRect("n-ygolonac", |(tint), x - 37, y - 90, 75, 100)
-                    case Byatis        => DrawRect("n-byatis", |(tint), x - 47, y - 90, 95, 90)
-                    case Abhoth        => DrawRect("n-abhoth", |(tint), x - 47, y - 110, 95, 120)
-                    case Filth         => DrawRect("n-filth", |(tint), x - 20, y - 20, 40, 40)
-                    case Daoloth       => DrawRect("n-daoloth", |(tint), x - 59, y - 91, 118, 99)
-                    case Nyogtha       => DrawRect("n-nyogtha", |(tint), x - 40, y - 69, 81, 80)
-                    case Tulzscha         => if (region != null) DrawRect("n-tulzscha", |(tint), x - 69, y - 127, 137, 137)
-                                             else DrawRect("n-tulzscha", |(tint), x - 50, y - 90, 100, 100)
+                    case Ghast         => DrawRect("n-ghast", |(neutralTint), x - 17, y - 53, 35, 59)
+                    case Gug           => DrawRect("n-gug", |(neutralTint), x - 36, y - 78, 73, 90)
+                    case Shantak       => DrawRect("n-shantak", |(neutralTint), x - 39, y - 89, 79, 100)
+                    case StarVampire   => DrawRect("n-star-vampire", |(neutralTint), x - 35, y - 75, 70, 85)
+                    case Voonith       => if (region != null) DrawRect("n-voonith", |(neutralTint), x - 35, y - 75, 70, 85)
+                                          else DrawRect("n-voonith", |(neutralTint), x - 22, y - 52, 45, 57)
+                    case DimensionalShamblerUnit => if (region != null) DrawRect("n-dimensional-shambler", |(neutralTint), x - 35, y - 75, 70, 85)
+                                                    else DrawRect("n-dimensional-shambler", |(neutralTint), x - 29, y - 60, 58, 70)
+                    case Gnorri            => if (region != null) DrawRect("n-gnorri", |(neutralTint), x - 50, y - 90, 100, 100)
+                                              else DrawRect("n-gnorri", |(neutralTint), x - 30, y - 54, 60, 60)
+                    case Ygolonac      => DrawRect("n-ygolonac", |(neutralTint), x - 37, y - 90, 75, 100)
+                    case Byatis        => DrawRect("n-byatis", |(neutralTint), x - 47, y - 90, 95, 90)
+                    case Abhoth        => DrawRect("n-abhoth", |(neutralTint), x - 47, y - 110, 95, 120)
+                    case Filth         => DrawRect("n-filth", |(neutralTint), x - 20, y - 20, 40, 40)
+                    case Daoloth       => DrawRect("n-daoloth", |(neutralTint), x - 59, y - 91, 118, 99)
+                    case Nyogtha       => DrawRect("n-nyogtha", |(neutralTint), x - 40, y - 69, 81, 80)
+                    case Tulzscha         => if (region != null) DrawRect("n-tulzscha", |(neutralTint), x - 69, y - 127, 137, 137)
+                                             else DrawRect("n-tulzscha", |(neutralTint), x - 50, y - 90, 100, 100)
 
                     case GhastIcon        => DrawRect("ghast-icon", None, x - 17, y - 55, 50, 50)
                     case GugIcon          => DrawRect("gug-icon", None, x - 17, y - 55, 50, 50)
@@ -2000,7 +2032,7 @@ object CthulhuWarsSolo {
                         // regions use the standard uniform find().
                         val partitioned = board.isLibraryMap && LtPartitions.contains((board.id, r.name))
                         val candidates = Array.tabulate(candidateCount)(n =>
-                            if (partitioned) findWeighted(px, py, r) else find(px, py)
+                            if (partitioned) findWeighted(px, py, r, horizontal) else find(px, py)
                         ).sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }
                             .map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y) }
 
@@ -2309,7 +2341,7 @@ object CthulhuWarsSolo {
                         >${full}</div>"""
                     f.can(sb).?(d).|(d.styled("used"))
                 }.mkString("") +
-                (1.to(6 - f.spellbooks.num - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") +
+                (1.to(6 - f.spellbooks.count(f.library.contains) - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") +
                 f.unfulfilled./{ r =>
                     val s = r.text.replace("\\", "\\\\").replace("'", "&#39;") // "
                     val d = s"""<div class='spellbook'
@@ -2386,11 +2418,16 @@ object CthulhuWarsSolo {
                     onclick='event.stopPropagation(); onExternalClick("${f.short}")'
                     onpointerover='event.stopPropagation(); onExternalOver("${f.short}")'
                     onpointerout='event.stopPropagation(); onExternalOut("${f.short}")'
+                    style='position:relative; z-index:2;'
                     >${div("top")(s) + sb + lcis}</div>"""
 
                 val bitmap = b.get(w, h)
 
                 bitmap.canvas.style.pointerEvents = "none"
+                bitmap.canvas.style.position = "absolute"
+                bitmap.canvas.style.top = "0"
+                bitmap.canvas.style.left = "0"
+                bitmap.canvas.style.zIndex = "1"
                 bitmap.canvas.style.width = "" + b.node.clientWidth + "px"
                 bitmap.canvas.style.height = "" + b.node.clientHeight + "px"
 
@@ -3104,6 +3141,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 def post() {
                                     if (position == actions.num) {
                                         hrf.web.postF(server + "write/" + hash + "/" + (position + 3), serializer.write(a.unwrap)) { _ =>
+                                            stopBackgroundCheck()
+
                                             queue :+= UIRead(g)
 
                                             startUI()
@@ -3111,6 +3150,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                             if (position == actions.num) {
                                                 hrf.web.getF(server + "read/" + hash + "/" + (position + 3)) { ll =>
                                                     if (ll.splt("\n").but("").any) {
+                                                        stopBackgroundCheck()
+
                                                         queue :+= UIRead(g)
 
                                                         startUI()
