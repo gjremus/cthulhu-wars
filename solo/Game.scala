@@ -4189,6 +4189,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
             barrierPaid = false
 
+            if (f.at(r).none) {
+                return AfterAction(self)
+            }
+
             // Round 8 Bug 60: snapshot FB.power BEFORE the 1-power attack cost is deducted,
             // so Ghatanothoa's combat strength uses the pre-battle power (not post-cost).
             // The original snapshot was in ProceedBattlesAction (line ~2570), but that runs
@@ -4234,7 +4238,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             queue = queue.drop(1)
 
-            if (game.nexed.any) {
+            if (game.nexed.any && game.nexed.has(battle.get.arena)) {
                 game.nexed = $
 
                 battle.get.attacker.log("proceeded to battle", battle.get.defender, "in", battle.get.arena)
