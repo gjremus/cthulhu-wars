@@ -3715,6 +3715,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     if (sbOwed.any) {
                                         val f = sbOwed(0)
                                         val effectiveLibrary = f.library.map { sb => (f, sb) match {
+                                            case (DS, Traitors) if game.options.has(DSAlternateSpellbooks) => Omnipotence
+                                            case (DS, FiendishGrowth) if game.options.has(DSAlternateSpellbooks) => FiendishSpawn
+                                            case (DS, UndirectedEnergy) if game.options.has(DSAlternateSpellbooks) => DirectedEnergy
+                                            case (SL, EnergyNexus) if game.options.has(SleeperEnergyNexusPreBattle) => EnergyNexusPB
                                             case (BB, Catabolism)   if game.options.has(BBAlternateSpellbooks) => Syzygy
                                             case (BB, Ailurophobia) if game.options.has(BBAlternateSpellbooks) => Carnivore
                                             case _ => sb
