@@ -3303,20 +3303,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // SPELLBOOK
         case CheckSpellbooksAction(next) =>
-            // Bubastis (BB): check auto-satisfiable requirements
-            if (factions.has(BB)) {
-                BB.satisfyIf(NoEarthCatsOnMoon,        "No Earth Cats on the Moon",                   BB.at(BB.moon).%(_.uclass == EarthCat).none)
-                val catInEveryStart = factions.but(BB).forall(e => starting.get(e).exists(r => BB.at(r).%(u => u.uclass == EarthCat || u.uclass == CatFromMars || u.uclass == CatFromSaturn || u.uclass == CatFromUranus).any))
-                if (BB.needs(CatInEveryEnemyStart) && catInEveryStart) {
-                    val bonus = factions.but(BB).num
-                    BB.satisfy(CatInEveryEnemyStart, "A Cat in every enemy faction's Start Area")
-                    if (bonus > 0) {
-                        BB.power += bonus
-                        BB.log("gained", bonus.power, "(Cat in every Start Area bonus)")
-                    }
-                }
-            }
-
             val fs = factions.%(f => f.unfulfilled.num + f.spellbooks.num < f.library.num)
             val fe = factions.%(f => f.es.%(_.value == 0).any)
 

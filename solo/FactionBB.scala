@@ -200,6 +200,20 @@ case class Pay2ForBBAction(self : Faction)
 // BUBASTIS (BB) EXPANSION — game-loop integration
 // ============================================================================
 object BBExpansion extends Expansion {
+    override def afterAction()(implicit game : Game) {
+        if (!game.setup.has(BB)) return
+        BB.satisfyIf(NoEarthCatsOnMoon, "No Earth Cats on the Moon", BB.at(BB.moon).%(_.uclass == EarthCat).none)
+        val catInEveryStart = game.factions.but(BB).forall(e => game.starting.get(e).exists(r => BB.at(r).%(u => u.uclass == EarthCat || u.uclass == CatFromMars || u.uclass == CatFromSaturn || u.uclass == CatFromUranus).any))
+        if (BB.needs(CatInEveryEnemyStart) && catInEveryStart) {
+            val bonus = game.factions.but(BB).num
+            BB.satisfy(CatInEveryEnemyStart, "A Cat in every enemy faction's Start Area")
+            if (bonus > 0) {
+                BB.power += bonus
+                BB.log("gained", bonus.power, "(Cat in every Start Area bonus)")
+            }
+        }
+    }
+
     override def eliminate(u : UnitFigure)(implicit game : Game) {
         if (!game.setup.has(BB)) return
         if (u.faction == BB) {
