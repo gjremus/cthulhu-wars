@@ -920,68 +920,12 @@ class Player(private val f : Faction)(implicit game : Game) {
     }
 
     def place(uc : UnitClass, r : Region) {
-        // Bubastis Moon Guard (Fix 45, v2.4.13): non-BB factions may NEVER place
-        // any unit, building, or gate-equivalent on the Moon. The ONLY way for a
-        // non-BB unit to enter the Moon is BB's Catnapping action (which writes
-        // u.region = BB.moon directly in FactionBB.scala — it does not go
-        // through this place() chokepoint). This guard is defense-in-depth:
-        // every destination-list filter (areas, board.connected, summonRegions,
-        // game.gates) already excludes Moon for non-BB callers, but if a future
-        // ability accidentally lets Moon slip through, this stops it cold.
-        // Also blocks Yog-Sothoth gate-stacking, Cathedrals, Chaos Gates, Craters,
-        // Pyramids (when added), Glaciers, Worms of Groth, Insects from Shaggai,
-        // Mother Hydra Acolytes (Zygote), Hounds, Moonbeasts, etc. on Moon.
-        // Exception: OW with TheyBreakThrough may summon to Moon (faction power).
-        // Exception: BG Avatar (BB Fix 71, v2.4.29) — Shub-Niggurath may avatar
-        // to the Moon, and may avatar off the Moon with ANY unit (the swap-
-        // target moves to the Moon during the swap). Avatar is unrestricted
-        // with regards to moon access. Detected via game.bgInAvatar transient
-        // flag set in FactionBG.AvatarAction.
-        // Exception: AN Dematerialization (BB Fix, v2.4.29) — AN may
-        // dematerialize a unit onto the Moon. Detected via
-        // game.anInDematerialize transient flag set in
-        // FactionAN.DematerializationMoveUnitAction.
-        // Exception: Dimensional Shambler deploy (BB Fix, v2.4.29) — ANY
-        // faction's Shambler may deploy to the Moon. Detected via
-        // game.shamblerInDeploy transient flag set in
-        // NeutralMonsters.ShamblerDeployAction.
-        // Exception: GC Unsubmerge (BB Bullet 50, v2.4.29) — Great Cthulhu
-        // may unsubmerge from the deep onto the Moon (the Moon is adjacent
-        // to all regions for arrival purposes; GC's submerged court resides
-        // off-map and may surface anywhere). Detected via game.gcInUnsubmerge
-        // transient flag set in FactionGC.UnsubmergeAction.
-        // Exception: Undimensioned (BB Fix 77, v2.4.30) — any faction may
-        // rearrange a unit onto the Moon via Undimensioned, but only if the
-        // faction already has at least one unit on the Moon (the destination-
-        // list filter at NeutralSpellbooks.scala enforces the eligibility;
-        // this flag carves the place() guard exception). Detected via
-        // game.undimensionedInPlay transient flag.
-        // Exception: Insects from Shaggai initial deploy (BB Fix 80, v2.4.30)
-        // — the loyalty-card deploy step explicitly allows placement in any
-        // Area for any faction, which includes the Moon. Detected via
-        // game.insectsInDeploy transient flag set in NeutralMonsters.scala.
-        // Exception: Ghosts of Ib (BB Fix 86, v2.4.31) — Bokrug's doom-phase
-        // placement may target the Moon (Moon counts as a valid "Area" for
-        // Ghosts of Ib). Detected via game.ghostsInPlace transient flag set
-        // in IGOOs.scala GhostsOfIbChooseAction.
-        // Exception: Byatis God of Forgetfulness (BB Fix 87, v2.4.31) — when
-        // Byatis is on the Moon, cultists/EarthCats forgotten there land on
-        // the Moon. Detected via game.byatisInForgetfulness transient flag
-        // set in IGOOs.scala GodOfForgetfulnessAction.
-        if (f != BB && !(f == OW && f.can(TheyBreakThrough)) && !(f == BG && game.bgInAvatar) && !(f == AN && game.anInDematerialize) && !game.shamblerInDeploy && !(f == GC && game.gcInUnsubmerge) && !game.undimensionedInPlay && !game.insectsInDeploy && !game.ghostsInPlace && !game.byatisInForgetfulness && !game.tsInDeathMarch && r == BB.moon) {
-            f.log("placement of", uc.styled(f), "on", BB.moon, "blocked: only BB units may enter the Moon (Catnapping is the sole exception, and OW after They Break Through)")
+        if (f != BB && r == BB.moon && (uc.utype == Token || uc.utype == Building || uc.utype == MapUnit)) {
+            f.log("placement of", uc.styled(f), "on", BB.moon, "blocked: non-BB factions may not place tokens, buildings, or map objects on the Moon")
         }
         else {
             val u = f.pool(uc).first
             u.region = r
-            // Universal CG trigger — single chokepoint for all placements. Any
-            // non-FB placement of a non-Building unit into a region with an FB
-            // Revenant or Ghatanothoa must register the region for CG dispatch.
-            // Covers: SummonAction, AwakenAction, RecruitAction (via Game.scala),
-            // StartAction's initial acolyte placement (skipped — FB check guards),
-            // plus every expansion that calls `self.place(...)` directly
-            // (BG Avatar's replacement, AN Cathedral/Festival, YS Screaming Dead,
-            // TS Undulate/Hecatomb, SL Lethargy, etc.).
             if (f != FB && uc.utype != Building &&
                 game.fbHasCGActive &&
                 FB.units.exists(u => u.region == r && (u.uclass == RevenantOfKnaa || u.uclass == Ghatanothoa)))
