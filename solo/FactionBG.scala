@@ -98,6 +98,15 @@ case class GhrothPlaceAction(self : BG, f : Faction, r : Region) extends BaseFac
 
 
 object BGExpansion extends Expansion {
+    override def afterAction()(implicit game : Game) {
+        if (!game.setup.has(BG)) return
+        val f = BG
+        f.satisfyIf(Spread4, "Have Units in four Areas", areas.%(r => f.at(r).any).num >= 4)
+        f.satisfyIf(Spread6, "Have Units in six Areas", areas.%(r => f.at(r).any).num >= 6)
+        f.satisfyIf(Spread8, "Have Units in eight Areas", areas.%(r => f.at(r).any).num >= 8)
+        f.satisfyIf(SpreadSocial, "Share Areas with all enemies", f.enemies.forall(e => areas.exists(r => f.at(r).any && e.at(r).any)), f.enemies.num)
+    }
+
     override def triggers()(implicit game : Game) {
         val f = BG
         f.satisfyIf(Spread4, "Have Units in four Areas", areas.%(r => f.at(r).any).num >= 4)

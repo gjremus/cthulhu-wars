@@ -94,6 +94,13 @@ case class DragonAscendingCancelAction(self : OW, then : ForcedAction) extends B
 
 
 object OWExpansion extends Expansion {
+    override def afterAction()(implicit game : Game) {
+        if (!game.setup.has(OW)) return
+        val f = OW
+        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.at(r).goos.any).any).any)
+        f.satisfyIf(UnitsAtEnemyGates, "Units at two enemy Gates", areas.%(r => f.at(r).any && f.enemies.%(_.gates.has(r)).any).num >= 2)
+    }
+
     override def triggers()(implicit game : Game) {
         val f = OW
         f.satisfyIf(EightGates, "Eight Gates on the map", game.allGates.onMap.num >= 8)
