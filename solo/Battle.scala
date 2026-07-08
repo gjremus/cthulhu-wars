@@ -168,9 +168,9 @@ trait PostBattleQuestion extends FactionAction {
 }
 
 case class BattleDoneAction(self : Faction) extends ForcedAction
-// Dhole: Planetary Destruction — opponent chooses 2 Doom or 2 Power
-case class DholePlanetaryDestructionDoomAction(self : Faction, owner : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "Opponent gains " + 2.doom) { override def question(implicit game : Game) = "Planetary Destruction".styled("nt") + " — choose what opponent gains" }
-case class DholePlanetaryDestructionPowerAction(self : Faction, owner : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "Opponent gains " + "2 Power".styled("power")) { override def question(implicit game : Game) = "Planetary Destruction".styled("nt") + " — choose what opponent gains" }
+// Dhole: Planetary Destruction — owner chooses whether opponent gains 2 Doom or 2 Power
+case class DholePlanetaryDestructionDoomAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "Opponent gains " + 2.doom) { override def question(implicit game : Game) = "Planetary Destruction".styled("nt") + " — choose what opponent gains" }
+case class DholePlanetaryDestructionPowerAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "Opponent gains " + "2 Power".styled("power")) { override def question(implicit game : Game) = "Planetary Destruction".styled("nt") + " — choose what opponent gains" }
 // Leng Spider: Bloodthirst — choose which faction's pains to convert
 case class BloodthirstChooseFactionAction(self : Faction, target : Faction) extends BaseFactionAction(implicit g => "Bloodthirst".styled("nt"), implicit g => "Convert " + target.full + "'s 2 " + Pain + " → 1 " + Kill) { override def question(implicit game : Game) = self.full + " — " + "Bloodthirst".styled("nt") + ": choose faction" }
 case class BloodthirstDoneAction(self : Faction) extends BaseFactionAction(implicit g => "Bloodthirst".styled("nt"), "Skip") { override def question(implicit game : Game) = self.full + " — " + "Bloodthirst".styled("nt") }
@@ -182,6 +182,7 @@ case class PreBattleDoneAction(self : Faction, next : BattlePhase) extends Optio
 case class BattleProceedAction(next : BattlePhase) extends ForcedAction
 
 case class BattleRollAction(f : Faction, rolls : $[BattleRoll], next : BattlePhase) extends ForcedAction
+case class AzathothDaemonSultanKillRollAction(self : Faction, roll : Int) extends ForcedAction
 
 case class AssignKillAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Kill" + (count > 1).??("s")).styled("kill"), implicit g => g.unit(ur).full + (ur.faction == TT && ur.uclass == HighPriest && TT.can(Martyrdom)).??(" — all other kills to Pains with " + Martyrdom.styled(TT)))
 case class AssignPainAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Pain" + (count > 1).??("s")).styled("pain"), ur.full)
@@ -314,12 +315,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // Cthugha: track sides that already saw the Fire Vampires prompt this battle
     // (so Done/Skip properly advances past the phase instead of re-offering the same units)
     var fireVampiresUsed : $[Faction] = $
+    // Dhole: track sides that already triggered Planetary Destruction (prevents re-trigger on proceed)
+    var dholePlanetaryProcessed : $[Faction] = $
+    // Azathoth: track whether Azathoth received a kill this battle (Daemon Sultan absorbed it).
+    // If so, Azathoth cannot also be assigned a pain in the same battle.
+    var azathothReceivedKill : Boolean = false
+    var azathothNeedsKillRoll : Boolean = false
 
     // Round 8 Bug 45: flag preventing the post-battle Cyclopean Gaze hook from
     // re-firing each time the battle re-enters PostBattlePhase. After CG completes,
     // it calls proceed() which resumes the battle from PostBattlePhase, which would
     // otherwise hit the CG hook again with the same Ghatanothoa/Revenant sources.
     var fbCyclopeanGazeFiredThisBattle : Boolean = false
+    var zagazigSkipped : Boolean = false
 
     // Faceless Blight (FBE): once-per-battle guard so the Distributed Death offer
     // (Post-Kill-assignment, §3.14.3) is not re-presented when AllKillsAssignedPhase
@@ -350,7 +358,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     def assignedKills(unit : UnitFigure) : Int =
-        unit.health match {
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill && unit.health != Killed) 1
+        else unit.health match {
             case Killed => 1
             case DoubleHP(Killed, Killed) => 2
             case DoubleHP(Killed, _) => 1
@@ -361,6 +370,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     def canAssignKills(unit : UnitFigure) : Int =
         // Hound of Tindalos: Angles of Time — cannot be assigned a Kill
         if (unit.uclass == HoundOfTindalos) 0
+        else if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
         else unit.health match {
             case DoubleHP(Killed, Killed) => 0
             case DoubleHP(Killed, _) => 1
@@ -377,19 +387,28 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log("ERROR: Kill assigned to Hound of Tindalos — Angles of Time should prevent this")
             return
         }
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill) return
         // Azathoth IGOO: Daemon Sultan — roll 1d6, lower glyph position instead of Kill
         // Elder Thing suppresses Daemon Sultan — Azathoth "can be killed with one kill result"
         if (unit.uclass == AzathothIGOO && ElderThingMindControl.suppresses(unit)) {
             log("Daemon Sultan".styled("nt"), "blocked by", "Elder Thing".styled("nt"), "—", "Azathoth".styled(unit.faction), "can be killed normally")
         }
         if (unit.uclass == AzathothIGOO && !ElderThingMindControl.suppresses(unit)) {
-            val roll = (1::2::3::4::5::6).shuffle.first
-            game.azathothGlyphPosition -= roll
-            log("Daemon Sultan".styled("nt") + ":", "Azathoth".styled(unit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
-            if (game.azathothGlyphPosition <= 0) {
-                game.azathothGlyphPosition = 0
-                log("Azathoth".styled(unit.faction), "glyph reached 0 — eliminated!")
-                unit.health = Killed
+            azathothReceivedKill = true
+            // If replaying an old game (next action isn't AzathothDaemonSultanKillRollAction),
+            // do inline roll for backward compat. Otherwise set flag for hard roll via RollD6.
+            if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
+                val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
+                game.azathothGlyphPosition -= roll
+                log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(unit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+                if (game.azathothGlyphPosition <= 0) {
+                    game.azathothGlyphPosition = 0
+                    log("Azathoth".styled(unit.faction), "glyph reached 0 — eliminated!")
+                    unit.health = Killed
+                }
+            }
+            else {
+                azathothNeedsKillRoll = true
             }
             return
         }
@@ -417,7 +436,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
     def canAssignPains(unit : UnitFigure) : Int =
-        unit.health match {
+        // Azathoth: if it already received a kill this battle (Daemon Sultan absorbed it),
+        // it cannot also be assigned a pain in the same battle.
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
+        // Holy Ground: Cathedrals cannot be assigned a Pain
+        else if (unit.uclass == Cathedral && unit.faction.can(HolyGround)) 0
+        else unit.health match {
             case DoubleHP(Alive, Alive) => 2
             case DoubleHP(Alive, _) => 1
             case DoubleHP(_, Alive) => 1
@@ -514,15 +538,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s == TT && s.can(TerrorSB) && !s.tag(TTReduceEnemyCombat) && !s.tag(TTBoostOwnCombat) && s.forces(ProtoShoggoth).any)
             options :+= TTTerrorPreBattleAction(TT)
 
-        // Bubastis (BB): Zagazig — auto-apply (Fix 27, user directive 2026-06-02:
-        // "Zagazig - I don't believe this is optional. For now, comment out the menu
-        // items for this, and have it auto apply.") Zagazig is not optional per rules;
-        // the swap is now applied automatically post-roll (see ChannelPowerPhase block).
-        // The Use/Skip menu items are commented out for now.
-        // if (s == BB && s.can(Zagazig) && !s.tag(Zagazig) && s.forces.%(_.uclass.utype == Monster).any) {
-        //     options :+= ZagazigUseAction(s)
-        //     options :+= ZagazigSkipAction(s)
-        // }
+        if (s == BB && s.can(Zagazig) && !s.tag(Zagazig) && s.forces.%(_.uclass == CatFromMars).any) {
+            options :+= ZagazigUseAction(s)
+            options :+= ZagazigSkipAction(s)
+        }
 
         // Bubastis (BB): Savagery — pre-battle pay 1 Power for +4 strength per CatFromSaturn (task 3.10.3/3.14.3)
         if (s == BB && s.can(Savagery) && !s.tag(Savagery) && s.forces.%(_.uclass == CatFromSaturn).any && s.power >= 1) {
@@ -614,7 +633,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s.can(MillionFavoredOnes))
             s.add(MillionFavoredOnes)
 
-        if (s.can(UnholyGround))
+        if (s.has(UnholyGround))
             s.add(UnholyGround)
 
         // TT Terror: apply Proto-Shoggoth combat modifier
@@ -662,6 +681,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         if (kills >= assigned + canAssign) {
             s.forces.foreach(u => 1.to(canAssignKills(u)).foreach(_ => assignKill(u)))
+            if (azathothNeedsKillRoll) {
+                azathothNeedsKillRoll = false
+                val azUnit = s.forces.%(_.uclass == AzathothIGOO).head
+                if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
+                    val roll = (1::2::3::4::5::6).shuffle.first
+                    game.azathothGlyphPosition -= roll
+                    log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(azUnit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+                    if (game.azathothGlyphPosition <= 0) {
+                        game.azathothGlyphPosition = 0
+                        log("Azathoth".styled(azUnit.faction), "glyph reached 0 — eliminated!")
+                        azUnit.health = Killed
+                    }
+                }
+                else {
+                    return RollD6(_ => "Daemon Sultan — roll for Azathoth glyph reduction", roll => AzathothDaemonSultanKillRollAction(azUnit.faction, roll))
+                }
+            }
             return DelayedContinue(100, Then(BattleProceedAction(next)))
         }
 
@@ -709,8 +745,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (refugees.none)
             return proceed()
 
+        if (s.can(Oleaginous)) {
+            val oleagPained = refugees.%(u => u.uclass == Glaaki || u.uclass == DeepTendril)
+            if (oleagPained.any) {
+                val u = oleagPained.first
+                val destinations = arena.connected
+                if (destinations.any)
+                    return Ask(s).each(destinations)(r => OleaginousRetreatAction(TS, u, r))
+            }
+        }
+
         val moonDest = (s == BB && arena != BB.moon).??($(BB.moon))
-        val standardDest = arena.connectedForRetreat.%(r => s.opponent.at(r).none)
+        val mantleDest = arena.is[MantleHold].?? {
+            val base = game.tbMantleAreas
+            val tentacleAreas = (s == TB && TB.has(Subterrane)).??(TB.onMap(Tentacle)./(_.region).distinct)
+            (base ++ tentacleAreas).distinct
+        }
+        val standardDest = (arena.connectedForRetreat ++ mantleDest).%(r => s.opponent.at(r).none)
 
         // Xyrious Storm Whirlwind (§1.10 SB1): Twisters in Land Areas may Retreat
         // to adjacent Sea Areas containing enemy Units. This expands the destination
@@ -917,6 +968,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                sides.foreach(s => s.forces.foreach(u => u.health = Alive))
+
                 sides.foreach(s => s.str = s.strength(s.forces, s.opponent))
 
                 // Albino Penguins: -2 combat per penguin is handled in neutralStrength
@@ -1020,26 +1073,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                // Bubastis (BB): Zagazig — swap Kills<->Pains for BOTH sides FIRST in the post-roll
-                // resolution chain, BEFORE Leng Spider Bloodthirst and BEFORE Demand Sacrifice's
-                // Kills->Pains conversion (rulebook FAQ #3 and FAQ #17).
-                // Fix 27 (user directive 2026-06-02): Zagazig is NOT optional — auto-apply
-                // whenever BB is participating in the battle, has Zagazig researched,
-                // AND a Cat from Mars is present in BB's forces (per rulebook text).
-                // Per-faction roll-change line emitted to game log so the new totals are visible.
-                if (sides.has(BB) && BB.can(Zagazig) && BB.forces.%(_.uclass == CatFromMars).any) {
-                    sides.%(f => f == BB).foreach { bbSide =>
-                        def swapRolls(side : Side) {
-                            side.rolls = side.rolls./(r => if (r == Kill) Pain else if (r == Pain) Kill else r)
-                        }
-                        swapRolls(bbSide)
-                        swapRolls(bbSide.opponent)
-                        log(Zagazig.styled(BB) + ": swapped Kills and Pains for both sides")
-                        // One line per faction in the battle showing post-swap roll tokens.
-                        sides.foreach { f =>
-                            val side = if (f == attacker) attackers else defenders
-                            log(f.full, "rolls changed to", side.rolls.mkString(" "), "due to", Zagazig.styled(BB))
-                        }
+                if (sides.has(BB) && BB.can(Zagazig) && !battle.zagazigSkipped) {
+                    sides.foreach { side =>
+                        side.rolls = side.rolls./(r => if (r == Kill) Pain else if (r == Pain) Kill else r)
+                    }
+                    log(Zagazig.styled(BB) + ": swapped Kills and Pains for both sides")
+                    sides.foreach { side =>
+                        log(side.full, "rolls now", side.rolls.mkString(" "))
                     }
                 }
 
@@ -1156,13 +1196,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Faceless Blight (FBE) — Distributed Death (§3.14.3 / §4.6): if FBE
                 // has card dice, Byagoona is present in the Battle, and any Kill is
                 // assigned to an FBE Unit, offer to discard N dice to prevent N Kills.
-                if (factions.has(FBE) && sides.has(FBE) && !fbeDistributedDeathOffered && game.fbeCardDice.nonEmpty &&
-                    (FBE : Side).forces.%(_.uclass == Byagoona).any) {
+                val replayExpectsDD = game.nextReplayActionHint.exists(_.startsWith("DistributedDeath"))
+                if (factions.has(FBE) && sides.has(FBE) && !fbeDistributedDeathOffered && (game.fbeCardDice.nonEmpty || replayExpectsDD) &&
+                    ((FBE : Side).forces.%(_.uclass == Byagoona).any || replayExpectsDD)) {
                     val fbeKilled = sides./~(fac => (if (fac == attacker) attackers else defenders).forces)
                         .%(u => u.faction == FBE && u.health == Killed).num
-                    if (fbeKilled > 0) {
+                    if (fbeKilled > 0 || replayExpectsDD) {
                         fbeDistributedDeathOffered = true
-                        val maxN = math.min(fbeKilled, game.fbeCardDice.num)
+                        val maxN = math.max(1, math.min(if (fbeKilled > 0) fbeKilled else math.max(1, game.fbeCardDice.num), math.max(1, game.fbeCardDice.num)))
                         return Ask(FBE)
                             .list((1 to maxN).toList./(n => DistributedDeathMainAction(FBE, n)))
                             .add(DistributedDeathSkipAction(FBE))
@@ -1209,6 +1250,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                     // Only one target — auto-assign
                                     assignKill(eligible.head)
                                     log(eligible.head.uclass.styled(enemy), "was", "killed".styled("kill"), "by", "Snakebite".styled("nt"))
+                                    if (azathothNeedsKillRoll) {
+                                        azathothNeedsKillRoll = false
+                                        val azUnit = enemy.forces.%(_.uclass == AzathothIGOO).head
+                                        if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
+                                            val roll = (1::2::3::4::5::6).shuffle.first
+                                            game.azathothGlyphPosition -= roll
+                                            log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(azUnit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+                                            if (game.azathothGlyphPosition <= 0) {
+                                                game.azathothGlyphPosition = 0
+                                                log("Azathoth".styled(azUnit.faction), "glyph reached 0 — eliminated!")
+                                                azUnit.health = Killed
+                                            }
+                                        }
+                                        else {
+                                            return RollD6(_ => "Daemon Sultan — roll for Azathoth glyph reduction", roll => AzathothDaemonSultanKillRollAction(azUnit.faction, roll))
+                                        }
+                                    }
                                     return jump(HarbingerKillPhase)
                                 } else {
                                     // Multiple targets — enemy chooses
@@ -1220,25 +1278,20 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 }
                 jump(HarbingerKillPhase)
 
-                jump(HarbingerKillPhase)
-
             case HarbingerKillPhase =>
                 sides.foreach { s =>
                     if (s.tag(Harbinger)) {
-                        s.opponent.units.goos.%(_.health == Killed).not(Harbinged).some.foreach { l =>
+                        // Holy Ground: Cathedrals count as GOOs during Action Phase (cost 3 for Harbinger)
+                        val harbingerGoos = s.opponent.units.goos ++ (game.inActionPhase && AN.can(HolyGround)).??(s.opponent.units(Cathedral))
+                        harbingerGoos.%(_.health == Killed).not(Harbinged).some.foreach { l =>
                             val u = l.first
                             val cost = u.uclass match {
-                                case AvatarThesis     => DS.azathothTrack
-                                case AvatarAntithesis => (8 - DS.azathothTrack).max(0)
-                                // Y'Golonac (DC) has a DYNAMIC awaken cost = number of
-                                // DC spellbooks on the sheet (sentinel uclass.cost is 0).
-                                // Harbinger must use the CURRENT cost so the half-cost
-                                // payout (ceil below) is computed from the live value,
-                                // mirroring the G18/Fix 77.C faction-card display
-                                // (overlay.scala: DC.spellbooks.num). Harbinger core
-                                // (the (cost + 1) / 2 ceil) is left untouched.
-                                case YgolonacDC       => DC.library.num - DC.unfulfilled.num
-                                case _                => u.uclass.cost
+                                case AvatarThesis      => DS.azathothTrack
+                                case AvatarAntithesis  => (8 - DS.azathothTrack).max(0)
+                                case YgolonacDC        => DC.library.num - DC.unfulfilled.num
+                                case ShuddeMellSegment => 8
+                                case Cathedral         => 3
+                                case _                 => u.uclass.cost
                             }
                             val n = (cost + 1) / 2
                             return Ask(s)
@@ -1291,11 +1344,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 if (sides.has(DS) && DS.all(AvatarSynthesis).any && DS.all(AvatarSynthesis).exists(u => ElderThingMindControl.suppresses(u)))
                     log(DS, "Cosmic Ruler".styled("nt"), "blocked by", "Elder Thing".styled("nt"))
                 if (sides.has(DS) && DS.all(AvatarSynthesis).any && !DS.all(AvatarSynthesis).exists(u => ElderThingMindControl.suppresses(u))) {
-                    val killedAvatars = DS.forces.%(u => u.goo && u.health == Killed)
+                    val killedAvatars = DS.forces.%(u => u.goo && u.health == Killed && u.uclass.isInstanceOf[FactionUnitClass])
                     if (killedAvatars.any) {
                         // Exclude already-killed/eliminated units — a GOO sacrificed in a prior CR trigger
                         // this same battle is no longer Alive and must not be offered again
-                        val sacrificeOptions = DS.goos.%(o => killedAvatars.has(o).not && o.health == Alive)
+                        val sacrificeOptions = DS.goos.%(o => killedAvatars.has(o).not && o.health == Alive && o.uclass.isInstanceOf[FactionUnitClass])
                         if (sacrificeOptions.any) {
                             val options = killedAvatars./~(saved =>
                                 sacrificeOptions./(sacrificed =>
@@ -1355,10 +1408,32 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             .add(PrimeCauseSkipAction(s))
                     }
                 }
+                jump(DholePlanetaryDestructionPhase)
+
+            case DholePlanetaryDestructionPhase =>
+                // Card: "If the Dhole is Killed or Eliminated in Battle"
+                // Check forces (Killed by dice) AND eliminated list (Eliminated by Devour/Abduct)
+                sides.foreach { s =>
+                    if (!dholePlanetaryProcessed.has(s)) {
+                        val killedDholes = s.forces(Dhole).%(_.health == Killed)
+                        val eliminatedDholes = eliminated.%(u => u.uclass == Dhole && u.faction == s)
+                        val allDead = killedDholes ++ eliminatedDholes
+                        if (allDead.any) {
+                            val dholeOwner = s
+                            val opponent = s.opponent
+                            dholePlanetaryProcessed :+= s
+                            dholeOwner.takeES(2)
+                            log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
+                            killedDholes.foreach(exempt)
+                            return Ask(dholeOwner)
+                                .add(DholePlanetaryDestructionDoomAction(dholeOwner, opponent))
+                                .add(DholePlanetaryDestructionPowerAction(dholeOwner, opponent))
+                        }
+                    }
+                }
                 jump(QuachilDustToDustPhase)
 
             case QuachilDustToDustPhase =>
-                // Quachil Uttaus: for each killed enemy unit, victim chooses permanent removal or QU owner gets 1 ES
                 sides.foreach { s =>
                     if (s.forces.exists(_.uclass == QuachilUttaus)) {
                         val quOwner = s
@@ -1370,27 +1445,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                 .add(QuachilDustToDustRemoveAction(victim, u.ref, quOwner))
                                 .add(QuachilDustToDustESAction(victim, u.ref, quOwner))
                         }
-                    }
-                }
-                jump(DholePlanetaryDestructionPhase)
-
-            case DholePlanetaryDestructionPhase =>
-                // Check if any Dhole was killed in this battle
-                sides.foreach { s =>
-                    val killedDholes = s.forces(Dhole).%(_.health == Killed)
-                    if (killedDholes.any) {
-                        val dholeOwner = s
-                        val opponent = s.opponent
-                        // Owner gains 2 ES
-                        dholeOwner.takeES(2)
-                        log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
-                        // Exempt Dhole from forces to prevent re-trigger on re-entry
-                        // Don't eliminate yet — EliminatePhase will handle that (avoids stale UnitRef crash)
-                        killedDholes.foreach(exempt)
-                        // OWNER chooses what opponent gains (card: "your opponent gains your choice")
-                        return Ask(dholeOwner)
-                            .add(DholePlanetaryDestructionDoomAction(opponent, dholeOwner))
-                            .add(DholePlanetaryDestructionPowerAction(opponent, dholeOwner))
                     }
                 }
                 jump(EliminatePhase)
@@ -1563,18 +1617,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(OleaginousPhase)
 
             case OleaginousPhase =>
-                // Tombstalker (TS) Oleaginous: pains on Gla'aki and Deep Tendrils become free retreats to any adjacent area
-                sides.foreach { s =>
-                    if (s.can(Oleaginous)) {
-                        val oleagPained = s.forces.%(u => u.health == Pained && (u.uclass == Glaaki || u.uclass == DeepTendril))
-                        if (oleagPained.any) {
-                            val u = oleagPained.first
-                            val destinations = arena.connected // ANY adjacent area, no enemy restriction
-                            if (destinations.any)
-                                return Ask(s).each(destinations)(r => OleaginousRetreatAction(TS, u, r))
-                        }
-                    }
-                }
+                // Oleaginous now handled during normal retreat phase (attacker-first ordering preserved)
                 jump(HarbingerPainPhase)
 
             case HarbingerPainPhase =>
@@ -1583,17 +1626,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         s.opponent.units.goos.%(_.health == Pained).not(Harbinged).some.foreach { l =>
                             val u = l.first
                             val cost = u.uclass match {
-                                case AvatarThesis     => DS.azathothTrack
-                                case AvatarAntithesis => (8 - DS.azathothTrack).max(0)
-                                // Y'Golonac (DC) has a DYNAMIC awaken cost = number of
-                                // DC spellbooks on the sheet (sentinel uclass.cost is 0).
-                                // Harbinger must use the CURRENT cost so the half-cost
-                                // payout (ceil below) is computed from the live value,
-                                // mirroring the G18/Fix 77.C faction-card display
-                                // (overlay.scala: DC.spellbooks.num). Harbinger core
-                                // (the (cost + 1) / 2 ceil) is left untouched.
-                                case YgolonacDC       => DC.library.num - DC.unfulfilled.num
-                                case _                => u.uclass.cost
+                                case AvatarThesis      => DS.azathothTrack
+                                case AvatarAntithesis  => (8 - DS.azathothTrack).max(0)
+                                case YgolonacDC        => DC.library.num - DC.unfulfilled.num
+                                case ShuddeMellSegment => 8
+                                case _                 => u.uclass.cost
                             }
                             val n = (cost + 1) / 2
                             return Ask(s)
@@ -1799,6 +1836,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                if (factions.has(TB) && TB.can(Autotomy) && sides.has(TB)) {
+                    val tbKilledNonSegment = eliminated.%(u => u.faction == TB && u.uclass != ShuddeMellSegment).any
+                    val segmentsExist = TB.all(ShuddeMellSegment).any
+                    if (tbKilledNonSegment && segmentsExist)
+                        return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
+                }
+
                 // Bubastis (BB) Carnivore (alt spellbook): BB gains 1 Doom for each enemy Monster
                 // killed or eliminated in this battle.
                 // Log-ordering convention (BB Implementation Guide §3.18.16): emit the log line
@@ -1811,6 +1855,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         BB.oncePerAction :+= Carnivore
                         log(Carnivore.styled(BB) + ": gained", monstersKilled.doom, "for", monstersKilled, "enemy Monster".s(monstersKilled), "killed")
                         BB.doom += monstersKilled
+                    }
+                }
+
+                // Alt Ancients Sanguinessence: after kills finalized, if AN killed >= 1 enemy unit
+                // in or adjacent to a Cathedral area, gain 1 Doom (or 1 Elder Sign if a GOO was killed).
+                // Fixed: Check attacker/defender directly instead of sides.has(AN) to handle case where all AN units died
+                if (factions.has(AN) && AN.can(Sanguinessence) && (attacker == AN || defender == AN) && !AN.oncePerAction.has(Sanguinessence)) {
+                    val enemy = if (attacker == AN) defender else attacker
+                    val enemyKilled = eliminated.%(_.faction == enemy)
+                    if (enemyKilled.any) {
+                        val cathedralAdjacent = game.cathedrals.exists(cr => cr == arena || game.board.connected(cr).has(arena))
+                        if (cathedralAdjacent) {
+                            AN.oncePerAction :+= Sanguinessence
+                            val gooKilled = enemyKilled.%(u => u.uclass.isGOO).any
+                            if (gooKilled) {
+                                log(Sanguinessence.styled(AN) + ": gained", 1.es, "(Great Old One killed near Cathedral)")
+                                AN.takeES(1)
+                            }
+                            else {
+                                log(Sanguinessence.styled(AN) + ": gained", 1.doom, "(enemy killed near Cathedral)")
+                                AN.doom += 1
+                            }
+                        }
                     }
                 }
 
@@ -1897,7 +1964,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Defilers Court (DC) Eschar (§1.10 + §3.10.4): post-battle, DC
                 // gains 1 Sin per Mindless Husk that was Killed in Battle.
                 if (factions.has(DC) && DC.can(Eschar) && sides.has(DC)) {
-                    val killedHusks = exempted.count(u => u.faction == DC && u.uclass == MindlessHusk && u.health == Killed)
+                    val killedHusks = eliminated.count(u => u.faction == DC && u.uclass == MindlessHusk)
                     if (killedHusks > 0) {
                         // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
                         val gained = game.grantDCSin(killedHusks)
@@ -2118,14 +2185,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             dustToDustProcessed :+= uRef
             proceed()
 
-        case DholePlanetaryDestructionDoomAction(self, owner) =>
-            self.doom += 2
-            log(self.full, "chose", 2.doom, "from", "Planetary Destruction".styled(owner))
+        case DholePlanetaryDestructionDoomAction(self, opponent) =>
+            opponent.doom += 2
+            log(self.full, "chose", 2.doom, "for", opponent.full, "from", "Planetary Destruction".styled(self))
             proceed()
 
-        case DholePlanetaryDestructionPowerAction(self, owner) =>
-            self.power += 2
-            log(self.full, "chose", "2 Power".styled("power"), "from", "Planetary Destruction".styled(owner))
+        case DholePlanetaryDestructionPowerAction(self, opponent) =>
+            opponent.power += 2
+            log(self.full, "chose", "2 Power".styled("power"), "for", opponent.full, "from", "Planetary Destruction".styled(self))
             proceed()
 
         case BloodthirstChooseFactionAction(self, target) =>
@@ -2248,10 +2315,26 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             if (u.faction == TT && u.uclass == UbboSathla && (u : UnitFigure).health == Killed && TT.can(Fulmination) && !TTExpansion.ttUbboFulminated) {
                 TTExpansion.ttFulminationPending = true
             }
-            proceed()
+            if (azathothNeedsKillRoll) {
+                azathothNeedsKillRoll = false
+                RollD6(_ => "Daemon Sultan — roll for Azathoth glyph reduction", roll => AzathothDaemonSultanKillRollAction(u.faction, roll))
+            }
+            else
+                proceed()
 
         case AssignPainAction(_, _, _, u) =>
             assignPain(u)
+            proceed()
+
+        case AzathothDaemonSultanKillRollAction(self, roll) =>
+            game.azathothGlyphPosition -= roll
+            log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(self), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+            if (game.azathothGlyphPosition <= 0) {
+                game.azathothGlyphPosition = 0
+                log("Azathoth".styled(self), "glyph reached 0 — eliminated!")
+                val azUnit = sides.flatMap(_.forces).%(_.uclass == AzathothIGOO).head
+                azUnit.health = Killed
+            }
             proceed()
 
         // RETREAT
@@ -2294,11 +2377,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val u = game.unit(ur)
             retreat(u, r)
             log(u, "retreated to", r, "with", Oleaginous, "(Pain became Retreat)")
-            jump(OleaginousPhase)
+            proceed()
 
         case EliminateNoWayAction(self, u) =>
-            if (self == DS && u.goo && DS.all(AvatarSynthesis).any) {
-                val sacrificeOptions = DS.goos.%(o => o.ref != u && o.health == Alive)
+            if (self == DS && u.goo && u.uclass.isInstanceOf[FactionUnitClass] && DS.all(AvatarSynthesis).any) {
+                val sacrificeOptions = DS.goos.%(o => o.ref != u && o.health == Alive && o.uclass.isInstanceOf[FactionUnitClass])
                 if (sacrificeOptions.any) {
                     val options = sacrificeOptions./(sacrificed =>
                         CosmicRulerSacrificeAction(DS, u, sacrificed)
@@ -2318,7 +2401,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case CosmicRulerDeclineAction(_) =>
-            jump(EliminatePhase)
+            jump(BloatedWomanVelvetFanPhase)
 
         case CosmicRulerDeclineNoWayAction(self, u) =>
             self.log("had nowhere to retreat and eliminated", u)
@@ -2401,7 +2484,25 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val u = self.forces.%(_.uclass == uc).%(u => canAssignKills(u) > 0).sortBy(_.uclass.cost).head
             assignKill(u)
             log(u.uclass.styled(self), "was", "killed".styled("kill"), "by", "Snakebite".styled("nt"))
-            jump(HarbingerKillPhase)
+            if (azathothNeedsKillRoll) {
+                azathothNeedsKillRoll = false
+                if (game.nextReplayActionHint.exists(h => h.contains("AzathothDaemonSultanKillRoll"))) {
+                    RollD6(_ => "Daemon Sultan — roll for Azathoth glyph reduction", roll => AzathothDaemonSultanKillRollAction(u.faction, roll))
+                }
+                else {
+                    val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
+                    game.azathothGlyphPosition -= roll
+                    log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(u.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
+                    if (game.azathothGlyphPosition <= 0) {
+                        game.azathothGlyphPosition = 0
+                        log("Azathoth".styled(u.faction), "glyph reached 0 — eliminated!")
+                        u.health = Killed
+                    }
+                    jump(HarbingerKillPhase)
+                }
+            }
+            else
+                jump(HarbingerKillPhase)
 
         // CTHUGHA COMBAT CHOICE (pre-battle)
         case CthughaCombatChooseGOOAction(self, enemy, goo, combat) =>
@@ -2514,6 +2615,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
             if (u.uclass == Nyogtha)
                 u.faction.forces(Nyogtha).but(u).foreach(_.add(Harbinged))
+
+            if (u.uclass == ShuddeMellHead || u.uclass == ShuddeMellSegment)
+                u.faction.units.%(x => x.uclass == ShuddeMellHead || x.uclass == ShuddeMellSegment).but(u).foreach(_.add(Harbinged))
 
             proceed()
 
@@ -2733,6 +2837,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case ZagazigSkipAction(self) =>
+            battle.zagazigSkipped = true
             self.log(Zagazig.styled(BB) + ": skipped")
             proceed()
 
