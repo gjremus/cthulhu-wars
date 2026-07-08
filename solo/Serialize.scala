@@ -183,6 +183,20 @@ class Serialize(val game : Game) {
         case EApply("TsunamiProcessAction", ps) => ForcedCultistMoveProcessAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[$[(Faction, $[UnitRef])]], parseExpr(ps(3)).asInstanceOf[Boolean], parseExpr(ps(4)).asInstanceOf[Action])
         case EApply("ForcedCultistMoveAction", ps) => ForcedCultistMoveAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[$[UnitRef]], parseExpr(ps(4)).asInstanceOf[Action])
         case EApply("ForcedCultistMoveProcessAction", ps) => ForcedCultistMoveProcessAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[$[(Faction, $[UnitRef])]], parseExpr(ps(3)).asInstanceOf[Boolean], parseExpr(ps(4)).asInstanceOf[Action])
+        // [LEGACY REPLAY] Pre-632df8c FBE Animated Rush actions had fewer params (no cancel/refund fields).
+        case EApply("AnimatedRushMoveAction", ps) if ps.num == 5 =>
+            val dest = parseExpr(ps(2)).asInstanceOf[Region]
+            AnimatedRushMoveAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], dest, parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[$[UnitRef]], $, $, dest, dest)
+        case EApply("AnimatedRushUnitPickAction", ps) if ps.num == 3 =>
+            AnimatedRushUnitPickAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[$[UnitRef]], $, $, game.board.regions.head, game.board.regions.head)
+        case EApply("AnimatedRushDestPickAction", ps) if ps.num == 4 =>
+            AnimatedRushDestPickAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Int], parseExpr(ps(3)).asInstanceOf[$[UnitRef]], $, $, game.board.regions.head, game.board.regions.head)
+        // [LEGACY REPLAY] Pre-632df8c "Done early" — single param (self).
+        case EApply("AnimatedRushDoneEarlyAction", ps) =>
+            AnimatedRushDoneEarlyAction(parseExpr(ps(0)).asInstanceOf[Faction])
+        // [LEGACY REPLAY] Pre-6d1ee19 "Done" — old move-all-at-once (self, source, dest, k, picked).
+        case EApply("AnimatedRushDoneAction", ps) =>
+            AnimatedRushDoneAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[$[UnitRef]])
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 

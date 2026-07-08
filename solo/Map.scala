@@ -46,6 +46,7 @@ object EarthMap3 extends Board {
         // gate-control / cathedral / faction logic skips the Moon naturally).
         case _ : MoonHold => $()
         case _ : MantleHold => $()
+        case _ : FactionRegion => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -166,6 +167,7 @@ object EarthMap4v35 extends Board {
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
         case _ : MantleHold => $()
+        case _ : FactionRegion => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -290,6 +292,7 @@ object EarthMap4v53 extends Board {
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
         case _ : MantleHold => $()
+        case _ : FactionRegion => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -422,6 +425,7 @@ object EarthMap5 extends Board {
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
         case _ : MantleHold => $()
+        case _ : FactionRegion => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -564,6 +568,7 @@ object EarthMap6 extends Board {
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
         case _ : MantleHold => $()
+        case _ : FactionRegion => $()
     }
 
     def distance(a : Region, b : Region) =
@@ -835,6 +840,7 @@ object LibraryCelaeno55 extends Board {
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
         case _ : MantleHold => $()
+        case _ : FactionRegion => $()
     }
 
     // Full adjacency including archway connections — used for movement
@@ -972,6 +978,7 @@ object LibraryCelaeno33 extends Board {
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
         case _ : MantleHold => $()
+        case _ : FactionRegion => $()
     }
 
     def connected(region : Region) = {
@@ -1051,6 +1058,7 @@ object LibraryCelaeno53 extends Board {
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
         case _ : MantleHold => $()
+        case _ : FactionRegion => $()
     }
 
     def connected(region : Region) = {
@@ -1152,6 +1160,7 @@ object LibraryCelaeno35 extends Board {
         // BB Moon: off-map region; no map adjacency. See note on EarthMap3.connected.
         case _ : MoonHold => $()
         case _ : MantleHold => $()
+        case _ : FactionRegion => $()
     }
 
     def connected(region : Region) = {

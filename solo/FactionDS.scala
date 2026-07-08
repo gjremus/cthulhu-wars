@@ -263,14 +263,16 @@ object DSExpansion extends Expansion {
             Ask(self).list(l./(r => DSAvatarThesisRegionAction(self, r))).cancel
 
         case DSAvatarThesisRegionAction(self, r) =>
-            Ask(self).list((0 to 8).toList.%(track => self.affords(track)(r))./(track => DSAvatarThesisCostAction(self, r, track)))
+            val affordable = (0 to 8).toList.%(track => self.affords(track)(r))./(track => DSAvatarThesisCostAction(self, r, track))
+            val options = if (affordable.any) affordable else $(DSAvatarThesisCostAction(self, r, 0))
+            Ask(self).list(options)
 
         case DSAvatarThesisCostAction(self, r, track) =>
             DS.azathothTrack = track
             self.power -= track
             self.payTax(r)
-            val larva = self.at(r).one(LarvaThesis)
-            game.eliminate(larva)
+            val larvaOpt = self.at(r)(LarvaThesis).starting
+            larvaOpt.foreach(game.eliminate)
             self.place(AvatarThesis, r)
             self.log("awakened", AvatarThesis.styled(self), "in", r, "setting Azathoth track to", track)
             self.satisfy(AwakenAvatarThesis, "Awaken Avatar Thesis")
@@ -297,8 +299,8 @@ object DSExpansion extends Expansion {
         case AwakenAction(self : DS.type, AvatarAntithesis, r, cost) =>
             self.power -= cost
             self.payTax(r)
-            val larva = self.at(r).one(LarvaAntithesis)
-            game.eliminate(larva)
+            val larvaOpt = self.at(r)(LarvaAntithesis).starting
+            larvaOpt.foreach(game.eliminate)
             self.place(AvatarAntithesis, r)
             self.log("awakened", AvatarAntithesis.styled(self), "in", r)
             self.satisfy(AwakenAvatarAntithesis, "Awaken Avatar Antithesis")

@@ -13,7 +13,10 @@ case object Reanimated extends FactionUnitClass(AN, "Reanimated", Monster, 4) {
     override def canCapture(u : UnitFigure)(implicit game : Game) = alone(u).not
 }
 case object Yothan extends FactionUnitClass(AN, "Yothan", Terror, 6)
-case object Cathedral extends FactionUnitClass(AN, "Cathedral", Building, 4)
+case object Cathedral extends FactionUnitClass(AN, "Cathedral", Building, 4) {
+    override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = !u.faction.can(HolyGround) && super.canMove(u)
+    override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = !u.faction.can(HolyGround) && super.canBeMoved(u)
+}
 
 // FACTION POWER — use .has(), NOT blocked by Moonbeast or Elder Thing
 case object Dematerialization extends FactionSpellbook(AN, "Dematerialization")
@@ -30,6 +33,11 @@ case object UnholyGround extends FactionSpellbook(AN, "Unholy Ground") with Batt
 case object Consecration extends FactionSpellbook(AN, "Consecration")
 // SPELLBOOK — use .can(), CAN be blocked by Moonbeast
 case object WorshipServices extends FactionSpellbook(AN, "Worship Services")
+
+// ALT ANCIENTS spellbooks (replacements for UnholyGround, Consecration, WorshipServices)
+case object HolyGround extends FactionSpellbook(AN, "Holy Ground")
+case object Sanguinessence extends FactionSpellbook(AN, "Sanguinessence")
+case object Crusade extends FactionSpellbook(AN, "Crusade")
 
 case object CathedralWW extends Requirement("Cathedral in Area with ||| Glyph")
 case object CathedralOO extends Requirement("Cathedral in Area with (*) Glyph")

@@ -247,6 +247,17 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
                 case Consecration =>
                     true |=> 200 -> "for rituals"
                     game.cathedrals.num == 4 |=> 400 -> "all cathedrals"
+                case HolyGround =>
+                    true |=> 500 -> "cathedrals become goos"
+                    game.cathedrals.num >= 2 |=> 400 -> "multiple cathedrals as goos"
+                    others.exists(_.goos.any) |=> 300 -> "enemy goos make cathedrals targetable"
+                case Sanguinessence =>
+                    true |=> 800 -> "doom from kills near cathedrals"
+                    game.cathedrals.num >= 2 |=> 400 -> "multiple cathedrals for coverage"
+                    others.exists(_.goos.any) |=> 600 -> "elder sign from goo kills"
+                case Crusade =>
+                    true |=> 900 -> "free battles against stronger foes"
+                    others.exists(_.power >= self.power) |=> 500 -> "enemies with more power"
                 case _ =>
                     true |=> -1000 -> "unknown"
             }
@@ -508,6 +519,10 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
 
                 foes.goos.any && game.cathedrals.contains(r) && r.str(AN) > 0 && have(UnholyGround) |=> 100000 -> "unholy ground enemy goo"
 
+                have(Crusade) && f.power >= self.power |=> 5000 -> "crusade free battle"
+                have(Sanguinessence) && game.cathedrals.exists(cr => cr == r || game.board.connected(cr).has(r)) |=> 3000 -> "sanguinessence near cathedral"
+                have(Sanguinessence) && foes.goos.any && game.cathedrals.exists(cr => cr == r || game.board.connected(cr).has(r)) |=> 8000 -> "sanguinessence elder sign from goo"
+
                 r.allies.num == 1 && r.allies(Yothan).any && enemyStr > 0 |=> -1000 -> "dont attack with lone yothan"
 
                 foes.goos.num == 1 && foes.monsterly.none && foes.cultists.none && r.allies(Yothan).any && (r.allies.%(_.uclass.utype == Monster).any || r.allies.cultists.any) |=> 60000 -> "prot yothan vs lone goo"
@@ -636,6 +651,8 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
                 // Need to be more than 500, to prioritize over building a general gate somewhere.
                 needGlyph && r.enemyGate |=> 1000 -> "new glyph at enemy gate"
                 have(WorshipServices) && needGlyph && r.enemyGate |=> 1100 -> "new glyph at enemy gate worship services"
+                have(Sanguinessence) && others.exists(e => game.board.connected(r).exists(adj => e.at(adj).any)) |=> 800 -> "cathedral near contested for sanguinessence"
+                have(Crusade) && r.enemyGate |=> 600 -> "cathedral at enemy gate with crusade aggression"
 
             case GiveWorstMonsterMainAction(_) =>
                 true |=> -10 -> "base"

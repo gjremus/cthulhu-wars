@@ -99,13 +99,11 @@ case object FB extends Faction { f =>
         val arena = game.battle./(_.arena)
         val onLand = arena./(_.glyph != Ocean).|(units.head.region.glyph != Ocean)
 
+        val ghatoCombat = game.battle.any.?(game.fbPowerAtBattleStart).|(f.power)
+
         units(Desiccated).not(Zeroed).num * (onLand.?(1).|(0)) +
         units(RevenantOfKnaa).not(Zeroed).num * desiccatedInPlay +
-        // Parallel-guide Fix 41 (2026-06-02): Ghatanothoa combat dice scale with FB.power AFTER
-        // the battle's attack cost has been paid, mirroring Writhe. AttackAction in Game.scala
-        // already deducts 1 power before Battle starts resolving, so f.power here is the
-        // post-payment value. The pre-battle snapshot path is no longer used.
-        units(Ghatanothoa).not(Zeroed).num * f.power +
+        units(Ghatanothoa).not(Zeroed).num * ghatoCombat +
         neutralStrength(units, opponent)
     }
 }
@@ -694,8 +692,8 @@ object FBExpansion extends Expansion {
             // commit hook), so any cancel here only reverses post-main flips.
             // 2026-06-08: cancel guard relaxed when FB has battled since cancel —
             // see pre-acted handler below for full rationale. Mirrors Library fix.
-            if (f.hasAllSB && hasAnyIPEligibleFaceUp && game.fbInfernalPactDiscount == game.fbInfernalPactCommittedDiscount && (!game.fbInfernalPactCancelledThisTurn || f.battled.any)) {
-                if (f.has(Ghatanothoa) && f.all(Ghatanothoa).any && ElderThingMindControl.suppresses(f.goo(Ghatanothoa)))
+            if (f.hasAllSB && f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && hasAnyIPEligibleFaceUp && game.fbInfernalPactDiscount == game.fbInfernalPactCommittedDiscount && (!game.fbInfernalPactCancelledThisTurn || f.battled.any)) {
+                if (ElderThingMindControl.suppresses(f.goo(Ghatanothoa)))
                     + GroupAction("Infernal Pact".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
                 else
                     + FBInfernalPactMainAction(f)
@@ -784,13 +782,11 @@ object FBExpansion extends Expansion {
             if (f.power >= 2)
                 + FBWritheMainAction(f)
 
-            // The Eye Opens (Cost 1, +1 in Ice Age region)
+            // The Eye Opens (Cost 1) — Ice Age does NOT affect this ability
             if (f.has(TheEyeOpens) && !FB.oncePerGame.has(TheEyeOpens)) {
                 if (f.power >= 1) {
                     val eligible = areas.%(r => f.at(r, Desiccated).any &&
-                        f.enemies.exists(_.at(r).%(_.uclass.utype == Cultist).any) &&
-                        // Ice Age regions cost 2 total — check affordability
-                        (f.power >= 2 || !game.factions.exists(wf => wf.iceAge.contains(r))))
+                        f.enemies.exists(_.at(r).%(_.uclass.utype == Cultist).any))
                     if (eligible.any)
                         + FBTheEyeOpensMainAction(f)
                 }
@@ -829,6 +825,9 @@ object FBExpansion extends Expansion {
 
         // ── AWAKEN GHATANOTHOA ──
         case FBAwakenGhatanothoaAction(self, cost) =>
+            if (self.pool(Ghatanothoa).none)
+                EndAction(self)
+            else {
             // IP intentionally does NOT discount this — see class docstring above.
             self.power -= cost
             val startArea = game.starting(FB)
@@ -858,6 +857,7 @@ object FBExpansion extends Expansion {
             game.triggers()
             // Check spellbook requirements (awakening is a requirement)
             CheckSpellbooksAction(EndAction(self))
+            }
 
         // ── WRITHE ──
         // Writhe can be used by any faction that has it (FB natively, or via SL Ancient
@@ -1551,12 +1551,6 @@ object FBExpansion extends Expansion {
                 val d = self.at(r, Desiccated).head
                 game.eliminate(d)
                 self.log(TheEyeOpens.styled(FB) + ": eliminated", u.uclass.styled(f), "and", Desiccated.styled(FB), "in", r)
-                // Ice Age: costs 1 extra power in Ice Age region
-                val iceAgeExtra = game.factions.exists(wf => wf.iceAge.contains(r))
-                if (iceAgeExtra) {
-                    self.power -= 1
-                    self.log(TheEyeOpens.styled(FB), "costs extra", 1.power, "due to", IceAge)
-                }
                 self.power += 1
                 self.log(TheEyeOpens.styled(FB) + ": gained", 1.power)
             }

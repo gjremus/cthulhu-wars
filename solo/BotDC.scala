@@ -74,6 +74,12 @@ class GameEvaluationDC(implicit game : Game) extends GameEvaluation(DC)(game) {
                 case DCPilgrimageMainAction(f) =>
                     self.power >= 1                     |=> 700  -> "use pilgrimage"
 
+                case DCPilgrimageUnitMoveAction(_, _, _, _, _) =>
+                    true                               |=> 800  -> "move unit via pilgrimage"
+
+                case DCPilgrimageDoneAction(_, _, _) =>
+                    true                               |=> 100  -> "done pilgrimage"
+
                 case DCDarkBargainMainAction(f) =>
                     true                                |=> 600  -> "use dark bargain"
 
@@ -82,6 +88,21 @@ class GameEvaluationDC(implicit game : Game) extends GameEvaluation(DC)(game) {
 
                 case DCProselytizeReqOptInAction(f) =>
                     self.needs(ProselytizeReq)          |=> 1500 -> "take Proselytize for SBR"
+
+                case DCProselytizeSelectFactionAction(_, _, _, _, _, _, target, _) =>
+                    (target != self)                    |=> 1000 -> "drag enemy cultist"
+                    (target == self)                    |=> -5000 -> "never drag own cultist"
+
+                case DCProselytizeFactionSelectDoneAction(_, _, _, _, selected, _) =>
+                    selected.any                       |=> 500 -> "done selecting factions"
+                    selected.none                      |=> -500 -> "done with no factions"
+
+                case DCProselytizeAssignToFactionAction(_, _, _, _, _, _, target, _) =>
+                    (target != self)                    |=> 800 -> "assign extra drag to enemy"
+
+                case DCProselytizeEnemyPickAction(_, _, _, cultistRef, _, _, _) =>
+                    !game.unit(cultistRef).onGate       |=> 800 -> "sacrifice off-gate cultist"
+                    game.unit(cultistRef).onGate        |=> 200 -> "sacrifice on-gate cultist"
 
                 case DCSatiateReqOptInAction(f) =>
                     self.needs(SatiateReq)              |=> 1500 -> "take Satiate for SBR"

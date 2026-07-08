@@ -253,6 +253,8 @@ case class GhatanotoaSBRPayAction(self : Faction) extends OptionFactionAction(im
 
 // Azathoth IGOO: Nuclear Chaos spellbook action
 case class NuclearChaosMainAction(self : Faction) extends OptionFactionAction(implicit g => "Nuclear Chaos".styled("nt") + " (Cost 0)") with MainQuestion
+case class NuclearChaosDieAction(self : Faction, remaining : $[Faction], rolls : Map[Faction, Int], roller : Faction, roll : Int) extends ForcedAction
+case class NuclearChaosRolledAction(self : Faction, rolls : Map[Faction, Int]) extends ForcedAction
 case class NuclearChaosRollAction(self : Faction, rolls : Map[Faction, Int]) extends ForcedAction
 case class NuclearChaosAdjustAction(self : Faction, rolls : Map[Faction, Int], adjust : Int) extends BaseFactionAction(implicit g => "Nuclear Chaos".styled("nt"), implicit g => {
     val myRoll = rolls.getOrElse(self, 0) + adjust
@@ -290,6 +292,7 @@ case class AzathothAwakenMainAction(self : Faction) extends OptionFactionAction(
     "</div>"
 }) with MainQuestion with Soft
 case class AzathothAwakenCommitAction(self : Faction, powerCost : Int, gateRegion : Region) extends ForcedAction
+case class AzathothAwakenCostAction(self : Faction, roll : Int, powerCost : Int, gateRegion : Region) extends ForcedAction
 case class AzathothEnemyChoiceAction(self : Faction, face : Int, remaining : $[Faction], choices : $[Offer]) extends ForcedAction
 case class AzathothEnemyChooseAction(self : Faction, face : Int, chooser : Faction) extends BaseFactionAction(implicit g => "Azathoth".styled("nt") + " Awakening", implicit g => {
     val qm = Overlays.imageSource("question-mark")
@@ -997,8 +1000,16 @@ object IGOOsExpansion extends Expansion {
 
             self.log(Ygolonac.styled(self), "used Orifices:", Ygolonac, "now belongs to", targetFaction)
 
-            // Resume battle at EliminatePhase to process Y'Golonac's original kill
-            BattleProceedAction(EliminatePhase)
+            // Exempt the original killed Y'Golonac from forces so subsequent phases
+            // (Fire Vampires, Quachil) don't interact with it — EliminatePhase still
+            // cleans up exempted killed units via exempted.%(_.health == Killed)
+            game.battle.foreach { b =>
+                (b.attackers.forces ++ b.defenders.forces).%(u => u.uclass == Ygolonac && u.health == Killed).foreach(u => b.exempt(u))
+            }
+
+            // Resume at CosmicRulerPhase so the full post-kill chain runs
+            // (including DholePlanetaryDestructionPhase)
+            BattleProceedAction(CosmicRulerPhase)
 
 
         // ── CEREMONY OF ANNIHILATION (Tulzscha spellbook, doom-phase action) ──
@@ -1010,6 +1021,8 @@ object IGOOsExpansion extends Expansion {
         case CeremonyOfAnnihilationChoiceAction(self) =>
             val earned = game.ritualCost
             self.power += earned
+            game.ritualHistory :+= self
+            game.ritualHistoryCeremony :+= true
             if (game.ritualTrack(game.ritualMarker) != 999)
                 game.ritualMarker += 1
             game.showROAT()
@@ -1088,10 +1101,12 @@ object IGOOsExpansion extends Expansion {
                 else
                     game.board.connected(sourceRegion).%(_.glyph != Ocean)
                 if (adj.none || cultists.none) {
-                    // No valid destination — skip
                     ForcedCultistMoveProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
                 } else if (adj.num == 1) {
-                    // Only one option — auto-move
+                    val dcAcolyteMoved = cultists.exists { ur => game.unitOpt(ur).exists(u =>
+                        (u.faction == DC && u.uclass == Acolyte) ||
+                        (u.uclass == MindParasiteCultist && game.mindParasiteOriginalFaction.get(u.ref).has(DC))
+                    ) }
                     cultists.foreach { ur =>
                         game.unitOpt(ur).foreach { u =>
                             u.region = adj.head
@@ -1100,9 +1115,12 @@ object IGOOsExpansion extends Expansion {
                     }
                     val powerName = if (oceanDest) "Tsunami" else "The Agony Sting"
                     faction.log(cultists.num, "cultist".s(cultists.num), "forcibly moved by", powerName.styled("nt"), "to", adj.head)
-                    ForcedCultistMoveProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
+                    val next = ForcedCultistMoveProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
+                    if (dcAcolyteMoved)
+                        Force(DCProselytizeCheckAction(sourceRegion, adj.head, next))
+                    else
+                        next
                 } else {
-                    // Multiple destinations — faction chooses for each cultist
                     val u = cultists.head
                     val rest = cultists.tail
                     val nextRemaining = if (rest.any) (faction, rest) +: remaining.tail else remaining.tail
@@ -1112,13 +1130,24 @@ object IGOOsExpansion extends Expansion {
 
         case ForcedCultistMoveAction(self, u, dest, remaining, then) =>
             if (u != null) {
-                game.unitOpt(u).foreach { uf =>
+                val ufOpt = game.unitOpt(u)
+                val dcAcolyteMoved = ufOpt.exists(uf =>
+                    (uf.faction == DC && uf.uclass == Acolyte) ||
+                    (uf.uclass == MindParasiteCultist && game.mindParasiteOriginalFaction.get(uf.ref).has(DC))
+                )
+                val src = ufOpt.map(_.region).getOrElse(dest)
+                ufOpt.foreach { uf =>
                     uf.region = dest
                     uf.onGate = false
                 }
                 self.log(u.uclass.styled(self), "forcibly moved to", dest)
+                if (dcAcolyteMoved)
+                    Force(DCProselytizeCheckAction(src, dest, then))
+                else
+                    Force(then)
+            } else {
+                Force(then)
             }
-            Force(then)
 
         // Ghatanothoa IGOO: Mummify
         case GhatanotoaMummifyAction(self) =>
@@ -1232,25 +1261,34 @@ object IGOOsExpansion extends Expansion {
 
         // ── NUCLEAR CHAOS (Azathoth spellbook) ──
         case NuclearChaosMainAction(self) =>
-            // All players roll 1d6
-            val rolls = factions.map(f => f -> (1::2::3::4::5::6).shuffle.first).toMap
-            factions.foreach { f => f.log("rolled a " + rolls(f) + " for", "Nuclear Chaos".styled("nt")) }
-            // Owner may adjust their roll +/-1
-            val myRoll = rolls(self)
-            val canPlus = myRoll < 6
-            val canMinus = myRoll > 1
+            val remaining = factions.toList
+            RollD6(_ => "" + remaining.head + " rolls for Nuclear Chaos", roll => NuclearChaosDieAction(self, remaining.drop(1), Map(), remaining.head, roll))
+
+        case NuclearChaosDieAction(self, remaining, rolls, roller, roll) =>
+            val updated = rolls + (roller -> roll)
+            if (remaining.any)
+                RollD6(_ => "" + remaining.head + " rolls for Nuclear Chaos", roll => NuclearChaosDieAction(self, remaining.drop(1), updated, remaining.head, roll))
+            else
+                Force(NuclearChaosRolledAction(self, updated))
+
+        case NuclearChaosRolledAction(self, rolls) =>
             var ask = Ask(self)
-            if (canPlus) ask = ask.add(NuclearChaosAdjustAction(self, rolls, 1))
-            if (canMinus) ask = ask.add(NuclearChaosAdjustAction(self, rolls, -1))
+            if (rolls(self) < 6)
+                ask = ask.add(NuclearChaosAdjustAction(self, rolls, 1))
+            if (rolls(self) > 1)
+                ask = ask.add(NuclearChaosAdjustAction(self, rolls, -1))
             ask = ask.add(NuclearChaosKeepAction(self, rolls))
             ask
 
         case NuclearChaosAdjustAction(self, rolls, adjust) =>
-            val adjusted = rolls + (self -> (rolls(self) + adjust))
+            factions.foreach { f => f.log("rolled a", rolls(f), "for", "Nuclear Chaos".styled("nt")) }
+            val newRoll = math.max(1, math.min(6, rolls(self) + adjust))
+            val adjusted = rolls + (self -> newRoll)
             self.log("Nuclear Chaos".styled("nt") + ": adjusted roll to", adjusted(self))
             Force(NuclearChaosRollAction(self, adjusted))
 
         case NuclearChaosKeepAction(self, rolls) =>
+            factions.foreach { f => f.log("rolled a", rolls(f), "for", "Nuclear Chaos".styled("nt")) }
             Force(NuclearChaosRollAction(self, rolls))
 
         case NuclearChaosRollAction(self, rolls) =>
@@ -1284,16 +1322,19 @@ object IGOOsExpansion extends Expansion {
         case AzathothAwakenCommitAction(self, _, gateRegion) =>
             // Store gate region for later resolve
             game.azathothAwakenGateRegion = |(gateRegion)
-            game.azathothAwakenChoices = $
+            game.azathothAwakenChoices = $()
             // Roll 1d6+2 for Power cost
             RollD6("Azathoth Awakening — roll for Power cost", roll => {
                 val powerCost = roll + 2
-                self.power -= powerCost
-                self.log("rolled", roll, "+ 2 =", powerCost.power, "to awaken", "Azathoth".styled("nt"))
-                // Start enemy choice loop
-                val enemies = factions.but(self)
-                AzathothEnemyChoiceAction(self, 0, enemies, $)
+                AzathothAwakenCostAction(self, roll, powerCost, gateRegion)
             })
+
+        case AzathothAwakenCostAction(self, roll, powerCost, gateRegion) =>
+            self.power -= powerCost
+            self.log("rolled a", roll, "with the Azathoth die.", self.full, "awakened Azathoth for", powerCost.power, "(" + roll, "dice roll + 2)")
+            // Start enemy choice loop
+            val enemies = factions.but(self)
+            AzathothEnemyChoiceAction(self, 0, enemies, $())
 
         case AzathothEnemyChoiceAction(self, _, remaining, choices) =>
             if (remaining.any) {

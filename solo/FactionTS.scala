@@ -324,7 +324,8 @@ object TSExpansion extends Expansion {
                 val gates = self.allGates
                 val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
                 val doom = valid.num
-                val es = self.goos.factionGOOs.num + self.can(Consecration).??($(0, 1, 1, 1, 2)(game.cathedrals.num))
+                val esGoo = if (self == TB) self.goos.factionGOOs.any.??(1) else self.goos.factionGOOs.num
+                val es = esGoo + self.can(Consecration).??($(0, 1, 1, 1, 2)(game.cathedrals.num))
 
                 // Exactly match standard ritual: power, doom, log, ES, acted
                 // power already 0, no deduction needed
@@ -559,11 +560,19 @@ object TSExpansion extends Expansion {
             }
 
         case GraspingDeadBattleAction(self, r, f) =>
-            self.log("Grasping Dead: battle with", self.at(r, TombHerd).num, TombHerd.styled(TS), "in", r)
-            TSExpansion.graspingDeadRemaining = TSExpansion.graspingDeadRemaining.but(r)
-            TSExpansion.graspingDeadFought :+= r
-            game.queue = $(new Battle(r, self, f, |(GraspingDead))) ++ game.queue
-            ProceedBattlesAction
+            if (self.at(r, TombHerd).none) {
+                TSExpansion.graspingDeadRemaining = TSExpansion.graspingDeadRemaining.but(r)
+                TSExpansion.graspingDeadFought :+= r
+                Force(GraspingDeadChooseRegionAction(self))
+            } else {
+                self.log("Grasping Dead: battle with", self.at(r, TombHerd).num, TombHerd.styled(TS), "in", r)
+                TSExpansion.graspingDeadRemaining = TSExpansion.graspingDeadRemaining.but(r)
+                TSExpansion.graspingDeadFought :+= r
+                if (game.factions.has(FB))
+                    game.fbPowerAtBattleStart = FB.power
+                game.queue = $(new Battle(r, self, f, |(GraspingDead))) ++ game.queue
+                ProceedBattlesAction
+            }
 
         case AfterAction(self) if self == TS && TSExpansion.graspingDeadActive =>
             // GD chain still active — check for more regions (including pained TombHerds in new regions)

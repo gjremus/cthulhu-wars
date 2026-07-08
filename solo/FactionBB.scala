@@ -94,13 +94,6 @@ case object BB extends Faction { f =>
         2.times(CatFromUranus)
 
     override def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = u match {
-        // Bastet: cost 6; requires one of each Cat variety in play (Moon counts
-        // as in-play — a cat on Earth or on the Moon satisfies its variety),
-        // and no enemy units in the target region. Per user correction
-        // (v2.4.4): "The Moon is in play. If at least one of each cat variety
-        // is either on earth, or on the moon, then the Bastet requirement is
-        // met." Use `f.all(uclass)` (region.inPlay) instead of `f.onMap(uclass)`
-        // so Moon-resident cats count toward the variety check.
         case Bastet =>
             (f.all(EarthCat).any &&
              f.all(CatFromMars).any &&
@@ -200,6 +193,32 @@ case class Pay2ForBBAction(self : Faction)
 // BUBASTIS (BB) EXPANSION — game-loop integration
 // ============================================================================
 object BBExpansion extends Expansion {
+    override def triggers()(implicit game : Game) {
+        if (!game.setup.has(BB)) return
+        BB.satisfyIf(NoEarthCatsOnMoon, "No Earth Cats on the Moon", BB.at(BB.moon).%(_.uclass == EarthCat).none)
+
+        // Cat in every enemy start — checked here (BEFORE Cyclopean Gaze) so
+        // that momentarily having cats in all starts earns the SBR even if CG
+        // subsequently pains a cat away.
+        if (BB.needs(CatInEveryEnemyStart)) {
+            val catInEveryStart = game.factions.but(BB).forall(e => game.starting.get(e).exists(r => BB.at(r).%(u => u.uclass == EarthCat || u.uclass == CatFromMars || u.uclass == CatFromSaturn || u.uclass == CatFromUranus).any))
+            if (catInEveryStart) {
+                val bonus = game.factions.but(BB).num
+                BB.satisfy(CatInEveryEnemyStart, "A Cat in every enemy faction's Start Area")
+                if (bonus > 0) {
+                    BB.power += bonus
+                    BB.log("gained", bonus.power, "(Cat in every Start Area bonus)")
+                }
+            }
+        }
+    }
+
+    def postCGTriggers()(implicit game : Game) {
+        // Cat-in-every-start check moved back to triggers() so it fires
+        // BEFORE Cyclopean Gaze.  This method is retained as a no-op so
+        // callers in Game.scala do not break.
+    }
+
     override def eliminate(u : UnitFigure)(implicit game : Game) {
         if (!game.setup.has(BB)) return
         if (u.faction == BB) {
@@ -303,7 +322,7 @@ object BBExpansion extends Expansion {
                 + Pay2ForBBAction(f)
 
             if (f.can(Catnapping) && f.allInPlay.%(_.uclass == Bastet).any && f.power >= 1 &&
-                game.factions.but(f).exists(e => f.allInPlay.%(_.uclass == Bastet).headOption.exists(b => e.at(b.region).any)))
+                game.factions.but(f).exists(e => f.allInPlay.%(_.uclass == Bastet).headOption.exists(b => b.region != BB.moon && e.at(b.region).any)))
                 + CatnappingMainAction(f)
 
             game.libraryActions(f)

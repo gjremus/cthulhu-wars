@@ -165,6 +165,10 @@ case class AnimatedRushDestPickAction(self : Faction, unitRef : UnitRef, movesLe
 case class AnimatedRushMoveAction(self : Faction, unitRef : UnitRef, dest : Region, movesLeft : Int, moved : $[UnitRef], discardedDice : $[Int], originalPositions : $[(UnitRef, Region)], rushSource : Region, rushDest : Region) extends ForcedAction with PowerNeutral
 case class AnimatedRushCancelAction(self : Faction, discardedDice : $[Int], originalPositions : $[(UnitRef, Region)], rushSource : Region, rushDest : Region)
     extends OptionFactionAction("Cancel Rush") with PowerNeutral { override def question(implicit game : Game) = "Animated Rush".styled(FBE) }
+// [LEGACY REPLAY] Pre-632df8c games recorded AnimatedRushDoneEarlyAction(self) instead of cancel.
+case class AnimatedRushDoneEarlyAction(self : Faction) extends OptionFactionAction("Done") with PowerNeutral { override def question(implicit game : Game) = "Animated Rush".styled(FBE) }
+// [LEGACY REPLAY] Pre-6d1ee19 games recorded AnimatedRushDoneAction — old "pick units, move all at once" flow.
+case class AnimatedRushDoneAction(self : Faction, source : Region, dest : Region, k : Int, picked : $[UnitRef]) extends ForcedAction with PowerNeutral
 
 // ── SUCCOR (Doom Phase, §1.10 SB5 / §3.10.5 / §4.4.5) ────────────────────────
 case class SuccorMainAction(self : Faction)
@@ -222,9 +226,11 @@ object FBEExpansion extends Expansion {
     // checked. Power triggers on 2+ Units of ANY faction; Doom needs 3+ FBE-controlled.
     // Exception: High Priest sacrifices (Unspeakable Oath) are not part of Actions
     // and never count toward Self Consuming.
+    // Fix: only record deaths when an action is actively resolving (fbeActionInProgress).
     override def eliminate(u : UnitFigure)(implicit game : Game) {
         if (!game.setup.has(FBE)) return
         if (game.fbeHPSacrificeInProgress) return
+        if (!game.fbeActionInProgress) return
         game.fbeSelfConsumingDeaths :+= (u.faction == FBE)
     }
 
@@ -637,6 +643,19 @@ object FBEExpansion extends Expansion {
             (1 to maxK).foreach(k => + AnimatedRushMainAction(self, rushSource, rushDest, k))
             + AnimatedRushSkipAction(self)
             asking
+
+        // [LEGACY REPLAY] Pre-632df8c "Done early" — keep moves, end rush.
+        case AnimatedRushDoneEarlyAction(self) =>
+            self.log("Animated Rush".styled(FBE) + ": done early")
+            Force(MoveContinueAction(self, true))
+
+        // [LEGACY REPLAY] Pre-6d1ee19 "Done" — discard k dice, move all picked units to dest.
+        case AnimatedRushDoneAction(self, source, dest, k, picked) =>
+            game.fbeCardDice = game.fbeCardDice.sortBy(x => x).drop(k)
+            picked.foreach(ur => game.unit(ur).region = dest)
+            self.log("Animated Rush".styled(FBE) + ": discarded", k, (k == 1).?("die").|("dice"),
+                "carried", picked.num, ("Unit".s(picked.num)).styled(FBE), "to", dest)
+            Force(MoveContinueAction(self, true))
 
         // ── SUCCOR (§1.10 SB5 / §3.10.5) ─────────────────────────────────────
         case SuccorMainAction(self) =>

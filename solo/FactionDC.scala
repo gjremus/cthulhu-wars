@@ -52,7 +52,7 @@ case object DarkBargain extends FactionSpellbook(DC, "Dark Bargain")
 // ── SPELLBOOK REQUIREMENTS ─────────────────────────────────────────────────
 // 1-to-1 slot mapping per authoritative §1.9 user-supplied list.
 case object ProselytizeReq extends Requirement("Doom Phase: gain 2 Sin per enemy GOO")
-case object SatiateReq     extends Requirement("Doom Phase: +1 Power per other SB, +1 Sin per remaining pool SB")
+case object SatiateReq     extends Requirement("Doom Phase: +1 Power per other SB earned, +1 Sin per pool SB not counting this one")
 case object LureReq        extends Requirement("No Mindless Husks in your Pool")
 case object EscharReq      extends Requirement("No Fallen Prophets in your Pool")
 case object PilgrimageReq  extends Requirement("Any player performs a Ritual of Annihilation")
@@ -230,12 +230,54 @@ case class DCDeliverReservedAcolytePlaceAction(self : Faction, sb : Spellbook, r
 // has both an off-gate and an on-gate Acolyte available. The DC player's
 // DCProselytizePlan command controls whether to prompt or auto-prefer one side.
 // Pattern matches GC Devolve / HP Unspeakable Oath / Gate Diplomacy ("command thing").
-case class DCProselytizeFactionPickAction(self : Faction, area : Region, to : Region, remaining : $[Faction])
+case class DCProselytizeCheckAction(from : Region, to : Region, then : Action)
+    extends ForcedAction with PowerNeutral
+case class DCProselytizeFactionPickAction(self : Faction, area : Region, to : Region, remaining : $[Faction], then : Action)
     extends ForcedAction with PowerNeutral
 case class DCProselytizePickCultistAction(self : Faction, area : Region, to : Region, cultist : UnitRef, remaining : $[Faction])
     extends BaseFactionAction(
         Proselytize.styled(DC) + ": " + self.short.styled(self) + " drags",
         implicit g => g.unit(cultist).uclass.styled(self) + (if (g.unit(cultist).onGate) " (on gate)" else " (off gate)") + " to " + to.toString)
+    with PowerNeutral
+
+// ── Aggregated Proselytize (fires after Pilgrimage or batch movement) ──────
+// When multiple DC Acolytes move from same source, DC gets a faction-picker
+// menu (if multiple enemy factions have cultists in source) rather than
+// auto-dragging one from each.
+case class DCProselytizeAggregatedAction(from : Region, to : Region, movedCount : Int, then : Action)
+    extends ForcedAction with PowerNeutral
+
+// DC picks which enemy factions to drag from (menu with factions + Done)
+case class DCProselytizeFactionSelectAction(self : Faction, from : Region, to : Region, movedCount : Int, remaining : Int, selected : $[Faction], then : Action)
+    extends ForcedAction with PowerNeutral
+
+// DC picks a faction to add to selection
+case class DCProselytizeSelectFactionAction(self : Faction, from : Region, to : Region, movedCount : Int, remaining : Int, selected : $[Faction], target : Faction, then : Action)
+    extends BaseFactionAction(Proselytize.styled(DC) + ": drag from", implicit g => target.full)
+    with PowerNeutral
+
+// Done selecting factions
+case class DCProselytizeFactionSelectDoneAction(self : Faction, from : Region, to : Region, movedCount : Int, selected : $[Faction], then : Action)
+    extends BaseFactionAction(Proselytize.styled(DC), "Done".styled("power"))
+    with PowerNeutral
+
+// Assignment loop: DC assigns how many cultists to drag from each faction
+case class DCProselytizeAssignAction(self : Faction, from : Region, to : Region, remaining : Int, assignments : $[(Faction, Int)], factions : $[Faction], then : Action)
+    extends ForcedAction with PowerNeutral
+
+case class DCProselytizeAssignToFactionAction(self : Faction, from : Region, to : Region, remaining : Int, assignments : $[(Faction, Int)], factions : $[Faction], target : Faction, then : Action)
+    extends BaseFactionAction(Proselytize.styled(DC) + ": assign drag to", implicit g => target.full + " (" + remaining + " remaining)")
+    with PowerNeutral
+
+// Execute the drags per faction (enemy picks which cultists)
+case class DCProselytizeExecuteDragAction(self : Faction, from : Region, to : Region, assignments : $[(Faction, Int)], then : Action)
+    extends ForcedAction with PowerNeutral
+
+// Enemy picks which of their cultists gets dragged (when they have choice)
+case class DCProselytizeEnemyPickAction(self : Faction, from : Region, to : Region, cultist : UnitRef, remainingForFaction : Int, assignments : $[(Faction, Int)], then : Action)
+    extends BaseFactionAction(
+        Proselytize.styled(DC) + ": " + self.short.styled(self) + " choose cultist to drag",
+        implicit g => g.unit(cultist).uclass.styled(self) + (if (g.unit(cultist).onGate) " (on gate)" else ""))
     with PowerNeutral
 
 // ── Satiate (Action: Cost 2 — §1.10) ───────────────────────────────────────
@@ -272,7 +314,7 @@ case class DCPilgrimageMainAction(self : Faction)
     with MainQuestion with Soft
 case class DCPilgrimageProphetAction(self : Faction, prophet : UnitRef)
     extends BaseFactionAction(
-        Pilgrimage.styled(DC) + ": choose destination",
+        Pilgrimage.styled(DC) + ": choose fallen prophet region",
         implicit g => FallenProphet.styled(DC) + " in " + g.unit(prophet).region.toString)
     with PowerNeutral
 case class DCPilgrimageDestAction(self : Faction, prophet : UnitRef, dest : Region)
@@ -283,7 +325,7 @@ case class DCPilgrimageDestAction(self : Faction, prophet : UnitRef, dest : Regi
 case class DCPilgrimageUnitContinueAction(self : Faction, prophet : UnitRef, dest : Region, remaining : $[UnitRef])
     extends ForcedAction with PowerNeutral
 case class DCPilgrimageUnitMoveAction(self : Faction, prophet : UnitRef, dest : Region, unit : UnitRef, remaining : $[UnitRef])
-    extends BaseFactionAction(Pilgrimage.styled(DC) + ": move", implicit g => g.unit(unit).uclass.styled(DC) + " to " + dest.toString)
+    extends BaseFactionAction(Pilgrimage.styled(DC) + ": move", implicit g => g.unit(unit).uclass.styled(DC) + (if (g.unit(unit).onGate) " (on gate)" else "") + " to " + dest.toString)
     with PowerNeutral
 case class DCPilgrimageUnitStayAction(self : Faction, prophet : UnitRef, dest : Region, unit : UnitRef, remaining : $[UnitRef])
     extends BaseFactionAction(Pilgrimage.styled(DC) + ": leave", implicit g => g.unit(unit).uclass.styled(DC) + " in " + g.unit(unit).region.toString)
@@ -308,7 +350,7 @@ case class DCDarkBargainMainAction(self : Faction)
     extends OptionFactionAction(DarkBargain.styled(DC) + " (Cost " + 0.power + ")")
     with MainQuestion with Soft
 case class DCDarkBargainConfirmAction(self : Faction)
-    extends BaseFactionAction(DarkBargain.styled(DC), "Confirm".styled("power")) with Soft
+    extends BaseFactionAction(DarkBargain.styled(DC), "Confirm".styled("power"))
 // Round-of-prompts: each enemy F secretly picks a D6 face. NO log line is
 // emitted per-enemy — the picks are stored on game.dcDarkBargainPicks and
 // revealed as a single combined line once all enemies are done.
@@ -753,7 +795,7 @@ object DCExpansion extends Expansion {
             // ProselytizeReq: Doom-Phase opt-in (+2 Sin per enemy GOO on satisfy)
             if (f.needs(ProselytizeReq))
                 + DCProselytizeReqOptInAction(f)
-            // SatiateReq: Doom-Phase opt-in (+1 Power per other SB, +1 Sin per pool SB)
+            // SatiateReq: Doom-Phase opt-in (+1 Power per other SB earned, +1 Sin per pool SB excl. this; sum=5)
             if (f.needs(SatiateReq))
                 + DCSatiateReqOptInAction(f)
 
@@ -778,8 +820,8 @@ object DCExpansion extends Expansion {
 
         case DCSatiateReqOptInAction(self) =>
             val otherSBs = self.spellbooks.num
-            val poolSBs  = self.unfulfilled.num
-            self.satisfy(SatiateReq, "Doom Phase SBR: +1 Power per other SB, +1 Sin per remaining pool SB")
+            val poolSBs  = self.unfulfilled.num - 1
+            self.satisfy(SatiateReq, "Doom Phase SBR: +1 Power per other SB earned, +1 Sin per pool SB (excl. this)")
             self.power += otherSBs
             // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
             val satiateGained = game.grantDCSin(poolSBs)
@@ -904,12 +946,22 @@ object DCExpansion extends Expansion {
                     ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(only one in", area, ")")
                     Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1))
                 } else if (cultists.num > 1) {
-                    // Ask the affected faction which to lose (self=ff for enemy-colored border)
-                    implicit val asking = Asking(ff)
-                    cultists.foreach { c =>
-                        + DCSatiatePickCultistAction(ff, area, c.ref, remaining.dropStarting, capturedSoFar)
+                    val allSameType = cultists.%(_.uclass != cultists.first.uclass).none
+                    val anyOnGate = cultists.%(_.onGate).any
+                    if (allSameType && !anyOnGate) {
+                        // All equivalent (same type, none on gate) — auto-capture one
+                        val c = cultists.first
+                        c.region = self.prison
+                        ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(all equivalent in", area, ")")
+                        Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1))
+                    } else {
+                        // Ask the affected faction which to lose (self=ff for enemy-colored border)
+                        implicit val asking = Asking(ff)
+                        cultists.foreach { c =>
+                            + DCSatiatePickCultistAction(ff, area, c.ref, remaining.dropStarting, capturedSoFar)
+                        }
+                        asking
                     }
-                    asking
                 } else {
                     Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar))
                 }
@@ -1049,21 +1101,26 @@ object DCExpansion extends Expansion {
             recordTenebrosum(action, 1, "Pilgrimage")
             val p = game.unit(prophet)
             val src = p.region
-            // Per-unit opt-in (Fix HB-77): rules say each OTHER DC unit in the
-            // Prophet's source area gets its own choice (move with the Prophet
-            // or stay behind). Iterate units via the Continue chain.
             val others = self.at(src).%(u => u.ref != prophet)./(_.ref)
-            self.log(Pilgrimage.styled(DC) + ": Fallen Prophet moves to", dest)
+            // Prophet does NOT move (per rules §1.10: "any of your OTHER Units").
+            self.log(Pilgrimage.styled(DC) + ": units from", src, "move to", dest)
+            // Reset aggregated Proselytize tracking for this Pilgrimage batch.
+            game.dcPilgrimageSrc = src
+            game.dcPilgrimageMovedAcolytes = 0
             Force(DCPilgrimageUnitContinueAction(self, prophet, dest, others))
 
         case DCPilgrimageUnitContinueAction(self, prophet, dest, remaining) =>
             if (remaining.none) {
-                EndAction(self)
+                // Pilgrimage complete — fire aggregated Proselytize if any Acolytes moved.
+                if (game.dcPilgrimageMovedAcolytes > 0 && DC.can(Proselytize))
+                    Force(DCProselytizeAggregatedAction(game.dcPilgrimageSrc, dest, game.dcPilgrimageMovedAcolytes, EndAction(self)))
+                else
+                    EndAction(self)
             } else {
                 implicit val asking = Asking(self)
-                val u = remaining.first
-                + DCPilgrimageUnitMoveAction(self, prophet, dest, u, remaining.dropStarting)
-                + DCPilgrimageUnitStayAction(self, prophet, dest, u, remaining.dropStarting)
+                remaining.foreach { u =>
+                    + DCPilgrimageUnitMoveAction(self, prophet, dest, u, remaining.but(u))
+                }
                 + DCPilgrimageDoneAction(self, prophet, dest)
                 asking
             }
@@ -1073,6 +1130,9 @@ object DCExpansion extends Expansion {
             val src = u.region
             u.region = dest
             self.log(Pilgrimage.styled(DC) + ": moved", u.uclass.styled(DC), "from", src, "to", dest)
+            // Track moved Acolytes for aggregated Proselytize (no per-unit trigger).
+            if (u.uclass == Acolyte && self == DC)
+                game.dcPilgrimageMovedAcolytes += 1
             Force(DCPilgrimageUnitContinueAction(self, prophet, dest, remaining))
 
         case DCPilgrimageUnitStayAction(self, prophet, dest, unitRef, remaining) =>
@@ -1081,7 +1141,11 @@ object DCExpansion extends Expansion {
             Force(DCPilgrimageUnitContinueAction(self, prophet, dest, remaining))
 
         case DCPilgrimageDoneAction(self, prophet, dest) =>
-            EndAction(self)
+            // Pilgrimage ended early via Done — fire aggregated Proselytize if any Acolytes moved.
+            if (game.dcPilgrimageMovedAcolytes > 0 && DC.can(Proselytize))
+                Force(DCProselytizeAggregatedAction(game.dcPilgrimageSrc, dest, game.dcPilgrimageMovedAcolytes, EndAction(self)))
+            else
+                EndAction(self)
 
         // ── Dark Bargain (cost 0, secret D6 + even power distribution) ────────
         // HB Fix 93 (2026-06-07): rewritten per user spec. Enemy picks are
@@ -1219,83 +1283,204 @@ object DCExpansion extends Expansion {
             game.dcDarkBargainFacedown = false
             UnknownContinue
 
-        // ── Proselytize (Item 2): forced per-enemy drag chain on Move ──────
-        // Fix HB-79 (2026-06-06): EVERY enemy with an Acolyte in the source
-        // area MUST give up one Acolyte dragged to the destination along with
-        // the moving DC Acolyte. NOT a yes/no opt-in. The only "choice" each
-        // enemy gets is WHICH Acolyte — between an off-gate Acolyte and an
-        // on-gate Acolyte when both exist. The DC player's DCProselytizePlan
-        // command controls whether to prompt or auto-prefer one side. Pattern
-        // matches GC Devolve / HP Unspeakable Oath / Gate Diplomacy "command
-        // thing" + DC Satiate/Lure per-faction chain.
+        // ── Proselytize (Item 2): aggregated drag on Move ──────────────────
+        // Reworked: single-unit moves route through DCProselytizeAggregatedAction
+        // with movedCount=1. Multi-unit moves (Pilgrimage) fire the aggregated
+        // action at end with total moved count. DC picks which enemy factions
+        // to drag from when multiple are available; enemy picks which cultist
+        // when they have a meaningful on-gate/off-gate choice.
         case MovedAction(self : DC.type, u, o, r) if u.uclass == Acolyte && self.can(Proselytize) && o != r =>
             val enemies = game.factions.but(self).%(e => e.at(o).%(_.uclass == Acolyte).any)
-            if (enemies.any) {
-                Force(DCProselytizeFactionPickAction(self, o, r, enemies))
-            } else {
+            if (enemies.any)
+                Force(DCProselytizeAggregatedAction(o, r, 1, MoveContinueAction(DC, true)))
+            else
                 UnknownContinue
+
+        // Proselytize: Mind Parasited DC Acolyte moved by Insects from Shaggai owner
+        case MovedAction(self, u, o, r) if u.uclass == MindParasiteCultist && game.mindParasiteOriginalFaction.get(u).has(DC) && game.factions.has(DC) && DC.can(Proselytize) && o != r =>
+            Force(DCProselytizeCheckAction(o, r, MoveContinueAction(self, true)))
+
+        case DCProselytizeCheckAction(from, to, then) =>
+            Force(DCProselytizeAggregatedAction(from, to, 1, then))
+
+        // ── Aggregated Proselytize: faction-picker + assignment + execution ───
+        case DCProselytizeAggregatedAction(from, to, movedCount, then) =>
+            if (game.factions.has(DC) && DC.can(Proselytize) && from != to && movedCount > 0) {
+                val enemies = game.factions.but(DC).%(e => e.at(from).%(_.uclass == Acolyte).any)
+                if (enemies.none) {
+                    Force(then)
+                } else if (enemies.num == 1) {
+                    // Only one enemy faction: drag up to movedCount of their cultists automatically.
+                    // Cap at available acolytes.
+                    val available = enemies.first.at(from).%(_.uclass == Acolyte).num
+                    val dragCount = movedCount.min(available)
+                    Force(DCProselytizeExecuteDragAction(DC, from, to, $((enemies.first, dragCount)), then))
+                } else {
+                    // Multiple enemy factions: DC picks which to drag from.
+                    Force(DCProselytizeFactionSelectAction(DC, from, to, movedCount, movedCount, $, then))
+                }
+            } else {
+                Force(then)
             }
 
-        case DCProselytizeFactionPickAction(self, area, to, remaining) =>
-            if (remaining.none) {
-                // All enemies processed — fall back to standard post-move chain.
-                MoveContinueAction(DC, true)
+        case DCProselytizeFactionSelectAction(self, from, to, movedCount, remaining, selected, then) =>
+            if (remaining <= 0) {
+                // All picks made: one from each selected faction.
+                val assignments = selected./( f => (f, 1) )
+                Force(DCProselytizeExecuteDragAction(self, from, to, assignments, then))
             } else {
-                val e = remaining.first
-                val acolytes = e.at(area).%(_.uclass == Acolyte)
-                if (acolytes.none) {
-                    // Defensive: enemy may have lost Acolytes from this area mid-chain.
-                    Force(DCProselytizeFactionPickAction(self, area, to, remaining.dropStarting))
-                } else if (acolytes.num == 1) {
-                    // Only one Acolyte — no choice, auto-drag.
-                    val c = acolytes.first
-                    c.region = to
-                    e.log(Proselytize.styled(DC) + ":", e.short.styled(e), Acolyte.styled(e),
-                        if (c.onGate) "(on gate)" else "(off gate)", "dragged from", area, "to", to)
-                    Force(DCProselytizeFactionPickAction(self, area, to, remaining.dropStarting))
+                implicit val asking = Asking(self)
+                val enemies = game.factions.but(DC).%(e => e.at(from).%(_.uclass == Acolyte).any).%(e => !selected.has(e))
+                enemies.foreach { e =>
+                    + DCProselytizeSelectFactionAction(self, from, to, movedCount, remaining, selected, e, then)
+                }
+                + DCProselytizeFactionSelectDoneAction(self, from, to, movedCount, selected, then)
+                asking
+            }
+
+        case DCProselytizeSelectFactionAction(self, from, to, movedCount, remaining, selected, target, then) =>
+            val newSelected = selected :+ target
+            val newRemaining = remaining - 1
+            val enemiesLeft = game.factions.but(DC).%(e => e.at(from).%(_.uclass == Acolyte).any).%(e => !newSelected.has(e))
+            if (newRemaining <= 0 || enemiesLeft.none) {
+                // Can't pick more — distribute drags.
+                if (newSelected.num >= movedCount) {
+                    // Equal or more factions than moved: one from each.
+                    val assignments = newSelected./( f => (f, 1) )
+                    Force(DCProselytizeExecuteDragAction(self, from, to, assignments, then))
                 } else {
+                    // More moved than factions selected: need assignment loop.
+                    Force(DCProselytizeAssignAction(self, from, to, movedCount - newSelected.num, newSelected./( f => (f, 1) ), newSelected, then))
+                }
+            } else {
+                Force(DCProselytizeFactionSelectAction(self, from, to, movedCount, newRemaining, newSelected, then))
+            }
+
+        case DCProselytizeFactionSelectDoneAction(self, from, to, movedCount, selected, then) =>
+            if (selected.none) {
+                DC.log(Proselytize.styled(DC) + ": declined to drag")
+                Force(then)
+            } else if (selected.num >= movedCount) {
+                val assignments = selected./( f => (f, 1) )
+                Force(DCProselytizeExecuteDragAction(self, from, to, assignments, then))
+            } else {
+                // More moved than factions selected: assign extras.
+                Force(DCProselytizeAssignAction(self, from, to, movedCount - selected.num, selected./( f => (f, 1) ), selected, then))
+            }
+
+        case DCProselytizeAssignAction(self, from, to, remaining, assignments, factions, then) =>
+            if (remaining <= 0) {
+                Force(DCProselytizeExecuteDragAction(self, from, to, assignments, then))
+            } else {
+                implicit val asking = Asking(self)
+                // Only offer factions that still have enough cultists to take more.
+                factions.foreach { f =>
+                    val currentAssigned = assignments.%((af, _) => af == f)./((_,n) => n).sum
+                    val available = f.at(from).%(_.uclass == Acolyte).num
+                    if (currentAssigned < available)
+                        + DCProselytizeAssignToFactionAction(self, from, to, remaining, assignments, factions, f, then)
+                }
+                asking
+            }
+
+        case DCProselytizeAssignToFactionAction(self, from, to, remaining, assignments, factions, target, then) =>
+            val newAssignments = assignments./{ case (f, n) => if (f == target) (f, n + 1) else (f, n) }
+            Force(DCProselytizeAssignAction(self, from, to, remaining - 1, newAssignments, factions, then))
+
+        case DCProselytizeExecuteDragAction(self, from, to, assignments, then) =>
+            if (assignments.none) {
+                Force(then)
+            } else {
+                val (faction, count) = assignments.first
+                val remainingAssignments = assignments.dropStarting
+                val acolytes = faction.at(from).%(_.uclass == Acolyte)
+                if (acolytes.none || count <= 0) {
+                    Force(DCProselytizeExecuteDragAction(self, from, to, remainingAssignments, then))
+                } else if (acolytes.num <= count) {
+                    // Drag all of them (no choice needed).
+                    acolytes.foreach { c =>
+                        c.region = to
+                    }
+                    faction.log(Proselytize.styled(DC) + ":", faction.short.styled(faction), acolytes.num.toString, Acolyte.styled(faction),
+                        "dragged from", from, "to", to)
+                    Force(DCProselytizeExecuteDragAction(self, from, to, remainingAssignments, then))
+                } else {
+                    // Enemy has MORE acolytes than need to be dragged — enemy picks.
                     val offGate = acolytes.%(c => !c.onGate)
                     val onGate  = acolytes.%(c => c.onGate)
                     if (offGate.none || onGate.none) {
-                        // All Acolytes share gate status — no real choice, auto-pick first.
-                        val c = acolytes.first
-                        c.region = to
-                        e.log(Proselytize.styled(DC) + ":", e.short.styled(e), Acolyte.styled(e),
-                            if (c.onGate) "(on gate)" else "(off gate)", "dragged from", area, "to", to,
-                            "(no choice — all", acolytes.num.toString, "same status)")
-                        Force(DCProselytizeFactionPickAction(self, area, to, remaining.dropStarting))
-                    } else if (DC.commands.has(DCProselytizePreferOnGate)) {
-                        // DC plan: auto-pick the on-gate Acolyte.
-                        val c = onGate.first
-                        c.region = to
-                        e.log(Proselytize.styled(DC) + ":", e.short.styled(e), Acolyte.styled(e),
-                            "(on gate)", "dragged from", area, "to", to, "(DC prefers on gate)")
-                        Force(DCProselytizeFactionPickAction(self, area, to, remaining.dropStarting))
-                    } else if (DC.commands.has(DCProselytizePreferOffGate)) {
-                        // DC plan: auto-pick the off-gate Acolyte.
-                        val c = offGate.first
-                        c.region = to
-                        e.log(Proselytize.styled(DC) + ":", e.short.styled(e), Acolyte.styled(e),
-                            "(off gate)", "dragged from", area, "to", to, "(DC prefers off gate)")
-                        Force(DCProselytizeFactionPickAction(self, area, to, remaining.dropStarting))
+                        // All same gate status: no meaningful choice — take first N.
+                        acolytes.take(count).foreach { c =>
+                            c.region = to
+                        }
+                        faction.log(Proselytize.styled(DC) + ":", faction.short.styled(faction), count.toString, Acolyte.styled(faction),
+                            "dragged from", from, "to", to)
+                        Force(DCProselytizeExecuteDragAction(self, from, to, remainingAssignments, then))
                     } else {
-                        // Default DCProselytizePrompt: present off-gate vs on-gate choice.
-                        // G11: self=e for enemy-colored menu border.
-                        implicit val asking = Asking(e)
-                        + DCProselytizePickCultistAction(e, area, to, offGate.first.ref, remaining.dropStarting)
-                        + DCProselytizePickCultistAction(e, area, to, onGate.first.ref, remaining.dropStarting)
+                        // Enemy has both on-gate and off-gate: enemy picks which get dragged.
+                        implicit val asking = Asking(faction)
+                        acolytes.foreach { c =>
+                            + DCProselytizeEnemyPickAction(faction, from, to, c.ref, count, remainingAssignments, then)
+                        }
                         asking
                     }
                 }
             }
 
-        case DCProselytizePickCultistAction(self, area, to, cultistRef, remaining) =>
+        case DCProselytizeEnemyPickAction(self, from, to, cultistRef, remainingForFaction, assignments, then) =>
             val c = game.unit(cultistRef)
-            val from = c.region
+            c.region = to
+            self.log(Proselytize.styled(DC) + ":", self.short.styled(self), c.uclass.styled(self),
+                if (c.onGate) "(on gate)" else "", "dragged from", from, "to", to)
+            if (remainingForFaction <= 1) {
+                Force(DCProselytizeExecuteDragAction(DC, from, to, assignments, then))
+            } else {
+                // Need to pick more from this faction.
+                val remaining = self.at(from).%(_.uclass == Acolyte)
+                if (remaining.none || remainingForFaction - 1 <= 0) {
+                    Force(DCProselytizeExecuteDragAction(DC, from, to, assignments, then))
+                } else if (remaining.num <= remainingForFaction - 1) {
+                    // Not enough left for choice — take all remaining.
+                    remaining.foreach { u =>
+                        u.region = to
+                    }
+                    self.log(Proselytize.styled(DC) + ":", self.short.styled(self), remaining.num.toString, Acolyte.styled(self),
+                        "dragged from", from, "to", to)
+                    Force(DCProselytizeExecuteDragAction(DC, from, to, assignments, then))
+                } else {
+                    val offGate = remaining.%(u => !u.onGate)
+                    val onGate  = remaining.%(u => u.onGate)
+                    if (offGate.none || onGate.none) {
+                        // All same status — no meaningful choice, take first N.
+                        remaining.take(remainingForFaction - 1).foreach { u =>
+                            u.region = to
+                        }
+                        self.log(Proselytize.styled(DC) + ":", self.short.styled(self), (remainingForFaction - 1).toString, Acolyte.styled(self),
+                            "dragged from", from, "to", to)
+                        Force(DCProselytizeExecuteDragAction(DC, from, to, assignments, then))
+                    } else {
+                        // Enemy has both on-gate and off-gate: enemy picks.
+                        implicit val asking = Asking(self)
+                        remaining.foreach { u =>
+                            + DCProselytizeEnemyPickAction(self, from, to, u.ref, remainingForFaction - 1, assignments, then)
+                        }
+                        asking
+                    }
+                }
+            }
+
+        // Legacy action classes kept for backwards compatibility with recorded games.
+        case DCProselytizeFactionPickAction(self, area, to, remaining, then) =>
+            // Route through new aggregated logic.
+            Force(DCProselytizeAggregatedAction(area, to, 1, then))
+
+        case DCProselytizePickCultistAction(self, area, to, cultistRef, remaining) =>
+            // Legacy: route through execution.
+            val c = game.unit(cultistRef)
             c.region = to
             self.log(Proselytize.styled(DC) + ":", self.short.styled(self), Acolyte.styled(self),
-                if (c.onGate) "(on gate)" else "(off gate)", "dragged from", from, "to", to)
-            Force(DCProselytizeFactionPickAction(DC, area, to, remaining))
+                if (c.onGate) "(on gate)" else "(off gate)", "dragged from", area, "to", to)
+            Force(DCProselytizeAggregatedAction(area, to, 1, MoveContinueAction(DC, true)))
 
         // ── LureReq / EscharReq pool-check satisfaction (Item 7) ─────────────
         // These are evaluated on triggers/state changes. Easiest hook: after
@@ -1661,7 +1846,7 @@ object DCExpansion extends Expansion {
 // Doom-phase SB-requirement opt-in actions
 // HB Fix 109.D (2026-06-11): dynamic computed values per user spec.
 // Proselytize: "SBR: +X Sin (2/ enemy GOO)"
-// Satiate: "SBR: +X Power, +Y Sin (1P/ claimed SB, 1S/ unclaimed SB)" where X+Y=6
+// Satiate: "SBR: +X Power, +Y Sin (1P/ other earned SB, 1S/ pool SB excl. this)" where X+Y=5
 case class DCProselytizeReqOptInAction(self : Faction)
     extends OptionFactionAction(implicit g => {
         val enemyGOOs = g.factions.but(self)./~(_.allInPlay).%(_.uclass.utype == GOO).num
@@ -1672,7 +1857,7 @@ case class DCProselytizeReqOptInAction(self : Faction)
 case class DCSatiateReqOptInAction(self : Faction)
     extends OptionFactionAction(implicit g => {
         val claimedSBs = self.spellbooks.num
-        val unclaimedSBs = 6 - claimedSBs
-        "SBR".styled(DC) + ": " + ("+" + claimedSBs + " Power").styled("power") + ", " + ("+" + unclaimedSBs + " Sin").styled("dc") + " (1P/ claimed SB, 1S/ unclaimed SB)"
+        val unclaimedSBs = 5 - claimedSBs
+        "SBR".styled(DC) + ": " + ("+" + claimedSBs + " Power").styled("power") + ", " + ("+" + unclaimedSBs + " Sin").styled("dc") + " (1P/ other earned SB, 1S/ pool SB excl. this)"
     })
     with DoomQuestion

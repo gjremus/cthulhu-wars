@@ -723,19 +723,8 @@ object Overlays {
         case $("DSAlternateSpellbooks") => spellbook("Daemon Sultan - Alternate Spellbooks", "", "<span class=ability-color>Traitors!</span>, <span class=ability-color>Fiendish Growth</span>, and <span class=ability-color>Undirected Energy</span> are replaced with:<br/><br/><span class=ability-color>Omnipotence</span> <span class=cost-color>(Action Cost: 1)</span><br/>Flip this spellbook facedown. Move any of your Avatars in play to any Areas on the Map.<br/><br/><span class=ability-color>Fiendish Spawn</span> <span class=cost-color>(Pre-Battle)</span><br/>Flip this spellbook facedown. If Avatar Antithesis is in a Battle, you may place up to two Larva of your choice from your pool into Avatar Antithesis's Area.<br/><br/><span class=ability-color>Directed Energy</span> <span class=cost-color>(Post-Battle)</span><br/>Flip this spellbook facedown. After Pains and Kills are resolved, if Avatar Thesis is in a Battle and survived, gain 1 power for each Controlled Chaos Gate in play.")
 
 
-        case $("AN") => faction(AN, "info:an-background", Dematerialization, "Doom Phase", "Relocate any or all of your own Units from one Area to a single other Area, anywhere on the Map.",
-            $, $(
-            (Acolyte,    6,   "1",   "0", s""""""),
-            (UnMan,      3, "3/0",   "0", s"""<div class=p><span class=cost-color>Cost:</span> 0 with ${reference(AN, Festival)}</div>"""),
-            (Reanimated, 3, "4/1",   "2", s"""<div class=p><span class=cost-color>Cost:</span> 1 with ${reference(AN, Brainless)}</div>"""),
-            (Yothan,     3, "6/3",   "7", s"""<div class=p><span class=cost-color>Cost:</span> 3 with ${reference(AN, Extinction)}</div>"""),
-            (Cathedral,  4, "3/1", "n/a", s"""
-                <div class=p>You may use the Create Gate Action to Create Cathedrals instead of Gates.</div>
-                <div class=p>${cost("Cost:")} 1 if built not adjacent to another Cathedral</div>
-                <div class=p>Spellbooks: ${reference(AN, WorshipServices)}, ${reference(AN, Consecration)}, ${reference(AN, UnholyGround)}</div>
-                <div class=p>${cost("Special:")} If all 4 Cathedrals are in play, you may Awaken an Independent Great Old One without your own Great Old One (when Awakening Cthugha this way, just pay 6 Power).</div>"""
-            )
-        ))
+        case $("AN") => anFactionOverlay(false)
+        case $("AN", altSB : Boolean) => anFactionOverlay(altSB)
 
         case $("AN", CathedralAA.text) => requirement(s"A Cathedral is in an Area marked with this Glyph: <img src=${imageSource("sign-aa")} class=inline-glyph />")
         case $("AN", CathedralOO.text) => requirement(s"A Cathedral is in an Area marked with this Glyph: <img src=${imageSource("sign-oo")} class=inline-glyph />")
@@ -750,6 +739,10 @@ object Overlays {
         case $("AN", UnholyGround.name) => spellbook(UnholyGround.name, "Post Battle", "If there is a Cathedral in the Battle Area, you may choose to remove a Cathedral from anywhere. If you do, an enemy Great Old One in the Battle must be eliminated by its owner.")
         case $("AN", Consecration.name) => spellbook(Consecration.name, "Doom Phase", "When you perform a Ritual of Annihilation, gain <span style=es>1 Elder Sign</span> if at least one Cathedral is in play. If all four Cathedrals are in play, gain <span style=es>2 Elder Signs</span> instead.")
         case $("AN", WorshipServices.name) => spellbook(WorshipServices.name, "Gather Power Phase", "Gain 1 Power for each Cathedral that shares an Area with an enemy Gate. Those enemies each gain 1 Power.")
+        // Alt Ancients (AA) replacement spellbooks
+        case $("AN", HolyGround.name) => spellbook(HolyGround.name, "Ongoing (Action Phase Only)", "Your Cathedrals count as 3 Cost Great Old One Units with 0 Combat. They cannot be assigned a Pain, Moved or Retreated but can be Killed like any other Unit.")
+        case $("AN", Sanguinessence.name) => spellbook(Sanguinessence.name, "Ongoing", "Any time you Kill 1 or more enemy Units in or adjacent to an Area with a Cathedral, gain 1 Doom. If you Killed any Great Old Ones, gain an Elder Sign instead.")
+        case $("AN", Crusade.name) => spellbook(Crusade.name, "Ongoing", "Declaring Battle against a player with equal or more Power than you costs 0 Power.")
 
             case $("DS") => dsFactionOverlay(false)
             case $("DS", altSB : Boolean) => dsFactionOverlay(altSB)
@@ -1217,7 +1210,7 @@ object Overlays {
                         case "DC" => CthulhuWarsSolo.Processing(|("#F0EDA8"), |("#333333"), None)
                         case "XSS" => CthulhuWarsSolo.Processing(|("#4a6b7a"), |("#333333"), None)
                         case "TB" => CthulhuWarsSolo.Processing(|("#8b6914"), |("#333333"), None)
-                        case "FBE" => CthulhuWarsSolo.Processing(|("#3d5f1c"), |("#333333"), None)
+                        case "FBE" => CthulhuWarsSolo.Processing(None, None, None, |("#3d5f1c"))
                         case _    => CthulhuWarsSolo.Processing(None, None, None)
                     }
                     CthulhuWarsSolo.getTintedAsset(assetId, tint).toDataURL("image/png")
@@ -1333,8 +1326,10 @@ object Overlays {
             def spriteHFor(onMapH : Double) : Double = onMapH * spriteScale
             val gateEntries = parsed.filter(_._1 == "gate")
             val unitEntries = parsed.filter(_._1 != "gate")
-            val gateControllerEntries = unitEntries.filter(e => e._3.contains("Cadavolyte") || e._3.contains("Acolyte"))
-            val otherUnits = unitEntries.filter(e => !e._3.contains("Cadavolyte") && !e._3.contains("Acolyte"))
+            val gateControlled = gateEntries.exists(_._3.contains("controlled"))
+            val gateControllerEntries = if (gateEntries.nonEmpty && gateControlled) unitEntries.filter(e => e._3.contains("Cadavolyte") || e._3.contains("Acolyte")) else $[(String, String, String, Double)]()
+            val abandonedCultistEntries = $[(String, String, String, Double)]()
+            val otherUnits = if (gateEntries.nonEmpty && gateControlled) unitEntries.filter(e => !e._3.contains("Cadavolyte") && !e._3.contains("Acolyte")) else unitEntries
             val gateFigure = gateEntries.headOption./({ case (_, src, display, onMapH) =>
                 val spriteH = spriteHFor(onMapH)
                 f"""<img src="$src"
@@ -1347,6 +1342,12 @@ object Overlays {
                          title="$display"
                          style="position: absolute; left: 50.00%%; top: 45.00%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95)); z-index: 1;" />"""
             }).|("")
+            val abandonedCultistFigures = abandonedCultistEntries./({ case (_, src, display, onMapH) =>
+                val spriteH = spriteHFor(onMapH)
+                f"""<img src="$src"
+                         title="$display"
+                         style="position: absolute; left: 25.00%%; top: 50.00%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
+            }).mkString("")
             val remainingControllers = if (gateControllerEntries.nonEmpty) gateControllerEntries.drop(1) else $[( String, String, String, Double)]()
             val allOther = (remainingControllers ++ otherUnits).toList
             val n = allOther.length
@@ -1365,7 +1366,7 @@ object Overlays {
                          style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
             }).mkString("")
             val figureLayer = if (count > 0)
-                s"""<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;">$gateFigure$controllerFigure$otherFigures</div>"""
+                s"""<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;">$gateFigure$controllerFigure$abandonedCultistFigures$otherFigures</div>"""
             else ""
             val emptyCaption = if (count == 0)
                 s"""<div style="position: absolute; bottom: 6%; left: 0; right: 0; text-align: center; color: white; text-shadow: 0 0 4px black, 0 0 4px black; font-size: 0.35em;">The Mantle is empty.</div>"""
@@ -1497,33 +1498,30 @@ object Overlays {
                 // by 30% (6% -> 7.8%) ONLY on the RoA track; the map render still uses 60x60.
                 val glyphWidthPct = if (style == "fb") "7.8%" else "6%"
                 if (isCeremony) {
-                    // CSS filter applied directly to img — only affects non-transparent pixels,
-                    // no square background artifact. sepia(1) gives warm base, hue-rotate shifts to faction hue.
-                    val tintFilter = style match {
-                        case "gc" => "sepia(1) hue-rotate(67deg) saturate(3) brightness(1.0)"
-                        case "cc" => "sepia(1) hue-rotate(181deg) saturate(3) brightness(0.9)"
-                        case "bg" => "sepia(1) hue-rotate(323deg) saturate(5) brightness(1.0)"
-                        case "ys" => "sepia(1) hue-rotate(12deg) saturate(8) brightness(1.2)"
-                        case "ww" => "sepia(1) hue-rotate(168deg) saturate(2) brightness(1.2)"
-                        case "sl" => "sepia(1) hue-rotate(344deg) saturate(5) brightness(1.0)"
-                        case "ow" => "sepia(1) hue-rotate(241deg) saturate(3) brightness(0.8)"
-                        case "an" => "sepia(1) hue-rotate(156deg) saturate(3) brightness(1.0)"
-                        case "ts" => "sepia(1) hue-rotate(74deg) saturate(2) brightness(1.3)"
-                        // Firstborn (FB): magenta/pink tint for RoA track ceremony glyphs
-                        case "fb" => "sepia(1) hue-rotate(295deg) saturate(4) brightness(1.0)"
-                        // Defilers Court (DC): gold tint per glyph (#F0EDA8); audit 2026-06-06 G13
-                        case "dc" => "sepia(1) hue-rotate(20deg) saturate(2) brightness(1.4)"
-                        // Faceless Blight (FBE): deep mossy green #3d5f1c (Task 3.11.5 / §4.0.3).
-                        // Sepia base (~hue 40°) hue-rotated to olive-green and darkened so the
-                        // RoA ceremony glyph reads FBE green, NOT the default sepia.
-                        case "fbe" => "sepia(1) hue-rotate(50deg) saturate(3) brightness(0.75)"
-                        // Xyrious Storm (XSS): stormy blue-grey #4a6b7a
-                        case "xss" => "sepia(1) hue-rotate(165deg) saturate(2) brightness(0.9)"
-                        // The Burrowers Beneath (TB): earthy brown #8b6914
-                        case "tb" => "sepia(1) hue-rotate(10deg) saturate(3) brightness(0.9)"
-                        case _    => "sepia(1)"
+                    val factionColor = style match {
+                        case "gc" => "#77a055"
+                        case "cc" => "#4977b3"
+                        case "bg" => "#cd3233"
+                        case "ys" => "#ffd000"
+                        case "ww" => "#88a9be"
+                        case "sl" => "#db6a33"
+                        case "ow" => "#6c4296"
+                        case "an" => "#47a5bc"
+                        case "ts" => "#BDE0BC"
+                        case "fb" => "#CB307E"
+                        case "ds" => "#3A2825"
+                        case "tt" => "#fc9ca0"
+                        case "bb" => "#c8a84b"
+                        case "dc" => "#F0EDA8"
+                        case "fbe" => "#3d5f1c"
+                        case "xss" => "#4a6b7a"
+                        case "tb" => "#8b6914"
+                        case _    => "#888888"
                     }
-                    s"""<img src="${imageSource("n-tulzscha")}"
+                    val processing = CthulhuWarsSolo.Processing(None, None, None, |(factionColor))
+                    val tintedCanvas = CthulhuWarsSolo.getTintedAsset("n-tulzscha", processing)
+                    val tintedSrc = tintedCanvas.toDataURL("image/png")
+                    s"""<img src="${tintedSrc}"
                         style="
                             position: absolute;
                             left: ${finalX}%;
@@ -1533,7 +1531,7 @@ object Overlays {
                             transform: translate(-50%, -50%);
                             opacity: 0.9;
                             pointer-events: none;
-                            filter: drop-shadow(0 0 0.15em rgba(0,0,0,0.9)) ${tintFilter};" />"""
+                            filter: drop-shadow(0 0 0.15em rgba(0,0,0,0.9));" />"""
                 } else {
                     s"""<img src="${imageSource(style + "-glyph")}"
                         style="
@@ -1656,12 +1654,12 @@ object Overlays {
         case $("TB", GatesAtGOOsReq.text) => requirement("Pay 8 Power, place Gates at every Area containing a Great Old One. Gain 1 Power per Gate placed.")
         case $("TB", AwakenShuddeMellReq.text) => requirement("Awaken Shudde M'ell.")
         case $("TB", ShuddeMellInThreeGlyphsReq.text) => requirement("Shudde M'ell Parts simultaneously in 3 specific Glyph Areas, OR Pay 6 Power as an Action.")
-        case $("TB", Stalk.name) => spellbook(Stalk.name, "Post-Move", "After a Move Action, relocate one Cultist to any Area your moved Units now occupy.")
-        case $("TB", Autotomy.name) => spellbook(Autotomy.name, "Post-Battle", "Transfer a Kill to a Segment. Gain Elder Signs per Segment in Pool. Ignore Pains, retreat all. At turn end, place Pool Segments on the Mantle.")
-        case $("TB", Subterrane.name) => spellbook(Subterrane.name, "Ongoing", "The Mantle is adjacent to every Area containing a TB Tentacle (for TB Units only).")
-        case $("TB", Grasp.name) => spellbook(Grasp.name, "Battle", "In a Battle with Shudde M'ell Head, add +1 Combat die per Tentacle in the Battle Area.")
-        case $("TB", Ensnare.name) => spellbook(Ensnare.name, "Action: Cost 1", "Choose an enemy with Units in a Tentacle Area. Roll 1d6. Enemy relocates that many Units to Head's Area.")
-        case $("TB", PsychicShriek.name) => spellbook(PsychicShriek.name, "Action: Cost 1", "Choose an enemy. Roll 2d6. Enemy retreats that many Units to Areas without TB Gates.")
+        case $("TB", Stalk.name) => spellbook(Stalk.name, "Ongoing", "Immediately after any faction's Move Action, you may relocate a single Cultist to a Moved Unit's Area.")
+        case $("TB", Autotomy.name) => spellbook(Autotomy.name, "Post-Battle, Shudde M'ell", "In Unlimited Battles on your turn with Head present, apply 1 received Kill to any Segment in play. IF YOU DO: 1. Gain 1 Elder Sign per Segment in pool; and 2. Ignore Pains, but Retreat all your Units not Killed/Eliminated from Battle Area to 1 adjacent Area. TURN-END: place all Segments from pool on the Mantle.")
+        case $("TB", Subterrane.name) => spellbook(Subterrane.name, "Ongoing", "For your Units only, any Tentacle's Area and the Mantle can be adjacent (eg. for Move, Pain).")
+        case $("TB", Grasp.name) => spellbook(Grasp.name, "Battle", "If any Chthonians in Battle Area, add +1 Combat Dice per adjacent Area containing a Tentacle (Maximum of +4).")
+        case $("TB", Ensnare.name) => spellbook(Ensnare.name, "Action: Cost 1", "Choose enemy in Area with Tentacle. Roll 1 D6 die. From that Area to Shudde M'ell's Head Area, the enemy must Relocate a number of their Units equal to the lesser of: the die roll; or their Power. On any Faction, you may use this only once per Action Phase.")
+        case $("TB", PsychicShriek.name) => spellbook(PsychicShriek.name, "Action: Cost 1", "If Mantle in play, choose enemy (not Hibernating). Roll 2 D6 dice. They Retreat a number of their Units equal to the lesser of: the dice roll; or 2x their Power; to Areas that did not contain their Units just prior to the Shriek, nor contain your Gates. On any Faction, you may use this only once per Action Phase.")
         case _ => ""
     }}
 
@@ -1960,6 +1958,36 @@ object Overlays {
     def ref(spellbook : Spellbook) = s"""<span class=ability-color>${spellbook.name}</span>"""
 
     def reference(f : Faction, spellbook : Spellbook) = s"""<span class="ability-color pointer" onclick="onExternalClick('${f.short}', '${spellbook.name}')">${spellbook.name}</span>"""
+
+    def anFactionOverlay(altSB : Boolean) = {
+        // Dematerialization is AN's Unique Ability (Ongoing) — same in BOTH the standard
+        // and alternate-spellbook variants. UnholyGround/Consecration/WorshipServices
+        // (standard) and HolyGround/Sanguinessence/Crusade (alt-variant) are SPELLBOOKS,
+        // not the Special Ability, and are referenced in the unit descriptions below.
+        val abilityPhase = "Doom Phase"
+        val abilityText  = "Relocate any or all of your own Units from one Area to a single other Area, anywhere on the Map."
+
+        // The Cathedral description changes based on which spellbook variant is active
+        val cathedralSBs = if (altSB) {
+            s"""${reference(AN, HolyGround)}, ${reference(AN, Sanguinessence)}, ${reference(AN, Crusade)}"""
+        } else {
+            s"""${reference(AN, WorshipServices)}, ${reference(AN, Consecration)}, ${reference(AN, UnholyGround)}"""
+        }
+
+        faction(AN, "info:an-background", Dematerialization, abilityPhase, abilityText,
+            $, $(
+            (Acolyte,    6,   "1",   "0", s""""""),
+            (UnMan,      3, "3/0",   "0", s"""<div class=p><span class=cost-color>Cost:</span> 0 with ${reference(AN, Festival)}</div>"""),
+            (Reanimated, 3, "4/1",   "2", s"""<div class=p><span class=cost-color>Cost:</span> 1 with ${reference(AN, Brainless)}</div>"""),
+            (Yothan,     3, "6/3",   "7", s"""<div class=p><span class=cost-color>Cost:</span> 3 with ${reference(AN, Extinction)}</div>"""),
+            (Cathedral,  4, "3/1", "n/a", s"""
+                <div class=p>You may use the Create Gate Action to Create Cathedrals instead of Gates.</div>
+                <div class=p>${cost("Cost:")} 1 if built not adjacent to another Cathedral</div>
+                <div class=p>Spellbooks: ${cathedralSBs}</div>
+                <div class=p>${cost("Special:")} If all 4 Cathedrals are in play, you may Awaken an Independent Great Old One without your own Great Old One (when Awakening Cthugha this way, just pay 6 Power).</div>"""
+            )
+        ))
+    }
 
     def slFactionOverlay(easierSBR : Boolean, energyNexusPreBattle : Boolean) = {
         def slRef(sb : Spellbook) = {

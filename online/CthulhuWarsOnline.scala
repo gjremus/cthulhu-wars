@@ -119,6 +119,19 @@ object CthulhuWarsOnline {
 
         val botGames = TableQuery[BotGames]
 
+        // Live-game registry. Presence of a gameId here means the game is
+        // currently "live" (featured / actively being streamed). The admin
+        // console's "Mark live" button toggles this; the admin game list
+        // includes an isLive column so the UI can highlight these.
+        case class LiveGame(gameId : Int)
+
+        class LiveGames(tag : Tag) extends Table[LiveGame](tag, "LiveGames") {
+            def gameId = column[Int]("gameId", O.PrimaryKey)
+            def * = (gameId).mapTo[LiveGame]
+        }
+
+        val liveGames = TableQuery[LiveGames]
+
         val db = Database.forURL("jdbc:hsqldb:file:" + database, driver="org.hsqldb.jdbcDriver")
 
         object q {
@@ -164,6 +177,15 @@ object CthulhuWarsOnline {
         }
         catch {
             case e : Exception => println("BotGame table init: " + e.getMessage)
+        }
+
+        // LiveGames registry — same idempotent CREATE IF NOT EXISTS pattern.
+        try {
+            import slick.jdbc.HsqldbProfile.api.actionBasedSQLInterpolation
+            q(sqlu"""CREATE TABLE IF NOT EXISTS "LiveGames" ("gameId" INTEGER PRIMARY KEY)""")
+        }
+        catch {
+            case e : Exception => println("LiveGames table init: " + e.getMessage)
         }
 
         if (!mode.contains("run")) {
@@ -281,7 +303,7 @@ object CthulhuWarsOnline {
                 }
             } ~
             (get & path("roles" / Segment)) { role =>
-                val list = q(roles.filter(_.secret === role).filter(_.name === "$").map(_.gameId).result.head.flatMap { id =>
+                val list = q(roles.filter(_.secret === role).map(_.gameId).result.head.flatMap { id =>
                     roles.filter(_.gameId === id).result
                 })
                 txt(list.map(r => r.name + " " + r.secret).mkString("\n"))
@@ -654,11 +676,13 @@ object CthulhuWarsOnline {
                         id -> (n > 0)
                     }.toMap
                     val botFlagged = q(botGames.map(_.gameId).result).toSet
+                    val liveFlagged = q(liveGames.map(_.gameId).result).toSet
                     txt(rows.map { case (id, name, secret, lastMs, broken) =>
                         val b = if (broken.getOrElse(false)) "1" else "0"
                         val c = if (completed.getOrElse(id, false)) "1" else "0"
                         val ib = if (botFlagged.contains(id)) "1" else "0"
-                        s"$id\t$name\t$secret\t${lastMs.getOrElse(0L)}\t$b\t$c\t$ib"
+                        val il = if (liveFlagged.contains(id)) "1" else "0"
+                        s"$id\t$name\t$secret\t${lastMs.getOrElse(0L)}\t$b\t$c\t$ib\t0\t0\t$il"
                     }.mkString("\n"))
                 }
             } ~
@@ -670,6 +694,20 @@ object CthulhuWarsOnline {
                 if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
                 else {
                     q(botGames.filter(_.gameId === gameId).delete, botGames += BotGame(gameId))
+                    complete(StatusCodes.Accepted)
+                }
+            } ~
+            (post & path("admin" / Segment / "mark-live" / IntNumber)) { (token, gameId) =>
+                if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
+                else {
+                    q(liveGames.filter(_.gameId === gameId).delete, liveGames += LiveGame(gameId))
+                    complete(StatusCodes.Accepted)
+                }
+            } ~
+            (post & path("admin" / Segment / "unmark-live" / IntNumber)) { (token, gameId) =>
+                if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
+                else {
+                    q(liveGames.filter(_.gameId === gameId).delete)
                     complete(StatusCodes.Accepted)
                 }
             } ~
@@ -753,6 +791,7 @@ object CthulhuWarsOnline {
                         meta.filter(_.gameId === gameId).delete,
                         adminAnnotations.filter(_.gameId === gameId).delete,
                         botGames.filter(_.gameId === gameId).delete,
+                        liveGames.filter(_.gameId === gameId).delete,
                         games.filter(_.id === gameId).delete
                     )
                     complete(StatusCodes.Accepted)

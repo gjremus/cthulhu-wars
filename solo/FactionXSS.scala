@@ -446,11 +446,15 @@ object XSSExpansion extends Expansion {
             // Move Eye of the Storm
             game.unit(eye).region = dest
             // Move extras
+            val dcAcolyteMoved = extras.exists(ur => game.unit(ur).faction == DC && game.unit(ur).uclass == Acolyte)
             extras.foreach { ur => game.unit(ur).region = dest }
             self.log(Tsunami.styled(XSS) + ": moved", EyeOfTheStorm.styled(XSS),
                 (extras.any).??(" and " + extras.num + " other Unit" + (extras.num > 1).??("s")),
                 "from", source, "to", dest)
-            EndAction(self)
+            if (dcAcolyteMoved && game.factions.has(DC) && DC.can(Proselytize))
+                Force(DCProselytizeCheckAction(source, dest, EndAction(self)))
+            else
+                EndAction(self)
 
         // -- STATIC ACCUMULATOR (§1.10 SB2 / §3.10.2) -------------------------
         // Pre-Battle: handled via PreBattleQuestion. Perform logic here for the

@@ -123,15 +123,23 @@ case object TB extends Faction { f =>
     }
 
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
-        // Shudde M'ell Head: combat = 3 x (number of Parts in play), excluding
-        // mid-battle eliminations (FCG #12: .not(Zeroed))
         val headCount = units.%(_.uclass == ShuddeMellHead).not(Zeroed).num
         val partsInPlay = f.all(ShuddeMellHead).not(Zeroed).num + f.all(ShuddeMellSegment).not(Zeroed).num
         val headStr = headCount * (3 * partsInPlay)
-        // Chthonians: 1 combat each (§1.7)
         val chthonianStr = units.%(_.uclass == Chthonian).not(Zeroed).num
-        // Cadavolytes, Tentacles, Segments: 0 combat
-        headStr + chthonianStr + neutralStrength(units, opponent)
+        val graspStr = (f.can(Grasp) && units.%(_.uclass == Chthonian).not(Zeroed).any).?? {
+            val arena = game.battle./(_.arena)
+            val adjacent = arena./~{ r =>
+                if (r.is[MantleHold]) {
+                    val base = game.tbMantleAreas
+                    val tentacleAreas = f.has(Subterrane).??(f.onMap(Tentacle)./(_.region).distinct)
+                    (base ++ tentacleAreas).distinct
+                } else
+                    game.board.connected(r)
+            }
+            min(4, adjacent.%(r => f.at(r, Tentacle).any).num)
+        }
+        headStr + chthonianStr + graspStr + neutralStrength(units, opponent)
     }
 }
 
@@ -243,7 +251,7 @@ case class TBEnsnarePickEnemyAction(self : Faction, targets : $[(Faction, Region
     override def question(implicit game : Game) = Ensnare.styled(TB) + ": choose enemy in a Tentacle Area"
 }
 case class TBEnsnareTargetAction(self : Faction, enemy : Faction, area : Region)
-    extends BaseFactionAction(Ensnare.styled(TB) + ": target", implicit g => enemy.full + " in " + area) with Soft
+    extends BaseFactionAction(Ensnare.styled(TB) + ": target", implicit g => enemy.full + " in " + area)
 // Roll result baked in for replay safety
 case class TBEnsnareRollAction(self : Faction, enemy : Faction, area : Region, roll : Int)
     extends ForcedAction
@@ -262,7 +270,7 @@ case class TBPsychicShriekPickEnemyAction(self : Faction, enemies : $[Faction])
     override def question(implicit game : Game) = PsychicShriek.styled(TB) + ": choose enemy (not Hibernating)"
 }
 case class TBPsychicShriekTargetAction(self : Faction, enemy : Faction)
-    extends BaseFactionAction(PsychicShriek.styled(TB) + ": target", implicit g => enemy.full) with Soft
+    extends BaseFactionAction(PsychicShriek.styled(TB) + ": target", implicit g => enemy.full)
 // Roll result baked in for replay safety
 case class TBPsychicShriekRollAction(self : Faction, enemy : Faction, roll : Int)
     extends ForcedAction
@@ -322,7 +330,7 @@ case class TBRemoveGatePlaceChthonianAreaAction(self : Faction, removedGate : Re
 
 // -- SBR-4: GATES AT EVERY GOO AREA (§1.9 / §3.12.4 / §4.5) ------------------
 case class TBGatesAtGOOsMainAction(self : Faction)
-    extends OptionFactionAction(GatesAtGOOsReq.text.styled(TB) + " (" + 8.power + ")") with MainQuestion with Soft
+    extends OptionFactionAction(GatesAtGOOsReq.text.styled(TB) + " (" + 8.power + ")") with MainQuestion
 case class TBGatesAtGOOsAction(self : Faction)
     extends ForcedAction
 case class TBGatesAtGOOsPlaceAction(self : Faction)
@@ -330,7 +338,7 @@ case class TBGatesAtGOOsPlaceAction(self : Faction)
 
 // -- SBR-6: SHUDDE M'ELL IN THREE GLYPHS — alt 6-Power Action (§1.9 / §3.12.6 / §4.5) --
 case class TBThreeGlyphsPayAction(self : Faction)
-    extends OptionFactionAction("Pay " + 6.power + " to satisfy " + ShuddeMellInThreeGlyphsReq.text.styled(TB)) with MainQuestion with Soft
+    extends OptionFactionAction("Pay " + 6.power + " to satisfy " + ShuddeMellInThreeGlyphsReq.text.styled(TB)) with MainQuestion
 case class TBThreeGlyphsPayConfirmAction(self : Faction)
     extends ForcedAction
 
@@ -513,7 +521,7 @@ object TBExpansion extends Expansion {
             // SBR-4: Gates at every GOO Area (Action, pay 8 Power)
             if (f.needs(GatesAtGOOsReq) && f.power >= 8) {
                 val gooAreas = game.factions./~(fx => fx.all(GOO)./(_.region)).distinct
-                val ungated = gooAreas.%!(r => f.gates.has(r))
+                val ungated = gooAreas.%!(r => game.gates.has(r))
                 if (ungated.any)
                     + TBGatesAtGOOsMainAction(f)
             }
@@ -547,15 +555,16 @@ object TBExpansion extends Expansion {
 
         case TBWrithingMawsPlaceFirstAction(self, uc) =>
             // Eligible regions: standard recruit/summon placement rules
+            // Cultists excluded from MoonHold (BB Moon only; Mantle is unrestricted per creator)
             val areas = if (uc.utype == Cultist)
-                game.board.regions.%(r => self.at(r).any || self.gates.has(r))
+                game.board.regions.%(r => self.at(r).any || self.gates.has(r)).%!(_.is[MoonHold])
             else
                 self.gates
             Ask(self).each(areas)(r => TBWrithingMawsPlaceSecondAction(self, uc, r).as(r)(ThousandWrithingMaws.styled(TB), ": place first", uc.styled(TB), "in")).cancel
 
         case TBWrithingMawsPlaceSecondAction(self, uc, r1) =>
             val areas = if (uc.utype == Cultist)
-                game.board.regions.%(r => self.at(r).any || self.gates.has(r))
+                game.board.regions.%(r => self.at(r).any || self.gates.has(r)).%!(_.is[MoonHold])
             else
                 self.gates
             Ask(self).each(areas)(r => TBWrithingMawsAction(self, uc, r1, r).as(r)(ThousandWrithingMaws.styled(TB), ": place second", uc.styled(TB), "in")).cancel
@@ -979,11 +988,12 @@ object TBExpansion extends Expansion {
         case TBGatesAtGOOsPlaceAction(self) =>
             // Place a Gate in each Area containing a GOO Unit (any faction) without a TB Gate
             val gooAreas = game.factions./~(fx => fx.all(GOO)./(_.region)).distinct
-            val ungated = gooAreas.%!(r => self.gates.has(r))
+            val ungated = gooAreas.%!(r => game.gates.has(r))
             var gatesPlaced = 0
             ungated.foreach { r =>
+                game.gates :+= r
                 self.gates :+= r
-                // Place a cultist on gate if possible, otherwise just mark the gate
+                game.tbSBR4Gates :+= r
                 val cultistAtRegion = self.at(r).%(u => u.uclass.utype == Cultist && !u.onGate).headOption
                 cultistAtRegion.foreach(_.onGate = true)
                 gatesPlaced += 1

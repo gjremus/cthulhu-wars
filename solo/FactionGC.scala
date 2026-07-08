@@ -183,7 +183,7 @@ object GCExpansion extends Expansion {
             Force(DevolveMainAction(f, then))
 
         case DevolveMainAction(f, then) =>
-            Ask(f).some(areas)(r => f.at(r, Acolyte)./(c => DevolveAction(f, c.region, then))).cancel
+            Ask(f).some(areas ++ $(BB.moon))(r => f.at(r, Acolyte)./(c => DevolveAction(f, c.region, then))).cancel
 
         case DevolveAction(f, r, then) =>
             if ((f.at(r, Monster, GOO) ++ f.at(r, ElderGod)).none)

@@ -129,7 +129,7 @@ case class Bot3(faction : Faction) {
             def shield = friends.goos.any
             def capturable = u.cultist && capturers.%(_.power > 0).any
             def capturers = game.factions.%(_ != u.faction).%(f => friends.goos.none && (_at(f, u.region).goos.any || (friends.monsterly.none && _at(f, u.region).monsterly.%(_.canCapture).any)))
-            def vulnerable = u.cultist && friends.goos.none && friends.monsterly.none
+            def vulnerable = u.cultist && u.uclass.canBeCaptured(u) && friends.goos.none && friends.monsterly.none
         }
 
         implicit def unitRefToUnitClassify(r : UnitRef) : UnitClassify = UnitClassify(r)
@@ -185,8 +185,8 @@ case class Bot3(faction : Faction) {
             }
         }
 
-        def maxDoomGain = validGatesForRitual.num + self.factionGOOs.num * 3
-        def aprxDoomGain = validGatesForRitual.num + self.factionGOOs.num * 1.666
+        def maxDoomGain = validGatesForRitual.num + (if (self == TB) self.goos.factionGOOs.any.??(1) else self.factionGOOs.num) * 3
+        def aprxDoomGain = validGatesForRitual.num + (if (self == TB) self.goos.factionGOOs.any.??(1) else self.factionGOOs.num) * 1.666
 
         def evalA(a : Action) : $[Evaluation] = {
             var result : $[Evaluation] = $
@@ -1733,18 +1733,16 @@ case class Bot3(faction : Faction) {
                     case PrimeCauseCancelReplacementAction(_) =>
                         true |=> -1000 -> "prime cause: cancel replacement (bot never cancels)"
 
-                    // ── Dhole Planetary Destruction (opponent's choice) ─────
-                    case DholePlanetaryDestructionDoomAction(_, _) =>
-                        // Opponent picks own doom vs own power. Doom is worse for us.
-                        // We're the opponent of dhole owner here. Pick LESS bad option.
-                        self.power > 5 |=> 200 -> "take power penalty (have plenty)"
-                        self.power <= 2 |=> -500 -> "dont take power loss when low"
-                        true |=> 100 -> "planetary destruction: doom choice"
+                    // ── Dhole Planetary Destruction (owner's choice) ──────
+                    case DholePlanetaryDestructionDoomAction(_, opponent) =>
+                        // Owner picks what to give opponent. Doom helps them win.
+                        opponent.doom >= 25 |=> 300 -> "give doom when opponent close to winning anyway"
+                        true |=> -200 -> "planetary destruction: avoid giving doom"
 
-                    case DholePlanetaryDestructionPowerAction(_, _) =>
-                        self.power > 5 |=> -300 -> "dont take power loss when high (prefer doom)"
-                        self.power <= 2 |=> 500 -> "take doom when low power"
-                        true |=> 200 -> "planetary destruction: power choice"
+                    case DholePlanetaryDestructionPowerAction(_, opponent) =>
+                        // Power is temporary, less dangerous than doom
+                        opponent.power <= 2 |=> 100 -> "give power when opponent is low"
+                        true |=> 200 -> "planetary destruction: prefer giving power"
 
                     // ── Laughingstock (Penguin owner) ───────────────────────
                     case LaughingstockMoveAction(_, uRef) =>
