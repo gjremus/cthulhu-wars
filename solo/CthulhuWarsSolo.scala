@@ -1443,6 +1443,21 @@ object CthulhuWarsSolo {
                         }
                     }
 
+                    // Unit-count-based shrink: regions above the small-area cutoff that
+                    // still have no shrink trigger get uniform shrink when crowded (5+ units).
+                    val UnitCountShrinkThreshold = 5
+                    val regionUnitCount = scala.collection.mutable.Map[Region, Int]().withDefaultValue(0)
+                    factions.foreach { f =>
+                        f.allInPlay.foreach { u =>
+                            if (u.region != null && regionGeom.contains(u.region))
+                                regionUnitCount(u.region) = regionUnitCount(u.region) + 1
+                        }
+                    }
+                    regionUnitCount.foreach { case (rg, count) =>
+                        if (count >= UnitCountShrinkThreshold && !regionUniformShrink.contains(rg))
+                            regionUniformShrink(rg) = SmallRegionUniformShrink
+                    }
+
                     // classRegions stays effectively empty after the loop above marks
                     // every large-unit region for uniform shrink. Kept as a defensive
                     // no-op so the downstream classShrink loop iterates nothing.
