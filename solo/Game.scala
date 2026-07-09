@@ -3238,17 +3238,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 factions.foreach(f => f.satisfyIf(FirstDoomPhase, "The first Doom phase", turn == 2))
                 factions.foreach(f => f.satisfyIf(FiveSpellbooks, "Have five spellbooks", f.unfulfilled.num == 1))
 
+                scala.scalajs.js.Dynamic.global.console.log(s"[SPELLBOOK-TRACE] PlayDirectionAction: returning CheckSpellbooksAction(DoomPhaseAction), turn=$turn")
                 CheckSpellbooksAction(DoomPhaseAction) // Then(...)
             }
 
         // SPELLBOOK
         case CheckSpellbooksAction(next) =>
-            println(s"[SPELLBOOK-TRACE] CheckSpellbooksAction entered with next=${next.getClass.getSimpleName} ($next)")
+            scala.scalajs.js.Dynamic.global.console.log(s"[SPELLBOOK-TRACE] CheckSpellbooksAction entered with next=${next.getClass.getSimpleName}")
             val fs = factions.%(f => f.unfulfilled.num + f.spellbooks.num < f.library.num)
             val fe = factions.%(f => f.es.%(_.value == 0).any)
 
             if (fs.any) {
-                println(s"[SPELLBOOK-TRACE] fs=${fs.mkString(",")}, offering spellbook with next=$next")
+                scala.scalajs.js.Dynamic.global.console.log(s"[SPELLBOOK-TRACE] fs=${fs.mkString(",")}, offering spellbook with next=${next.getClass.getSimpleName}")
                 val f = fs(0)
                 // Map library names for buff option spellbook swaps before filtering
                 val effectiveLibrary = f.library.map { sb => (f, sb) match {
@@ -3766,7 +3767,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             MainGatesAction(f)
 
         case MainGatesAction(f) =>
-            println(s"[SPELLBOOK-TRACE] MainGatesAction($f) -> CheckSpellbooksAction(MainAction($f))")
+            scala.scalajs.js.Dynamic.global.console.log(s"[SPELLBOOK-TRACE] MainGatesAction($f) -> CheckSpellbooksAction(MainAction($f))")
             checkGatesGained(f)
 
             CheckSpellbooksAction(MainAction(f))
