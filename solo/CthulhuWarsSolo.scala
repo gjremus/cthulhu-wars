@@ -2711,7 +2711,14 @@ object CthulhuWarsSolo {
                     if (isDCDarkBargainFacedown) d.styled("used")
                     else f.can(sb).?(d).|(d.styled("used"))
                 }.mkString("") +
-                (1.to(f.library.num - f.spellbooks.%(f.library.has).num - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") +
+                { val effectiveLib = f.library.map { sb => (f, sb) match {
+                    case (DS, Traitors) if game.options.has(DSAlternateSpellbooks) => Omnipotence
+                    case (DS, FiendishGrowth) if game.options.has(DSAlternateSpellbooks) => FiendishSpawn
+                    case (DS, UndirectedEnergy) if game.options.has(DSAlternateSpellbooks) => DirectedEnergy
+                    case (SL, EnergyNexus) if game.options.has(SleeperEnergyNexusPreBattle) => EnergyNexusPB
+                    case _ => sb
+                }}
+                (1.to(f.library.num - f.spellbooks.%(effectiveLib.has).num - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") } +
                 f.unfulfilled./{ r =>
                     // Check if any Moonbeast is on an SBR that maps to this requirement's spellbook
                     val reqSpellbooks = f.library.%(sb => !f.spellbooks.has(sb))
