@@ -3723,7 +3723,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                 // Post-replay spellbook check: if any faction earned an SBR
                                 // during replay but never picked a spellbook (version drift),
-                                // force the spellbook prompt now.
+                                // force the spellbook prompt now. Preserve the original continuation
+                                // from the saved Continue so we don't corrupt the game flow.
                                 {
                                     implicit val ig : Game = game
                                     val sbOwed = game.factions.%(f => f.unfulfilled.num + f.spellbooks.num < f.library.num)
@@ -3740,11 +3741,19 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         }}
                                         val bs = (effectiveLibrary.%!(f.has) ++ game.neutralSpellbooks).diff(f.ignorePerInstant)
                                         if (bs.any) {
-                                            val currentFaction = cc.get match {
-                                                case Ask(af, _) => af
-                                                case _ => game.factions(0)
+                                            // Extract the original next action from the saved Continue.
+                                            // If the Continue is already a CheckSpellbooksAction Ask, use its next.
+                                            // Otherwise derive the continuation from the game state.
+                                            val originalNext : ForcedAction = cc.get match {
+                                                case Ask(_, actions) if actions.any =>
+                                                    actions(0).unwrap match {
+                                                        case SpellbookAction(_, _, next) => next
+                                                        case _ => if (game.doomPhase) DoomPhaseAction else CheckSpellbooksAction(PreMainAction(game.factions(0)))
+                                                    }
+                                                case Then(next) => next
+                                                case _ => if (game.doomPhase) DoomPhaseAction else CheckSpellbooksAction(PreMainAction(game.factions(0)))
                                             }
-                                            cc = |(Ask(f).each(bs)(b => SpellbookAction(f, b, CheckSpellbooksAction(MainAction(currentFaction)))))
+                                            cc = |(Ask(f).each(bs)(b => SpellbookAction(f, b, originalNext)))
                                         }
                                     }
                                 }
