@@ -340,16 +340,16 @@ object OWExpansion extends Expansion {
 
             killall.foreach(f => f.at(r).foreach(_.health = Killed))
 
-            val painall = ee.%(f => f.at(r).%(u => !(u.uclass == Cathedral && u.faction.can(HolyGround))).num == p.count(f))
+            val painall = ee.%(f => f.at(r).%(u => u.uclass != Cathedral).num == p.count(f))
 
-            painall.foreach(f => f.at(r).%(u => !(u.uclass == Cathedral && u.faction.can(HolyGround))).foreach(_.health = Pained))
+            painall.foreach(f => f.at(r).%(u => u.uclass != Cathedral).foreach(_.health = Pained))
 
             val aa = ee.diff(killall).diff(painall)
 
             if (aa.any) {
                 val f = aa(0)
                 val rs = (k.count(f) - f.at(r).%(_.health == Killed).num).times(Kill) ++ (p.count(f) - f.at(r).%(_.health == Pained).num).times(Pain)
-                val painableUnits = f.at(r).%(_.health == Alive).%(u => !(u.uclass == Cathedral && u.faction.can(HolyGround) && rs.first == Pain))./(_.uclass).sortBy(_.cost)
+                val painableUnits = f.at(r).%(_.health == Alive).%(u => !(u.uclass == Cathedral && rs.first == Pain))./(_.uclass).sortBy(_.cost)
                 val us = if (rs.first == Pain) painableUnits else f.at(r).%(_.health == Alive)./(_.uclass).sortBy(_.cost)
                 val uu = (us.num > 1).?(us).|(us.take(1))
                 Ask(f).each(uu)(u => DreadCurseAssignAction(self, r, e, k, p, f, rs.first, u))

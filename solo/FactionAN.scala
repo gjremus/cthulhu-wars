@@ -14,8 +14,9 @@ case object Reanimated extends FactionUnitClass(AN, "Reanimated", Monster, 4) {
 }
 case object Yothan extends FactionUnitClass(AN, "Yothan", Terror, 6)
 case object Cathedral extends FactionUnitClass(AN, "Cathedral", Building, 4) {
-    override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = !u.faction.can(HolyGround) && super.canMove(u)
-    override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = !u.faction.can(HolyGround) && super.canBeMoved(u)
+    override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = false
 }
 
 // FACTION POWER — use .has(), NOT blocked by Moonbeast or Elder Thing
@@ -61,6 +62,7 @@ case object AN extends Faction { f =>
     def cathedralCost(r : Region)(implicit game : Game) : Int = 1 + game.board.connected(r).intersect(game.cathedrals).any.??(2)
 
     val allUnits =
+        4.times(Cathedral) ++
         3.times(Yothan) ++
         3.times(Reanimated) ++
         3.times(UnMan) ++
@@ -106,6 +108,9 @@ case class DematerializationDoneAction(self : Faction) extends BaseFactionAction
 
 object ANExpansion extends Expansion {
     override def eliminate(u : UnitFigure)(implicit game : Game) {
+        if (u.uclass == Cathedral) {
+            game.cathedrals = game.cathedrals.but(u.region)
+        }
         if (u.uclass == Yothan && u.faction.can(Extinction)) {
             u.region = AN.extinct
             u.state = $
@@ -192,6 +197,7 @@ object ANExpansion extends Expansion {
             self.power -= AN.cathedralCost(r)
             self.payTax(r)
             game.cathedrals :+= r
+            self.place(Cathedral, r)
             self.log("built a cathedral in", r)
             r.glyph match {
                 case GlyphAA => self.satisfy(CathedralAA, "Cathedral in /^\\ ".trim)

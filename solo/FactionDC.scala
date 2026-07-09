@@ -948,14 +948,9 @@ object DCExpansion extends Expansion {
                     Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1))
                 } else if (cultists.num > 1) {
                     val allSameType = cultists.%(_.uclass != cultists.first.uclass).none
-                    // Check if any cultist is actually on a gate that the faction controls
                     val onGateCultists = cultists.%(c => c.onGate && ff.gates.has(c.region))
-                    val offGateCultists = cultists.%(c => !c.onGate || !ff.gates.has(c.region))
-                    // Cultists are equivalent if they're all the same type AND all have the same gate status
-                    val allSameGateStatus = onGateCultists.none || offGateCultists.none
-                    if (allSameType && allSameGateStatus) {
-                        // All equivalent (same type, same gate status) — auto-capture one
-                        val c = cultists.first
+                    if (allSameType && onGateCultists.none) {
+                        val c = cultists.shuffle.first
                         c.region = self.prison
                         c.onGate = false
                         ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(all equivalent in", area, ")")

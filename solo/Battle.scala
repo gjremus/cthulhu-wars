@@ -439,8 +439,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Azathoth: if it already received a kill this battle (Daemon Sultan absorbed it),
         // it cannot also be assigned a pain in the same battle.
         if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
-        // Holy Ground: Cathedrals cannot be assigned a Pain
-        else if (unit.uclass == Cathedral && unit.faction.can(HolyGround)) 0
+        // Cathedrals cannot be assigned a Pain
+        else if (unit.uclass == Cathedral) 0
         else unit.health match {
             case DoubleHP(Alive, Alive) => 2
             case DoubleHP(Alive, _) => 1
@@ -2698,6 +2698,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case UnholyGroundAction(self, o, cr) =>
             self.add(UnholyGround)
             game.cathedrals :-= cr
+            AN.at(cr, Building).%(_.uclass == Cathedral).starting.foreach(u => game.eliminate(u))
             log("Cathedral".styled(self), "in", cr, "was removed with", UnholyGround)
             Ask(o)
                 .each(o.forces.goos.distinctBy(_.uclass))(u => UnholyGroundEliminateAction(o, self, u).as(u)(UnholyGround, "eliminates in", arena))

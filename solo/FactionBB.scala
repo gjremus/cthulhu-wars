@@ -372,6 +372,7 @@ object BBExpansion extends Expansion {
                         val units = f.at(r)
                         units.foreach { u =>
                             u.region = BB.moon
+                            u.onGate = false
                         }
                         if (units.any)
                             self.log(Catnapping.styled(BB) + ": moved", units.num, "unit".s(units.num), "of", f.full, "from", r, "to", BB.moon)
