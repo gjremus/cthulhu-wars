@@ -1173,6 +1173,7 @@ object DCExpansion extends Expansion {
 
         case DCDarkBargainConfirmAction(self) =>
             recordTenebrosum(action, 0, "Dark Bargain")
+            self.log("chose", DarkBargain.styled(DC), "— enemies pick secret D6 faces")
             // Start secret round-of-prompts: each enemy picks a D6 face 1..6.
             game.dcDarkBargainPicks = $
             val enemies = game.factions.but(self)
