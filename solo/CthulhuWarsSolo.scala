@@ -3750,7 +3750,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                                         case SpellbookAction(_, _, next) => next
                                                         case _ => if (game.doomPhase) DoomPhaseAction else CheckSpellbooksAction(PreMainAction(game.factions(0)))
                                                     }
-                                                case Then(next) => next
+                                                case Then(next : ForcedAction) => next
                                                 case _ => if (game.doomPhase) DoomPhaseAction else CheckSpellbooksAction(PreMainAction(game.factions(0)))
                                             }
                                             cc = |(Ask(f).each(bs)(b => SpellbookAction(f, b, originalNext)))
