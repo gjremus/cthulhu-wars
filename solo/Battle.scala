@@ -1754,6 +1754,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 sides.foreach(_.forces.foreach(u => u.health = Alive))
                 sides.foreach(_.forces.foreach(_.remove(Retreated)))
                 sides.foreach(_.forces.foreach(_.remove(Zeroed)))
+                game.factions.foreach(_.units.foreach(u => if (u.health == Pained) u.health = Alive))
 
                 exempted.foreach(_.remove(Hidden))
                 exempted.foreach(_.remove(Absorbed))
