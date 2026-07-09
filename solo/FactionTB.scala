@@ -596,6 +596,7 @@ object TBExpansion extends Expansion {
             val u = game.unit(part)
             val from = u.region
             u.region = TB.mantle
+            u.onGate = false
             self.log(Behemoth.styled(TB) + ": moved", u.uclass.styled(TB), "from", from, "to", TB.mantle)
             // Unlimited — return to main action (FCG #19)
             Force(MainAction(self))
@@ -644,6 +645,7 @@ object TBExpansion extends Expansion {
             val u = game.unit(cultist)
             val from = u.region
             u.region = dest
+            u.onGate = false
             self.log(Stalk.styled(TB) + ": relocated", u.uclass.styled(TB), "from", from, "to", dest)
             game.checkGatesGained(self)
             EndAction(mover)
@@ -693,7 +695,7 @@ object TBExpansion extends Expansion {
 
             // Ignore Pains: retreat all TB units not killed/eliminated from battle area
             val toRetreat = self.at(arena)
-            toRetreat.foreach { u => u.region = retreatDest }
+            toRetreat.foreach { u => u.region = retreatDest; u.onGate = false }
             if (toRetreat.any)
                 self.log(Autotomy.styled(TB) + ": retreated", toRetreat.num, "unit".s(toRetreat.num), "to", retreatDest)
 
@@ -764,6 +766,7 @@ object TBExpansion extends Expansion {
         case TBEnsnareRelocatePickAction(self, enemy, u, area, headArea, count, relocated, remaining) =>
             val unit = game.unit(u)
             unit.region = headArea
+            unit.onGate = false
             TB.log(Ensnare.styled(TB) + ": relocated", unit.uclass.styled(enemy), "to", headArea)
             Force(TBEnsnareRelocateAction(self, enemy, area, headArea, count - 1, relocated :+ u, remaining.but(u)))
 
@@ -844,6 +847,7 @@ object TBExpansion extends Expansion {
         case TBPsychicShriekRetreatPickAction(self, enemy, u, dest, count, priorAreas, retreated, remaining) =>
             val unit = game.unit(u)
             unit.region = dest
+            unit.onGate = false
             TB.log(PsychicShriek.styled(TB) + ": retreated", unit.uclass.styled(enemy), "to", dest)
             Force(TBPsychicShriekRetreatAction(self, enemy, count - 1, priorAreas, retreated :+ u, remaining.but(u)))
 

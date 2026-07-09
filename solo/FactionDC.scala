@@ -948,7 +948,7 @@ object DCExpansion extends Expansion {
                     Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1))
                 } else if (cultists.num > 1) {
                     val allSameType = cultists.%(_.uclass != cultists.first.uclass).none
-                    val anyOnGate = cultists.%(_.onGate).any
+                    val anyOnGate = cultists.%(c => c.onGate && ff.gates.has(c.region)).any
                     if (allSameType && !anyOnGate) {
                         // All equivalent (same type, none on gate) — auto-capture one
                         val c = cultists.first
