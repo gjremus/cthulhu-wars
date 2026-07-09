@@ -1961,6 +1961,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 sides.foreach(_.forces.foreach(u => u.health = Alive))
                 sides.foreach(_.forces.foreach(_.remove(Retreated)))
                 sides.foreach(_.forces.foreach(_.remove(Zeroed)))
+                game.factions.foreach(_.units.foreach(u => if (u.health == Pained) u.health = Alive))
 
                 // Defilers Court (DC) Eschar (§1.10 + §3.10.4): post-battle, DC
                 // gains 1 Sin per Mindless Husk that was Killed in Battle.
