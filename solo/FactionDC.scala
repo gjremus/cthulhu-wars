@@ -948,9 +948,13 @@ object DCExpansion extends Expansion {
                     Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1))
                 } else if (cultists.num > 1) {
                     val allSameType = cultists.%(_.uclass != cultists.first.uclass).none
-                    val anyOnGate = cultists.%(c => c.onGate && ff.gates.has(c.region)).any
-                    if (allSameType && !anyOnGate) {
-                        // All equivalent (same type, none on gate) — auto-capture one
+                    // Check if any cultist is actually on a gate that the faction controls
+                    val onGateCultists = cultists.%(c => c.onGate && ff.gates.has(c.region))
+                    val offGateCultists = cultists.%(c => !c.onGate || !ff.gates.has(c.region))
+                    // Cultists are equivalent if they're all the same type AND all have the same gate status
+                    val allSameGateStatus = onGateCultists.none || offGateCultists.none
+                    if (allSameType && allSameGateStatus) {
+                        // All equivalent (same type, same gate status) — auto-capture one
                         val c = cultists.first
                         c.region = self.prison
                         c.onGate = false
@@ -1418,8 +1422,8 @@ object DCExpansion extends Expansion {
                     Force(DCProselytizeExecuteDragAction(self, from, to, remainingAssignments, then))
                 } else {
                     // Enemy has MORE acolytes than need to be dragged — enemy picks.
-                    val offGate = acolytes.%(c => !c.onGate)
-                    val onGate  = acolytes.%(c => c.onGate)
+                    val offGate = acolytes.%(c => !c.onGate || !faction.gates.has(c.region))
+                    val onGate  = acolytes.%(c => c.onGate && faction.gates.has(c.region))
                     if (offGate.none || onGate.none) {
                         // All same gate status: no meaningful choice — take first N.
                         acolytes.take(count).foreach { c =>
@@ -1463,8 +1467,8 @@ object DCExpansion extends Expansion {
                         "dragged from", from, "to", to)
                     Force(DCProselytizeExecuteDragAction(DC, from, to, assignments, then))
                 } else {
-                    val offGate = remaining.%(u => !u.onGate)
-                    val onGate  = remaining.%(u => u.onGate)
+                    val offGate = remaining.%(u => !u.onGate || !self.gates.has(u.region))
+                    val onGate  = remaining.%(u => u.onGate && self.gates.has(u.region))
                     if (offGate.none || onGate.none) {
                         // All same status — no meaningful choice, take first N.
                         remaining.take(remainingForFaction - 1).foreach { u =>

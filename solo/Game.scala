@@ -1014,10 +1014,10 @@ class Player(private val f : Faction)(implicit game : Game) {
         if (f.at(r, GreatRaceOfYith).any)
             true
         else
-        if (e.at(r, GOO).any || (e == AN && e.can(HolyGround) && game.inActionPhase && e.at(r, Cathedral).any))
+        if (e.at(r, GOO).any || (e == AN && e.can(HolyGround) && game.inActionPhase && game.cathedrals.has(r)))
             false
         else
-        if (f.at(r, GOO).any || (f == AN && f.can(HolyGround) && game.inActionPhase && f.at(r, Cathedral).any))
+        if (f.at(r, GOO).any || (f == AN && f.can(HolyGround) && game.inActionPhase && game.cathedrals.has(r)))
             true
         else
         if (e.at(r, Terror).any)
