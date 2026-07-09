@@ -693,6 +693,8 @@ object DSExpansion extends Expansion {
                 val u = game.unit(ref)
                 val from = u.region
                 u.region = r
+                // HB Fix 112 (2026-07-09): clear stale onGate when forcibly moved
+                u.onGate = false
                 self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
             }
             self.oncePerTurn :+= Omnipotence
@@ -703,6 +705,8 @@ object DSExpansion extends Expansion {
                 val u = game.unit(ref)
                 val from = u.region
                 u.region = r
+                // HB Fix 112 (2026-07-09): clear stale onGate when forcibly moved
+                u.onGate = false
                 self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
             }
             self.oncePerTurn :+= Omnipotence
@@ -727,6 +731,8 @@ object DSExpansion extends Expansion {
             val u = game.unit(uRef)
             val from = u.region
             u.region = r
+            // HB Fix 112 (2026-07-09): clear stale onGate when forcibly moved
+            u.onGate = false
             self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
             if (remaining.any)
                 Force(OmnipotenceMoveSeparatelyAction(self, remaining))

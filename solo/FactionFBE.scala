@@ -652,7 +652,12 @@ object FBEExpansion extends Expansion {
         // [LEGACY REPLAY] Pre-6d1ee19 "Done" — discard k dice, move all picked units to dest.
         case AnimatedRushDoneAction(self, source, dest, k, picked) =>
             game.fbeCardDice = game.fbeCardDice.sortBy(x => x).drop(k)
-            picked.foreach(ur => game.unit(ur).region = dest)
+            picked.foreach { ur =>
+                val u = game.unit(ur)
+                u.region = dest
+                // HB Fix 112 (2026-07-09): clear stale onGate when forcibly moved
+                u.onGate = false
+            }
             self.log("Animated Rush".styled(FBE) + ": discarded", k, (k == 1).?("die").|("dice"),
                 "carried", picked.num, ("Unit".s(picked.num)).styled(FBE), "to", dest)
             Force(MoveContinueAction(self, true))

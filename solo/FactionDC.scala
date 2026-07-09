@@ -947,8 +947,26 @@ object DCExpansion extends Expansion {
                     ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(only one in", area, ")")
                     Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1))
                 } else if (cultists.num > 1) {
+                    // HB Fix 112 (2026-07-09): sanitize stale onGate flags before
+                    // deciding whether to prompt. A cultist forcibly moved (e.g.
+                    // Tsunami, Omnipotence, or gate diplomacy displacement) may retain
+                    // onGate=true even though it no longer controls any gate. Clear
+                    // onGate on any cultist whose faction does NOT own a gate in
+                    // this area. If the faction DOES own a gate here, only the first
+                    // cultist with onGate should keep it (there can be at most one
+                    // genuine controller per gate).
+                    if (!ff.gates.has(area)) {
+                        cultists.foreach(c => c.onGate = false)
+                    } else {
+                        // Faction has a gate here — at most one cultist is the real
+                        // controller. If multiple have onGate (stale duplicates), keep
+                        // only the first and clear the rest.
+                        val onGateUnits = cultists.%(_.onGate)
+                        if (onGateUnits.num > 1)
+                            onGateUnits.drop(1).foreach(c => c.onGate = false)
+                    }
                     val allSameType = cultists.%(_.uclass != cultists.first.uclass).none
-                    val onGateCultists = cultists.%(c => c.onGate && ff.gates.has(c.region))
+                    val onGateCultists = cultists.%(c => c.onGate && ff.gates.has(area))
                     if (allSameType && onGateCultists.none) {
                         val c = cultists.shuffle.first
                         c.region = self.prison

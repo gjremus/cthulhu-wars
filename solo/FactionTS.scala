@@ -231,6 +231,8 @@ object TSExpansion extends Expansion {
 
         case TSUndulateCarryAction(self, u, from, to, newCarrierCost) =>
             u.region = to
+            // HB Fix 112 (2026-07-09): clear stale onGate when forcibly moved
+            u.onGate = false
             u.add(Moved)
             u.add(MovedForFree)
             self.log("Undulate: carried", u, "for free from", from, "to", to)

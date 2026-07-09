@@ -447,7 +447,12 @@ object XSSExpansion extends Expansion {
             game.unit(eye).region = dest
             // Move extras
             val dcAcolyteMoved = extras.exists(ur => game.unit(ur).faction == DC && game.unit(ur).uclass == Acolyte)
-            extras.foreach { ur => game.unit(ur).region = dest }
+            extras.foreach { ur =>
+                val u = game.unit(ur)
+                u.region = dest
+                // HB Fix 112 (2026-07-09): clear stale onGate when forcibly moved
+                u.onGate = false
+            }
             self.log(Tsunami.styled(XSS) + ": moved", EyeOfTheStorm.styled(XSS),
                 (extras.any).??(" and " + extras.num + " other Unit" + (extras.num > 1).??("s")),
                 "from", source, "to", dest)
