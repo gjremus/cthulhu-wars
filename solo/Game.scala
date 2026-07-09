@@ -916,8 +916,10 @@ class Player(private val f : Faction)(implicit game : Game) {
     def allInPlay = units.%(_.region.inPlay)
     // HIGH-2 revised: ElderGod (Bastet) counts as GOO per spec §1.3 for capture-blocking,
     // Nyarlathotep Harbinger 2-ES, multi-GOO checks, etc.
-    // Alt Ancients Holy Ground: Cathedrals count as GOOs during Action Phase
-    def goos = units.%(_.region.inPlay).%(u => u.uclass.isGOO || (u.uclass == Cathedral && u.faction.can(HolyGround) && game.inActionPhase))
+    // Alt Ancients Holy Ground: Cathedrals with Holy Ground are true GOOs (with restrictions:
+    // cannot be pained/moved/retreated, do not generate ES via RoA). They block capture, satisfy
+    // GooMeetsGoo, and participate in all GOO-presence checks.
+    def goos = units.%(_.region.inPlay).%(u => u.uclass.isGOO || (u.uclass == Cathedral && u.faction.spellbooks.contains(HolyGround)))
     def cultists = units.%(_.region.inPlay).%(_.uclass.utype == Cultist)
     // Lunacy (BB): Earth Cats count as Cultists for enemy-targeting effects.
     def cultistsForEnemyTargeting = units.%(_.region.inPlay).%(_.targetableAsCultistByEnemy)
@@ -1014,10 +1016,12 @@ class Player(private val f : Faction)(implicit game : Game) {
         if (f.at(r, GreatRaceOfYith).any)
             true
         else
-        if (e.at(r, GOO).any || (e == AN && e.can(HolyGround) && game.inActionPhase && game.cathedrals.has(r)))
+        // Alt Ancients Holy Ground: Cathedrals with Holy Ground are true GOOs for capture purposes.
+        // The list-level .goos now includes them, so e.at(r).goos covers both real GOOs and HG Cathedrals.
+        if (e.at(r).goos.any)
             false
         else
-        if (f.at(r, GOO).any || (f == AN && f.can(HolyGround) && game.inActionPhase && game.cathedrals.has(r)))
+        if (f.at(r).goos.any)
             true
         else
         if (e.at(r, Terror).any)
@@ -2948,13 +2952,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             SetupFactionsAction
 
-        case PowerGatherAction(last) if nextReplayActionHint.exists(h => h.startsWith("MainGatesAction") || h.startsWith("PreMainAction") || h.startsWith("MainAction") || h.startsWith("NextPlayerAction")) =>
-            factions.foreach { f =>
-                f.active = f.hibernating.not
-            }
-
-            PreMainAction(last)
-
         case PowerGatherAction(last) =>
             fbeActionInProgress = false
             // [2026-05-24] Guard the whole power-calc / per-turn-reset / log
@@ -3837,6 +3834,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             CheckSpellbooksAction(PreMainAction(f))
 
         case PreMainAction(f) if f.active.not && f.hibernating.not =>
+            if (f == DC) println(s"[DC-TRACE] PreMainAction INACTIVE branch: power=${f.power}, active=${f.active}")
             implicit val asking = Asking(f)
 
             + GroupAction("Before " + f + " turn")
@@ -3945,6 +3943,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             asking.ask.useIf(_.actions.exists(_.isInfo.not))(_.add(NeedOk).add(OutOfTurnRefresh(PreMainAction(f))).add(SacrificeHighPriestAllowedAction).group(" ")).skip(MainAction(f))
 
         case PreMainAction(f) if f.active =>
+            if (f == DC) println(s"[DC-TRACE] PreMainAction ACTIVE branch: power=${f.power}, active=${f.active}")
             PreActionPromptsAction(f, f.enemies)
 
         case PreActionPromptsAction(e, l) =>
@@ -4109,7 +4108,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case MainGatesAction(f) =>
             gateBlockedLog = $
+            if (f == DC) println(s"[DC-TRACE] MainGatesAction BEFORE checkGatesGained: DC power=${f.power}, active=${f.active}, acted=${f.acted}, gates=${f.gates}")
             checkGatesGained(f)
+            if (f == DC) println(s"[DC-TRACE] MainGatesAction AFTER checkGatesGained: DC power=${f.power}, active=${f.active}, acted=${f.acted}, gates=${f.gates}")
 
             // TB: immediately trigger Mantle overlay if 2 adjacent gates now exist
             if (f == TB && TB.needs(OverlayMantleReq) && !tbMantleInPlay) {
@@ -4124,8 +4125,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             CheckSpellbooksAction(MainAction(f))
 
         case MainAction(f) if f.active.not =>
+            if (f == DC) println(s"[DC-TRACE] Game.scala MainAction(DC) INACTIVE branch: power=${f.power}, active=${f.active}, acted=${f.acted}")
             implicit val asking = Asking(f)
 
+            game.controls(f)
             game.reveals(f)
 
             + NextPlayerAction(f).as("Skip")
@@ -4239,8 +4242,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             round += 1
 
             factions.foreach { f =>
-                f.active = f.power > 0 && f.hibernating.not
+                f.active = (f.power > 0 || (f == DC && dcSin > 0) || (f == SL && slSin > 0)) && f.hibernating.not
             }
+
+            if (setup.has(DC)) println(s"[DC-TRACE] NextPlayerAction: DC power=${DC.power}, active=${DC.active}")
 
             factions = factions.drop(1) ++ factions.take(1)
 
@@ -4267,11 +4272,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                 if (f.onMap(HighPriest).any)
                     if (f.commands.has(UnspeakableOathOpportunityEndOfPhase) || f.commands.has(UnspeakableOathPrompt))
-                        + SacrificeHighPriestPromptAction(f, PreMainAction(next)).as("Sacrifice", HighPriest.styled(f))("Unspeakable Oath".hl)
+                        + SacrificeHighPriestPromptAction(f, EndPhasePromptsAction(next, l.but(f))).as("Sacrifice", HighPriest.styled(f))("Unspeakable Oath".hl)
 
                 if (f.loyaltyCards.has(DimensionalShamblerCard) && f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
                     if (f.commands.has(ShamblerOpportunityEndOfPhase) || f.commands.has(ShamblerPrompt))
-                        + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(next))).as(DimensionalShamblerUnit.styled(f), "to Map")("End of Action Phase")
+                        + ShamblerDeployPromptAction(f, CheckSpellbooksAction(EndPhasePromptsAction(next, l.but(f)))).as(DimensionalShamblerUnit.styled(f), "to Map")("End of Action Phase")
 
                 if (f == TB && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
                     if (f.commands.has(TBRemoveGateOpportunityEndOfPhase) || f.commands.has(TBRemoveGatePrompt))

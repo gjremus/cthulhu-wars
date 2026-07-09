@@ -495,7 +495,15 @@ object DCExpansion extends Expansion {
 
         // ── MAIN ACTION ─────────────────────────────────────────────────────
         case MainAction(f : DC.type) if f.active.not =>
-            UnknownContinue
+            implicit val asking = Asking(f)
+            println(s"[DC-TRACE] DC MainAction inactive: power=${f.power}, active=${f.active}, acted=${f.acted}")
+            game.controls(f)
+            if (dcCanDeliverFactionCardAcolyte(f))
+                + DCPlaceReservedAcolyteMainAction(f)
+            game.reveals(f)
+            + NextPlayerAction(f).as("Skip")
+            + NeedOk
+            asking
         case MainAction(f : DC.type) if f.acted =>
             // Post-acted: still allow Tenebrosum repeat + controls + endTurn (G1)
             // HB Fix 90 (2026-06-07): dcTenebrosumExtraTurn flag retired — Tenebrosum
@@ -538,6 +546,7 @@ object DCExpansion extends Expansion {
             }
             game.reveals(f)
             game.endTurn(f)(true)
+            + NeedOk
             asking
 
         case MainAction(f : DC.type) =>
@@ -600,6 +609,7 @@ object DCExpansion extends Expansion {
             game.reveals(f)
             game.endTurn(f)(f.battled.any || game.nexed.any)
 
+            + NeedOk
             asking
 
         // ── Tenebrosum: Soft prompt — opens "are you sure" confirm ───────────
@@ -967,7 +977,8 @@ object DCExpansion extends Expansion {
                     }
                     val allSameType = cultists.%(_.uclass != cultists.first.uclass).none
                     val onGateCultists = cultists.%(c => c.onGate && ff.gates.has(area))
-                    if (allSameType && onGateCultists.none) {
+                    val allEquivGate = onGateCultists.none || onGateCultists.num == cultists.num
+                    if (allSameType && allEquivGate) {
                         val c = cultists.shuffle.first
                         c.region = self.prison
                         c.onGate = false
