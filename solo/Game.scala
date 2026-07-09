@@ -3243,10 +3243,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // SPELLBOOK
         case CheckSpellbooksAction(next) =>
+            println(s"[SPELLBOOK-TRACE] CheckSpellbooksAction entered with next=${next.getClass.getSimpleName} ($next)")
             val fs = factions.%(f => f.unfulfilled.num + f.spellbooks.num < f.library.num)
             val fe = factions.%(f => f.es.%(_.value == 0).any)
 
             if (fs.any) {
+                println(s"[SPELLBOOK-TRACE] fs=${fs.mkString(",")}, offering spellbook with next=$next")
                 val f = fs(0)
                 // Map library names for buff option spellbook swaps before filtering
                 val effectiveLibrary = f.library.map { sb => (f, sb) match {
@@ -3764,6 +3766,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             MainGatesAction(f)
 
         case MainGatesAction(f) =>
+            println(s"[SPELLBOOK-TRACE] MainGatesAction($f) -> CheckSpellbooksAction(MainAction($f))")
             checkGatesGained(f)
 
             CheckSpellbooksAction(MainAction(f))
