@@ -987,6 +987,10 @@ object DCExpansion extends Expansion {
             // was silent. Add an explicit explanatory log line.
             if (capturedSoFar > 0 && bonus == 0)
                 self.log(Satiate.styled(DC) + ": no Elder Sign because no captures beyond the first")
+            // HB Fix SC-Satiate: multi-capture procs Self Consuming. Each captured
+            // cultist counts as a unit removed for Self Consuming purposes (not FBE-controlled).
+            if (game.setup.has(FBE) && game.fbeActionInProgress && capturedSoFar > 0)
+                (1 to capturedSoFar).foreach(_ => game.fbeSelfConsumingDeaths :+= false)
             EndAction(self)
 
         // ── Lure (cost 1, force-move adjacent enemy cultists into Y'Golonac's area) ──
