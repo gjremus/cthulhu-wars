@@ -272,8 +272,11 @@ case class SpendToFlipTomeAction(self : Faction, tome : LibraryTome) extends Bas
 
 // Tome usage actions
 case class UseTomeGuardianMainAction(self : Faction) extends OptionFactionAction(implicit g => "Use " + TomeGuardian.elem + " (" + "1 Power".styled("power") + ")") with MainQuestion with Soft
-case class UseTomeGuardianRelocateAction(self : Faction, source : Region, target : Faction) extends BaseFactionAction(implicit g => "Relocate " + target.full + " units in", source) {
-    override def question(implicit game : Game) = "Relocate units with " + TomeGuardian.elem
+case class UseTomeGuardianRegionAction(self : Faction, source : Region) extends BaseFactionAction(implicit g => "Relocate enemy units in", source) with Soft {
+    override def question(implicit game : Game) = "Choose region with " + TomeGuardian.elem
+}
+case class UseTomeGuardianRelocateAction(self : Faction, source : Region, target : Faction) extends BaseFactionAction(implicit g => "Relocate " + target.full + " units in", source) with Soft {
+    override def question(implicit game : Game) = "Choose faction to relocate from " + source
 }
 case class UseTomeGuardianDestAction(self : Faction, source : Region, target : Faction, dest : Region) extends BaseFactionAction(implicit g => "Move to", dest) {
     override def question(implicit game : Game) = "Choose destination for " + target.full + " units from " + source
@@ -666,15 +669,26 @@ object LibraryExpansion extends Expansion {
         // ── GUARDIAN UNDER THE LAKE — move enemy units between Archway regions ──
         case UseTomeGuardianMainAction(self) =>
             val arches = game.board.regions.%(game.board.archways.contains)
-            // Show one entry per (region, enemy faction) combo where enemy has units
-            val options = arches./~{ r =>
+            val regionsWithEnemies = arches.%(r =>
+                factions.but(self).%(_.at(r).%(u => u.uclass.utype != MapUnit).any).any)
+            // Region-first options (clean UX for new games)
+            val regionOptions = regionsWithEnemies./(r => UseTomeGuardianRegionAction(self, r))
+            // Old-style per-faction options (backward compat for replay of existing games)
+            val legacyOptions = arches./~{ r =>
                 factions.but(self).%(_.at(r).%(u => u.uclass.utype != MapUnit).any)./(f =>
                     UseTomeGuardianRelocateAction(self, r, f))
             }
-            Ask(self).each(options)(identity).cancel
+            Ask(self).list(regionOptions).list(legacyOptions).cancel
+
+        case UseTomeGuardianRegionAction(self, source) =>
+            val enemies = factions.but(self).%(_.at(source).%(u => u.uclass.utype != MapUnit).any)
+            if (enemies.num == 1)
+                Force(UseTomeGuardianRelocateAction(self, source, enemies.head))
+            else
+                Ask(self).each(enemies)(f =>
+                    UseTomeGuardianRelocateAction(self, source, f)).cancel
 
         case UseTomeGuardianRelocateAction(self, source, target) =>
-            // Show all OTHER archway regions as destinations, with cancel
             val arches = game.board.regions.%(game.board.archways.contains).but(source)
             Ask(self).each(arches)(dest =>
                 UseTomeGuardianDestAction(self, source, target, dest)).cancel
