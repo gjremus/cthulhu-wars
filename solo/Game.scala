@@ -2565,7 +2565,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // (Herald-discounted to 5 if applicable) — gate the menu entry on
         // affordability so we never offer a ritual BB cannot pay.
         if (f == BB && f.acted.not && f.power >= cost) {
-            val bastetUnits = f.allInPlay.%(_.uclass == Bastet).%(_.region.onMap)
+            val bastetUnits = f.allInPlay.%(_.uclass == Bastet).%(u => u.region.onMap || u.region == BB.moon)
             bastetUnits.foreach { bastet =>
                 val r = bastet.region
                 val hasEnemyCultist = factions.but(f).exists(e => e.at(r).%(u => u.uclass.utype == Cultist).any)
@@ -3511,7 +3511,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // Bubastis Requires Attention: doom-phase ritual via Bastet + enemy Cultist
         case RequiresAttentionMainAction(self) =>
-            val bastetRegions = self.allInPlay.%(_.uclass == Bastet).%(_.region.onMap)./(_.region)
+            val bastetRegions = self.allInPlay.%(_.uclass == Bastet).%(u => u.region.onMap || u.region == BB.moon)./(_.region)
             // BB Fix 78, v2.4.30 — skip regions where any Elder Thing is co-located with Bastet (combat unaffected).
             // Defense-in-depth filter mirrors the menu-gate suppression at neutralSpellbooks(); even if a stale
             // RequiresAttentionMainAction reaches this handler from a queue / replay, the Elder-Thing-blocked region
