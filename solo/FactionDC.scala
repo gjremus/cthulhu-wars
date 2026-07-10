@@ -304,6 +304,9 @@ case class DCLureConfirmAction(self : Faction)
     extends BaseFactionAction(Lure.styled(DC), "Confirm".styled("power"))
 case class DCLureFactionPickAction(self : Faction, area : Region, remaining : $[Faction])
     extends ForcedAction with PowerNeutral
+case class DCLurePickRegionAction(self : Faction, area : Region, from : Region, remaining : $[Faction])
+    extends BaseFactionAction(Lure.styled(DC) + ": " + self.short.styled(self) + " — choose cultist from", implicit g => from.toString)
+    with PowerNeutral
 case class DCLurePickCultistAction(self : Faction, area : Region, cultist : UnitRef, remaining : $[Faction])
     extends BaseFactionAction(Lure.styled(DC) + ": " + self.short.styled(self) + " moves", implicit g => {
         val r = g.unit(cultist).region
@@ -952,6 +955,9 @@ object DCExpansion extends Expansion {
                 Force(DCSatiateFinishAction(self, area, capturedSoFar))
             } else {
                 val ff = remaining.first
+                if (ff == self) {
+                    Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar))
+                } else {
                 val cultists = ff.at(area).%(_.uclass.utype == Cultist)
                 if (cultists.num == 1) {
                     // Auto-capture the only cultist
@@ -983,7 +989,8 @@ object DCExpansion extends Expansion {
                     val onGateCultists = cultists.%(c => c.onGate && ff.gates.has(area))
                     val allEquivGate = onGateCultists.none || onGateCultists.num == cultists.num
                     if (allSameType && allEquivGate) {
-                        val c = cultists.shuffle.first
+                        val c = cultists.first
+                        println(s"[SATIATE-TRACE] auto-capture: ${c.ref} from ${c.region} → prison. cultists in area: ${cultists./(_.ref).mkString(", ")}")
                         c.region = self.prison
                         c.onGate = false
                         ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(all equivalent in", area, ")")
@@ -998,6 +1005,7 @@ object DCExpansion extends Expansion {
                     }
                 } else {
                     Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar))
+                }
                 }
             }
 
@@ -1058,67 +1066,78 @@ object DCExpansion extends Expansion {
             } else {
                 val e = remaining.first
                 val adj = game.board.connected(area)
-                println(s"[LURE TRACE] area=$area adj=${adj./(_.name)} enemy=${e.name}")
+                println(s"[LURE-ELIG] area=${area} adj=${adj./(_.toString).mkString(",")} faction=${e}")
+                println(s"[LURE-ELIG] ${e} ALL cultists: ${e.units.%(_.uclass.utype == Cultist)./(u => s"${u.ref}@${u.region}(onMap=${u.region.glyph.onMap})").mkString(", ")}")
                 val eligible = adj./~{ r =>
-                    // HB Fix 113 (2026-06-13): per owner — Lure is blocked out of
-                    // any source Area where ANY enemy of DC (i.e. any faction other
-                    // than DC itself, self) has a Great Old One, an independent
-                    // Great Old One (iGOO), a Faction Building, or a Terror —
-                    // INCLUDING the Cultist's own faction. This matches the
-                    // verbatim card text ("Enemy Cultists in Areas containing an
-                    // enemy Great Old One, Terror or Faction Building are exempt"),
-                    // where "enemy" is from DC's perspective and so includes the
-                    // Cultist's owner. Examples: CC's Nyarlathotep blocks luring
-                    // CC's own Cultists out of that Area; AN's Cathedral (Building)
-                    // or Yothan (Terror) blocks AN's Cultists; a controlled neutral
-                    // Terror on map (Brown Jenkin, Dhole, ...) blocks the
-                    // controlling faction's Cultists. `isGOO` covers GOO, iGOO and
-                    // ElderGod (Bastet); controlled neutral Terrors are utype
-                    // Terror on the controlling faction's units.
-                    // (Prior code only checked factions OTHER than the Cultist owner
-                    //  for GOOs, and any faction — including DC — for Terror/Building,
-                    //  which both mis-scoped the exemption.)
                     val enemiesOfDC = game.factions.but(self)
                     val hasEnemyGOO        = enemiesOfDC.exists(o => o.at(r).%(_.uclass.isGOO).any)
                     val hasEnemyTerror     = enemiesOfDC.exists(o => o.at(r).%(_.uclass.utype == Terror).any)
                     val hasEnemyBuilding   = enemiesOfDC.exists(o => o.at(r).%(_.uclass.utype == Building).any)
-                    // HB Fix 97.B (2026-06-07): per user "fix, this only applies to
-                    // the Bubastis moon area". Prior code matched any region whose
-                    // display name contained "Moon" (string match). Replaced with
-                    // canonical BB.moon region equality — only the Bubastis Moon
-                    // tile is exempted.
                     val isMoon = r == BB.moon
                     if (hasEnemyGOO || hasEnemyTerror || hasEnemyBuilding || isMoon) $()
                     else e.at(r).%(_.uclass.utype == Cultist)
-                }
-                println(s"[LURE TRACE] eligible for ${e.name}: ${eligible./(u => u.uclass.name + "@" + u.region.name)}")
+                }.%(c => c.region.glyph.onMap)
+                println(s"[LURE-ELIG] eligible after filter: ${eligible./(u => s"${u.ref}@${u.region}").mkString(", ")}")
                 if (eligible.num == 0) {
-                    // Skip this enemy
                     Force(DCLureFactionPickAction(self, area, remaining.dropStarting))
                 } else if (eligible.num == 1) {
                     val c = eligible.first
                     val from = c.region
-                    c.region = area
-                    c.onGate = false
-                    e.log(Lure.styled(DC) + ":", e.short.styled(e), "moves", c.uclass.styled(e), "from", from, "to", area)
-                    Force(DCLureFactionPickAction(self, area, remaining.dropStarting))
-                } else {
-                    // Ask enemy which Cultist to move (self=e for enemy-colored menu border per G11)
-                    implicit val asking = Asking(e)
-                    eligible.foreach { c =>
-                        + DCLurePickCultistAction(e, area, c.ref, remaining.dropStarting)
+                    if (!from.glyph.onMap) {
+                        Force(DCLureFactionPickAction(self, area, remaining.dropStarting))
+                    } else {
+                        c.region = area
+                        c.onGate = false
+                        e.log(Lure.styled(DC) + ":", e.short.styled(e), "moves", c.uclass.styled(e), "from", from, "to", area)
+                        Force(DCLureFactionPickAction(self, area, remaining.dropStarting))
                     }
-                    asking
+                } else {
+                    val regions = eligible./(_.region).distinct
+                    if (regions.num > 1) {
+                        implicit val asking = Asking(e)
+                        regions.foreach { r =>
+                            + DCLurePickRegionAction(e, area, r, remaining.dropStarting)
+                        }
+                        asking
+                    } else {
+                        implicit val asking = Asking(e)
+                        eligible.foreach { c =>
+                            + DCLurePickCultistAction(e, area, c.ref, remaining.dropStarting)
+                        }
+                        asking
+                    }
                 }
+            }
+
+        case DCLurePickRegionAction(self, area, from, remaining) =>
+            val cultists = self.at(from).%(_.uclass.utype == Cultist)
+            if (cultists.num == 1) {
+                val c = cultists.first
+                c.region = area
+                c.onGate = false
+                self.log(Lure.styled(DC) + ":", self.short.styled(self), "moves", c.uclass.styled(self), "from", from, "to", area)
+                Force(DCLureFactionPickAction(DC, area, remaining))
+            } else {
+                implicit val asking = Asking(self)
+                cultists.foreach { c =>
+                    + DCLurePickCultistAction(self, area, c.ref, remaining)
+                }
+                asking
             }
 
         case DCLurePickCultistAction(self, area, cultistRef, remaining) =>
             val c = game.unit(cultistRef)
             val from = c.region
-            c.region = area
-            c.onGate = false
-            self.log(Lure.styled(DC) + ":", self.short.styled(self), "moves", c.uclass.styled(self), "from", from, "to", area)
-            Force(DCLureFactionPickAction(DC, area, remaining))
+            println(s"[LURE-TRACE] cultist=${cultistRef} region=${from} glyph=${from.glyph} onMap=${from.glyph.onMap} inPlay=${from.glyph.inPlay}")
+            if (!from.glyph.onMap) {
+                println(s"[LURE-TRACE] SKIPPING (not on map): ${cultistRef} in ${from}")
+                Force(DCLureFactionPickAction(DC, area, remaining))
+            } else {
+                c.region = area
+                c.onGate = false
+                self.log(Lure.styled(DC) + ":", self.short.styled(self), "moves", c.uclass.styled(self), "from", from, "to", area)
+                Force(DCLureFactionPickAction(DC, area, remaining))
+            }
 
         // ── Pilgrimage (cost 1, free move for other DC units in Prophet's area) ──
         case DCPilgrimageMainAction(self) =>
