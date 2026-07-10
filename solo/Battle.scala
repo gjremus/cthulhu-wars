@@ -700,7 +700,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // one Miss, not only when FB is the attacker. Pick FB's own Side directly via attacker/
     // defender comparison rather than relying on an implicit Faction->Side conversion inside
     // a sides.filter loop, so the behaviour is obviously symmetric across attacker/defender.
-    if (factions.has(FB) && sides.has(FB) && FB.has(Augury) && game.fbAuguryKills > 0) {
+    if (factions.has(FB) && sides.has(FB) && FB.can(Augury) && game.fbAuguryKills > 0) {
         val fbSide : Side = if (attacker == FB) attackers else defenders
         if (fbSide.rolls.has(Miss)) {
             val misses = fbSide.rolls.count(_ == Miss)
@@ -1090,7 +1090,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // the other side's surplus. By the time BattleEnd runs, EliminatePhase has already moved
                 // every killed unit into the battle-level `exempted` list (see EliminatePhase, line ~768),
                 // so counting `exempted` units by faction gives the true per-side kill/elimination total.
-                if (factions.has(FB) && FB.has(Augury) && sides.has(FB)) {
+                if (factions.has(FB) && FB.can(Augury) && sides.has(FB)) {
                     // Attacker side: kills rolled minus defender units actually killed/eliminated
                     val attackerKillsRolled = attackers.rolls.count(_ == Kill)
                     val defenderUnitsKilled = exempted.count(_.faction == defender)
