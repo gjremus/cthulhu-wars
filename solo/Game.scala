@@ -2778,7 +2778,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // Bubastis Requires Attention: Bastet ritual — optional doom-phase action
         if (f == BB && f.acted.not) {
-            val bastetUnits = f.allInPlay.%(_.uclass == Bastet).%(_.region.onMap)
+            val bastetUnits = f.allInPlay.%(_.uclass == Bastet).%(u => u.region.onMap || u.region == BB.moon)
             bastetUnits.foreach { bastet =>
                 val r = bastet.region
                 val hasEnemyCultist = factions.but(f).exists(e => e.at(r).%(u => u.uclass.utype == Cultist).any)
@@ -3809,7 +3809,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // Bubastis Requires Attention: doom-phase ritual via Bastet + enemy Cultist
         case RequiresAttentionMainAction(self) =>
-            val bastetRegions = self.allInPlay.%(_.uclass == Bastet).%(_.region.onMap)./(_.region)
+            val bastetRegions = self.allInPlay.%(_.uclass == Bastet).%(u => u.region.onMap || u.region == BB.moon)./(_.region)
             val eligible = bastetRegions.%(r => factions.but(self).exists(e => e.at(r).%(u => u.uclass.utype == Cultist).any))
             Ask(self).each(eligible)(r => RequiresAttentionTargetAction(self, r)).cancel
 
