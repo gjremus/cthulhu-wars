@@ -507,11 +507,10 @@ object FBEExpansion extends Expansion {
             UnknownContinue
 
         // ── SHAPESTEALING (§1.10 SB3 / §3.10.3) ──────────────────────────────
-        // FBE picks an enemy Monster (Soft), then takes one die FROM the card and
-        // DISCARDS it. The card dice are FIXED once placed (§1.8) — they are NOT
-        // re-rolled — so the compared value is the EXISTING die's stored pip value
-        // (1-6), not a fresh d6. The terminal resolve action bakes in that pip for
-        // replay safety. Battle.scala's matching cases resume the battle.
+        // FBE picks an enemy Monster, discards the LOWEST card die (weakest first,
+        // per Q2 resolution), then ROLLS a fresh d6. The fresh roll's pip value
+        // (1-6) is compared to the Monster's Cost. Card text: "roll a die from
+        // your Faction Card." Battle.scala's matching cases resume the battle.
         case ShapestealingPreBattleAction(self) =>
             game.battle match {
                 case Some(b) =>
@@ -522,29 +521,26 @@ object FBEExpansion extends Expansion {
             }
 
         case ShapestealingTargetAction(self, enemyMonster) =>
-            // Take the HIGHEST-value card die (best chance to beat the Monster's
-            // Cost — best-play, deterministic for replay) and bake its pip into the
-            // resolve action. Its value is the FIXED stored pip (§1.8), not a re-roll.
-            val chosen = game.fbeCardDice.maxOr(0)
-            Force(ShapestealingResolveAction(self, enemyMonster, chosen))
+            // Discard the LOWEST card die (weakest first, protects strong dice per
+            // Q2 resolution), then roll a fresh d6 (card text: "roll a die from your
+            // Faction Card"). The fresh roll's pip is compared to the Monster's Cost.
+            val sorted = game.fbeCardDice.sortBy(x => x)
+            val discarded = sorted.head
+            game.fbeCardDice = sorted.drop(1)
+            self.log(Shapestealing.styled(FBE) + ": discarded lowest card die (value", discarded.toString + ")")
+            RollD6(_ => Shapestealing.styled(FBE) + ": roll for Shapestealing",
+                roll => ShapestealingResolveAction(self, enemyMonster, roll))
 
         case ShapestealingResolveAction(self, enemyMonster, roll) =>
-            // Discard the chosen card die (the one whose value `roll` was read) —
-            // a card die IS consumed (§1.10 SB3 Resolved). Card dice are fixed, so
-            // remove exactly one die equal to the value used.
-            game.fbeCardDice = (game.fbeCardDice.indexOf(roll) match {
-                case -1 => game.fbeCardDice
-                case i  => game.fbeCardDice.patch(i, Nil, 1)
-            })
             val mon = game.unit(enemyMonster)
             val cost = mon.uclass.cost
             if (roll > cost) {
                 game.fbeShapestolen :+= enemyMonster
-                self.log(Shapestealing.styled(FBE) + ": discarded card die (value", roll.toString + "); vs Cost",
+                self.log(Shapestealing.styled(FBE) + ": rolled", roll.toString + "; vs Cost",
                     cost.toString + " —", mon.uclass.styled(mon.faction), "fights for", FBE.full, "this Combat")
             }
             else
-                self.log(Shapestealing.styled(FBE) + ": discarded card die (value", roll.toString + "); vs Cost",
+                self.log(Shapestealing.styled(FBE) + ": rolled", roll.toString + "; vs Cost",
                     cost.toString + " — failed")
             UnknownContinue   // Battle.scala ShapestealingResolveAction case resumes via proceed()
 
