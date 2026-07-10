@@ -305,7 +305,7 @@ case class DCLureConfirmAction(self : Faction)
 case class DCLureFactionPickAction(self : Faction, area : Region, remaining : $[Faction])
     extends ForcedAction with PowerNeutral
 case class DCLurePickCultistAction(self : Faction, area : Region, cultist : UnitRef, remaining : $[Faction])
-    extends BaseFactionAction(Lure.styled(DC) + ": " + self.short.styled(self) + " moves", implicit g => cultist.uclass.styled(self) + " to " + area.toString)
+    extends BaseFactionAction(Lure.styled(DC) + ": " + self.short.styled(self) + " moves", implicit g => cultist.uclass.styled(self) + " from " + g.unit(cultist).region.toString + " to " + area.toString)
     with PowerNeutral
 
 // ── Pilgrimage (Action: Cost 1 — §1.10) ────────────────────────────────────
@@ -936,7 +936,7 @@ object DCExpansion extends Expansion {
             ygolonacOpt match {
                 case Some(yg) =>
                     val area = yg.region
-                    val factionsWithCultists = game.factions.%(ff => ff.at(area).%(_.uclass.utype == Cultist).any)
+                    val factionsWithCultists = game.factions.but(self).%(ff => ff.at(area).%(_.uclass.utype == Cultist).any)
                     // Per-faction pick chain (Item 8): each faction with 2+ cultists chooses which to lose.
                     Force(DCSatiateFactionPickAction(self, area, factionsWithCultists, 0))
                 case None =>
@@ -999,10 +999,14 @@ object DCExpansion extends Expansion {
 
         case DCSatiatePickCultistAction(self, area, cultistRef, remaining, capturedSoFar) =>
             val c = game.unit(cultistRef)
+            if (c.faction == DC) {
+                Force(DCSatiateFactionPickAction(DC, area, remaining, capturedSoFar))
+            } else {
             c.region = DC.prison
             c.onGate = false
             self.log(Satiate.styled(DC) + ":", self.short.styled(self), "loses", c.uclass.styled(self), "to", DC.full)
             Force(DCSatiateFactionPickAction(DC, area, remaining, capturedSoFar + 1))
+            }
 
         case DCSatiateFinishAction(self, area, capturedSoFar) =>
             val bonus = math.max(0, capturedSoFar - 1)
@@ -1050,6 +1054,7 @@ object DCExpansion extends Expansion {
             } else {
                 val e = remaining.first
                 val adj = game.board.connected(area)
+                println(s"[LURE TRACE] area=$area adj=${adj./(_.name)} enemy=${e.name}")
                 val eligible = adj./~{ r =>
                     // HB Fix 113 (2026-06-13): per owner — Lure is blocked out of
                     // any source Area where ANY enemy of DC (i.e. any faction other
@@ -1082,6 +1087,7 @@ object DCExpansion extends Expansion {
                     if (hasEnemyGOO || hasEnemyTerror || hasEnemyBuilding || isMoon) $()
                     else e.at(r).%(_.uclass.utype == Cultist)
                 }
+                println(s"[LURE TRACE] eligible for ${e.name}: ${eligible./(u => u.uclass.name + "@" + u.region.name)}")
                 if (eligible.num == 0) {
                     // Skip this enemy
                     Force(DCLureFactionPickAction(self, area, remaining.dropStarting))
@@ -1165,6 +1171,9 @@ object DCExpansion extends Expansion {
         case DCPilgrimageUnitMoveAction(self, prophet, dest, unitRef, remaining) =>
             val u = game.unit(unitRef)
             val src = u.region
+            if (!src.glyph.inPlay) {
+                Force(DCPilgrimageUnitContinueAction(self, prophet, dest, remaining))
+            } else {
             u.region = dest
             u.onGate = false
             self.log(Pilgrimage.styled(DC) + ": moved", u.uclass.styled(DC), "from", src, "to", dest)
@@ -1172,6 +1181,7 @@ object DCExpansion extends Expansion {
             if (u.uclass == Acolyte && self == DC)
                 game.dcPilgrimageMovedAcolytes += 1
             Force(DCPilgrimageUnitContinueAction(self, prophet, dest, remaining))
+            }
 
         case DCPilgrimageUnitStayAction(self, prophet, dest, unitRef, remaining) =>
             val u = game.unit(unitRef)
