@@ -2710,6 +2710,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             SetupFactionsAction
 
         case PowerGatherAction(last) =>
+            // [TRACE] Hibernate bug investigation — dump faction power before calc
+            println("[TRACE PowerGather] turn=" + turn + " shepherdDone=" + TSExpansion.shepherdDoneThisGather + " factions: " + factions./(f => f + "=" + f.power).mkString(", "))
+
             // [2026-05-24] Guard the whole power-calc / per-turn-reset / log
             // block so it only fires on FIRST entry. The TS Shepherd of the
             // Crypt re-enters PowerGatherAction via
