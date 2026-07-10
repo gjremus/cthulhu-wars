@@ -237,6 +237,7 @@ object WWExpansion extends Expansion {
 
         case ArcticWindAction(self, o, u, r) =>
             u.region = r
+            u.onGate = false
             u.add(Moved)
             log(u, "followed with", ArcticWind)
             MovedAction(self, self.goo(Ithaqua), o, r)

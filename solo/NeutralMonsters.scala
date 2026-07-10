@@ -542,39 +542,21 @@ object NeutralMonstersExpansion extends Expansion {
             }
         }
 
-        // Shadow Pharaoh Hebephrenia: abandon gates in SP's area
+        // Shadow Pharaoh Hebephrenia: SP's presence blocks gate control and pushes cultists off gates
         // Card: "(Yog-Sothoth is unaffected.)"
-        factions.foreach { f =>
-            f.allInPlay.%(_.uclass == ShadowPharaoh).foreach { sp =>
-                val r = sp.region
-                // Force abandon all gates in this region — Yog-Sothoth exempt
-                factions.foreach { gateOwner =>
-                    if (gateOwner.gates.has(r) && gateOwner != OW) {
-                        gateOwner.at(r).foreach(_.onGate = false)
-                        gateOwner.gates = gateOwner.gates.but(r)
-                        gateOwner.abandoned :+= r
-                        gateOwner.log("Hebephrenia".styled("nt") + ":", "gate abandoned in", r, "due to", ShadowPharaoh.styled(f))
-                    }
+        factions./~(f => f.allInPlay.%(_.uclass == ShadowPharaoh)).foreach { sp =>
+            val r = sp.region
+            // Force lose control — all factions (OW's unitGate is separate field, unaffected)
+            factions.foreach { gateOwner =>
+                if (gateOwner.gates.has(r)) {
+                    gateOwner.at(r).%(u => u.uclass != YogSothoth).foreach(_.onGate = false)
+                    gateOwner.gates = gateOwner.gates.but(r)
+                    gateOwner.log("Hebephrenia".styled("nt") + ":", "gate lost in", r, "due to", ShadowPharaoh.styled(sp.faction))
                 }
             }
-        }
-
-        // Shadow Pharaoh: after Hebephrenia runs, reclaim abandoned gates where SP is NOT present
-        // and SP-owner has a cultist (gate diplomacy off)
-        {
-            val spRegions = factions./~(f => f.allInPlay.%(_.uclass == ShadowPharaoh)./(_.region)).toSet
+            // Push any unit off gate — Yog-Sothoth exempt
             factions.foreach { f =>
-                if (f.loyaltyCards.has(ShadowPharaohCard)) {
-                    game.gates.foreach { r =>
-                        if (!spRegions.contains(r) && !factions.exists(_.gates.has(r))) {
-                            f.at(r).%(u => u.uclass.utype == Cultist && u.health == Alive && u.uclass.canControlGate(u)(game)).headOption.foreach { c =>
-                                f.gates :+= r
-                                c.onGate = true
-                                f.log(c.uclass.styled(f), "reclaimed gate in", r, "after", ShadowPharaoh.styled(f), "departed")
-                            }
-                        }
-                    }
-                }
+                f.at(r).%(u => u.onGate && u.uclass != YogSothoth).foreach(_.onGate = false)
             }
         }
 
