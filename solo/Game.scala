@@ -1816,6 +1816,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             SetupFactionsAction
 
+        case PowerGatherAction(last) if factions.%!(_.hibernating).%(_.power > 0).any =>
+            factions.foreach { f =>
+                f.active = f.power > 0 && f.hibernating.not
+            }
+
+            PreMainAction(last)
+
         case PowerGatherAction(last) =>
             turn += 1
 
@@ -2672,11 +2679,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                 if (f.onMap(HighPriest).any)
                     if (f.commands.has(UnspeakableOathOpportunityEndOfPhase) || f.commands.has(UnspeakableOathPrompt))
-                        + SacrificeHighPriestPromptAction(f, PreMainAction(next)).as("Sacrifice", HighPriest.styled(f))("Unspeakable Oath".hl)
+                        + SacrificeHighPriestPromptAction(f, EndPhasePromptsAction(next, l.but(f))).as("Sacrifice", HighPriest.styled(f))("Unspeakable Oath".hl)
 
                 if (f.loyaltyCards.has(DimensionalShamblerCard) && f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
                     if (f.commands.has(ShamblerOpportunityEndOfPhase) || f.commands.has(ShamblerPrompt))
-                        + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(next))).as(DimensionalShamblerUnit.styled(f), "to Map")("End of Action Phase")
+                        + ShamblerDeployPromptAction(f, CheckSpellbooksAction(EndPhasePromptsAction(next, l.but(f)))).as(DimensionalShamblerUnit.styled(f), "to Map")("End of Action Phase")
 
                 |(asking.ask).%(_.actions.%!(_.isInfo).any)./(_.add(NeedOk).add(OutOfTurnRefresh(EndPhasePromptsAction(next, l))).add(SacrificeHighPriestAllowedAction).group(" ").skip(EndPhasePromptsAction(next, l.but(f))))
             }
