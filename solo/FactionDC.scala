@@ -305,7 +305,11 @@ case class DCLureConfirmAction(self : Faction)
 case class DCLureFactionPickAction(self : Faction, area : Region, remaining : $[Faction])
     extends ForcedAction with PowerNeutral
 case class DCLurePickCultistAction(self : Faction, area : Region, cultist : UnitRef, remaining : $[Faction])
-    extends BaseFactionAction(Lure.styled(DC) + ": " + self.short.styled(self) + " moves", implicit g => cultist.uclass.styled(self) + " from " + g.unit(cultist).region.toString + " to " + area.toString)
+    extends BaseFactionAction(Lure.styled(DC) + ": " + self.short.styled(self) + " moves", implicit g => {
+        val r = g.unit(cultist).region
+        val fromStr = if (r.glyph.inPlay && r.glyph.onMap) " from " + r.toString else ""
+        cultist.uclass.styled(self) + fromStr + " to " + area.toString
+    })
     with PowerNeutral
 
 // ── Pilgrimage (Action: Cost 1 — §1.10) ────────────────────────────────────
