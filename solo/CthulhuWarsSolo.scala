@@ -610,7 +610,7 @@ object CthulhuWarsSolo {
                         if (confirm.not && actions.%!(_.isInfo).num == 1 && actions.has(NeedOk).not)
                             UIPerform(game, actions.%!(_.isInfo).only)
                         else
-                        if (confirm.not && actions(0).isInstanceOf[SpellbookAction] && actions.num == faction.unclaimedSB)
+                        if (confirm.not && actions.num == 1 && actions(0).isInstanceOf[SpellbookAction])
                             UIPerform(game, actions(0))
                         else {
                             setup.difficulty(faction) match {
@@ -990,18 +990,48 @@ object CthulhuWarsSolo {
                         case GOO => 4
                     }
 
-                    free.sortBy(d => -rank(d)).foreach { d =>
-                        sticking +:= Array.tabulate(40)(n => find(px, py)).sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }.map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y) }.minBy { dd =>
-                            (draws ++ fixed ++ sticking).map { oo =>
-                                val d = dd.rect
-                                val o = oo.rect
-                                val w = min(o.x + o.width, d.x + d.width) - max(o.x, d.x)
-                                val h = min(o.y + o.height, d.y + d.height) - max(o.y, d.y)
-                                val s = (w > 0 && h > 0).?(w * h).|(0)
-                                s * (1.0 / (o.width * o.height) + 1.0 / (d.width * d.height))
-                            }.sum
-                        }
+                    def overlapScore(dd : DrawItem) : Double =
+                        (draws ++ fixed ++ sticking).map { oo =>
+                            val d = dd.rect
+                            val o = oo.rect
+                            val w = min(o.x + o.width, d.x + d.width) - max(o.x, d.x)
+                            val h = min(o.y + o.height, d.y + d.height) - max(o.y, d.y)
+                            val s = (w > 0 && h > 0).?(w * h).|(0)
+                            s * (1.0 / (o.width * o.height) + 1.0 / (d.width * d.height))
+                        }.sum
 
+                    def maxUnitOverlapFrac(dd : DrawItem) : Double = {
+                        val d = dd.rect
+                        if (d == null || d.width <= 0 || d.height <= 0) return 0.0
+                        val dArea = d.width * d.height
+                        var maxFrac = 0.0
+                        (sticking ++ fixed).foreach { oo =>
+                            if (oo.unit != Gate) {
+                                val o = oo.rect
+                                if (o != null && o.width > 0 && o.height > 0) {
+                                    val w = min(o.x + o.width, d.x + d.width) - max(o.x, d.x)
+                                    val h = min(o.y + o.height, d.y + d.height) - max(o.y, d.y)
+                                    if (w > 0 && h > 0) {
+                                        val frac = (w * h).toDouble / dArea
+                                        if (frac > maxFrac) maxFrac = frac
+                                    }
+                                }
+                            }
+                        }
+                        maxFrac
+                    }
+
+                    free.sortBy(d => -rank(d)).foreach { d =>
+                        def genCandidates(count : Int) = Array.tabulate(count)(n => find(px, py))
+                            .sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }
+                            .map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y) }
+
+                        var chosen = genCandidates(40).minBy(overlapScore)
+
+                        if (maxUnitOverlapFrac(chosen) > 0.30)
+                            chosen = genCandidates(500).minBy(overlapScore)
+
+                        sticking +:= chosen
                     }
 
                     draws ++= fixed
@@ -1070,7 +1100,7 @@ object CthulhuWarsSolo {
                         >${full}</div>"""
                     f.can(sb).?(d).|(d.styled("used"))
                 }.mkString("") +
-                (1.to(6 - f.spellbooks.num - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") +
+                (1.to(f.library.num - f.spellbooks.%(f.library.has).num - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") +
                 f.unfulfilled./{ r =>
                     val s = r.text.replace("\\", "\\\\") // "
                     val d = s"""<div class='spellbook'
@@ -1458,6 +1488,15 @@ object CthulhuWarsSolo {
                 }
             }
 
+            def isRollAction(a : Action) : Boolean = a.unwrap match {
+                case _ : BattleRollAction => true
+                case _ : DesecrateRollAction => true
+                case _ : GhrothRollAction => true
+                case _ : DreadCurseRollAction => true
+                case _ : ThousandFormsRollAction => true
+                case _ => false
+            }
+
             def showUndo(n : Int) : () => Unit = () => {
                 show(undoDiv.parentElement.parentElement)
 
@@ -1467,7 +1506,11 @@ object CthulhuWarsSolo {
 
                 val style = None
 
-                if (hash != "")
+                val hasRollAfter = hash != "" && actions.reverse.drop(n).exists(isRollAction)
+
+                if (hasRollAfter)
+                    undoDiv.appendChild(newDiv("", "Cannot undo past a dice roll"))
+                else if (hash != "")
                     undoDiv.appendChild(newDiv("option" + style./(" " + _).|(""), "Undo to here".hl, () => { clear(undoDiv); performUndoOnline(n) }))
                 else
                     undoDiv.appendChild(newDiv("option" + style./(" " + _).|(""), "Undo to here".hl, () => { clear(undoDiv); performUndoLocal(n) }))
