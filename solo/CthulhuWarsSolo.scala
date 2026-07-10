@@ -1443,20 +1443,8 @@ object CthulhuWarsSolo {
                         }
                     }
 
-                    // Unit-count-based shrink: regions above the small-area cutoff that
-                    // still have no shrink trigger get uniform shrink when crowded (5+ units).
-                    val UnitCountShrinkThreshold = 5
-                    val regionUnitCount = scala.collection.mutable.Map[Region, Int]().withDefaultValue(0)
-                    factions.foreach { f =>
-                        f.allInPlay.foreach { u =>
-                            if (u.region != null && regionGeom.contains(u.region))
-                                regionUnitCount(u.region) = regionUnitCount(u.region) + 1
-                        }
-                    }
-                    regionUnitCount.foreach { case (rg, count) =>
-                        if (count >= UnitCountShrinkThreshold && !regionUniformShrink.contains(rg))
-                            regionUniformShrink(rg) = SmallRegionUniformShrink
-                    }
+                    // (Unit-count-based shrink removed — replaced by overlap-detection
+                    // triggered shrink in the placement loop below.)
 
                     // classRegions stays effectively empty after the loop above marks
                     // every large-unit region for uniform shrink. Kept as a defensive
@@ -2064,33 +2052,84 @@ object CthulhuWarsSolo {
                     val blackHallAreaOpt = board.regions.find(_.name == "Black Hall").flatMap(regionArea.get)
                     val tightRegionThreshold = blackHallAreaOpt.map(a => (a * 1.10).toInt)
 
-                    free.sortBy(d => -rank(d)).foreach { d =>
-                        val protoR = d.proto
-                        val isLargeUnit = d.unit.utype != Cultist && protoR != null &&
-                                          math.max(protoR.width, protoR.height) >= ghatoLikeThreshold
-                        val isTightRegion = tightRegionThreshold.exists(t => regionArea.get(r).exists(_ <= t))
-                        val candidateCount = if (board.isLibraryMap && isLargeUnit && isTightRegion) 200 else 40
+                    // Library-map overlap detection: compute the max fraction of a
+                    // candidate's area that overlaps with any single already-placed unit.
+                    // Gates and tomes are excluded (handled by the weighted overlapOf penalty).
+                    def maxUnitOverlapFrac(dd : DrawItem) : Double = {
+                        val d = dd.rect
+                        if (d == null || d.width <= 0 || d.height <= 0) return 0.0
+                        val dArea = d.width * d.height
+                        var maxFrac = 0.0
+                        (sticking ++ fixed).foreach { oo =>
+                            if (oo.unit != Gate && oo.unit != ChaosGate) {
+                                val o = oo.rect
+                                if (o != null && o.width > 0 && o.height > 0) {
+                                    val w = min(o.x + o.width, d.x + d.width) - max(o.x, d.x)
+                                    val h = min(o.y + o.height, d.y + d.height) - max(o.y, d.y)
+                                    if (w > 0 && h > 0) {
+                                        val inter = w * h
+                                        val frac = inter.toDouble / dArea
+                                        if (frac > maxFrac) maxFrac = frac
+                                    }
+                                }
+                            }
+                        }
+                        maxFrac
+                    }
 
-                        // L/T-partitioned library regions get balanced placement (see
-                        // Library at Celaeno mirror); other regions use the standard find().
-                        val partitioned = board.isLibraryMap && LtPartitions.contains((board.id, r.name))
-                        val candidates = Array.tabulate(candidateCount)(n =>
-                            if (partitioned) findWeighted(px, py, r) else find(px, py)
-                        ).sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }
-                            .map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y) }
+                    val OverlapThreshold = 0.30
+                    var needsShrinkRedo = false
 
-                        // Library map: filter via perspective caps, primary then fallback.
-                        // Earth map: skip filter, base overlap-only behavior.
-                        val chosen : DrawItem = if (board.isLibraryMap && place.nonEmpty) {
-                            val withSpill = candidates.toSeq.map(c => (c, directionalSpill(c.rect)))
-                            val primary = withSpill.filter { case (_, s) => passesCaps(s, 0.0, 0.30, 0.10, 0.10) }
-                            val pool = if (primary.nonEmpty) primary
-                                       else withSpill.filter { case (_, s) => passesCaps(s, 0.0, 0.60, 0.30, 0.30) }
-                            if (pool.nonEmpty) pool.minBy { case (c, _) => overlapOf(c) }._1
-                            else candidates.minBy(overlapOf)
-                        } else candidates.minBy(overlapOf)
+                    def placeUnits(units : $[DrawItem]) : Unit = {
+                        units.sortBy(d => -rank(d)).foreach { d =>
+                            val protoR = d.proto
+                            val isLargeUnit = d.unit.utype != Cultist && protoR != null &&
+                                              math.max(protoR.width, protoR.height) >= ghatoLikeThreshold
+                            val isTightRegion = tightRegionThreshold.exists(t => regionArea.get(r).exists(_ <= t))
+                            val candidateCount = if (board.isLibraryMap && isLargeUnit && isTightRegion) 200 else 40
 
-                        sticking +:= chosen
+                            val partitioned = board.isLibraryMap && LtPartitions.contains((board.id, r.name))
+
+                            def generateCandidates(count : Int) = Array.tabulate(count)(n =>
+                                if (partitioned) findWeighted(px, py, r) else find(px, py)
+                            ).sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }
+                                .map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y) }
+
+                            def pickBest(candidates : Array[DrawItem]) : DrawItem = if (board.isLibraryMap && place.nonEmpty) {
+                                val withSpill = candidates.toSeq.map(c => (c, directionalSpill(c.rect)))
+                                val primary = withSpill.filter { case (_, s) => passesCaps(s, 0.0, 0.30, 0.10, 0.10) }
+                                val pool = if (primary.nonEmpty) primary
+                                           else withSpill.filter { case (_, s) => passesCaps(s, 0.0, 0.60, 0.30, 0.30) }
+                                if (pool.nonEmpty) pool.minBy { case (c, _) => overlapOf(c) }._1
+                                else candidates.minBy(overlapOf)
+                            } else candidates.minBy(overlapOf)
+
+                            var chosen = pickBest(generateCandidates(candidateCount))
+
+                            // Library-map overlap check: if chosen overlaps >30% onto
+                            // another unit, retry with extended candidate pool.
+                            if (board.isLibraryMap && maxUnitOverlapFrac(chosen) > OverlapThreshold) {
+                                chosen = pickBest(generateCandidates(500))
+                                // If still too much overlap, flag for shrink-and-redo.
+                                if (maxUnitOverlapFrac(chosen) > OverlapThreshold)
+                                    needsShrinkRedo = true
+                            }
+
+                            sticking +:= chosen
+                        }
+                    }
+
+                    placeUnits(free)
+
+                    // If any placement exceeded the overlap threshold and no shrink
+                    // was already active for this region, apply uniform shrink and
+                    // redo all placements from scratch so units render smaller.
+                    if (board.isLibraryMap && needsShrinkRedo && !regionUniformShrink.contains(r)) {
+                        regionUniformShrink(r) = SmallRegionUniformShrink
+                        needsShrinkRedo = false
+                        val redoAll = sticking
+                        sticking = $
+                        placeUnits(redoAll)
                     }
 
                     draws ++= fixed
