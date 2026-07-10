@@ -258,6 +258,13 @@ case class FBTheEyeOpensCommitAction(self : Faction, pending : $[FBEyeOpensTarge
 // than from the AfterAction expansion handler — when true the chain ends with FBCyclopeanGazeBattleDoneAction
 // which Battle.scala catches to resume battle flow via proceed().
 case class FBCyclopeanGazePhaseAction(self : Faction, actor : Faction, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends ForcedAction with PowerNeutral
+// CG is now optional for FB — prompted per source whether to use or skip
+case class FBCyclopeanGazeUseAction(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends OptionFactionAction(
+    implicit g => "Use " + CyclopeanGaze.styled(FB) + " (" + sourceUnit.styled(FB) + " in " + r + ")"
+) with PowerNeutral { def question(implicit game : Game) = CyclopeanGaze.styled(FB) }
+case class FBCyclopeanGazeSkipAction(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends OptionFactionAction(
+    implicit g => "Skip " + CyclopeanGaze.styled(FB) + " (" + sourceUnit.styled(FB) + " in " + r + ")"
+) with PowerNeutral { def question(implicit game : Game) = CyclopeanGaze.styled(FB) }
 case class FBCyclopeanGazeAssignPainAction(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends ForcedAction with PowerNeutral
 // Firstborn (FB): Cyclopean Gaze — actor chooses which of their units to pain.
 // Round 8 Bug 57: the painted faction (NOT FB) picks which of their units to pain.
@@ -1747,28 +1754,31 @@ object FBExpansion extends Expansion {
             UnknownContinue
 
         case FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle) =>
-            // Bug fix Round 4: pop one (region, sourceUnit) per step and dispatch a single pain.
-            // Round 8 Bug 58: only the actor's units are valid CG targets (CG triggers
-            // against the faction that took the action ending in a gaze region). Skip
-            // sources whose region has no actor units.
             if (sourcesPending.any) {
                 val FBCyclopeanGazeSource(r, srcUnit) = sourcesPending.head
                 val rest = sourcesPending.tail
                 val units = actor.at(r).%(u => u.uclass.utype != Building)
-                if (units.any)
-                    Force(FBCyclopeanGazeAssignPainAction(self, actor, r, srcUnit, rest, fromBattle))
-                else
+                if (units.any) {
+                    implicit val asking = Asking(FB)
+                    + FBCyclopeanGazeUseAction(FB, actor, r, srcUnit, rest, fromBattle)
+                    + FBCyclopeanGazeSkipAction(FB, actor, r, srcUnit, rest, fromBattle)
+                    asking
+                } else
                     Force(FBCyclopeanGazePhaseAction(self, actor, rest, fromBattle))
             } else {
-                // No more sources to process. Battle-mode hands control back to Battle.scala
-                // via the marker action; action-phase mode re-fires AfterAction. The AfterAction
-                // handler updates the snapshot before checking deltas (Round 8 fix), so the
-                // re-entry is a no-op and normal flow resumes.
                 if (fromBattle)
                     Force(FBCyclopeanGazeBattleDoneAction(self))
                 else
                     Then(AfterAction(actor))
             }
+
+        case FBCyclopeanGazeUseAction(self, actor, r, sourceUnit, sourcesPending, fromBattle) =>
+            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + " in " + r + ": used")
+            Force(FBCyclopeanGazeAssignPainAction(self, actor, r, sourceUnit, sourcesPending, fromBattle))
+
+        case FBCyclopeanGazeSkipAction(self, actor, r, sourceUnit, sourcesPending, fromBattle) =>
+            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + " in " + r + ": skipped")
+            Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
 
         case FBCyclopeanGazeAssignPainAction(self, actor, r, sourceUnit, sourcesPending, fromBattle) =>
             // Round 8 Bug 58: CG only triggers against the FACTION THAT TOOK THE ACTION

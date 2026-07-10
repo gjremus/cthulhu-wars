@@ -369,6 +369,7 @@ object OWExpansion extends Expansion {
                         println(s"[DREAD-CURSE-TRACE] KILL: ${u.faction} ${u.uclass} id=${u.index} in ${u.region}")
                         log(u, "was", "killed".styled("kill"))
                         game.eliminate(u)
+                        println(s"[DREAD-CURSE-TRACE] POST-ELIMINATE: ${u.faction} ${u.uclass} id=${u.index} region=${u.region} health=${u.health} tag=${u.state}")
 
                         if (u.goo)
                             factions.foreach { f =>
@@ -379,6 +380,12 @@ object OWExpansion extends Expansion {
                                 }
                             }
                     }
+                }
+
+                e.foreach { f =>
+                    val stillOnMap = f.units.%(u => u.region.onMap && u.uclass == TombHerd)
+                    if (stillOnMap.any)
+                        println(s"[DREAD-CURSE-TRACE] WARNING: ${f} still has TombHerds on map after DC kill: ${stillOnMap./(u => s"${u.uclass}/${u.index} at ${u.region} health=${u.health}").mkString(", ")}")
                 }
 
                 var m = e./~(f => f.at(r).%(_.health == Pained))
