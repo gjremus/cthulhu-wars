@@ -205,10 +205,10 @@ object BGExpansion extends Expansion {
 
             CheckSpellbooksAction(DoomAction(self))
 
-        // FERTILITY
+        // FERTILITY — unlimited action: summon does NOT consume BG's main action
         case SummonedAction(self, uc, r, l) if self.has(Fertility) && self.oncePerRound.has(Fertility).not =>
             self.oncePerRound :+= Fertility
-            SummonedAction(self, uc, r, l)
+            AfterAction(self)
 
         // ELIMINATE CULTISTS
         case EliminateTwoCultistsMainAction(self) =>

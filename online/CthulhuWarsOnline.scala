@@ -72,6 +72,19 @@ object CthulhuWarsOnline {
 
         val logs = TableQuery[Logs]
 
+        // Live-game registry. Presence of a gameId here means the game is
+        // currently "live" (featured / actively being streamed). The admin
+        // console's "Mark live" button toggles this; the admin game list
+        // includes an isLive column so the UI can highlight these.
+        case class LiveGame(gameId : Int)
+
+        class LiveGames(tag : Tag) extends Table[LiveGame](tag, "LiveGames") {
+            def gameId = column[Int]("gameId", O.PrimaryKey)
+            def * = (gameId).mapTo[LiveGame]
+        }
+
+        val liveGames = TableQuery[LiveGames]
+
         val db = Database.forURL("jdbc:hsqldb:file:" + database, driver="org.hsqldb.jdbcDriver")
 
         object q {
@@ -88,6 +101,15 @@ object CthulhuWarsOnline {
 
         if (mode.contains("create")) {
             q(games.schema.create, logs.schema.create, roles.schema.create)
+        }
+
+        // LiveGames registry — same idempotent CREATE IF NOT EXISTS pattern.
+        try {
+            import slick.jdbc.HsqldbProfile.api.actionBasedSQLInterpolation
+            q(sqlu"""CREATE TABLE IF NOT EXISTS "LiveGames" ("gameId" INTEGER PRIMARY KEY)""")
+        }
+        catch {
+            case e : Exception => println("LiveGames table init: " + e.getMessage)
         }
 
         if (!mode.contains("run")) {
@@ -135,7 +157,7 @@ object CthulhuWarsOnline {
                 }
             } ~
             (get & path("roles" / Segment)) { role =>
-                val list = q(roles.filter(_.secret === role).filter(_.name === "$").map(_.gameId).result.head.flatMap { id =>
+                val list = q(roles.filter(_.secret === role).map(_.gameId).result.head.flatMap { id =>
                     roles.filter(_.gameId === id).result
                 })
                 txt(list.map(r => r.name + " " + r.secret).mkString("\n"))

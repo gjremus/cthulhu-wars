@@ -1186,6 +1186,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (action == CancelAction)
             return continue
 
+        if (action.isVoid)
+            return continue
+
         if (action == OutOfTurnDone)
             return continue match {
                 case MultiAsk(aa) if aa.exists(_.actions.of[OutOfTurnRefresh].any) => internalPerform(aa./~(_.actions.of[OutOfTurnRefresh]).distinct.only.action, NoVoid)
@@ -1438,12 +1441,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             SetupFactionsAction
 
-        case PowerGatherAction(last) if factions.%!(_.hibernating).%(_.power > 0).any =>
-            factions.foreach { f =>
-                f.active = f.power > 0 && f.hibernating.not
-            }
-
-            PreMainAction(last)
 
         case PowerGatherAction(last) =>
             turn += 1
@@ -2045,14 +2042,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             factions.foreach(_.oncePerAction = $)
 
-            CheckSpellbooksAction(PreMainAction(self))
+            if (game.nexed.any)
+                NextPlayerAction(self)
+            else
+                CheckSpellbooksAction(PreMainAction(self))
 
         case EndTurnAction(f) =>
             f.acted = true
 
             NextPlayerAction(f)
 
-        case NextPlayerAction(_) if queue.any =>
+        case NextPlayerAction(_) if queue.any || game.nexed.any =>
             ProceedBattlesAction
 
         case NextPlayerAction(_) if factions.%(_.doom >= 30).any =>
@@ -2296,7 +2296,19 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (game.nexed.any) {
                 game.nexed = $
 
-                battle.get.attacker.log("proceeded to battle", battle.get.defender, "in", battle.get.arena)
+                val b = battle.get
+                val attackerUnits = b.attacker.at(b.arena)
+                val defenderUnits = b.defender.at(b.arena)
+                if (attackerUnits.none || defenderUnits.none) {
+                    if (attackerUnits.none)
+                        b.attacker.log("had no units remaining in", b.arena, "after", EnergyNexus)
+                    if (defenderUnits.none)
+                        b.defender.log("had no units remaining in", b.arena, "after", EnergyNexus)
+                    battle = None
+                    return Force(AfterAction(b.attacker))
+                }
+
+                b.attacker.log("proceeded to battle", b.defender, "in", b.arena)
             }
 
             battle.get.proceed()
@@ -2360,12 +2372,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Ask(self).each(a ++ b)(r => RecruitAction(self, uc, r)).cancel
 
         case RecruitAction(self, uc, r) =>
-            self.power -= self.recruitCost(uc, r)
+            val cost = self.recruitCost(uc, r)
+            self.power -= cost
             self.payTax(r)
-            self.place(uc, r)
-            self.log("recruited", uc.styled(self), "in", r)
+            if (self.pool(uc).none) {
+                self.log("recruit failed:", uc.styled(self), "— none in pool")
+                self.power += cost
+            } else {
+                self.place(uc, r)
+                self.log("recruited", uc.styled(self), "in", r)
+            }
 
-            if (uc === HighPriest) {
+            if (uc === HighPriest && self.onMap(HighPriest).any) {
                 self.plans ++= $(
                     // UnspeakableOathImmediately,
                     UnspeakableOathPrompt,
