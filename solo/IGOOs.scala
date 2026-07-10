@@ -253,6 +253,7 @@ case class GhatanotoaSBRPayAction(self : Faction) extends OptionFactionAction(im
 
 // Azathoth IGOO: Nuclear Chaos spellbook action
 case class NuclearChaosMainAction(self : Faction) extends OptionFactionAction(implicit g => "Nuclear Chaos".styled("nt") + " (Cost 0)") with MainQuestion
+case class NuclearChaosDieAction(self : Faction, remaining : $[Faction], rolls : Map[Faction, Int], roller : Faction, roll : Int) extends ForcedAction
 case class NuclearChaosRolledAction(self : Faction, rolls : Map[Faction, Int]) extends ForcedAction
 case class NuclearChaosRollAction(self : Faction, rolls : Map[Faction, Int]) extends ForcedAction
 case class NuclearChaosAdjustAction(self : Faction, rolls : Map[Faction, Int], adjust : Int) extends BaseFactionAction(implicit g => "Nuclear Chaos".styled("nt"), implicit g => {
@@ -1206,28 +1207,33 @@ object IGOOsExpansion extends Expansion {
 
         // ── NUCLEAR CHAOS (Azathoth spellbook) ──
         case NuclearChaosMainAction(self) =>
-            // All players roll 1d6 — commit rolls immediately so they're deterministic on replay
-            val rolls = factions.map(f => f -> (1::2::3::4::5::6).shuffle.first).toMap
-            Force(NuclearChaosRolledAction(self, rolls))
+            val remaining = factions.toList
+            RollD6(_ => "" + remaining.head + " rolls for Nuclear Chaos", roll => NuclearChaosDieAction(self, remaining.drop(1), Map(), remaining.head, roll))
+
+        case NuclearChaosDieAction(self, remaining, rolls, roller, roll) =>
+            val updated = rolls + (roller -> roll)
+            if (remaining.any)
+                RollD6(_ => "" + remaining.head + " rolls for Nuclear Chaos", roll => NuclearChaosDieAction(self, remaining.drop(1), updated, remaining.head, roll))
+            else
+                Force(NuclearChaosRolledAction(self, updated))
 
         case NuclearChaosRolledAction(self, rolls) =>
-            factions.foreach { f => f.log("rolled a " + rolls(f) + " for", "Nuclear Chaos".styled("nt")) }
-            // Owner may adjust their roll +/-1
-            val myRoll = rolls(self)
-            val canPlus = myRoll < 6
-            val canMinus = myRoll > 1
             var ask = Ask(self)
-            if (canPlus) ask = ask.add(NuclearChaosAdjustAction(self, rolls, 1))
-            if (canMinus) ask = ask.add(NuclearChaosAdjustAction(self, rolls, -1))
+            if (rolls(self) < 6)
+                ask = ask.add(NuclearChaosAdjustAction(self, rolls, 1))
+            if (rolls(self) > 1)
+                ask = ask.add(NuclearChaosAdjustAction(self, rolls, -1))
             ask = ask.add(NuclearChaosKeepAction(self, rolls))
             ask
 
         case NuclearChaosAdjustAction(self, rolls, adjust) =>
+            factions.foreach { f => f.log("rolled a", rolls(f), "for", "Nuclear Chaos".styled("nt")) }
             val adjusted = rolls + (self -> (rolls(self) + adjust))
             self.log("Nuclear Chaos".styled("nt") + ": adjusted roll to", adjusted(self))
             Force(NuclearChaosRollAction(self, adjusted))
 
         case NuclearChaosKeepAction(self, rolls) =>
+            factions.foreach { f => f.log("rolled a", rolls(f), "for", "Nuclear Chaos".styled("nt")) }
             Force(NuclearChaosRollAction(self, rolls))
 
         case NuclearChaosRollAction(self, rolls) =>
