@@ -4527,6 +4527,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // whose destination is the Moon. MoveSelectAction already filters
         // Moon out of destination lists for non-BB factions, but this is a
         // belt-and-suspender check at the action-execution layer so any
+        case MoveAction(self, u, o, r, cost) if u.region.glyph == Prison =>
+            if (cost > 0 && !dcTenebrosumGuard)
+                self.power -= cost
+            MoveContinueAction(self, true)
+
         // future spell/ability that constructs a MoveAction directly cannot
         // sneak a non-BB unit onto the Moon. Catnapping is the sole way for
         // a non-BB unit to enter the Moon; Catnapping mutates u.region
