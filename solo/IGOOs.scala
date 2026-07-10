@@ -1218,9 +1218,15 @@ object IGOOsExpansion extends Expansion {
 
         // ── NUCLEAR CHAOS (Azathoth spellbook) ──
         case NuclearChaosMainAction(self) =>
-            // All players roll 1d6 — commit rolls immediately so they're deterministic on replay
-            val rolls = factions.map(f => f -> (1::2::3::4::5::6).shuffle.first).toMap
-            Force(NuclearChaosRolledAction(self, rolls))
+            val remaining = factions.toList
+            RollD6(_ => "" + remaining.head + " rolls for Nuclear Chaos", roll => NuclearChaosDieAction(self, remaining.drop(1), Map(), remaining.head, roll))
+
+        case NuclearChaosDieAction(self, remaining, rolls, roller, roll) =>
+            val updated = rolls + (roller -> roll)
+            if (remaining.any)
+                RollD6(_ => "" + remaining.head + " rolls for Nuclear Chaos", roll => NuclearChaosDieAction(self, remaining.drop(1), updated, remaining.head, roll))
+            else
+                Force(NuclearChaosRolledAction(self, updated))
 
         case NuclearChaosRolledAction(self, rolls) =>
             var ask = Ask(self)
