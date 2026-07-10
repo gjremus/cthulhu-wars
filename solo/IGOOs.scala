@@ -253,6 +253,7 @@ case class GhatanotoaSBRPayAction(self : Faction) extends OptionFactionAction(im
 
 // Azathoth IGOO: Nuclear Chaos spellbook action
 case class NuclearChaosMainAction(self : Faction) extends OptionFactionAction(implicit g => "Nuclear Chaos".styled("nt") + " (Cost 0)") with MainQuestion
+case class NuclearChaosRolledAction(self : Faction, rolls : Map[Faction, Int]) extends ForcedAction
 case class NuclearChaosRollAction(self : Faction, rolls : Map[Faction, Int]) extends ForcedAction
 case class NuclearChaosAdjustAction(self : Faction, rolls : Map[Faction, Int], adjust : Int) extends BaseFactionAction(implicit g => "Nuclear Chaos".styled("nt"), implicit g => {
     val myRoll = rolls.getOrElse(self, 0) + adjust
@@ -1213,8 +1214,11 @@ object IGOOsExpansion extends Expansion {
 
         // ── NUCLEAR CHAOS (Azathoth spellbook) ──
         case NuclearChaosMainAction(self) =>
-            // All players roll 1d6
+            // All players roll 1d6 — commit rolls immediately so they're deterministic on replay
             val rolls = factions.map(f => f -> (1::2::3::4::5::6).shuffle.first).toMap
+            Force(NuclearChaosRolledAction(self, rolls))
+
+        case NuclearChaosRolledAction(self, rolls) =>
             factions.foreach { f => f.log("rolled a " + rolls(f) + " for", "Nuclear Chaos".styled("nt")) }
             // Owner may adjust their roll +/-1
             val myRoll = rolls(self)
