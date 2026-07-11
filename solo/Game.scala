@@ -4134,7 +4134,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (f == DC) println(s"[DC-TRACE] Game.scala MainAction(DC) INACTIVE branch: power=${f.power}, active=${f.active}, acted=${f.acted}")
             implicit val asking = Asking(f)
 
-            game.controls(f)
             game.reveals(f)
 
             + NextPlayerAction(f).as("Skip")
