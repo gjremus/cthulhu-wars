@@ -272,9 +272,7 @@ case class SpendToFlipTomeAction(self : Faction, tome : LibraryTome) extends Bas
 
 // Tome usage actions
 case class UseTomeGuardianMainAction(self : Faction) extends OptionFactionAction(implicit g => "Use " + TomeGuardian.elem + " (" + "1 Power".styled("power") + ")") with MainQuestion with Soft
-case class UseTomeGuardianRelocateAction(self : Faction, source : Region, target : Faction) extends BaseFactionAction(implicit g => "Relocate " + target.full + " units in", source) {
-    override def question(implicit game : Game) = "Relocate units with " + TomeGuardian.elem
-}
+case class UseTomeGuardianRelocateAction(self : Faction, source : Region, target : Faction) extends BaseFactionAction(implicit g => "Choose faction to relocate from " + source, implicit g => target.full) with Soft
 case class UseTomeGuardianDestAction(self : Faction, source : Region, target : Faction, dest : Region) extends BaseFactionAction(implicit g => "Move to", dest) {
     override def question(implicit game : Game) = "Choose destination for " + target.full + " units from " + source
 }
