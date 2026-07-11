@@ -2269,14 +2269,19 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 case c => c
             }
 
-        internalPerform(action, NoVoid) match {
-            case Force(a) => internalPerform(a, NoVoid)
-            case c =>
-                if (action.isRecorded && action.is[OutOfTurn].not)
-                    continue = c
-
-                c
+        var result = internalPerform(action, NoVoid)
+        var depth = 0
+        while (result.isInstanceOf[Force] && depth < 100) {
+            result = internalPerform(result.asInstanceOf[Force].action, NoVoid)
+            depth += 1
         }
+        if (result.isInstanceOf[Force])
+            println(s"[FORCE-LOOP] Force chain exceeded 100 depth on ${action.getClass.getSimpleName}")
+
+        if (action.isRecorded && action.is[OutOfTurn].not)
+            continue = result
+
+        result
     }
 
     def internalPerform(action : Action, soft : VoidGuard) : Continue = {
@@ -5210,6 +5215,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case action : PreBattleQuestion =>
             log("[warn] battle action " + action.getClass.getSimpleName + " skipped — no active battle")
             UnknownContinue
+
+        // Defensive: FB Carnage/CG post-battle actions whose state mutation is
+        // handled by FBExpansion (returns UnknownContinue) but whose battle-flow
+        // resume (proceed()) requires an active battle. When game.battle is None
+        // during replay (e.g. CG-optional desync cleared the battle early), the
+        // action's game-state work was already done by FBExpansion — just continue.
+        case _ : FBCarnageChooseSpellbookAction | _ : FBCarnagePayPowerAction | _ : FBCarnageCancelAction | _ : FBCyclopeanGazeBattleDoneAction =>
+            println(s"[WARN] ${action.getClass.getSimpleName} with no active battle — continuing")
+            StartContinue
 
     }
 

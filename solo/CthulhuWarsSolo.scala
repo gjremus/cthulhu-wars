@@ -4070,6 +4070,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                     if (a.isVoid.not) {
                                         game.nextReplayActionHint = if (n + 1 < recorded.num) Some(serializer.write(recorded(n + 1))) else None
+                                        if (n % 50 == 0 || n > recorded.num - 5) println(s"[REPLAY] action ${n}/${recorded.num}: ${serializer.write(a.unwrap).take(60)}")
                                         try {
                                         val (l, c) = game.perform(a.unwrap)
                                         game.nextReplayActionHint = None
@@ -4088,6 +4089,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                             game.nextReplayActionHint = None
                                             val msg = "REPLAY CRASH at action " + actions.num + "/" + recorded.num + ": " + e.getMessage + " | Action: " + serializer.write(a.unwrap)
                                             println(msg)
+                                            dom.document.title = "CRASH: " + msg.take(80)
                                             throw new Error(msg)
                                         }
                                     }
