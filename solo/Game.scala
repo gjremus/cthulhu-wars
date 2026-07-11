@@ -2958,13 +2958,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             SetupFactionsAction
 
-        case PowerGatherAction(last) if factions.%!(_.hibernating).%(f => f.power > 0 || (f == DC && dcSin > 0) || (f == SL && slSin > 0)).any =>
-            factions.foreach { f =>
-                f.active = (f.power > 0 || (f == DC && dcSin > 0) || (f == SL && slSin > 0)) && f.hibernating.not
-            }
-
-            PreMainAction(last)
-
         case PowerGatherAction(last) =>
             fbeActionInProgress = false
             // [2026-05-24] Guard the whole power-calc / per-turn-reset / log
