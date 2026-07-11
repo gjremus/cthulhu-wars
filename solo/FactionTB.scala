@@ -459,7 +459,13 @@ object TBExpansion extends Expansion {
         // MAIN ACTION (§2.7 / §3.10)
         // ====================================================================
         case MainAction(f : TB.type) if f.active.not =>
-            UnknownContinue
+            implicit val asking = Asking(f)
+
+            game.reveals(f)
+
+            + NextPlayerAction(f).as("Skip")("" + f + " action")
+
+            asking
 
         case MainAction(f : TB.type) if f.acted =>
             implicit val asking = Asking(f)
