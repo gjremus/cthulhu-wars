@@ -671,8 +671,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         val chooser : Faction = retreater(s)
 
-        if (destinations.none)
+        if (destinations.none) {
             Ask(s).each(refugees.sortA)(u => EliminateNoWayAction(s, u).as(u)("Nowhere to retreat, a pained unit is eliminated"))
+        }
         else
         if (destinations.num == 1) {
             val r = destinations.only

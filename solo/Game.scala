@@ -1594,6 +1594,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 f.plans = f.plans.notOf[HighPriestGatesPlan]
                 // !! // f.commands = f.commands.notOf[HighPriestGatesPlan]
             }
+
         }
     }
 
