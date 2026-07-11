@@ -1754,10 +1754,15 @@ object FBExpansion extends Expansion {
                 val rest = sourcesPending.tail
                 val units = actor.at(r).%(u => u.uclass.utype != Building)
                 if (units.any) {
-                    implicit val asking = Asking(FB)
-                    + FBCyclopeanGazeUseAction(FB, actor, r, srcUnit, rest, fromBattle)
-                    + FBCyclopeanGazeSkipAction(FB, actor, r, srcUnit, rest, fromBattle)
-                    asking
+                    val replayExpectsCGChoice = game.nextReplayActionHint.exists(h => h.startsWith("FBCyclopeanGazeUse") || h.startsWith("FBCyclopeanGazeSkip"))
+                    if (game.nextReplayActionHint.any && !replayExpectsCGChoice)
+                        Force(FBCyclopeanGazeAssignPainAction(self, actor, r, srcUnit, rest, fromBattle))
+                    else {
+                        implicit val asking = Asking(FB)
+                        + FBCyclopeanGazeUseAction(FB, actor, r, srcUnit, rest, fromBattle)
+                        + FBCyclopeanGazeSkipAction(FB, actor, r, srcUnit, rest, fromBattle)
+                        asking
+                    }
                 } else
                     Force(FBCyclopeanGazePhaseAction(self, actor, rest, fromBattle))
             } else {
@@ -1873,6 +1878,7 @@ object FBExpansion extends Expansion {
             Ask(self).each(available)(sb => FBCarnageChooseSpellbookAction(self, sb))
 
         case FBCarnageChooseSpellbookAction(self, sb) =>
+            println(s"[CARNAGE-TRACE] FBCarnageChooseSpellbookAction: self=${self}, sb=${sb}. battle=${game.battle.isDefined}")
             flipSpellbookDown(sb)
             self.takeES(1)
             self.log(Carnage.styled(FB) + ": flipped", sb.name.styled(FB), "facedown for", 1.es)
