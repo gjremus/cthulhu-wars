@@ -882,23 +882,25 @@ object Overlays {
                 // by 30% (6% -> 7.8%) ONLY on the RoA track; the map render still uses 60x60.
                 val glyphWidthPct = if (style == "fb") "7.8%" else "6%"
                 if (isCeremony) {
-                    // CSS filter applied directly to img — only affects non-transparent pixels,
-                    // no square background artifact. sepia(1) gives warm base, hue-rotate shifts to faction hue.
-                    val tintFilter = style match {
-                        case "gc" => "sepia(1) hue-rotate(67deg) saturate(3) brightness(1.0)"
-                        case "cc" => "sepia(1) hue-rotate(181deg) saturate(3) brightness(0.9)"
-                        case "bg" => "sepia(1) hue-rotate(323deg) saturate(5) brightness(1.0)"
-                        case "ys" => "sepia(1) hue-rotate(12deg) saturate(8) brightness(1.2)"
-                        case "ww" => "sepia(1) hue-rotate(168deg) saturate(2) brightness(1.2)"
-                        case "sl" => "sepia(1) hue-rotate(344deg) saturate(5) brightness(1.0)"
-                        case "ow" => "sepia(1) hue-rotate(241deg) saturate(3) brightness(0.8)"
-                        case "an" => "sepia(1) hue-rotate(156deg) saturate(3) brightness(1.0)"
-                        case "ts" => "sepia(1) hue-rotate(74deg) saturate(2) brightness(1.3)"
-                        // Firstborn (FB): magenta/pink tint for RoA track ceremony glyphs
-                        case "fb" => "sepia(1) hue-rotate(295deg) saturate(4) brightness(1.0)"
-                        case _    => "sepia(1)"
+                    // Canvas-based tinting using multiply-only Processing for exact faction color dominance
+                    val factionColor = style match {
+                        case "gc" => "#77a055"
+                        case "cc" => "#4977b3"
+                        case "bg" => "#cd3233"
+                        case "ys" => "#ffd000"
+                        case "ww" => "#88a9be"
+                        case "sl" => "#db6a33"
+                        case "ow" => "#6c4296"
+                        case "an" => "#47a5bc"
+                        case "ts" => "#BDE0BC"
+                        case "fb" => "#CB307E"
+                        case "ds" => "#3A2825"
+                        case _    => "#888888"
                     }
-                    s"""<img src="${imageSource("n-tulzscha")}"
+                    val processing = CthulhuWarsSolo.Processing(None, None, None, |(factionColor))
+                    val tintedCanvas = CthulhuWarsSolo.getTintedAsset("n-tulzscha", processing)
+                    val tintedSrc = tintedCanvas.toDataURL("image/png")
+                    s"""<img src="${tintedSrc}"
                         style="
                             position: absolute;
                             left: ${finalX}%;
@@ -908,7 +910,7 @@ object Overlays {
                             transform: translate(-50%, -50%);
                             opacity: 0.9;
                             pointer-events: none;
-                            filter: drop-shadow(0 0 0.15em rgba(0,0,0,0.9)) ${tintFilter};" />"""
+                            filter: drop-shadow(0 0 0.15em rgba(0,0,0,0.9));" />"""
                 } else {
                     s"""<img src="${imageSource(style + "-glyph")}"
                         style="
@@ -1343,7 +1345,7 @@ object Overlays {
                     units./{ case (uc, n, c, b, t) => s"""
                         <tr>
                             <td>
-                                <img class="img" src=${imageSource("info:" + f.short.toLowerCase + "-" + uc.name.toLowerCase.replace(" ", "-"))}>
+                                <img class="img" src=${imageSource("info:" + f.short.toLowerCase + "-" + uc.name.toLowerCase.replace("'", "").replace(" ", "-"))}>
                             </td>
                             <td>
                                 <div class="unit-desc">

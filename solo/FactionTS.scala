@@ -559,11 +559,20 @@ object TSExpansion extends Expansion {
             }
 
         case GraspingDeadBattleAction(self, r, f) =>
-            self.log("Grasping Dead: battle with", self.at(r, TombHerd).num, TombHerd.styled(TS), "in", r)
-            TSExpansion.graspingDeadRemaining = TSExpansion.graspingDeadRemaining.but(r)
-            TSExpansion.graspingDeadFought :+= r
-            game.queue = $(new Battle(r, self, f, |(GraspingDead))) ++ game.queue
-            ProceedBattlesAction
+            if (self.at(r, TombHerd).none) {
+                // TombHerds pained out before this battle started — skip and re-check
+                TSExpansion.graspingDeadRemaining = TSExpansion.graspingDeadRemaining.but(r)
+                TSExpansion.graspingDeadFought :+= r
+                Force(GraspingDeadChooseRegionAction(self))
+            } else {
+                self.log("Grasping Dead: battle with", self.at(r, TombHerd).num, TombHerd.styled(TS), "in", r)
+                TSExpansion.graspingDeadRemaining = TSExpansion.graspingDeadRemaining.but(r)
+                TSExpansion.graspingDeadFought :+= r
+                if (game.factions.has(FB))
+                    game.fbPowerAtBattleStart = FB.power
+                game.queue = $(new Battle(r, self, f, |(GraspingDead))) ++ game.queue
+                ProceedBattlesAction
+            }
 
         case AfterAction(self) if self == TS && TSExpansion.graspingDeadActive =>
             // GD chain still active — check for more regions (including pained TombHerds in new regions)

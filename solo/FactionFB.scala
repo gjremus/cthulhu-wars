@@ -91,12 +91,11 @@ case object FB extends Faction { f =>
         val arena = game.battle./(_.arena)
         val onLand = arena./(_.glyph != Ocean).|(units.head.region.glyph != Ocean)
 
+        val ghatoCombat = game.battle.any.?(game.fbPowerAtBattleStart).|(f.power)
+
         units(Desiccated).not(Zeroed).num * (onLand.?(1).|(0)) +
         units(RevenantOfKnaa).not(Zeroed).num * desiccatedInPlay +
-        // Bug fix: Ghatanothoa combat is power BEFORE the battle began (snapshot taken
-        // at battle start in Battle.scala). f.power decreases during a battle as costs are
-        // paid, which would otherwise reduce his combat unfairly.
-        units(Ghatanothoa).not(Zeroed).num * (if (game.battle.any && f == FB) game.fbPowerAtBattleStart else f.power) +
+        units(Ghatanothoa).not(Zeroed).num * ghatoCombat +
         neutralStrength(units, opponent)
     }
 }
@@ -701,9 +700,7 @@ object FBExpansion extends Expansion {
             // Post-main IP: trigger on ANY face-up IP-eligible item (faction SB, iGOO SB,
             // or library tome). Previously was faction-SB only; expanded so library tomes
             // and FB-controlled iGOO SBs also qualify per game rules.
-            if (f.hasAllSB && hasAnyIPEligibleFaceUp && game.fbInfernalPactDiscount == game.fbInfernalPactCommittedDiscount) {
-                // Only show "enter new IP session" when there's no pending
-                // uncommitted state — prevents double-entry confusion.
+            if (f.hasAllSB && f.has(Ghatanothoa) && f.onMap(Ghatanothoa).any && hasAnyIPEligibleFaceUp && game.fbInfernalPactDiscount == game.fbInfernalPactCommittedDiscount) {
                 + FBInfernalPactMainAction(f)
             }
             // Cancel only available if there's post-commit discount to cancel
@@ -791,13 +788,11 @@ object FBExpansion extends Expansion {
             if (f.power >= 2)
                 + FBWritheMainAction(f)
 
-            // The Eye Opens (Cost 1, +1 in Ice Age region)
+            // The Eye Opens (Cost 1) — Ice Age does NOT affect this ability
             if (f.has(TheEyeOpens) && !FB.oncePerGame.has(TheEyeOpens)) {
                 if (f.power >= 1) {
                     val eligible = areas.%(r => f.at(r, Desiccated).any &&
-                        f.enemies.exists(_.at(r).%(_.uclass.utype == Cultist).any) &&
-                        // Ice Age regions cost 2 total — check affordability
-                        (f.power >= 2 || !game.factions.exists(wf => wf.iceAge.contains(r))))
+                        f.enemies.exists(_.at(r).%(_.uclass.utype == Cultist).any))
                     if (eligible.any)
                         + FBTheEyeOpensMainAction(f)
                 }
@@ -1579,12 +1574,6 @@ object FBExpansion extends Expansion {
                 val d = self.at(r, Desiccated).head
                 game.eliminate(d)
                 self.log(TheEyeOpens.styled(FB) + ": eliminated", u.uclass.styled(f), "and", Desiccated.styled(FB), "in", r)
-                // Ice Age: costs 1 extra power in Ice Age region
-                val iceAgeExtra = game.factions.exists(wf => wf.iceAge.contains(r))
-                if (iceAgeExtra) {
-                    self.power -= 1
-                    self.log(TheEyeOpens.styled(FB), "costs extra", 1.power, "due to", IceAge)
-                }
                 self.power += 1
                 self.log(TheEyeOpens.styled(FB) + ": gained", 1.power)
             }

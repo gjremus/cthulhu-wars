@@ -257,6 +257,12 @@ object CthulhuWarsOnline {
                         } catch { case _ : Throwable => None }
                         if (ver.exists(_.contains("more-neutral-units")))
                             redirect("/mnu/play/" + role, StatusCodes.TemporaryRedirect)
+                        else if (ver.exists(_.contains("Homebrew")))
+                            redirect("/HB/play/" + role, StatusCodes.TemporaryRedirect)
+                        else if (ver.exists(_.contains("bubastis")))
+                            redirect("/BB/play/" + role, StatusCodes.TemporaryRedirect)
+                        else if (ver.exists(_.contains("tcho-tcho")))
+                            redirect("/TchoTcho/play/" + role, StatusCodes.TemporaryRedirect)
                         else
                             htm(full)
                     }
@@ -460,7 +466,10 @@ object CthulhuWarsOnline {
             (get & path("admin" / Segment / "games")) { token =>
                 if (ownerToken.isEmpty || token != ownerToken) complete(StatusCodes.NotFound)
                 else {
-                    // Tab-separated columns: id, name, masterSecret, lastWriteMs, broken (0|1), completed (0|1).
+                    // Tab-separated columns:
+                    //   0: id, 1: name, 2: masterSecret, 3: lastWriteMs,
+                    //   4: broken (0|1), 5: completed (0|1), 6: isBot (0|1),
+                    //   7: playerCount, 8: botCount, 9: hasFixResponse (0|1), 10: startMs.
                     // Notes are NOT included here — fetched on row select via /admin/<t>/annotation
                     // so the list endpoint stays compact for long game lists.
                     val rows = q(games.join(roles).on(_.id === _.gameId)
@@ -478,11 +487,19 @@ object CthulhuWarsOnline {
                         id -> (n > 0)
                     }.toMap
                     val botFlagged = q(botGames.map(_.gameId).result).toSet
+                    // Faction count per game: roles excluding the admin ($) and hash (#)
+                    // meta-roles. For bot-flagged games all factions are bots; for human
+                    // games all factions are players.
+                    val factionCounts = q(roles.filter(r => r.name =!= "$" && r.name =!= "#")
+                        .groupBy(_.gameId).map { case (gid, grp) => (gid, grp.length) }.result)
+                        .toMap
                     txt(rows.map { case (id, name, secret, lastMs, broken) =>
                         val b = if (broken.getOrElse(false)) "1" else "0"
                         val c = if (completed.getOrElse(id, false)) "1" else "0"
                         val ib = if (botFlagged.contains(id)) "1" else "0"
-                        s"$id\t$name\t$secret\t${lastMs.getOrElse(0L)}\t$b\t$c\t$ib"
+                        val fc = factionCounts.getOrElse(id, 0)
+                        val (pc, bc) = if (botFlagged.contains(id)) (0, fc) else (fc, 0)
+                        s"$id\t$name\t$secret\t${lastMs.getOrElse(0L)}\t$b\t$c\t$ib\t$pc\t$bc\t0\t0"
                     }.mkString("\n"))
                 }
             } ~
