@@ -557,14 +557,14 @@ object TBExpansion extends Expansion {
             // Eligible regions: standard recruit/summon placement rules
             // Cultists excluded from MoonHold (BB Moon only; Mantle is unrestricted per creator)
             val areas = if (uc.utype == Cultist)
-                game.board.regions.%(r => self.at(r).any || self.gates.has(r)).%!(_.is[MoonHold])
+                (game.board.regions ++ game.tbMantleInPlay.??($(TB.mantle))).%(r => self.at(r).any || self.gates.has(r)).%!(_.is[MoonHold])
             else
                 self.gates
             Ask(self).each(areas)(r => TBWrithingMawsPlaceSecondAction(self, uc, r).as(r)(ThousandWrithingMaws.styled(TB), ": place first", uc.styled(TB), "in")).cancel
 
         case TBWrithingMawsPlaceSecondAction(self, uc, r1) =>
             val areas = if (uc.utype == Cultist)
-                game.board.regions.%(r => self.at(r).any || self.gates.has(r)).%!(_.is[MoonHold])
+                (game.board.regions ++ game.tbMantleInPlay.??($(TB.mantle))).%(r => self.at(r).any || self.gates.has(r)).%!(_.is[MoonHold])
             else
                 self.gates
             Ask(self).each(areas)(r => TBWrithingMawsAction(self, uc, r1, r).as(r)(ThousandWrithingMaws.styled(TB), ": place second", uc.styled(TB), "in")).cancel
