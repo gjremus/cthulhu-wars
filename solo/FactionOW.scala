@@ -200,8 +200,8 @@ object OWExpansion extends Expansion {
 
             game.moves(f)
 
-            if (f.can(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(f.affords(1)).any)
-                game.gates.%(r => f.enemies.%(_.at(r, GOO, ElderGod).any).none).%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
+            if (f.can(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(r => f.affords(1)(r) && f.enemies.%(_.at(r, GOO, ElderGod).any).none).any)
+                game.gates.%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
                     + BeyondOneMainAction(f, _)
                 }
 
@@ -264,7 +264,7 @@ object OWExpansion extends Expansion {
             Ask(self).each(l./~(r => self.at(r).%(_.uclass.cost >= 3)).%(u => u.canMove || u.uclass == HoundOfTindalos))(u => BeyondOneUnitAction(self, u.region, u.uclass)).cancel
 
         case BeyondOneUnitAction(self, o, uc) =>
-            Ask(self).each(areas.diff(game.gates).%(self.affords(1)))(r => BeyondOneAction(self, o, uc, r)).cancel
+            Ask(self).each(areas.diff(game.gates).%(r => self.affords(1)(r) && self.enemies.%(_.at(r, GOO, ElderGod).any).none))(r => BeyondOneAction(self, o, uc, r)).cancel
 
         case BeyondOneAction(self, o, uc, r) =>
             self.power -= 1

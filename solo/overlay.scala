@@ -1635,7 +1635,7 @@ object Overlays {
         case $("XSS", TorrentialDownpour.name) => spellbook(TorrentialDownpour.name, "Gather Power", "Gain 1 Power if you have Amphibian Crawlers in BOTH a Land Area AND a Sea Area. Gain +1 additional Power for each of those Amphibian Crawler Areas that contain an Enemy-Controlled Gate.")
         case $("TB") =>
             faction(TB, "info:tb-background", ThousandWrithingMaws, "Ongoing",
-            "2 Power Action: may Recruit/Summon two 2 Cost Units of same type.<br/><br/>" +
+            "2 Power Action: may Recruit/Summon two upto 2 Cost Units of same type.<br/><br/>" +
             "<span class=ability-color>Behemoth</span> <span class=cost-color>(Ongoing):</span> Whenever TB Power reaches 0 (after Shudde M'ell has been Awakened and the Mantle is in play), place a Segment from Pool on the Mantle. Parts may be moved to the Mantle as a 0-Cost Unlimited Action.",
             $(), $(
             (Cadavolyte,        6, "2", "0", s"""<div class=p>Acolyte, but Gathers 0 Power</div>"""),

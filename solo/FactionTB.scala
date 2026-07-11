@@ -160,7 +160,7 @@ case class TBSetupPlaceTentacleInAction(self : Faction, r : Region, remaining : 
 
 // -- THOUSAND WRITHING MAWS: 2-Power double recruit/summon (§1.5.1 / §3.6.3 / §4.3) --
 case class TBWrithingMawsMainAction(self : Faction)
-    extends OptionFactionAction(ThousandWrithingMaws.styled(TB) + ": recruit/summon two 2-cost units (" + 2.power + ")") with MainQuestion with Soft
+    extends OptionFactionAction(ThousandWrithingMaws.styled(TB) + ": recruit/summon two upto 2-cost units of same type (" + 2.power + ")") with MainQuestion with Soft
 case class TBWrithingMawsTypeAction(self : Faction, uc : UnitClass)
     extends BaseFactionAction(ThousandWrithingMaws.styled(TB) + ": two", uc.styled(TB)) with Soft
 case class TBWrithingMawsPlaceFirstAction(self : Faction, uc : UnitClass)
@@ -278,6 +278,10 @@ case class TBPsychicShriekRetreatAction(self : Faction, enemy : Faction, count :
     extends ForcedAction with PowerNeutral {
     override def question(implicit game : Game) = PsychicShriek.styled(TB) + ": " + enemy.full + " retreat " + count + " units"
 }
+case class TBPsychicShriekRetreatUnitAction(self : Faction, enemy : Faction, u : UnitRef, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
+    extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": select unit to retreat", implicit g => g.unit(u).uclass.styled(enemy) + " in " + g.unit(u).region)
+case class TBPsychicShriekRetreatDestAction(self : Faction, enemy : Faction, u : UnitRef, dest : Region, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
+    extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": retreat " + g.unit(u).uclass.styled(enemy) + " to", implicit g => dest.elem)
 case class TBPsychicShriekRetreatPickAction(self : Faction, enemy : Faction, u : UnitRef, dest : Region, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
     extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": retreat", implicit g => g.unit(u).uclass.styled(enemy) + " to " + dest)
 
@@ -458,7 +462,26 @@ object TBExpansion extends Expansion {
             UnknownContinue
 
         case MainAction(f : TB.type) if f.acted =>
-            UnknownContinue
+            implicit val asking = Asking(f)
+
+            game.controls(f)
+
+            // Behemoth: Move any Part to the Mantle (0-Cost Unlimited, §1.8 / §3.4.3)
+            if (game.tbMantleInPlay && game.tbShuddeMellEverAwakened) {
+                val partsNotOnMantle = (f.all(ShuddeMellHead) ++ f.all(ShuddeMellSegment)).%(_.region != TB.mantle)
+                if (partsNotOnMantle.any)
+                    + TBMovePartToMantleMainAction(f)
+            }
+
+            // SBR-3: Remove a Gate, place a Chthonian (Unlimited, 0-Cost)
+            if (f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
+                + TBRemoveGatePlaceChthonianMainAction(f)
+
+            game.reveals(f)
+
+            game.endTurn(f)(true)
+
+            asking
 
         case MainAction(f : TB.type) =>
             implicit val asking = Asking(f)
@@ -468,15 +491,10 @@ object TBExpansion extends Expansion {
 
             // Thousand Writhing Maws: 2-Power double recruit/summon (§1.5.1 / §3.6.3)
             // Offered FIRST in the action menu (creator request 2026-06-19).
+            // Units eligible: any unit type with cost <= 2 and at least 2 in pool.
             if (f.power >= 2) {
-                val eligible2CostTypes : $[UnitClass] = {
-                    var types : $[UnitClass] = $
-                    if (f.pool(Cadavolyte).num >= 2)  types :+= Cadavolyte
-                    if (f.pool(Tentacle).num >= 2)    types :+= Tentacle
-                    if (f.pool(Chthonian).num >= 2)   types :+= Chthonian
-                    types
-                }
-                if (eligible2CostTypes.any)
+                val eligibleTypes = f.allUnits.distinct.%(uc => uc.cost > 0 && uc.cost <= 2 && uc.utype != GOO && f.pool(uc).num >= 2)
+                if (eligibleTypes.any)
                     + TBWrithingMawsMainAction(f)
             }
 
@@ -544,9 +562,9 @@ object TBExpansion extends Expansion {
         // ====================================================================
         case TBWrithingMawsMainAction(self) =>
             implicit val asking = Asking(self)
-            if (self.pool(Cadavolyte).num >= 2)  + TBWrithingMawsTypeAction(self, Cadavolyte)
-            if (self.pool(Tentacle).num >= 2)    + TBWrithingMawsTypeAction(self, Tentacle)
-            if (self.pool(Chthonian).num >= 2)   + TBWrithingMawsTypeAction(self, Chthonian)
+            self.allUnits.distinct.%(uc => uc.cost > 0 && uc.cost <= 2 && uc.utype != GOO && self.pool(uc).num >= 2).foreach { uc =>
+                + TBWrithingMawsTypeAction(self, uc)
+            }
             + CancelAction
             asking
 
@@ -806,9 +824,10 @@ object TBExpansion extends Expansion {
                 val totalRoll = roll1 + roll2
                 val count = math.min(totalRoll, 2 * enemy.power)
                 self.log(PsychicShriek.styled(TB) + ": rolled", totalRoll, "— retreat", count, "unit".s(count))
-                // Snapshot enemy's current occupied areas (before retreat)
-                val priorAreas = enemy.allInPlay./(_.region).distinct
-                val enemyUnits = enemy.allInPlay./(_.ref)
+                // Snapshot enemy's current occupied MAP areas (before retreat) — exclude off-map units (Sorcery, Slumber, etc.)
+                val onMapUnits = enemy.allInPlay.%(_.region.onMap)
+                val priorAreas = onMapUnits./(_.region).distinct
+                val enemyUnits = onMapUnits./(_.ref)
                 TBPsychicShriekRetreatAction(enemy, enemy, count, priorAreas, $, enemyUnits)
             })
 
@@ -816,15 +835,13 @@ object TBExpansion extends Expansion {
             if (count <= 0 || remaining.none)
                 EndAction(TB)
             else {
-                // Valid destinations per unit: ADJACENT to unit's region, NOT in priorAreas, no TB Gates
-                val unitsWithDests = remaining./~{ ur =>
+                // Find units that have at least one valid retreat destination
+                val unitsWithDests = remaining.%(ur => {
                     val unitRegion = game.unit(ur).region
                     val adjacent = game.board.connected(unitRegion)
-                    val validDests = adjacent.%(r => !priorAreas.has(r) && !TB.gates.has(r))
-                    validDests./(r => (ur, r))
-                }
+                    adjacent.%(r => !priorAreas.has(r) && !TB.gates.has(r)).any
+                })
                 if (unitsWithDests.none) {
-                    // FCG #23: auto-eliminate any unit with no legal destination
                     remaining.foreach { ur =>
                         val u = game.unit(ur)
                         game.eliminate(u)
@@ -832,17 +849,41 @@ object TBExpansion extends Expansion {
                     TB.log(PsychicShriek.styled(TB) + ": no legal destinations — eliminated remaining units")
                     EndAction(TB)
                 } else if (unitsWithDests.num == 1) {
-                    val (ur, r) = unitsWithDests.head
-                    Force(TBPsychicShriekRetreatPickAction(self, enemy, ur, r, count, priorAreas, retreated, remaining))
+                    val ur = unitsWithDests.head
+                    val unitRegion = game.unit(ur).region
+                    val adjacent = game.board.connected(unitRegion)
+                    val validDests = adjacent.%(r => !priorAreas.has(r) && !TB.gates.has(r))
+                    if (validDests.num == 1)
+                        Force(TBPsychicShriekRetreatPickAction(self, enemy, ur, validDests.head, count, priorAreas, retreated, remaining))
+                    else
+                        Force(TBPsychicShriekRetreatUnitAction(self, enemy, ur, count, priorAreas, retreated, remaining))
                 } else {
-                    // FCG #26: enemy picks which unit + destination
+                    // Step 1: enemy picks which unit to retreat
                     implicit val asking = Asking(self)
-                    unitsWithDests.foreach { case (ur, r) =>
-                        + TBPsychicShriekRetreatPickAction(self, enemy, ur, r, count, priorAreas, retreated, remaining)
+                    unitsWithDests.foreach { ur =>
+                        + TBPsychicShriekRetreatUnitAction(self, enemy, ur, count, priorAreas, retreated, remaining)
                     }
                     asking
                 }
             }
+
+        case TBPsychicShriekRetreatUnitAction(self, enemy, u, count, priorAreas, retreated, remaining) =>
+            // Step 2: enemy picks where the selected unit retreats to
+            val unitRegion = game.unit(u).region
+            val adjacent = game.board.connected(unitRegion)
+            val validDests = adjacent.%(r => !priorAreas.has(r) && !TB.gates.has(r))
+            if (validDests.num == 1)
+                Force(TBPsychicShriekRetreatPickAction(self, enemy, u, validDests.head, count, priorAreas, retreated, remaining))
+            else {
+                implicit val asking = Asking(self)
+                validDests.foreach { r =>
+                    + TBPsychicShriekRetreatDestAction(self, enemy, u, r, count, priorAreas, retreated, remaining)
+                }
+                asking
+            }
+
+        case TBPsychicShriekRetreatDestAction(self, enemy, u, dest, count, priorAreas, retreated, remaining) =>
+            Force(TBPsychicShriekRetreatPickAction(self, enemy, u, dest, count, priorAreas, retreated, remaining))
 
         case TBPsychicShriekRetreatPickAction(self, enemy, u, dest, count, priorAreas, retreated, remaining) =>
             val unit = game.unit(u)

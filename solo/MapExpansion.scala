@@ -275,9 +275,7 @@ case class UseTomeGuardianMainAction(self : Faction) extends OptionFactionAction
 case class UseTomeGuardianRegionAction(self : Faction, source : Region) extends BaseFactionAction(implicit g => "Relocate enemy units in", source) with Soft {
     override def question(implicit game : Game) = "Choose region with " + TomeGuardian.elem
 }
-case class UseTomeGuardianRelocateAction(self : Faction, source : Region, target : Faction) extends BaseFactionAction(implicit g => "Relocate " + target.full + " units in", source) with Soft {
-    override def question(implicit game : Game) = "Choose faction to relocate from " + source
-}
+case class UseTomeGuardianRelocateAction(self : Faction, source : Region, target : Faction) extends BaseFactionAction(implicit g => "Choose faction to relocate from " + source, implicit g => target.full) with Soft
 case class UseTomeGuardianDestAction(self : Faction, source : Region, target : Faction, dest : Region) extends BaseFactionAction(implicit g => "Move to", dest) {
     override def question(implicit game : Game) = "Choose destination for " + target.full + " units from " + source
 }

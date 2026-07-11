@@ -1875,6 +1875,7 @@ object FBExpansion extends Expansion {
 
         case FBCarnageFlipSpellbookAction(self) =>
             val available = faceUpSpellbooks
+            println(s"[CARNAGE-TRACE] FBCarnageFlipSpellbookAction: available=${available}, oncePerGame=${FB.oncePerGame}, spellbooks=${FB.spellbooks}")
             Ask(self).each(available)(sb => FBCarnageChooseSpellbookAction(self, sb))
 
         case FBCarnageChooseSpellbookAction(self, sb) =>

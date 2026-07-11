@@ -943,7 +943,8 @@ object DCExpansion extends Expansion {
             ygolonacOpt match {
                 case Some(yg) =>
                     val area = yg.region
-                    val factionsWithCultists = game.factions.but(self).%(ff => ff.at(area).%(_.uclass.utype == Cultist).any)
+                    val factionsWithCultists = game.factions.%(ff => ff.at(area).%(_.uclass.utype == Cultist).any)
+                    println(s"[SATIATE-CONFIRM-TRACE] Y'Golonac in ${area}. Factions with cultists: ${factionsWithCultists.mkString(", ")}. All units in area: ${game.factions./~(_.at(area))./(u => s"${u.ref}@${u.region}").mkString(", ")}")
                     // Per-faction pick chain (Item 8): each faction with 2+ cultists chooses which to lose.
                     Force(DCSatiateFactionPickAction(self, area, factionsWithCultists, 0))
                 case None =>
@@ -955,13 +956,11 @@ object DCExpansion extends Expansion {
                 Force(DCSatiateFinishAction(self, area, capturedSoFar))
             } else {
                 val ff = remaining.first
-                if (ff == self) {
-                    Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar))
-                } else {
                 val cultists = ff.at(area).%(_.uclass.utype == Cultist)
+                println(s"[SATIATE-FACTION-TRACE] Processing faction ${ff} in ${area}. Cultists found: ${cultists./(c => s"${c.ref}@${c.region}").mkString(", ")}. cultists.num=${cultists.num}")
                 if (cultists.num == 1) {
-                    // Auto-capture the only cultist
                     val c = cultists.first
+                    println(s"[SATIATE-AUTO-CAPTURE] Capturing ${c.ref} from ${c.region} → ${self}.prison")
                     c.region = self.prison
                     c.onGate = false
                     ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(only one in", area, ")")
@@ -978,9 +977,6 @@ object DCExpansion extends Expansion {
                     if (!ff.gates.has(area)) {
                         cultists.foreach(c => c.onGate = false)
                     } else {
-                        // Faction has a gate here — at most one cultist is the real
-                        // controller. If multiple have onGate (stale duplicates), keep
-                        // only the first and clear the rest.
                         val onGateUnits = cultists.%(_.onGate)
                         if (onGateUnits.num > 1)
                             onGateUnits.drop(1).foreach(c => c.onGate = false)
@@ -996,7 +992,6 @@ object DCExpansion extends Expansion {
                         ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(all equivalent in", area, ")")
                         Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1))
                     } else {
-                        // Ask the affected faction which to lose (self=ff for enemy-colored border)
                         implicit val asking = Asking(ff)
                         cultists.foreach { c =>
                             + DCSatiatePickCultistAction(ff, area, c.ref, remaining.dropStarting, capturedSoFar)
@@ -1006,19 +1001,14 @@ object DCExpansion extends Expansion {
                 } else {
                     Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar))
                 }
-                }
             }
 
         case DCSatiatePickCultistAction(self, area, cultistRef, remaining, capturedSoFar) =>
             val c = game.unit(cultistRef)
-            if (c.faction == DC) {
-                Force(DCSatiateFactionPickAction(DC, area, remaining, capturedSoFar))
-            } else {
             c.region = DC.prison
             c.onGate = false
             self.log(Satiate.styled(DC) + ":", self.short.styled(self), "loses", c.uclass.styled(self), "to", DC.full)
             Force(DCSatiateFactionPickAction(DC, area, remaining, capturedSoFar + 1))
-            }
 
         case DCSatiateFinishAction(self, area, capturedSoFar) =>
             val bonus = math.max(0, capturedSoFar - 1)
@@ -1471,6 +1461,7 @@ object DCExpansion extends Expansion {
                 } else if (acolytes.num <= count) {
                     // Drag all of them (no choice needed).
                     acolytes.foreach { c =>
+                        println(s"[PROSELYTIZE-DRAG-TRACE] Dragging ${c.ref} from ${c.region} (glyph=${c.region.glyph}) to ${to}")
                         c.region = to
                         c.onGate = false
                     }
@@ -1484,6 +1475,7 @@ object DCExpansion extends Expansion {
                     if (offGate.none || onGate.none) {
                         // All same gate status: no meaningful choice — take first N.
                         acolytes.take(count).foreach { c =>
+                            println(s"[PROSELYTIZE-DRAG-TAKE-N] Dragging ${c.ref} from ${c.region} (glyph=${c.region.glyph}) to ${to}. count=${count}, totalAcolytes=${acolytes.num}")
                             c.region = to
                             c.onGate = false
                         }
@@ -1799,11 +1791,10 @@ object DCExpansion extends Expansion {
             // RITUAL — at least one gate to ritual at.
             case _ : RitualAction =>
                 self.allGates.any
-            // DC SB Satiate — needs Y'Golonac on map + an enemy cultist in its
-            // area. No power gate (Sin pays).
+            // DC SB Satiate — needs Y'Golonac on map + any cultist (including DC's own) in its area.
             case _ : DCSatiateConfirmAction =>
                 self.can(Satiate) && self.allInPlay.%(_.uclass == YgolonacDC).any &&
-                    self.allInPlay.%(_.uclass == YgolonacDC).exists(yg => game.factions.but(self).exists(e => e.at(yg.region).%(_.uclass.utype == Cultist).any))
+                    self.allInPlay.%(_.uclass == YgolonacDC).exists(yg => game.factions.exists(e => e.at(yg.region).%(_.uclass.utype == Cultist).any))
             // DC SB Lure — needs Y'Golonac on map + an adjacent eligible enemy
             // cultist. No power gate (Sin pays).
             case _ : DCLureConfirmAction =>

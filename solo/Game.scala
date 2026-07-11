@@ -2306,6 +2306,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
         }
 
+        println(s"[FATAL-TRACE] unknown continue on: ${action.getClass.getSimpleName}. battle=${battle.isDefined}. expansions=${expansions.map(_.getClass.getSimpleName).mkString(",")}")
         throw new Error("unknown continue on " + action)
     }
 
@@ -4535,6 +4536,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // Moon out of destination lists for non-BB factions, but this is a
         // belt-and-suspender check at the action-execution layer so any
         case MoveAction(self, u, o, r, cost) if u.region.glyph == Prison =>
+            println(s"[PRISON-GUARD-TRACE] Blocked move of ${u.ref} from prison to ${r}. Unit is in ${u.region}.")
             if (cost > 0 && !dcTenebrosumGuard)
                 self.power -= cost
             MoveContinueAction(self, true)
@@ -4552,6 +4554,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             EndAction(self)
 
         case MoveAction(self, u, o, r, cost) =>
+            if (u.faction.short == "FBE")
+                println(s"[FBE-MOVE-TRACE] ${u.ref} region=${u.region} (glyph=${u.region.glyph}), origin=${o}, dest=${r}. Prison guard DID NOT fire.")
+            if (u.region != o)
+                println(s"[MOVE-MISMATCH-TRACE] ${u.ref} expected origin=${o} but actual region=${u.region} (glyph=${u.region.glyph}). Moving to ${r}.")
             val t = self.payTax(r)
 
             // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
@@ -5204,6 +5210,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case action : PreBattleQuestion =>
             log("[warn] battle action " + action.getClass.getSimpleName + " skipped — no active battle")
             UnknownContinue
+
     }
 
 }
