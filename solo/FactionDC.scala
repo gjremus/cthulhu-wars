@@ -837,7 +837,7 @@ object DCExpansion extends Expansion {
 
         case DCSatiateReqOptInAction(self) =>
             val otherSBs = self.spellbooks.num
-            val poolSBs  = self.unfulfilled.num - 1
+            val poolSBs  = 5 - otherSBs
             self.satisfy(SatiateReq, "Doom Phase SBR: +1 Power per other SB earned, +1 Sin per pool SB (excl. this)")
             self.power += otherSBs
             // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
