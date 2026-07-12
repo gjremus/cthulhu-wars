@@ -578,6 +578,7 @@ object CthulhuWarsSolo {
             var actions : $[Action] = $
             var queue : $[UIAction] = $
             var paused = recorded.any && hash == ""
+            var lastTurnBoundaryIndex = -1
 
             val serializer = new Serialize(game)
 
@@ -2372,7 +2373,7 @@ object CthulhuWarsSolo {
                     }
                 }
 
-                draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0))./(_.rect).foreach { d =>
+                draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0))./(_.rect).%(r => r != null).foreach { d =>
                     g.globalAlpha = d.alpha
                     val needsOutline = d.key == "custodian-icon" || d.key == "librarian-icon"
                     if (needsOutline) {
@@ -4062,6 +4063,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 recorded.indexed./ { (a, n) =>
                                     actions +:= a
 
+                                    a.unwrap match {
+                                        case PreMainAction(f) if self.has(f) => lastTurnBoundaryIndex = actions.num - 1
+                                        case _ =>
+                                    }
+
                                     if (a.is[ReloadAction.type] && initial.not) {
                                         println("reloading...")
                                         dom.document.location.assign(dom.document.location.href)
@@ -4119,8 +4125,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     case a => a
                                 }
 
-                                if (a.isRecorded)
+                                if (a.isRecorded) {
                                     actions +:= a
+                                    a.unwrap match {
+                                        case PreMainAction(f) if self.has(f) => lastTurnBoundaryIndex = actions.num - 1
+                                        case _ =>
+                                    }
+                                }
 
                                 game.nextReplayActionHint = if (recorded.any && hash == "" && localReplay.not && recorded.num > actions.num) Some(recorded(actions.num).replace("&gt;", ">")) else None
                                 try {
@@ -4259,6 +4270,24 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         perform(a)
                                     })))
                                 )
+
+                                if (hash != "" && self.has(f) && lastTurnBoundaryIndex >= 0) {
+                                    actionDiv.appendChild(newDiv("", "&nbsp;"))
+                                    actionDiv.appendChild(newDiv("option", "Undo Turn".hl, () => {
+                                        stopBackgroundCheck()
+                                        clear(actionDiv)
+                                        actionDiv.appendChild(newDiv("", "Undoing turn..."))
+                                        hrf.web.postF(server + "undo-turn/" + hash + "/" + (lastTurnBoundaryIndex + 3), "") { response =>
+                                            dom.document.location.assign(dom.document.location.href)
+                                        } {
+                                            clear(actionDiv)
+                                            actionDiv.appendChild(newDiv("", "Undo failed (may have been blocked by game rules)"))
+                                            setTimeout(3000) {
+                                                dom.document.location.assign(dom.document.location.href)
+                                            }
+                                        }
+                                    }))
+                                }
 
                                 None
                             }

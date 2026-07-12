@@ -205,6 +205,38 @@ object CthulhuWarsOnline {
             q(meta.filter(_.gameId === gameId).delete, meta += Meta(gameId, now))
         }
 
+        // Undo-turn validation and execution. Returns (success, errorMessage).
+        // The client sends the action index of its last PreMainAction; the server
+        // validates that (a) the entry at that index IS a PreMainAction for the
+        // requesting player's faction, (b) no ElderSignAction exists in the span,
+        // and (c) no other player wrote actions after that point.
+        def undoTurn(roleSecret : String, targetIndex : Int) : (Boolean, String) = {
+            val roleInfo = try {
+                q(roles.filter(_.secret === roleSecret).filter(_.name =!= "#").filter(_.name =!= "$").map(r => (r.name, r.gameId)).result.head)
+            } catch {
+                case _ : Throwable => return (false, "invalid role")
+            }
+            val (roleName, gameId) = roleInfo
+            val entries = q(logs.filter(_.gameId === gameId).filter(_.index >= targetIndex).sortBy(_.index).result)
+            if (entries.isEmpty)
+                return (false, "no actions to undo")
+            val first = entries.head
+            if (!first.value.startsWith("PreMainAction("))
+                return (false, "target is not a turn boundary")
+            val factionInAction = first.value.stripPrefix("PreMainAction(").takeWhile(c => c != ',' && c != ')')
+            if (factionInAction != roleName)
+                return (false, "not your turn boundary")
+            if (entries.exists(_.value.startsWith("ElderSignAction(")))
+                return (false, "elder signs were drawn")
+            if (entries.exists(e => e.value.startsWith("AttackAction(") || e.value.startsWith("NuclearChaosDieAction(")))
+                return (false, "dice were rolled")
+            if (entries.tail.exists(e => e.role != "" && e.role != roleName && e.role != "$"))
+                return (false, "another player has acted")
+            q(logs.filter(_.gameId === gameId).filter(_.index >= targetIndex).delete)
+            touchMeta(gameId)
+            (true, "ok")
+        }
+
         implicit val system = ActorSystem()
         implicit val executionContext = system.dispatcher
 
@@ -353,6 +385,11 @@ object CthulhuWarsOnline {
                 catch { case _ : Throwable => () }
                 complete(StatusCodes.Accepted)
             } ~
+            (post & path("undo-turn" / Segment / IntNumber)) { (role, index) =>
+                val (ok, msg) = undoTurn(role, index)
+                if (ok) complete(StatusCodes.Accepted)
+                else complete(StatusCodes.Forbidden, msg)
+            } ~
             // ── ADMIN ENDPOINTS (owner-only) ──
             // Gated by ownerToken matching the 5th argv. If ownerToken is empty (not
             // configured), every admin endpoint returns 404 so it's invisible.
@@ -441,6 +478,11 @@ object CthulhuWarsOnline {
                     try { touchMeta(q(roles.filter(_.secret === role).map(_.gameId).result.head)) }
                     catch { case _ : Throwable => () }
                     complete(StatusCodes.Accepted)
+                } ~
+                (post & path("undo-turn" / Segment / IntNumber)) { (role, index) =>
+                    val (ok, msg) = undoTurn(role, index)
+                    if (ok) complete(StatusCodes.Accepted)
+                    else complete(StatusCodes.Forbidden, msg)
                 } ~
                 // /mnu/play/<role-secret> — game-join URL. Serve MNU's index.html so
                 // the SPA can pick up the role from window.location and start the
@@ -539,6 +581,11 @@ object CthulhuWarsOnline {
                     catch { case _ : Throwable => () }
                     complete(StatusCodes.Accepted)
                 } ~
+                (post & path("undo-turn" / Segment / IntNumber)) { (role, index) =>
+                    val (ok, msg) = undoTurn(role, index)
+                    if (ok) complete(StatusCodes.Accepted)
+                    else complete(StatusCodes.Forbidden, msg)
+                } ~
                 pathPrefix("play") {
                     pathPrefix("webp")   { getFromDirectory("../tt/webp") } ~
                     pathPrefix("fonts")  { getFromDirectory("../tt/fonts") } ~
@@ -630,6 +677,11 @@ object CthulhuWarsOnline {
                     try { touchMeta(q(roles.filter(_.secret === role).map(_.gameId).result.head)) }
                     catch { case _ : Throwable => () }
                     complete(StatusCodes.Accepted)
+                } ~
+                (post & path("undo-turn" / Segment / IntNumber)) { (role, index) =>
+                    val (ok, msg) = undoTurn(role, index)
+                    if (ok) complete(StatusCodes.Accepted)
+                    else complete(StatusCodes.Forbidden, msg)
                 } ~
                 pathPrefix("play") {
                     pathPrefix("webp")   { getFromDirectory("../bb/webp") } ~

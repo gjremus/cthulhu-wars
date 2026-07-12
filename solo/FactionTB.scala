@@ -1045,7 +1045,7 @@ object TBExpansion extends Expansion {
                 game.gates :+= r
                 self.gates :+= r
                 game.tbSBR4Gates :+= r
-                val cultistAtRegion = self.at(r).%(u => u.uclass.utype == Cultist && !u.onGate).headOption
+                val cultistAtRegion = self.at(r).%(u => u.uclass.canControlGate(u) && !u.onGate).headOption
                 cultistAtRegion.foreach(_.onGate = true)
                 gatesPlaced += 1
             }
