@@ -105,6 +105,8 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 100  -> "pick segment for autotomy"
                 case TBAutotomyRetreatAction(f, _, _) =>
                     true                                         |=> 100  -> "pick autotomy retreat"
+                case TBAutotomyRetreatExecuteAction(f, _, _) =>
+                    true                                         |=> 100  -> "autotomy retreat commit"
                 case TBAutotomyAction(f, _, _, _) =>
                     true                                         |=> 500  -> "autotomy commit"
 

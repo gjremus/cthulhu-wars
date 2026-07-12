@@ -281,7 +281,7 @@ case class TBPsychicShriekRetreatAction(self : Faction, enemy : Faction, count :
     override def question(implicit game : Game) = PsychicShriek.styled(TB) + ": " + enemy.full + " retreat " + count + " units"
 }
 case class TBPsychicShriekRetreatUnitAction(self : Faction, enemy : Faction, u : UnitRef, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
-    extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": select unit to retreat", implicit g => g.unit(u).uclass.styled(enemy) + " in " + g.unit(u).region)
+    extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": retreat " + count + " unit".s(count) + " — select unit", implicit g => g.unit(u).uclass.styled(enemy) + " in " + g.unit(u).region)
 case class TBPsychicShriekRetreatDestAction(self : Faction, enemy : Faction, u : UnitRef, dest : Region, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
     extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": retreat " + g.unit(u).uclass.styled(enemy) + " to", implicit g => dest.elem)
 case class TBPsychicShriekRetreatPickAction(self : Faction, enemy : Faction, u : UnitRef, dest : Region, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
@@ -490,6 +490,9 @@ object TBExpansion extends Expansion {
             implicit val asking = Asking(f)
 
             game.controls(f)
+
+            if (f.hasAllSB)
+                game.battles(f)
 
             // Behemoth: Move any Part to the Mantle (0-Cost Unlimited, §1.8 / §3.4.3)
             if (game.tbMantleInPlay && game.tbShuddeMellEverAwakened) {
@@ -862,6 +865,7 @@ object TBExpansion extends Expansion {
                 val totalRoll = roll1 + roll2
                 val count = math.min(totalRoll, 2 * enemy.power)
                 self.log(PsychicShriek.styled(TB) + ": rolled", totalRoll, "— retreat", count, "unit".s(count))
+                enemy.log("must retreat", count, "unit".s(count), "(" + PsychicShriek.styled(TB) + ")")
                 // Snapshot enemy's current occupied MAP areas (before retreat) — exclude off-map units (Sorcery, Slumber, etc.)
                 val onMapUnits = enemy.allInPlay.%(_.region.onMap)
                 val priorAreas = onMapUnits./(_.region).distinct

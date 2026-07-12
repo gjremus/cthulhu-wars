@@ -55,7 +55,7 @@ case object TS extends Faction { f =>
         6.times(Acolyte)
 
     override def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = u match {
-        case Glaaki => (f.gates.has(r) && f.gates.exists(_.glyph == Ocean)).?(max(1, 7 - game.deathsHead))
+        case Glaaki => (f.gates.has(r) && r.glyph == Ocean).?(max(1, 7 - game.deathsHead))
         case _ => None
     }
 
@@ -422,7 +422,7 @@ object TSExpansion extends Expansion {
             Force(TSAwakenGlaakiChooseRegionAction(self, power, dh))
 
         case TSAwakenGlaakiChooseRegionAction(self, power, dh) =>
-            val eligible = areas.%(r => self.gates.has(r) && self.gates.exists(_.glyph == Ocean) && self.affords(power)(r) && self.pool(Glaaki).any)
+            val eligible = areas.%(r => self.gates.has(r) && r.glyph == Ocean && self.affords(power)(r) && self.pool(Glaaki).any)
             Ask(self).list(eligible./(r => TSAwakenGlaakiPayAction(self, r, power, dh))).cancel
 
         case TSAwakenGlaakiPayAction(self, r, power, dh) =>
