@@ -1023,6 +1023,9 @@ class Player(private val f : Faction)(implicit game : Game) {
         if (f.at(r).goos.any)
             true
         else
+        if (f == AN && AN.can(HolyGround) && f.at(r, Cathedral).any)
+            true
+        else
         if (e.at(r, Terror).any)
             false
         else

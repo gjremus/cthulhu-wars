@@ -16,7 +16,7 @@ case object Yothan extends FactionUnitClass(AN, "Yothan", Terror, 6)
 case object Cathedral extends FactionUnitClass(AN, "Cathedral", Building, 4) {
     override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = false
     override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = false
-    override def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = u.faction.can(HolyGround)
 }
 
 // FACTION POWER — use .has(), NOT blocked by Moonbeast or Elder Thing

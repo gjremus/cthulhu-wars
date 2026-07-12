@@ -83,7 +83,7 @@ case object OW extends Faction { f =>
         units(Mutant).num * 1 +
         units(Abomination).num * 2 +
         units(SpawnOW).num * 3 +
-        units(YogSothoth).not(Zeroed).num * (2 * factions.but(f)./(e => if (e == TB) e.goos.factionGOOs.any.??(1) else e.factionGOOs.num).sum) +
+        units(YogSothoth).not(Zeroed).num * (2 * factions.but(f)./(e => if (e == TB) e.goos.factionGOOs.any.??(1) else e.factionGOOs.num).sum + (AN.can(HolyGround) && game.cathedrals.num == 4).??(2)) +
         neutralStrength(units, opponent)
 }
 
