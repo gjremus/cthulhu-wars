@@ -420,7 +420,7 @@ trait Faction { f =>
         // Cthugha: pre-battle combat = 1 if enemy GOO present in region (enables battle declaration)
         // Actual combat is calculated dynamically during battle (picks highest enemy GOO)
         // HIGH-2 revised: ElderGod (Bastet) counts as GOO per spec §1.3.
-        units(Cthugha).not(Zeroed).%(u => opponent.at(u.region).%(_.uclass.isGOO).any).num +
+        units(Cthugha).not(Zeroed).%(u => opponent.at(u.region).%(_.uclass.isGOO).any || (AN.can(HolyGround) && opponent.at(u.region, Cathedral).any)).num +
         0 +
         // Atlach-Nacha: combat 4
         units(AtlachNacha).not(Zeroed).num * 4 +
@@ -3833,7 +3833,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case RequiresAttentionTargetAction(self, r) =>
             val enemyGate  = factions.but(self).exists(_.gates.has(r))
-            val enemyGOO   = factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any)
+            val enemyGOO   = factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any || (AN.can(HolyGround) && e.at(r, Cathedral).any))
             val esBonus    = enemyGate.??(1) + enemyGOO.??(2)
             self.doom += 4
             self.log(RequiresAttention.styled(BB) + ": ritual in", r, "— gained", 4.doom)

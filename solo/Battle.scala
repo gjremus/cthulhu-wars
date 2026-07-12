@@ -860,7 +860,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Cthugha Firestorm: "Kill an enemy GOO in Battle"
         // HIGH-2 revised: ElderGod (Bastet) counts as GOO for this trigger per spec §1.3.
         if (s.has(Cthugha) && s.upgrades.has(Firestorm).not) {
-            val killedGOOs = s.opponent.forces.%(u => u.uclass.isGOO && u.health == Killed)
+            val killedGOOs = s.opponent.forces.%(u => (u.uclass.isGOO || (u.uclass == Cathedral && AN.can(HolyGround))) && u.health == Killed)
             if (killedGOOs.any) {
                 s.upgrades :+= Firestorm
                 s.log("gained", Firestorm.styled(s), "for killing enemy GOO with", Cthugha.styled(s))
@@ -1037,7 +1037,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     val enemySide = if (s == attacker) defenders else attackers
                     val enemy = s.opponent
                     if (mySide.forces.%(_.uclass == Cthugha).any) {
-                        val enemyGOOs = enemySide.forces.%(_.uclass.utype == GOO)
+                        val enemyGOOs = enemySide.forces.%(u => u.uclass.utype == GOO || (u.uclass == Cathedral && AN.can(HolyGround)))
                         if (enemyGOOs.num > 1) {
                             val gooTypes = enemyGOOs./(_.uclass).distinct
                             val combats = gooTypes./(goo => (goo, enemy.strength(enemySide.forces.%(_.uclass == goo), s)))
@@ -1143,7 +1143,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (ts.rolls.count(_ == Pain) >= 3)
             ts.satisfy(TSRoll3Pains, "Rolled 3 Pains in battle")
         // HIGH-2 revised: ElderGod (Bastet) counts as GOO per spec §1.3.
-        if (ts.forces.%(_.uclass == Glaaki).any && ts.opponent.forces.%(_.uclass.isGOO).any)
+        if (ts.forces.%(_.uclass == Glaaki).any && (ts.opponent.forces.%(_.uclass.isGOO).any || (AN.can(HolyGround) && ts.opponent.forces.%(_.uclass == Cathedral).any)))
             ts.satisfy(TSGlaakiBattlesGOO, "Gla'aki battled enemy GOO")
     }
 
@@ -1909,7 +1909,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         val cathedralAdjacent = game.cathedrals.exists(cr => cr == arena || game.board.connected(cr).has(arena))
                         if (cathedralAdjacent) {
                             AN.oncePerAction :+= Sanguinessence
-                            val gooKilled = enemyKilled.%(u => u.uclass.isGOO).any
+                            val gooKilled = enemyKilled.%(u => u.uclass.isGOO || (u.uclass == Cathedral && AN.can(HolyGround))).any
                             if (gooKilled) {
                                 log(Sanguinessence.styled(AN) + ": gained", 1.es, "(Great Old One killed near Cathedral)")
                                 AN.takeES(1)
