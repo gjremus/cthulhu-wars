@@ -371,6 +371,8 @@ object NeutralMonstersExpansion extends Expansion {
 
         case ShantakCarryCultistAction(self, o, u, r) =>
             u.region = r
+            // HB Fix 112b (2026-07-11): clear stale onGate when Shantak carries cultist
+            u.onGate = false
 
             u.add(Moved)
             u.add(MovedForFree)

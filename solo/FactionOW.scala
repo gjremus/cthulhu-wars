@@ -125,7 +125,7 @@ object OWExpansion extends Expansion {
     override def afterAction()(implicit game : Game) {
         if (!game.setup.has(OW)) return
         val f = OW
-        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.at(r).goos.any).any).any)
+        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.goos.%(_.region == r).any).any).any)
         val unitsAtEnemyGatesThreshold = if (game.options.has(OpenerCheapMutants)) 3 else 2
         val unitsAtEnemyGatesLabel = if (game.options.has(OpenerCheapMutants)) "Units at three enemy Gates" else "Units at two enemy Gates"
         f.satisfyIf(UnitsAtEnemyGates, unitsAtEnemyGatesLabel, areas.%(r => f.at(r).any && f.enemies.%(_.gates.has(r)).any).num >= unitsAtEnemyGatesThreshold)
@@ -136,7 +136,7 @@ object OWExpansion extends Expansion {
         f.satisfyIf(EightGates, "Eight Gates on the map", game.allGates.onMap.num >= 8)
         f.satisfyIf(TenGates, "Ten Gates on the map", game.allGates.onMap.num >= 10)
         f.satisfyIf(TwelveGates, "Twelve Gates on the map", game.allGates.onMap.num >= 12)
-        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.at(r).goos.any).any).any)
+        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.goos.%(_.region == r).any).any).any)
         val unitsAtEnemyGatesThreshold = if (game.options.has(OpenerCheapMutants)) 3 else 2
         val unitsAtEnemyGatesLabel = if (game.options.has(OpenerCheapMutants)) "Units at three enemy Gates" else "Units at two enemy Gates"
         f.satisfyIf(UnitsAtEnemyGates, unitsAtEnemyGatesLabel, areas.%(r => f.at(r).any && f.enemies.%(_.gates.has(r)).any).num >= unitsAtEnemyGatesThreshold)

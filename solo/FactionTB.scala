@@ -723,6 +723,9 @@ object TBExpansion extends Expansion {
             if (toRetreat.any)
                 self.log(Autotomy.styled(TB) + ": retreated", toRetreat.num, "unit".s(toRetreat.num), "to", retreatDest)
 
+            // Set flag so TB's pains are skipped in pain assignment
+            game.battle.foreach(_.tbAutotomyUsed = true)
+
             // Queue turn-end action to place all pool Segments on Mantle
             Force(TBAutotomyTurnEndAction(self))
 

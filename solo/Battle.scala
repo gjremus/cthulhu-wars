@@ -144,6 +144,7 @@ case object EliminatePhase extends BattlePhase
 case object CloudOfAshesPromptPhase extends BattlePhase
 case object BerserkergangPhase extends BattlePhase
 case object UnholyGroundPhase extends BattlePhase
+case object TBAutotomyPhase extends BattlePhase
 case object AssignDefenderPains extends BattlePhase
 case object AssignAttackerPains extends BattlePhase
 case object AllPainsAssignedPhase extends BattlePhase
@@ -328,6 +329,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // otherwise hit the CG hook again with the same Ghatanothoa/Revenant sources.
     var fbCyclopeanGazeFiredThisBattle : Boolean = false
     var zagazigSkipped : Boolean = false
+    var tbAutotomyUsed : Boolean = false
 
     // Faceless Blight (FBE): once-per-battle guard so the Distributed Death offer
     // (Post-Kill-assignment, §3.14.3) is not re-presented when AllKillsAssignedPhase
@@ -340,6 +342,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     var eliminated : $[UnitFigure] = $
+    var eliminatedByDice : $[UnitFigure] = $
 
     def eliminate(u : UnitFigure) {
         exempt(u)
@@ -710,6 +713,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     def assignPains(s : Faction, next : BattlePhase) : Continue = {
+        if (s == attacker && s == TB && tbAutotomyUsed)
+            return BattleProceedAction(next)
+
         val pains = s.opponent.rolls.count(_ == Pain)
         val assigned = s.forces./(assignedPains).sum
         val canAssign = s.forces./(canAssignPains).sum
@@ -1466,6 +1472,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
                 checkDaolothSpellbook()
 
+                val preCount = eliminated.num
                 sides.foreach { s =>
                     s.forces.%(_.health == Killed).foreach(eliminate)
                 }
@@ -1473,6 +1480,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 exempted.%(_.health == Killed).foreach { u =>
                     if (!eliminated.has(u)) eliminate(u)
                 }
+                eliminatedByDice = eliminated.drop(preCount)
 
                 jump(CloudOfAshesPromptPhase)
 
@@ -1565,6 +1573,18 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                jump(TBAutotomyPhase)
+
+            case TBAutotomyPhase =>
+                if (factions.has(TB) && TB.can(Autotomy) && attacker == TB) {
+                    val tbSide = attackers
+                    val headPresent = (tbSide.forces ++ eliminated.%(_.faction == TB)).%(_.uclass == ShuddeMellHead).any
+                    val defenderRolledKill = defenders.rolls.has(Kill)
+                    val tbKilledByDice = defenderRolledKill && eliminatedByDice.%(u => u.faction == TB && u.uclass != ShuddeMellSegment).any
+                    val segmentsExist = TB.all(ShuddeMellSegment).any
+                    if (tbKilledByDice && headPresent && segmentsExist)
+                        return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
+                }
                 jump(AssignDefenderPains)
 
             case AssignDefenderPains =>
@@ -1834,13 +1854,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             .add(NecromanticSporesMainAction(FBE, enemyKilled))
                             .add(NecromanticSporesSkipAction(FBE))
                     }
-                }
-
-                if (factions.has(TB) && TB.can(Autotomy) && sides.has(TB)) {
-                    val tbKilledNonSegment = eliminated.%(u => u.faction == TB && u.uclass != ShuddeMellSegment).any
-                    val segmentsExist = TB.all(ShuddeMellSegment).any
-                    if (tbKilledNonSegment && segmentsExist)
-                        return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
                 }
 
                 // Bubastis (BB) Carnivore (alt spellbook): BB gains 1 Doom for each enemy Monster
@@ -2916,6 +2929,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case NecromanticSporesSkipAction(self) =>
             proceed()
+
+        case TBAutotomySkipAction(self) =>
+            jump(AssignDefenderPains)
+
+        case TBAutotomyTurnEndAction(self) =>
+            jump(AssignDefenderPains)
 
         case NecromanticSporesEliminateAction(self, _, _, _) =>
             proceed()

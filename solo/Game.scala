@@ -1017,8 +1017,7 @@ class Player(private val f : Faction)(implicit game : Game) {
             true
         else
         // Alt Ancients Holy Ground: Cathedrals with Holy Ground are true GOOs for capture purposes.
-        // The list-level .goos now includes them, so e.at(r).goos covers both real GOOs and HG Cathedrals.
-        if (e.at(r).goos.any)
+        if (e.goos.%(_.region == r).any)
             false
         else
         if (f.at(r).goos.any)
@@ -2112,7 +2111,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // (source/bubastis.txt line 108) + FAQ #19 ("Bubastis' Moon Gate is inherent
                 // and always present"). Skip the abandon-on-no-onGate-unit check for BB.moon.
                 // TB Mantle Gate: normal gate — can be lost if no onGate unit is present.
-                if (!(f == BB && r == BB.moon) && !(f == TB && tbSBR4Gates.has(r)) && f.at(r).%(_.onGate).none) {
+                // TB SBR4 Gate: retains control without onGate unit UNLESS another faction
+                // has a gate-controlling unit present (normal CW gate seizure rules apply).
+                val bbMoonExempt = f == BB && r == BB.moon
+                val tbSBR4Exempt = f == TB && tbSBR4Gates.has(r) &&
+                    factions.but(f).%(e => e.at(r).%(_.canControlGate).any).none
+                if (!bbMoonExempt && !tbSBR4Exempt && f.at(r).%(_.onGate).none) {
                     f.gates :-= r
                     f.log("lost control of the gate in", r)
                 }
@@ -4957,6 +4961,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val u = onCard.head
                 val bwOwner = u.region.asInstanceOf[VelvetFanHold].faction
                 u.region = r
+                // HB Fix 112b (2026-07-11): clear stale onGate when returning from VelvetFanHold
+                u.onGate = false
                 // Card: "no one will be paid Power for this while she is out of play"
                 val bwInPlay = bwOwner.allInPlay.%(_.uclass == BloatedWoman).any
                 if (bwInPlay) {

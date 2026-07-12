@@ -836,7 +836,7 @@ object DCExpansion extends Expansion {
             Force(CheckSpellbooksAction(DoomAction(self)))
 
         case DCSatiateReqOptInAction(self) =>
-            val otherSBs = self.spellbooks.num
+            val otherSBs = self.spellbooks.%(sb => DC.library.contains(sb) && sb != Satiate).num
             val poolSBs  = 5 - otherSBs
             self.satisfy(SatiateReq, "Doom Phase SBR: +1 Power per other SB earned, +1 Sin per pool SB (excl. this)")
             self.power += otherSBs
@@ -1925,7 +1925,7 @@ case class DCProselytizeReqOptInAction(self : Faction)
     with DoomQuestion
 case class DCSatiateReqOptInAction(self : Faction)
     extends OptionFactionAction(implicit g => {
-        val claimedSBs = self.spellbooks.num
+        val claimedSBs = self.spellbooks.%(sb => DC.library.contains(sb) && sb != Satiate).num
         val unclaimedSBs = 5 - claimedSBs
         "SBR".styled(DC) + ": " + ("+" + claimedSBs + " Power").styled("power") + ", " + ("+" + unclaimedSBs + " Sin").styled("dc") + " (1P/ other earned SB, 1S/ pool SB excl. this)"
     })
