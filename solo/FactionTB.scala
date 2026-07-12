@@ -232,12 +232,14 @@ case class TBAutotomySkipAction(self : Faction)
 }
 case class TBAutotomyPickSegmentAction(self : Faction, segments : $[UnitRef])
     extends ForcedAction with PowerNeutral with Soft {
-    override def question(implicit game : Game) = Autotomy.styled(TB) + ": choose Segment to take the Kill"
+    override def question(implicit game : Game) = Autotomy.styled(TB) + ": apply Kill to which Segment?"
 }
 case class TBAutotomyRetreatAction(self : Faction, segment : UnitRef, arena : Region)
     extends ForcedAction with PowerNeutral with Soft {
     override def question(implicit game : Game) = Autotomy.styled(TB) + ": retreat all Units to which adjacent Area?"
 }
+case class TBAutotomyRetreatExecuteAction(self : Faction, retreatDest : Region, arena : Region)
+    extends ForcedAction
 case class TBAutotomyAction(self : Faction, segment : UnitRef, retreatDest : Region, arena : Region)
     extends ForcedAction
 case class TBAutotomyTurnEndAction(self : Faction)
@@ -432,6 +434,22 @@ object TBExpansion extends Expansion {
             Force(TBSetupPlaceTentacleAction(self, remaining - 1))
 
         // ====================================================================
+        // END OF TURN: place pool Segments on Mantle (Autotomy rule)
+        // ====================================================================
+        case EndTurnAction(f : TB.type) if game.tbAutotomyPendingSegments =>
+            Force(TBAutotomyTurnEndAction(f))
+
+        case TBAutotomyTurnEndAction(self) =>
+            val poolSegments = self.pool(ShuddeMellSegment).num
+            if (poolSegments > 0 && game.tbMantleInPlay) {
+                1.to(poolSegments).foreach(_ => self.place(ShuddeMellSegment, TB.mantle))
+                self.log(Autotomy.styled(TB) + ": placed", poolSegments, "Segment".s(poolSegments), "from pool on", TB.mantle)
+            }
+            game.tbAutotomyPendingSegments = false
+            self.acted = true
+            NextPlayerAction(self)
+
+        // ====================================================================
         // DOOM PHASE (§3.11 — clear Ensnare/Shriek targeted-faction tags)
         // ====================================================================
         case DoomAction(f : TB.type) =>
@@ -453,6 +471,7 @@ object TBExpansion extends Expansion {
             // Clear per-Action-Phase faction tags (§2.4 / §3.11)
             game.tbEnsnareTargetedThisPhase = $
             game.tbShriekTargetedThisPhase = $
+            game.tbAutotomyPendingSegments = false
             UnknownContinue
 
         // ====================================================================
@@ -675,40 +694,39 @@ object TBExpansion extends Expansion {
             EndAction(mover)
 
         // ====================================================================
-        // AUTOTOMY: Post-Battle Kill transfer (§3.10.2)
+        // AUTOTOMY: Pre-Kill-Assignment Kill transfer (§3.10.2)
         // ====================================================================
         case TBAutotomyUseAction(self) =>
             val segments = (self.all(ShuddeMellSegment))./(_.ref)
-            if (segments.num == 1)
-                Force(TBAutotomyPickSegmentAction(self, segments))
-            else
-                Force(TBAutotomyPickSegmentAction(self, segments))
+            Force(TBAutotomyPickSegmentAction(self, segments))
 
         case TBAutotomySkipAction(self) =>
             self.log(Autotomy.styled(TB) + ": declined")
             UnknownContinue
 
         case TBAutotomyPickSegmentAction(self, segments) =>
+            val arena = game.battle.map(_.arena).|(TB.mantle)
             if (segments.num == 1) {
-                val arena = game.battle.map(_.arena).|(TB.mantle)
-                Force(TBAutotomyRetreatAction(self, segments.head, arena))
+                Force(TBAutotomyAction(self, segments.head, game.unit(segments.head).region, arena))
             } else {
                 Ask(self).each(segments)(ur =>
-                    TBAutotomyRetreatAction(self, ur, game.battle.map(_.arena).|(TB.mantle))
-                        .as(ShuddeMellSegment.styled(TB) + " in " + game.unit(ur).region))
+                    TBAutotomyAction(self, ur, game.unit(ur).region, arena)
+                        .as(Autotomy.styled(TB) + ": apply Kill to " + ShuddeMellSegment.styled(TB) + " in " + game.unit(ur).region))
             }
 
-        case TBAutotomyRetreatAction(self, segment, arena) =>
-            // Choose 1 adjacent Area to retreat all TB units (not killed/eliminated) to
-            val adjacent = game.board.connected(arena) ++ tbMantleEdges(arena)
-            Ask(self).each(adjacent.distinct)(r =>
-                TBAutotomyAction(self, segment, r, arena))
-
         case TBAutotomyAction(self, segment, retreatDest, arena) =>
-            // Kill the Segment
+            // Kill the chosen Segment (absorbs one Kill from opponent)
             val segUnit = game.unit(segment)
+            val segRegion = segUnit.region
             game.eliminate(segUnit)
-            self.log(Autotomy.styled(TB) + ": Kill transferred to", ShuddeMellSegment.styled(TB))
+
+            // Also remove from battle forces if the Segment was in this battle
+            game.battle.foreach { b =>
+                val tbSide = if (b.attacker == TB) b.attackers else b.defenders
+                tbSide.forces = tbSide.forces.%(_.ref != segment)
+            }
+
+            self.log(Autotomy.styled(TB) + ": Kill transferred to", ShuddeMellSegment.styled(TB), "in", segRegion)
 
             // Gain 1 Elder Sign per Segment in pool (at the moment of transfer)
             val segmentsInPool = self.pool(ShuddeMellSegment).num
@@ -717,25 +735,36 @@ object TBExpansion extends Expansion {
                 self.log(Autotomy.styled(TB) + ": gained", segmentsInPool.es, "for", segmentsInPool, "Segment".s(segmentsInPool), "in pool")
             }
 
-            // Ignore Pains: retreat all TB units not killed/eliminated from battle area
+            // Remove one Kill from opponent's rolls so TB has one fewer Kill to assign
+            game.battle.foreach { b =>
+                val opponentSide = if (b.attacker == TB) b.defenders else b.attackers
+                val idx = opponentSide.rolls.indexOf(Kill)
+                if (idx >= 0)
+                    opponentSide.rolls = opponentSide.rolls.patch(idx, Nil, 1)
+            }
+
+            // Set flag so post-kill retreat fires and pains are skipped
+            game.battle.foreach(_.tbAutotomyUsed = true)
+            // Mark that segments should be placed on Mantle at end of turn
+            game.tbAutotomyPendingSegments = true
+
+            // Return to kill assignment
+            UnknownContinue
+
+        case TBAutotomyRetreatAction(self, segment, arena) =>
+            // Post-kill-assignment: choose adjacent area to retreat all surviving TB units
+            val adjacent = game.board.connected(arena) ++ tbMantleEdges(arena)
+            Ask(self).each(adjacent.distinct)(r =>
+                TBAutotomyRetreatExecuteAction(self, r, arena))
+
+        case TBAutotomyRetreatExecuteAction(self, retreatDest, arena) =>
+            // Retreat all surviving TB units from battle area
             val toRetreat = self.at(arena)
             toRetreat.foreach { u => u.region = retreatDest; u.onGate = false }
             if (toRetreat.any)
                 self.log(Autotomy.styled(TB) + ": retreated", toRetreat.num, "unit".s(toRetreat.num), "to", retreatDest)
 
-            // Set flag so TB's pains are skipped in pain assignment
-            game.battle.foreach(_.tbAutotomyUsed = true)
-
-            // Queue turn-end action to place all pool Segments on Mantle
-            Force(TBAutotomyTurnEndAction(self))
-
-        case TBAutotomyTurnEndAction(self) =>
-            // TURN-END: place all Segments from pool on the Mantle
-            val poolSegments = self.pool(ShuddeMellSegment).num
-            if (poolSegments > 0 && game.tbMantleInPlay) {
-                1.to(poolSegments).foreach(_ => self.place(ShuddeMellSegment, TB.mantle))
-                self.log(Autotomy.styled(TB) + ": placed", poolSegments, "Segment".s(poolSegments), "from pool on", TB.mantle)
-            }
+            // Segments placed on Mantle at end of turn (Done press), not here
             UnknownContinue
 
         // ====================================================================

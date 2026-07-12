@@ -329,6 +329,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // otherwise hit the CG hook again with the same Ghatanothoa/Revenant sources.
     var fbCyclopeanGazeFiredThisBattle : Boolean = false
     var zagazigSkipped : Boolean = false
+    var tbAutotomyOffered : Boolean = false
     var tbAutotomyUsed : Boolean = false
 
     // Faceless Blight (FBE): once-per-battle guard so the Distributed Death offer
@@ -713,7 +714,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     def assignPains(s : Faction, next : BattlePhase) : Continue = {
-        if (s == attacker && s == TB && tbAutotomyUsed)
+        if (s == TB && tbAutotomyUsed)
             return BattleProceedAction(next)
 
         val pains = s.opponent.rolls.count(_ == Pain)
@@ -1185,9 +1186,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     jump(AssignDefenderKills)
 
             case AssignDefenderKills =>
+                if (defender == TB && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
+                    val tbSide = defenders
+                    val headPresent = (tbSide.forces ++ eliminated.%(_.faction == TB)).%(_.uclass == ShuddeMellHead).any
+                    val opponentRolledKill = attackers.rolls.has(Kill)
+                    val segmentsExist = TB.all(ShuddeMellSegment).any
+                    if (opponentRolledKill && headPresent && segmentsExist) {
+                        tbAutotomyOffered = true
+                        return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
+                    }
+                }
                 assignKills(defender, AssignAttackerKills)
 
             case AssignAttackerKills =>
+                if (attacker == TB && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
+                    val tbSide = attackers
+                    val headPresent = (tbSide.forces ++ eliminated.%(_.faction == TB)).%(_.uclass == ShuddeMellHead).any
+                    val opponentRolledKill = defenders.rolls.has(Kill)
+                    val segmentsExist = TB.all(ShuddeMellSegment).any
+                    if (opponentRolledKill && headPresent && segmentsExist) {
+                        tbAutotomyOffered = true
+                        return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
+                    }
+                }
                 assignKills(attacker, AllKillsAssignedPhase)
 
             case AllKillsAssignedPhase =>
@@ -1576,14 +1597,21 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(TBAutotomyPhase)
 
             case TBAutotomyPhase =>
-                if (factions.has(TB) && TB.can(Autotomy) && attacker == TB) {
-                    val tbSide = attackers
-                    val headPresent = (tbSide.forces ++ eliminated.%(_.faction == TB)).%(_.uclass == ShuddeMellHead).any
-                    val defenderRolledKill = defenders.rolls.has(Kill)
-                    val tbKilledByDice = defenderRolledKill && eliminatedByDice.%(u => u.faction == TB && u.uclass != ShuddeMellSegment).any
-                    val segmentsExist = TB.all(ShuddeMellSegment).any
-                    if (tbKilledByDice && headPresent && segmentsExist)
-                        return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
+                // Post-kill: if Autotomy was used, retreat all surviving TB units
+                if (tbAutotomyUsed) {
+                    val toRetreat = TB.at(arena)
+                    if (toRetreat.any) {
+                        val tentacleAreas = TB.has(Subterrane).??(TB.onMap(Tentacle)./(_.region).distinct)
+                        val mantleEdges : $[Region] =
+                            if (!game.tbMantleInPlay) Nil
+                            else if (arena == TB.mantle) (game.tbMantleAreas ++ tentacleAreas).distinct
+                            else if (game.tbMantleAreas.has(arena) || tentacleAreas.has(arena)) $(TB.mantle)
+                            else Nil
+                        val adjacent = (game.board.connected(arena) ++ mantleEdges).distinct
+                        return Ask(TB).each(adjacent)(r =>
+                            TBAutotomyRetreatExecuteAction(TB, r, arena)
+                                .as("Retreat all units to " + r))
+                    }
                 }
                 jump(AssignDefenderPains)
 
@@ -2931,10 +2959,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case TBAutotomySkipAction(self) =>
-            jump(AssignDefenderPains)
+            proceed()
+
+        case TBAutotomyAction(self, _, _, _) =>
+            proceed()
+
+        case TBAutotomyRetreatExecuteAction(self, _, _) =>
+            proceed()
 
         case TBAutotomyTurnEndAction(self) =>
-            jump(AssignDefenderPains)
+            proceed()
 
         case NecromanticSporesEliminateAction(self, _, _, _) =>
             proceed()

@@ -1574,6 +1574,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var tbEnsnareTargetedThisPhase : $[Faction] = $
     var tbShriekTargetedThisPhase : $[Faction] = $
     var tbSBR4Gates : $[Region] = $
+    var tbAutotomyPendingSegments : Boolean = false
     // Set true when Distributed Death cancels a Kill assigned to Byagoona, so
     // Succor's SBR ("Byagoona Dies … do not fulfill if the Kill is prevented") is
     // NOT satisfied (§3.12.5). Reset per battle.
