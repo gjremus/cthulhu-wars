@@ -579,6 +579,7 @@ object CthulhuWarsSolo {
             var queue : $[UIAction] = $
             var paused = recorded.any && hash == ""
             var lastTurnBoundaryIndex = -1
+            var undoableFromWait = false
 
             val serializer = new Serialize(game)
 
@@ -4064,7 +4065,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     actions +:= a
 
                                     a.unwrap match {
-                                        case PreMainAction(f) if self.has(f) => lastTurnBoundaryIndex = actions.num - 1
+                                        case PreMainAction(f) if self.has(f) =>
+                                            lastTurnBoundaryIndex = actions.num - 1
+                                            undoableFromWait = false
+                                        case PreMainAction(f) if self.any && self.has(f).not && lastTurnBoundaryIndex >= 0 =>
+                                            undoableFromWait = true
+                                        case _ if a.isVoid.not && undoableFromWait =>
+                                            undoableFromWait = false
                                         case _ =>
                                     }
 
@@ -4128,7 +4135,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 if (a.isRecorded) {
                                     actions +:= a
                                     a.unwrap match {
-                                        case PreMainAction(f) if self.has(f) => lastTurnBoundaryIndex = actions.num - 1
+                                        case PreMainAction(f) if self.has(f) =>
+                                            lastTurnBoundaryIndex = actions.num - 1
+                                            undoableFromWait = false
+                                        case PreMainAction(f) if self.any && self.has(f).not && lastTurnBoundaryIndex >= 0 =>
+                                            undoableFromWait = true
+                                        case _ if a.isVoid.not && undoableFromWait =>
+                                            undoableFromWait = false
                                         case _ =>
                                     }
                                 }
@@ -4227,6 +4240,26 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         perform(a)
                                     })))
                                 )
+
+                                if (undoableFromWait && lastTurnBoundaryIndex >= 0) {
+                                    actionDiv.appendChild(newDiv("", "&nbsp;"))
+                                    actionDiv.appendChild(newDiv("option", "Undo Turn".hl, () => {
+                                        stopBackgroundCheck()
+                                        clear(actionDiv)
+                                        actionDiv.appendChild(newDiv("", "Undoing turn..."))
+                                        hrf.web.postF(server + "undo-turn/" + hash + "/" + (lastTurnBoundaryIndex + 3), "") { response =>
+                                            dom.document.location.assign(dom.document.location.href)
+                                        } {
+                                            clear(actionDiv)
+                                            actionDiv.appendChild(newDiv("", "Undo failed (may have been blocked by game rules)"))
+                                            setTimeout(3000) {
+                                                dom.document.location.assign(dom.document.location.href)
+                                            }
+                                        }
+                                    }))
+                                }
+
+                                None
                             }
                             case UIQuestion(f, game, actions, waiting) => {
                                 cancelUndo()
@@ -4270,24 +4303,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         perform(a)
                                     })))
                                 )
-
-                                if (hash != "" && self.has(f) && lastTurnBoundaryIndex >= 0 && !game.players(f).acted) {
-                                    actionDiv.appendChild(newDiv("", "&nbsp;"))
-                                    actionDiv.appendChild(newDiv("option", "Undo Turn".hl, () => {
-                                        stopBackgroundCheck()
-                                        clear(actionDiv)
-                                        actionDiv.appendChild(newDiv("", "Undoing turn..."))
-                                        hrf.web.postF(server + "undo-turn/" + hash + "/" + (lastTurnBoundaryIndex + 3), "") { response =>
-                                            dom.document.location.assign(dom.document.location.href)
-                                        } {
-                                            clear(actionDiv)
-                                            actionDiv.appendChild(newDiv("", "Undo failed (may have been blocked by game rules)"))
-                                            setTimeout(3000) {
-                                                dom.document.location.assign(dom.document.location.href)
-                                            }
-                                        }
-                                    }))
-                                }
 
                                 None
                             }

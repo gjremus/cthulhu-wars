@@ -680,10 +680,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         val assigned = s.forces./(assignedKills).sum
         val canAssign = s.forces./(canAssignKills).sum
 
+        if (s == TB) {
+            println(s"[ASSIGNKILLS-TB-TRACE] kills=${kills} assigned=${assigned} canAssign=${canAssign} tbAutotomyUsed=${tbAutotomyUsed} tbAutotomyOffered=${tbAutotomyOffered}")
+            println(s"[ASSIGNKILLS-TB-TRACE] forces=${s.forces./(u => s"${u.ref}(${u.health},canKill=${canAssignKills(u)})").mkString(",")}")
+            println(s"[ASSIGNKILLS-TB-TRACE] opponentRolls=${s.opponent.rolls}")
+        }
+
         if (kills <= assigned)
             return BattleProceedAction(next)
 
         if (kills >= assigned + canAssign) {
+            if (s == TB) println(s"[ASSIGNKILLS-TB-TRACE] AUTO-ASSIGNING all kills (kills >= assigned + canAssign)")
             s.forces.foreach(u => 1.to(canAssignKills(u)).foreach(_ => assignKill(u)))
             if (azathothNeedsKillRoll) {
                 azathothNeedsKillRoll = false
@@ -1189,13 +1196,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 assignKills(defender, AssignAttackerKills)
 
             case AssignAttackerKills =>
-                // Autotomy only fires in Unlimited Battles on TB's turn (TB is attacker + already acted)
-                if (attacker == TB && TB.acted && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
-                    val tbSide = attackers
-                    val headPresent = (tbSide.forces ++ eliminated.%(_.faction == TB)).%(_.uclass == ShuddeMellHead).any
+                // Autotomy fires in Unlimited Battles immediately before TB applies kills,
+                // provided a Segment is anywhere in play and at least 1 kill is rolled against TB.
+                // TB.hasAllSB is the Unlimited Battle condition (pre-action or post-action).
+                if (attacker == TB && TB.hasAllSB && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
                     val opponentRolledKill = defenders.rolls.has(Kill)
                     val segmentsExist = TB.all(ShuddeMellSegment).any
-                    if (opponentRolledKill && headPresent && segmentsExist) {
+                    if (opponentRolledKill && segmentsExist) {
                         tbAutotomyOffered = true
                         return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
                     }
@@ -1994,6 +2001,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 sides.foreach(_.forces.foreach(_.remove(Retreated)))
                 sides.foreach(_.forces.foreach(_.remove(Zeroed)))
                 game.factions.foreach(_.units.foreach(u => if (u.health == Pained) u.health = Alive))
+                game.factions.foreach(_.units.foreach(_.remove(Retreated)))
 
                 // Defilers Court (DC) Eschar (§1.10 + §3.10.4): post-battle, DC
                 // gains 1 Sin per Mindless Husk that was Killed in Battle.
@@ -2956,6 +2964,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case TBAutotomyRetreatExecuteAction(self, _, _) =>
+            // Replay safety: if tbAutotomyUsed is still false here, the TBAutotomyAction
+            // was missing from the server log. The FactionTB handler performs the fallback
+            // kill reduction before this point, so just ensure the flag is set.
+            if (!tbAutotomyUsed)
+                tbAutotomyUsed = true
             proceed()
 
         case TBAutotomyTurnEndAction(self) =>

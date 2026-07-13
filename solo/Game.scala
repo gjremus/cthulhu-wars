@@ -4255,7 +4255,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             round += 1
 
             factions.foreach { f =>
-                f.active = (f.power > 0 || (f == DC && dcSin > 0) || (f == SL && slSin > 0)) && f.hibernating.not
+                f.active = (f.power > 0) && f.hibernating.not
             }
 
             if (setup.has(DC)) println(s"[DC-TRACE] NextPlayerAction: DC power=${DC.power}, active=${DC.active}")

@@ -235,7 +235,7 @@ case class TBAutotomySkipAction(self : Faction)
     override def question(implicit game : Game) = Autotomy.styled(TB)
 }
 case class TBAutotomyPickSegmentAction(self : Faction, segments : $[UnitRef])
-    extends ForcedAction with PowerNeutral with Soft {
+    extends ForcedAction with PowerNeutral {
     override def question(implicit game : Game) = Autotomy.styled(TB) + ": apply Kill to which Segment?"
 }
 case class TBAutotomyRetreatAction(self : Faction, segment : UnitRef, arena : Region)
@@ -733,18 +733,15 @@ object TBExpansion extends Expansion {
 
         case TBAutotomyPickSegmentAction(self, segments) =>
             val arena = game.battle.map(_.arena).|(TB.mantle)
-            if (segments.num == 1) {
-                Force(TBAutotomyAction(self, segments.head, game.unit(segments.head).region, arena))
-            } else {
-                Ask(self).each(segments)(ur =>
-                    TBAutotomyAction(self, ur, game.unit(ur).region, arena)
-                        .as(Autotomy.styled(TB) + ": apply Kill to " + ShuddeMellSegment.styled(TB) + " in " + game.unit(ur).region))
-            }
+            Ask(self).each(segments)(ur =>
+                TBAutotomyAction(self, ur, game.unit(ur).region, arena)
+                    .as(Autotomy.styled(TB) + ": apply Kill to " + ShuddeMellSegment.styled(TB) + " in " + game.unit(ur).region))
 
         case TBAutotomyAction(self, segment, retreatDest, arena) =>
             // Kill the chosen Segment (absorbs one Kill from opponent)
             val segUnit = game.unit(segment)
             val segRegion = segUnit.region
+
             game.eliminate(segUnit)
 
             // Also remove from battle forces if the Segment was in this battle
@@ -785,6 +782,39 @@ object TBExpansion extends Expansion {
                 TBAutotomyRetreatExecuteAction(self, r, arena))
 
         case TBAutotomyRetreatExecuteAction(self, retreatDest, arena) =>
+            // Replay safety: if autotomy hasn't fired yet (TBAutotomyAction missing from log),
+            // perform the kill reduction here so existing recorded games replay correctly.
+            game.battle.foreach { b =>
+                if (!b.tbAutotomyUsed) {
+                    // Find a segment to eliminate (prefer one in the battle arena)
+                    val tbSide = if (b.attacker == TB) b.attackers else b.defenders
+                    val segInBattle = tbSide.forces.%(_.uclass == ShuddeMellSegment)
+                    val segOnMap = self.onMap(ShuddeMellSegment)
+                    val segToKill = segInBattle.any.?(segInBattle.first).|(segOnMap.headOption.orNull)
+                    if (segToKill != null) {
+                        val segRegion = segToKill.region
+                        game.eliminate(segToKill)
+                        tbSide.forces = tbSide.forces.%(_.ref != segToKill.ref)
+                        self.log(Autotomy.styled(TB) + " (replay): Kill transferred to", ShuddeMellSegment.styled(TB), "in", segRegion)
+
+                        val segmentsInPool = self.pool(ShuddeMellSegment).num
+                        if (segmentsInPool > 0) {
+                            self.takeES(segmentsInPool)
+                            self.log(Autotomy.styled(TB) + ": gained", segmentsInPool.es, "for", segmentsInPool, "Segment".s(segmentsInPool), "in pool")
+                        }
+                    }
+
+                    // Remove one Kill from opponent's rolls
+                    val opponentSide = if (b.attacker == TB) b.defenders else b.attackers
+                    val idx = opponentSide.rolls.indexOf(Kill)
+                    if (idx >= 0)
+                        opponentSide.rolls = opponentSide.rolls.patch(idx, Nil, 1)
+
+                    b.tbAutotomyUsed = true
+                    game.tbAutotomyPendingSegments = true
+                }
+            }
+
             // Retreat all surviving TB units from battle area
             val toRetreat = self.at(arena)
             toRetreat.foreach { u => u.region = retreatDest; u.onGate = false }
