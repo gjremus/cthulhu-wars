@@ -1186,20 +1186,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     jump(AssignDefenderKills)
 
             case AssignDefenderKills =>
-                if (defender == TB && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
-                    val tbSide = defenders
-                    val headPresent = (tbSide.forces ++ eliminated.%(_.faction == TB)).%(_.uclass == ShuddeMellHead).any
-                    val opponentRolledKill = attackers.rolls.has(Kill)
-                    val segmentsExist = TB.all(ShuddeMellSegment).any
-                    if (opponentRolledKill && headPresent && segmentsExist) {
-                        tbAutotomyOffered = true
-                        return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
-                    }
-                }
                 assignKills(defender, AssignAttackerKills)
 
             case AssignAttackerKills =>
-                if (attacker == TB && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
+                // Autotomy only fires in Unlimited Battles on TB's turn (TB is attacker + already acted)
+                if (attacker == TB && TB.acted && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
                     val tbSide = attackers
                     val headPresent = (tbSide.forces ++ eliminated.%(_.faction == TB)).%(_.uclass == ShuddeMellHead).any
                     val opponentRolledKill = defenders.rolls.has(Kill)
