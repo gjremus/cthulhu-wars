@@ -4271,7 +4271,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     })))
                                 )
 
-                                if (hash != "" && self.has(f) && lastTurnBoundaryIndex >= 0) {
+                                if (hash != "" && self.has(f) && lastTurnBoundaryIndex >= 0 && !game.players(f).acted) {
                                     actionDiv.appendChild(newDiv("", "&nbsp;"))
                                     actionDiv.appendChild(newDiv("option", "Undo Turn".hl, () => {
                                         stopBackgroundCheck()
