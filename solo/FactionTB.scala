@@ -184,6 +184,10 @@ case class TBMovePartToMantlePickAction(self : Faction, parts : $[UnitRef])
 case class TBMovePartToMantleAction(self : Faction, part : UnitRef)
     extends ForcedAction with PowerNeutral
 
+// -- UNLIMITED BATTLE: Post-acted battle option (§3.10 / all SBs earned) ------
+case class TBUnlimitedBattleMainAction(self : Faction, l : $[Region])
+    extends OptionFactionAction("Unlimited Battle") with MainQuestion with Soft
+
 // -- BEHEMOTH: Segment-on-zero-Power (automatic, §1.8 / §3.4.3) ---------------
 case class TBBehemothSegmentAction(self : Faction, then : ForcedAction)
     extends ForcedAction
@@ -491,8 +495,13 @@ object TBExpansion extends Expansion {
 
             game.controls(f)
 
-            if (f.hasAllSB)
-                game.battles(f)
+            if (f.hasAllSB) {
+                val enough = game.nexed.any.?(game.queue.%(_.attacker == f).%(_.effect.has(EnergyNexus))./(_.arena)).|(f.battled)
+                val battleAreas = game.board.regions.nex ++ game.tbMantleInPlay.??($(TB.mantle))
+                val validAreas = battleAreas.%(f.affords(1)).diff(enough).%(r => game.factionlike.but(f).exists(f.canAttack(r)))
+                if (validAreas.any)
+                    + TBUnlimitedBattleMainAction(f, validAreas)
+            }
 
             // Behemoth: Move any Part to the Mantle (0-Cost Unlimited, §1.8 / §3.4.3)
             if (game.tbMantleInPlay && game.tbShuddeMellEverAwakened) {
@@ -584,6 +593,12 @@ object TBExpansion extends Expansion {
             game.endTurn(f)(f.battled.any || game.nexed.any)
 
             asking
+
+        // ====================================================================
+        // UNLIMITED BATTLE: Post-acted battle (routes to standard attack flow)
+        // ====================================================================
+        case TBUnlimitedBattleMainAction(self, l) =>
+            Force(AttackMainAction(self, l, None))
 
         // ====================================================================
         // THOUSAND WRITHING MAWS: 2-Power double recruit/summon (§3.6.3)
