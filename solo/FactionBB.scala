@@ -155,9 +155,9 @@ case class ZagazigSkipAction(self : Faction)
 
 // ── SAVAGERY (Task 3.10.3 / 3.14.3) ─────────────────────────────────────────
 case class SavageryUseAction(self : Faction)
-    extends OptionFactionAction(("Use " + Savagery.name).styled(BB)) with PreBattleQuestion with Soft
+    extends OptionFactionAction(("Use " + Savagery.name).styled(BB)) with PreBattleQuestion
 case class SavagerySkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + Savagery.name).styled(BB)) with PreBattleQuestion with Soft
+    extends OptionFactionAction(("Skip " + Savagery.name).styled(BB)) with PreBattleQuestion
 
 // ── PREDATOR (Task 3.10.4 / 3.14.4) ─────────────────────────────────────────
 // PostBattleQuestion trait defined in Battle.scala (Task 3.14.4)

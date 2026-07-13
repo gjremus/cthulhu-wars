@@ -291,6 +291,7 @@ class Side(private val self : Faction, var forces : $[UnitFigure], var str : Int
     def count(s : BattleSpellbook) = effects.count(s)
     var bloodthirstUsed : Int = 0
     var cthughaCombatBonus : Int = 0
+    var savageryPaid = false
 }
 
 class Battle(val arena : Region, val attacker : Faction, val defender : Faction, val effect : |[Spellbook])(implicit val game : Game) {
@@ -556,11 +557,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // paid for. Same gotcha pattern as the AlbinoPenguins / ServitorOfOuter
         // adjustments below — we have to make the recomputed "expected"
         // include every pre-battle declared modifier. Savagery contributes
-        // 4 × (CatFromSaturn count) when s.tag(Savagery) is set (i.e. the
-        // player chose Use Savagery in the pre-battle prompt at line 521 /
-        // applied at 2483).
+        // 4 × (CatFromSaturn count) when savageryPaid is set (i.e. the
+        // player chose Use Savagery and paid 1 power).
         val savageryBonus =
-            if (s == BB && s.tag(Savagery))
+            if (s == BB && side.savageryPaid)
                 s.forces.%(_.uclass == CatFromSaturn).num * 4
             else 0
         val str = s.strength(s.forces, s.opponent) + side.cthughaCombatBonus + savageryBonus
@@ -703,11 +703,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         val assigned = s.forces./(assignedPains).sum
         val canAssign = s.forces./(canAssignPains).sum
 
+        scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-TRACE] assignPains: faction=${s.name} opponent=${s.opponent.name} pains=$pains assigned=$assigned canAssign=$canAssign forces=${s.forces./(_.uclass.name).mkString(",")} opRolls=${s.opponent.rolls.mkString(",")}")
+
         if (pains <= assigned)
             return BattleProceedAction(next)
 
         if (pains >= assigned + canAssign) {
             s.forces.foreach(u => 1.to(canAssignPains(u)).foreach(_ => assignPain(u)))
+            return DelayedContinue(100, Then(BattleProceedAction(next)))
+        }
+
+        if (game.nextReplayActionHint.exists(h => !h.contains("AssignPainAction"))) {
+            scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-TRACE] assignPains: skipping (replay compat) nextHint=${game.nextReplayActionHint}")
+            s.forces.%(u => canAssignPains(u) > 0).take(pains - assigned).foreach(u => assignPain(u))
             return DelayedContinue(100, Then(BattleProceedAction(next)))
         }
 
@@ -733,6 +741,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         if (refugees.none)
             return proceed()
+
+        if (game.nextReplayActionHint.exists(h => !h.contains("RetreatUnitAction") && !h.contains("RetreatAllAction") && !h.contains("RetreatSeparatelyAction") && !h.contains("EliminateNoWayAction") && !h.contains("OleaginousRetreatAction") && !h.contains("BattleDoneAction"))) {
+            scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-TRACE] retreat: skipping (replay compat) refugees=${refugees./(_.uclass.name).mkString(",")}")
+            val destinations = (arena.connectedForRetreat.%(r => s.opponent.at(r).none)).distinct
+            if (destinations.any)
+                refugees.foreach(u => retreat(u, destinations.head))
+            else
+                refugees.foreach(u => { u.health = Alive })
+            return proceed()
+        }
 
         if (s.can(Oleaginous)) {
             val oleagPained = refugees.%(u => u.uclass == Glaaki || u.uclass == DeepTendril)
@@ -1166,9 +1184,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 assignKills(defender, AssignAttackerKills)
 
             case AssignAttackerKills =>
+                scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-BUG-TRACE] AssignAttackerKills: attacker=${attacker.name} defender=${defender.name} att.forces=${attackers.forces./(_.uclass.name).mkString(",")} def.forces=${defenders.forces./(_.uclass.name).mkString(",")} att.rolls=${attackers.rolls.mkString(",")} def.rolls=${defenders.rolls.mkString(",")}")
                 assignKills(attacker, AllKillsAssignedPhase)
 
             case AllKillsAssignedPhase =>
+                scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-BUG-TRACE] AllKillsAssignedPhase: att.forces=${attackers.forces./(u => u.uclass.name + "=" + u.health).mkString(",")} def.forces=${defenders.forces./(u => u.uclass.name + "=" + u.health).mkString(",")}")
                 sides.foreach { s =>
                     if (s.tag(Emissary)) {
                         s.forces.%(_.health == Killed)(Nyarlathotep).foreach { u =>
@@ -1405,6 +1425,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(EliminatePhase)
 
             case EliminatePhase =>
+                scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-BUG-TRACE] EliminatePhase: att.forces=${attackers.forces./(u => u.uclass.name + "=" + u.health).mkString(",")} def.forces=${defenders.forces./(u => u.uclass.name + "=" + u.health).mkString(",")}")
                 checkKillSpellbooks(attacker)
                 checkKillSpellbooks(defender)
 
@@ -1466,20 +1487,35 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(NecrophagyPhase)
 
             case NecrophagyPhase =>
-                factions.%(_.oncePerAction.has(Necrophagy)).foreach { f =>
+                scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-PHASE] NecrophagyPhase: attacker=${attacker.name} defender=${defender.name} arena=${arena}")
+                val necroFactions = factions.%(_.oncePerAction.has(Necrophagy))
+                scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-DEBUG] NecrophagyPhase: necroFactions=${necroFactions./(_.name).mkString(",")}")
+                necroFactions.foreach { f =>
                     f.oncePerAction :-= Necrophagy
+                    val ghouls = f.all(Ghoul).diff(attacker.forces).diff(defender.forces).diff(exempted)
+                    scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-DEBUG] NecrophagyPhase: faction=${f.name} ghouls=${ghouls./(_.uclass.name).mkString(",")} allGhouls=${f.all(Ghoul).num} exemptedGhouls=${exempted.%(_.uclass.name == "Ghoul").num}")
 
-                    return Ask(f)
-                        .each(f.all(Ghoul).diff(attacker.forces).diff(defender.forces).diff(exempted))(u => NecrophagyAction(f, u, u.region).as(u, "from", u.region)(Necrophagy, "to", arena))
-                        .done(BattleDoneAction(f))
+                    if (game.nextReplayActionHint.exists(h => !h.contains("Necrophagy") && !h.contains("BattleDoneAction"))) {
+                        scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-DEBUG] NecrophagyPhase: skipping (replay compat) nextHint=${game.nextReplayActionHint}")
+                    }
+                    else if (ghouls.any) {
+                        return Ask(f)
+                            .each(ghouls)(u => NecrophagyAction(f, u, u.region).as(u, "from", u.region)(Necrophagy, "to", arena))
+                            .done(BattleDoneAction(f))
+                    }
                 }
 
+                scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-DEBUG] NecrophagyPhase: falling through to AssignDefenderPains")
                 jump(AssignDefenderPains)
 
             case AssignDefenderPains =>
+                scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-BUG-TRACE] AssignDefenderPains: attacker=${attacker.name} defender=${defender.name} att.forces=${attackers.forces./(u => u.uclass.name + "=" + u.health).mkString(",")} def.forces=${defenders.forces./(u => u.uclass.name + "=" + u.health).mkString(",")}")
+                scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-BUG-TRACE] AssignDefenderPains: attRolls=${attackers.rolls.mkString(",")} defRolls=${defenders.rolls.mkString(",")}")
                 assignPains(defender, AssignAttackerPains)
 
             case AssignAttackerPains =>
+                scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-BUG-TRACE] AssignAttackerPains: attacker=${attacker.name} defender=${defender.name} att.forces=${attackers.forces./(u => u.uclass.name + "=" + u.health).mkString(",")} def.forces=${defenders.forces./(u => u.uclass.name + "=" + u.health).mkString(",")}")
+                scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-BUG-TRACE] AssignAttackerPains: attRolls=${attackers.rolls.mkString(",")} defRolls=${defenders.rolls.mkString(",")}")
                 assignPains(attacker, AllPainsAssignedPhase)
 
             case AllPainsAssignedPhase =>
@@ -1591,6 +1627,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     jump(PostBattlePhase)
 
             case PostBattlePhase =>
+                scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-PHASE] PostBattlePhase: attacker=${attacker.name} defender=${defender.name} att.forces=${attackers.forces./(_.uclass.name).mkString(",")} def.forces=${defenders.forces./(_.uclass.name).mkString(",")}")
                 game.checkGatesLost()
 
                 sides.foreach { s =>
@@ -1722,6 +1759,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(BattleEnd)
 
             case BattleEnd =>
+                scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-DEBUG] BattleEnd reached: attacker=${attacker.name} defender=${defender.name} arena=${arena}")
                 // Firstborn (FB): reset the Carnage once-per-battle flag at end of battle
                 if (factions.has(FB))
                     FB.oncePerAction :-= Carnage
@@ -1755,6 +1793,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 sides.foreach(_.forces.foreach(_.remove(Retreated)))
                 sides.foreach(_.forces.foreach(_.remove(Zeroed)))
                 game.factions.foreach(_.units.foreach(u => if (u.health == Pained) u.health = Alive))
+                game.factions.foreach(_.units.foreach(_.remove(Retreated)))
 
                 exempted.foreach(_.remove(Hidden))
                 exempted.foreach(_.remove(Absorbed))
@@ -2009,6 +2048,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             jump(BattleStart)
 
         case BattleDoneAction(self) =>
+            scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-DEBUG] BattleDoneAction: self=${self.name} phase=${phase} battleExists=${game.battle.any}")
             proceed()
 
         case BattleProceedAction(bf) =>
@@ -2395,6 +2435,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         // NECROPHAGY
         case NecrophagyAction(self, u, r) =>
+            scala.scalajs.js.Dynamic.global.console.log(s"[PAIN-DEBUG] NecrophagyAction: self=${self.name} ghoul from ${r} to arena=${arena}")
             self.oncePerAction :+= Necrophagy
 
             // Parallel-guide Fix 38: Necrophagy is a Pain-driven forced move; it must NOT trigger
@@ -2614,11 +2655,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val bonus = saturnCount * 4
             self.power -= 1
             (self : Side).add(Savagery)
+            (self : Side).savageryPaid = true
             (self : Side).str += bonus
             self.log(Savagery.styled(BB) + ": paid", 1.power, "for +" + bonus.str, "strength (" + saturnCount + " Cat".s(saturnCount) + " from Saturn)")
             proceed()
 
         case SavagerySkipAction(self) =>
+            (self : Side).add(Savagery)
             self.log(Savagery.styled(BB) + ": skipped")
             proceed()
 
