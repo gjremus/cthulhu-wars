@@ -538,6 +538,15 @@ object TBExpansion extends Expansion {
             game.moves(f)
             game.captures(f)
             game.recruits(f)
+
+            if (f.hasAllSB) {
+                val enough = game.nexed.any.?(game.queue.%(_.attacker == f).%(_.effect.has(EnergyNexus))./(_.arena)).|(f.battled)
+                val battleAreas = game.board.regions.nex ++ game.tbMantleInPlay.??($(TB.mantle))
+                val validAreas = battleAreas.%(f.affords(1)).diff(enough).%(r => game.factionlike.but(f).exists(f.canAttack(r)))
+                if (validAreas.any)
+                    + TBUnlimitedBattleMainAction(f, validAreas)
+            }
+
             game.battles(f)
             game.controls(f)
             game.builds(f)
