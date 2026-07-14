@@ -4,6 +4,8 @@ import hrf.colmat._
 
 import html._
 
+import scala.scalajs.js
+
 
 // ============================================================================
 // BUBASTIS (BB) UNITS
@@ -188,7 +190,7 @@ case class RequiresAttentionMainAction(self : Faction)
 case class RequiresAttentionTargetAction(self : Faction, r : Region)
     extends BaseFactionAction(RequiresAttention.styled(BB) + ": resolve in", r)
 case class RequiresAttentionSkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + RequiresAttention.name).styled(BB)) with MainQuestion with Soft
+    extends OptionFactionAction(("Skip " + RequiresAttention.name).styled(BB)) with MainQuestion
 
 // ── SPELLBOOK REQUIREMENTS (Task 3.12.1) ─────────────────────────────────────
 // Audit V11: handler mutates Power and ends terminally — must be HARD, not Soft.
@@ -285,12 +287,15 @@ object BBExpansion extends Expansion {
 
         // MAIN ACTION
         case MainAction(f : BB.type) if f.active.not =>
+            js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] MainAction guard 1: BB not active")
             UnknownContinue
 
-        case MainAction(f : BB.type) if f.acted =>
+        case MainAction(f : BB.type) if f.acted || f.battled.any =>
+            js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] MainAction guard 2: BB acted=${f.acted}, battled=${f.battled.any}")
             UnknownContinue
 
         case MainAction(f : BB.type) =>
+            js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] MainAction entered: BB acted=${f.acted}, battled=${f.battled.any}, power=${f.power}")
             implicit val asking = Asking(f)
 
             // BB v2.4.16 (game 498 full-crash fix): wrap each menu-builder call so a
@@ -321,8 +326,8 @@ object BBExpansion extends Expansion {
             }
 
             safeMenuStep("Catnapping") {
-                if (f.can(Catnapping) && f.allInPlay.%(_.uclass == Bastet).any && f.power >= 1 &&
-                    game.factions.but(f).exists(e => f.allInPlay.%(_.uclass == Bastet).headOption.exists(b => e.at(b.region).any)))
+                if (f.can(Catnapping) && f.onMap(Bastet).any && f.power >= 1 &&
+                    f.onMap(Bastet).headOption.exists(b => game.factions.but(f).exists(e => e.at(b.region).any)))
                     + CatnappingMainAction(f)
             }
 
@@ -337,11 +342,10 @@ object BBExpansion extends Expansion {
         // Audit V3: Soft handler must not mutate state — Power cost moved into the Hard
         // CatnappingDoneAction so Cancel mid-flow refunds the Power automatically.
         case CatnappingMainAction(self) =>
-            val bastetRegion = self.allInPlay.%(_.uclass == Bastet).headOption.map(_.region)
+            val bastetRegion = self.onMap(Bastet).headOption.map(_.region)
             bastetRegion match {
                 case Some(r) =>
                     val eligibleFactions = game.factions.but(self).%(f => f.at(r).any)
-                    // Start multi-select with all factions as remaining
                     Force(CatnappingFactionPickAction(self, $(), eligibleFactions))
                 case None =>
                     UnknownContinue
@@ -362,7 +366,9 @@ object BBExpansion extends Expansion {
         // Audit V2/V3: Hard action — pay Power and move units atomically here so
         // Cancel before Done leaves Power untouched.
         case CatnappingDoneAction(self, picked) =>
-            val bastetRegion = self.allInPlay.%(_.uclass == Bastet).headOption.map(_.region)
+            js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] CatnappingDoneAction fired for ${self.short}, picked=${picked./(_.short).mkString(",")}, acted-before=${self.acted}")
+            self.oncePerRound :+= Catnapping
+            val bastetRegion = self.onMap(Bastet).headOption.map(_.region)
             bastetRegion match {
                 case Some(r) =>
                     self.power -= 1
@@ -374,8 +380,10 @@ object BBExpansion extends Expansion {
                         if (units.any)
                             self.log(Catnapping.styled(BB) + ": moved", units.num, "unit".s(units.num), "of", f.full, "from", r, "to", BB.moon)
                     }
+                    js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] About to call EndAction, acted-now=${self.acted}")
                     EndAction(self)
                 case None =>
+                    js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] No bastet region found, calling EndAction anyway")
                     EndAction(self)
             }
 
