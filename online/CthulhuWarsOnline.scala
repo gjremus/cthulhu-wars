@@ -230,7 +230,7 @@ object CthulhuWarsOnline {
                 return (false, "elder signs were drawn")
             if (entries.exists(e => e.value.startsWith("AttackAction(") || e.value.startsWith("NuclearChaosDieAction(")))
                 return (false, "dice were rolled")
-            if (entries.tail.exists(e => e.role != "" && e.role != roleName && e.role != "$"))
+            if (entries.tail.exists(e => e.role != "" && e.role != roleName && e.role != "$" && !e.value.startsWith("PreMainAction(")))
                 return (false, "another player has acted")
             q(logs.filter(_.gameId === gameId).filter(_.index >= targetIndex).delete)
             touchMeta(gameId)
