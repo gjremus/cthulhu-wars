@@ -290,7 +290,7 @@ object BBExpansion extends Expansion {
             js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] MainAction guard 1: BB not active")
             UnknownContinue
 
-        case MainAction(f : BB.type) if f.acted || f.battled.any =>
+        case MainAction(f : BB.type) if f.acted =>
             js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] MainAction guard 2: BB acted=${f.acted}, battled=${f.battled.any}")
             UnknownContinue
 
