@@ -3776,7 +3776,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 {
                                     implicit val ig : Game = game
                                     val sbOwed = game.factions.%(f => f.unfulfilled.num + f.spellbooks.num < f.library.num)
-                                    if (sbOwed.any) {
+                                    if (sbOwed.any && game.battle.none) {
                                         val f = sbOwed(0)
                                         val effectiveLibrary = f.library.map { sb => (f, sb) match {
                                             case (DS, Traitors) if game.options.has(DSAlternateSpellbooks) => Omnipotence

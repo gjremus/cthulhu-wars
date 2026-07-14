@@ -149,9 +149,9 @@ case class CatnappingDoneAction(self : Faction, picked : $[Faction])
 
 // ── ZAGAZIG (Task 3.10.2 / 3.14.2) ──────────────────────────────────────────
 case class ZagazigUseAction(self : Faction)
-    extends OptionFactionAction(("Use " + Zagazig.name).styled(BB)) with PreBattleQuestion with Soft
+    extends OptionFactionAction(("Use " + Zagazig.name).styled(BB)) with PreBattleQuestion
 case class ZagazigSkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + Zagazig.name).styled(BB)) with PreBattleQuestion with Soft
+    extends OptionFactionAction(("Skip " + Zagazig.name).styled(BB)) with PreBattleQuestion
 
 // ── SAVAGERY (Task 3.10.3 / 3.14.3) ─────────────────────────────────────────
 case class SavageryUseAction(self : Faction)
@@ -168,13 +168,13 @@ case class SavagerySkipAction(self : Faction)
 // CRIT-3: Predator is OPTIONAL ("may select") — BB gets a Use/Skip prompt
 // post-battle before the type-pick chain runs.
 case class PredatorUseAction(self : Faction)
-    extends OptionFactionAction(("Use " + Predator.name).styled(BB)) with PostBattleQuestion with Soft
+    extends OptionFactionAction(("Use " + Predator.name).styled(BB)) with PostBattleQuestion
 case class PredatorSkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + Predator.name).styled(BB)) with PostBattleQuestion with Soft
+    extends OptionFactionAction(("Skip " + Predator.name).styled(BB)) with PostBattleQuestion
 case class PredatorPickEnemyTypeAction(self : Faction, lostTypes : $[UnitClass])
-    extends ForcedAction with PowerNeutral with Soft
+    extends ForcedAction with PowerNeutral
 case class PredatorTypeChoiceAction(self : Faction, uc : UnitClass)
-    extends BaseFactionAction(Predator.styled(BB) + ": choose enemy unit class to eliminate", implicit g => uc.styled(BB)) with PowerNeutral with Soft
+    extends BaseFactionAction(Predator.styled(BB) + ": choose enemy unit class to eliminate", implicit g => uc.styled(BB)) with PowerNeutral
 // FCG #26: affected-faction is `self`, so the enemy gets to pick which unit dies.
 // FCG #27: identify the specific unit by UnitRef, not (UnitClass, Region).
 case class PredatorEnemyEliminateAction(self : Faction, picker : Faction, u : UnitRef)

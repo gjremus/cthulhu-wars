@@ -89,7 +89,7 @@ case class OmnipotenceMoveAllAction(self : Faction, selected : $[UnitRef], r : R
 case class OmnipotenceMoveSeparatelyAction(self : Faction, selected : $[UnitRef]) extends BaseFactionAction("Move Avatars", "Move separately")
 case class OmnipotenceMoveOneAction(self : Faction, u : UnitRef, r : Region, remaining : $[UnitRef]) extends BaseFactionAction(implicit g => "Move " + g.unit(u).uclass.styled(self) + " to", r)
 case class OmnipotenceJoinAction(self : Faction, selected : $[UnitRef], r : Region) extends BaseFactionAction("Join units in", r)
-case class OmnipotenceCancelAction(self : Faction) extends BaseFactionAction("Omnipotence", "Cancel") with Soft
+case class OmnipotenceCancelAction(self : Faction) extends BaseFactionAction("Omnipotence", "Cancel")
 
 case class FiendishSpawnPreBattleAction(self : Faction) extends OptionFactionAction(FiendishSpawn.styled(self)) with PreBattleQuestion
 case class FiendishSpawnChooseAction(self : Faction, uc : UnitClass, placed : Int) extends BaseFactionAction(implicit g => "Place Larva in battle", uc.styled(self))
