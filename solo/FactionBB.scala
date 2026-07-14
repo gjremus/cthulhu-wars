@@ -142,15 +142,15 @@ case class CatnappingDoneAction(self : Faction, picked : $[Faction])
 
 // ── ZAGAZIG (Task 3.10.2 / 3.14.2) ──────────────────────────────────────────
 case class ZagazigUseAction(self : Faction)
-    extends OptionFactionAction(("Use " + Zagazig.name).styled(BB)) with PreBattleQuestion with Soft
+    extends OptionFactionAction(("Use " + Zagazig.name).styled(BB)) with PreBattleQuestion
 case class ZagazigSkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + Zagazig.name).styled(BB)) with PreBattleQuestion with Soft
+    extends OptionFactionAction(("Skip " + Zagazig.name).styled(BB)) with PreBattleQuestion
 
 // ── SAVAGERY (Task 3.10.3 / 3.14.3) ─────────────────────────────────────────
 case class SavageryUseAction(self : Faction)
-    extends OptionFactionAction(("Use " + Savagery.name).styled(BB)) with PreBattleQuestion with Soft
+    extends OptionFactionAction(("Use " + Savagery.name).styled(BB)) with PreBattleQuestion
 case class SavagerySkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + Savagery.name).styled(BB)) with PreBattleQuestion with Soft
+    extends OptionFactionAction(("Skip " + Savagery.name).styled(BB)) with PreBattleQuestion
 
 // ── PREDATOR (Task 3.10.4 / 3.14.4) ─────────────────────────────────────────
 // PostBattleQuestion trait defined in Battle.scala (Task 3.14.4)
@@ -161,9 +161,9 @@ case class SavagerySkipAction(self : Faction)
 // CRIT-3: Predator is OPTIONAL ("may select") — BB gets a Use/Skip prompt
 // post-battle before the type-pick chain runs.
 case class PredatorUseAction(self : Faction)
-    extends OptionFactionAction(("Use " + Predator.name).styled(BB)) with PostBattleQuestion with Soft
+    extends OptionFactionAction(("Use " + Predator.name).styled(BB)) with PostBattleQuestion
 case class PredatorSkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + Predator.name).styled(BB)) with PostBattleQuestion with Soft
+    extends OptionFactionAction(("Skip " + Predator.name).styled(BB)) with PostBattleQuestion
 case class PredatorPickEnemyTypeAction(self : Faction, lostTypes : $[UnitClass])
     extends ForcedAction with PowerNeutral with Soft
 case class PredatorTypeChoiceAction(self : Faction, uc : UnitClass)
@@ -181,7 +181,7 @@ case class RequiresAttentionMainAction(self : Faction)
 case class RequiresAttentionTargetAction(self : Faction, r : Region)
     extends BaseFactionAction(RequiresAttention.styled(BB) + ": resolve in", r)
 case class RequiresAttentionSkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + RequiresAttention.name).styled(BB)) with MainQuestion with Soft
+    extends OptionFactionAction(("Skip " + RequiresAttention.name).styled(BB)) with MainQuestion
 
 // ── SPELLBOOK REQUIREMENTS (Task 3.12.1) ─────────────────────────────────────
 // Audit V11: handler mutates Power and ends terminally — must be HARD, not Soft.
@@ -321,8 +321,8 @@ object BBExpansion extends Expansion {
             if (f.needs(Pay2ForBB) && f.power >= 2)
                 + Pay2ForBBAction(f)
 
-            if (f.can(Catnapping) && f.allInPlay.%(_.uclass == Bastet).any && f.power >= 1 &&
-                game.factions.but(f).exists(e => f.allInPlay.%(_.uclass == Bastet).headOption.exists(b => b.region != BB.moon && e.at(b.region).any)))
+            if (f.can(Catnapping) && f.onMap(Bastet).any && f.power >= 1 &&
+                f.onMap(Bastet).headOption.exists(b => game.factions.but(f).exists(e => e.at(b.region).any)))
                 + CatnappingMainAction(f)
 
             game.libraryActions(f)
@@ -339,11 +339,10 @@ object BBExpansion extends Expansion {
         // Audit V3: Soft handler must not mutate state — Power cost moved into the Hard
         // CatnappingDoneAction so Cancel mid-flow refunds the Power automatically.
         case CatnappingMainAction(self) =>
-            val bastetRegion = self.allInPlay.%(_.uclass == Bastet).headOption.map(_.region)
+            val bastetRegion = self.onMap(Bastet).headOption.map(_.region)
             bastetRegion match {
                 case Some(r) =>
                     val eligibleFactions = game.factions.but(self).%(f => f.at(r).any)
-                    // Start multi-select with all factions as remaining
                     Force(CatnappingFactionPickAction(self, $(), eligibleFactions))
                 case None =>
                     UnknownContinue
@@ -364,7 +363,8 @@ object BBExpansion extends Expansion {
         // Audit V2/V3: Hard action — pay Power and move units atomically here so
         // Cancel before Done leaves Power untouched.
         case CatnappingDoneAction(self, picked) =>
-            val bastetRegion = self.allInPlay.%(_.uclass == Bastet).headOption.map(_.region)
+            self.oncePerRound :+= Catnapping
+            val bastetRegion = self.onMap(Bastet).headOption.map(_.region)
             bastetRegion match {
                 case Some(r) =>
                     self.power -= 1
