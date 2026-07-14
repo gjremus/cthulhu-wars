@@ -1650,6 +1650,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 sides.foreach(_.forces.foreach(_.remove(Retreated)))
                 sides.foreach(_.forces.foreach(_.remove(Zeroed)))
                 game.factions.foreach(_.units.foreach(u => if (u.health == Pained) u.health = Alive))
+                game.factions.foreach(_.units.foreach(_.remove(Retreated)))
 
                 exempted.foreach(_.remove(Hidden))
                 exempted.foreach(_.remove(Absorbed))
@@ -1919,6 +1920,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     f.oncePerTurn :+= EnergyNexusPB
                     game.nexed = $(arena)
                     game.battleResumePhase = |("PreRoll")
+                    // Clear stale Retreated flags from all units (fix for phantom retreat display)
+                    game.factions.foreach(_.units.foreach(_.remove(Retreated)))
                     f.log("used", EnergyNexus, "in", arena)
                     return Force(PreMainAction(f))
                 }

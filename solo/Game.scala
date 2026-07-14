@@ -3486,6 +3486,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             factions.foreach(_.acted = false)
             factions.foreach(_.battled = $)
             factions.foreach(_.oncePerRound = $)
+            // Clear all stale Retreated flags at round start (defense-in-depth for phantom retreat display)
+            factions.foreach(_.units.foreach(_.remove(Retreated)))
 
             round += 1
 
@@ -3793,6 +3795,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         b.attacker.log("had no units remaining in", b.arena, "after", EnergyNexus)
                     if (defenderUnits.none)
                         b.defender.log("had no units remaining in", b.arena, "after", EnergyNexus)
+                    factions.foreach(_.units.foreach(u => if (u.health == Pained) u.health = Alive))
+                    factions.foreach(_.units.foreach(_.remove(Retreated)))
                     game.battleResumePhase = None
                     battle = None
                     return Force(AfterAction(b.attacker))
@@ -3834,9 +3838,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                             b.attacker.log("had no units remaining in", b.arena, "after", EnergyNexus)
                         if (defenderUnits.none)
                             b.defender.log("had no units remaining in", b.arena, "after", EnergyNexus)
+                        factions.foreach(_.units.foreach(u => if (u.health == Pained) u.health = Alive))
+                        factions.foreach(_.units.foreach(_.remove(Retreated)))
                         game.battleResumePhase = None
                         battle = None
-                        Force(AfterAction(b.attacker))
+                        return Force(AfterAction(b.attacker))
                     }
                     else {
                         b.attacker.log("proceeded to battle", b.defender, "in", b.arena)
