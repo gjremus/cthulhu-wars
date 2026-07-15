@@ -230,7 +230,7 @@ object WWExpansion extends Expansion {
             EndAction(self)
 
         // ARCTIC WIND
-        case MovedAction(self : WW, u, o, r) if u.uclass == Ithaqua && self.can(ArcticWind) =>
+        case MovedAction(self : WW, u, o, r) if u.uclass == Ithaqua && self.can(ArcticWind) && r.glyph != MoonGlyph =>
             Ask(self)
                 .each(self.at(o).not(Moved).%(_.canMove).sortA)(u => ArcticWindAction(self, o, u, r).as(u.ref.full, "from", o)(ArcticWind, "to", r))
                 .done(MoveContinueAction(self, true))
