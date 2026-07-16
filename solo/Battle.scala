@@ -310,7 +310,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // Albino Penguins: track original owner for post-battle return
     var penguinOriginalOwner : Map[UnitRef, Faction] = Map()
     // Quachil Uttaus: track units already processed by Dust to Dust (ES chosen)
-    var dustToDustProcessed : $[UnitRef] = $
+    var dustToDustProcessed : $[Faction] = $
     // Elder Shoggoth: track sides that already used Prime Cause this battle (1 replacement max)
     var primeCauseUsed : $[Faction] = $
     // Cthugha: track sides that already saw the Fire Vampires prompt this battle
@@ -1314,7 +1314,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                 case AvatarThesis      => DS.azathothTrack
                                 case AvatarAntithesis  => (8 - DS.azathothTrack).max(0)
                                 case YgolonacDC        => DC.library.num - DC.unfulfilled.num
-                                case ShuddeMellSegment => 8
+                                case ShuddeMellSegment => 0
                                 case Cathedral         => 3
                                 case _                 => u.uclass.cost
                             }
@@ -1459,16 +1459,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(QuachilDustToDustPhase)
 
             case QuachilDustToDustPhase =>
-                sides.foreach { s =>
-                    if (s.forces.exists(_.uclass == QuachilUttaus)) {
-                        val quOwner = s
-                        val killedEnemies = s.opponent.forces.%(u => u.health == Killed && !dustToDustProcessed.has(u.ref))
-                        if (killedEnemies.any) {
-                            val victim = s.opponent
-                            val u = killedEnemies.head
-                            return Ask(victim)
-                                .add(QuachilDustToDustRemoveAction(victim, u.ref, quOwner))
-                                .add(QuachilDustToDustESAction(victim, u.ref, quOwner))
+                // Quachil Uttaus: ONE ask per battle TOTAL (not per killed unit, fixed 2026-07-16).
+                // If any enemy unit was killed in this battle and ANY side has QU, the victim
+                // picks ONE killed unit to permanently remove from the game OR gives QU owner 1 ES
+                // instead. If BOTH sides have QU, only the FIRST side's QU triggers.
+                if (dustToDustProcessed.isEmpty) {
+                    sides.foreach { s =>
+                        if (s.forces.exists(_.uclass == QuachilUttaus)) {
+                            val quOwner = s
+                            val killedEnemies = s.opponent.forces.%(u => u.health == Killed)
+                            if (killedEnemies.any) {
+                                val victim = s.opponent
+                                // Mark battle as processed so we skip remaining sides
+                                dustToDustProcessed :+= s
+                                // One Ask offering: for each killed unit, "permanently
+                                // remove this one" + a single "no, give QU owner 1 ES"
+                                // action. Use first killed enemy in the ES action since
+                                // we just need a unit ref for the log message.
+                                var ask = Ask(victim)
+                                killedEnemies.foreach { u =>
+                                    ask = ask.add(QuachilDustToDustRemoveAction(victim, u.ref, quOwner))
+                                }
+                                return ask.add(QuachilDustToDustESAction(victim, killedEnemies.head.ref, quOwner))
+                            }
                         }
                     }
                 }
@@ -1675,7 +1688,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                 case AvatarThesis      => DS.azathothTrack
                                 case AvatarAntithesis  => (8 - DS.azathothTrack).max(0)
                                 case YgolonacDC        => DC.library.num - DC.unfulfilled.num
-                                case ShuddeMellSegment => 8
+                                case ShuddeMellSegment => 0
                                 case _                 => u.uclass.cost
                             }
                             val n = (cost + 1) / 2

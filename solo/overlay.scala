@@ -1232,9 +1232,9 @@ object Overlays {
             // every unit being a flat 14%-tall sprite. The Earth Cat (on-map height
             // 70px) is the anchor: it keeps its established 14%-of-moon-height size,
             // and every other unit scales relative to it by the same 0.2 (= 14/70)
-            // %-per-map-pixel factor.
+            // %-per-map-pixel factor. Cap at 22% to prevent GOOs from dominating.
             val moonSpriteScale = 14.0 / 70.0
-            def spriteHFor(onMapH : Double) : Double = onMapH * moonSpriteScale
+            def spriteHFor(onMapH : Double) : Double = (onMapH * moonSpriteScale).min(22.0)
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
             val seed = parsed.length * 31 + parsed./({ case (s, _, _, _) => s }).mkString.hashCode
             val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
