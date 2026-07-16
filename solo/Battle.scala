@@ -1375,8 +1375,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             val killedEnemies = s.opponent.forces.%(u => u.health == Killed)
                             if (killedEnemies.any) {
                                 val victim = s.opponent
-                                // Mark battle as processed so we skip remaining sides
-                                dustToDustProcessed :+= s
                                 // One Ask offering: for each killed unit, "permanently
                                 // remove this one" + a single "no, give QU owner 1 ES"
                                 // action. Use first killed enemy in the ES action since
