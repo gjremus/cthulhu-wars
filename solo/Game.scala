@@ -3449,6 +3449,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             MoveContinueAction(self, false)
 
         case MoveContinueAction(self, moved) =>
+            // Defense-in-depth: clear any lingering Retreated flags that survived past BattleEnd
+            val retreatedUnits = factions./~(f => f.units.%(_.tag(Retreated))./(u => f.short + "/" + u.uclass.name + "/" + u.index + "@" + u.region))
+            if (retreatedUnits.any) {
+                log("TRACE-MOVE-MENU: clearing lingering Retreated from:", retreatedUnits.mkString(", "))
+                factions.foreach(_.units.foreach(_.remove(Retreated)))
+            }
+
             if (self.power == 0)
                 Then(MoveDoneAction(self))
             else {

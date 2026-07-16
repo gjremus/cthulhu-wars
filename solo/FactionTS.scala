@@ -55,7 +55,7 @@ case object TS extends Faction { f =>
         6.times(Acolyte)
 
     override def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = u match {
-        case Glaaki => (f.gates.has(r) && f.gates.exists(_.glyph == Ocean)).?(max(1, 7 - game.deathsHead))
+        case Glaaki => (f.gates.has(r) && r.glyph == Ocean).?(max(1, 7 - game.deathsHead))
         case _ => None
     }
 
@@ -108,7 +108,7 @@ case class TSUseTomeAction(self : Faction, tomeNum : Int) extends OptionFactionA
 case class TSRemoveTomeAction(self : Faction, tomeNum : Int) extends OptionFactionAction("Remove face-down " + "Cursed Tome".styled(TS) + " Vol. " + tomeNumToRoman(tomeNum) + " from game") with PowerNeutral {
     def question(implicit game : Game) = "Ritual of Annihilation"
 }
-case class TSSkipRemoveTomeAction(self : Faction) extends OptionFactionAction("Keep face-down " + "Cursed Tomes".styled(TS)) with Soft with PowerNeutral {
+case class TSSkipRemoveTomeAction(self : Faction) extends OptionFactionAction("Keep face-down " + "Cursed Tomes".styled(TS)) with PowerNeutral {
     def question(implicit game : Game) = "Ritual of Annihilation"
 }
 
@@ -128,8 +128,8 @@ case class TSPlaceTomeUnitActionLegacy5(self : Faction, uc : UnitClass, r : Regi
 // UNDULATE (carry chain: moved unit can carry lesser-cost units for free)
 case class TSUndulateCarryPhaseAction(self : Faction, from : Region, to : Region, carrierCost : Int) extends ForcedAction with PowerNeutral
 case class TSUndulateCarryAction(self : Faction, u : UnitRef, from : Region, to : Region, newCarrierCost : Int) extends BaseFactionAction(
-    (g : Game) => "Undulate: carry " + g.unit(u).full + " (cost " + u.uclass.cost + ") for free from " + from + " to",
-    to
+    (g : Game) => "Undulate".styled(TS) + " carry the following unit from " + from + " to " + to + ":",
+    (g : Game) => g.unit(u).full
 ) with PowerNeutral
 // [2026-04-03] Removed Soft — prevents Explode from following Skip into movement menu, which leaked MoveActions into carry decisions
 case class TSUndulateSkipAction(self : Faction) extends BaseFactionAction(None, "Skip " + "Undulate".styled(TS) + " carry") with PowerNeutral
@@ -230,8 +230,19 @@ object TSExpansion extends Expansion {
             val eligible = self.at(from).%(v => v.uclass.cost > 0 && v.uclass.cost < carrierCost && v.uclass.canBeMoved(v))
             if (eligible.any) {
                 implicit val asking = Asking(self)
-                eligible.sortBy(v => -v.uclass.cost).foreach { v =>
-                    + TSUndulateCarryAction(self, v.ref, from, to, v.uclass.cost)
+                val sorted = eligible.sortBy(v => (v.onGate.??(1).|(0), -v.uclass.cost))
+                val costs = sorted./(_.uclass.cost).distinct
+                if (costs.num > 1) {
+                    costs.sortBy(c => -c).foreach { c =>
+                        + GroupAction(s"$c cost units")
+                        sorted.%(_.uclass.cost == c).foreach { v =>
+                            + TSUndulateCarryAction(self, v.ref, from, to, v.uclass.cost)
+                        }
+                    }
+                } else {
+                    sorted.foreach { v =>
+                        + TSUndulateCarryAction(self, v.ref, from, to, v.uclass.cost)
+                    }
                 }
                 + TSUndulateSkipAction(self)
                 asking
@@ -425,7 +436,7 @@ object TSExpansion extends Expansion {
             Force(TSAwakenGlaakiChooseRegionAction(self, power, dh))
 
         case TSAwakenGlaakiChooseRegionAction(self, power, dh) =>
-            val eligible = areas.%(r => self.gates.has(r) && self.gates.exists(_.glyph == Ocean) && self.affords(power)(r) && self.pool(Glaaki).any)
+            val eligible = areas.%(r => self.gates.has(r) && r.glyph == Ocean && self.affords(power)(r) && self.pool(Glaaki).any)
             Ask(self).list(eligible./(r => TSAwakenGlaakiPayAction(self, r, power, dh))).cancel
 
         case TSAwakenGlaakiPayAction(self, r, power, dh) =>
