@@ -1367,15 +1367,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(QuachilDustToDustPhase)
 
             case QuachilDustToDustPhase =>
-                // Quachil Uttaus: ONE ask per battle TOTAL (not per killed unit, fixed 2026-07-16).
-                // If any enemy unit was killed in this battle and ANY side has QU, the victim
-                // picks ONE killed unit to permanently remove from the game OR gives QU owner 1 ES
-                // instead. If BOTH sides have QU, only the FIRST side's QU triggers.
-                //
-                // Replay protection (2026-07-16): dustToDustProcessed is marked in the action
-                // perform handlers, so on replay the action executes and marks the battle
-                // as processed before we reach this phase check. This prevents re-generating
-                // the Ask during replay.
+                println(s"[TRACE QU] Entering QuachilDustToDustPhase — dustToDustProcessed=${dustToDustProcessed}")
                 if (dustToDustProcessed.isEmpty) {
                     sides.foreach { s =>
                         if (s.forces.exists(_.uclass == QuachilUttaus)) {
@@ -1950,24 +1942,28 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case QuachilDustToDustRemoveAction(self, uRef, quOwner) =>
             val u = game.unit(uRef)
-            // Remove from battle forces first
-            exempt(u)
-            // Permanently remove from game
-            self.units = self.units.%(_.ref != uRef)
-            log(self.full, "permanently removed", u.uclass.styled(self), "from the game via", "Dust to Dust".styled("nt"))
-            // Mark as processed so replay doesn't re-trigger (2026-07-16 FIX)
+            if (!dustToDustProcessed.has(quOwner)) {
+                exempt(u)
+                self.units = self.units.%(_.ref != uRef)
+                log(self.full, "permanently removed", u.uclass.styled(self), "from the game via", "Dust to Dust".styled("nt"))
+                println(s"[TRACE QU] Remove executed for ${self} — dustToDustProcessed was empty")
+            }
+            else {
+                println(s"[TRACE QU] Remove SKIPPED for ${self} — already in dustToDustProcessed: ${dustToDustProcessed}")
+            }
             dustToDustProcessed :+= quOwner
             proceed()
 
         case QuachilDustToDustESAction(self, uRef, quOwner) =>
             val u = game.unit(uRef)
-            quOwner.takeES(1)
-            log(quOwner.full, "gained", 1.es, "from", "Dust to Dust".styled("nt"), "(", u.uclass.styled(self), "killed)")
-            // Per-battle, not per-unit (user 2026-05-24): the ES choice means
-            // "don't remove any unit permanently"; all killed units stay in
-            // their normal killed state and will be eliminated by
-            // EliminatePhase (which also triggers checkKillSpellbooks).
-            // Mark as processed so replay doesn't re-trigger (2026-07-16 FIX)
+            if (!dustToDustProcessed.has(quOwner)) {
+                quOwner.takeES(1)
+                log(quOwner.full, "gained", 1.es, "from", "Dust to Dust".styled("nt"), "(", u.uclass.styled(self), "killed)")
+                println(s"[TRACE QU] ES awarded to ${quOwner} — dustToDustProcessed was empty")
+            }
+            else {
+                println(s"[TRACE QU] ES SKIPPED for ${quOwner} — already in dustToDustProcessed: ${dustToDustProcessed}")
+            }
             dustToDustProcessed :+= quOwner
             proceed()
 
