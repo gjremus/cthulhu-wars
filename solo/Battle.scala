@@ -1314,7 +1314,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                 case AvatarThesis      => DS.azathothTrack
                                 case AvatarAntithesis  => (8 - DS.azathothTrack).max(0)
                                 case YgolonacDC        => DC.library.num - DC.unfulfilled.num
-                                case ShuddeMellSegment => 1
+                                case ShuddeMellSegment => 0
                                 case Cathedral         => 3
                                 case _                 => u.uclass.cost
                             }
@@ -1688,7 +1688,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                 case AvatarThesis      => DS.azathothTrack
                                 case AvatarAntithesis  => (8 - DS.azathothTrack).max(0)
                                 case YgolonacDC        => DC.library.num - DC.unfulfilled.num
-                                case ShuddeMellSegment => 1
+                                case ShuddeMellSegment => 0
                                 case _                 => u.uclass.cost
                             }
                             val n = (cost + 1) / 2

@@ -1230,11 +1230,12 @@ object Overlays {
             // real on-map sprite height, so the Moon matches the regular map (a
             // Bastet towers over an Earth Cat, exactly as on the board) instead of
             // every unit being a flat 14%-tall sprite. The Earth Cat (on-map height
-            // 70px) is the anchor: it keeps its established 14%-of-moon-height size,
-            // and every other unit scales relative to it by the same 0.2 (= 14/70)
-            // %-per-map-pixel factor. Cap at 16% to prevent large GOOs (TB Shudde M'ell, etc.) from dominating.
-            val moonSpriteScale = 14.0 / 70.0
-            def spriteHFor(onMapH : Double) : Double = (onMapH * moonSpriteScale).min(16.0)
+            // 70px) is the anchor: scaled to 10% moon height (reduced from 14% to
+            // prevent large TB units from dominating). Other units scale relative
+            // to it by the same 0.143 (= 10/70) %-per-map-pixel factor. Cap at 12%
+            // to prevent large GOOs (TB Shudde M'ell Head/Segments, etc.) from dominating.
+            val moonSpriteScale = 10.0 / 70.0
+            def spriteHFor(onMapH : Double) : Double = (onMapH * moonSpriteScale).min(12.0)
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
             val seed = parsed.length * 31 + parsed./({ case (s, _, _, _) => s }).mkString.hashCode
             val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
