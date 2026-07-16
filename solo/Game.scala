@@ -3803,6 +3803,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 }
                 b.attacker.log("proceeded to battle", b.defender, "in", b.arena)
                 if (game.battleResumePhase.any) {
+                    // Clear retreated flags before resuming battle (fix for phantom retreat display after Energy Nexus)
+                    factions.foreach(_.units.foreach(_.remove(Retreated)))
                     game.battleResumePhase = None
                     b.attackers.forces = attackerUnits
                     b.defenders.forces = defenderUnits
@@ -3849,6 +3851,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                         // Energy Nexus PB: resume at PreRoll (skip pre-battle to avoid double Devour)
                         if (game.battleResumePhase.any) {
+                            // Clear retreated flags before resuming battle (fix for phantom retreat display after Energy Nexus)
+                            factions.foreach(_.units.foreach(_.remove(Retreated)))
                             game.battleResumePhase = None
                             b.attackers.forces = attackerUnits
                             b.defenders.forces = defenderUnits

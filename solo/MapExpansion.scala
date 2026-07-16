@@ -387,7 +387,7 @@ object LibraryExpansion extends Expansion {
             val validRegions = game.board.regions.%(_.glyph.onMap).%(r =>
                 overdueHolders.exists(_.at(r).%(u => u.uclass.utype != MapUnit).any))
 
-            val stayActions = currentRegion./(r => LibrarianStayAction(self, r)).$
+            val stayActions = currentRegion.%(r => overdueHolders.exists(_.at(r).%(u => u.uclass.utype != MapUnit).any))./(r => LibrarianStayAction(self, r)).$
             val moveActions = validRegions.%(r => !currentRegion.has(r))./( r =>
                 LibrarianMoveAction(self, r))
             val allActions = stayActions ++ moveActions
