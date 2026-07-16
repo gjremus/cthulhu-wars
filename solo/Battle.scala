@@ -1310,7 +1310,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // If any enemy unit was killed in this battle and ANY side has QU, the victim
                 // picks ONE killed unit to permanently remove from the game OR gives QU owner 1 ES
                 // instead. If BOTH sides have QU, only the FIRST side's QU triggers.
-                if (dustToDustProcessed.isEmpty) {
+                //
+                // Replay protection (2026-07-16): Check if a Dust to Dust action is already in
+                // the log for this battle. If yes, skip generating the Ask (the logged action
+                // will be performed directly during replay).
+                val dustActionInLog = game.nextReplayActionHint.exists(h =>
+                    h.contains("QuachilDustToDustES") || h.contains("QuachilDustToDustRemove"))
+
+                if (dustToDustProcessed.isEmpty && !dustActionInLog) {
                     sides.foreach { s =>
                         if (s.forces.exists(_.uclass == QuachilUttaus)) {
                             val quOwner = s
