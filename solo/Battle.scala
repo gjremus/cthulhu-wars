@@ -2228,7 +2228,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Permanently remove from game
             self.units = self.units.%(_.ref != uRef)
             log(self.full, "permanently removed", u.uclass.styled(self), "from the game via", "Dust to Dust".styled("nt"))
-            dustToDustProcessed :+= uRef
             proceed()
 
         case QuachilDustToDustESAction(self, uRef, quOwner) =>
@@ -2238,7 +2237,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Unit is still killed — exempt from forces and eliminate normally
             exempt(u)
             eliminate(u)
-            dustToDustProcessed :+= uRef
             proceed()
 
         case DholePlanetaryDestructionDoomAction(self, opponent) =>
