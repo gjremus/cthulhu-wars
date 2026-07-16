@@ -1209,27 +1209,31 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(QuachilDustToDustPhase)
 
             case QuachilDustToDustPhase =>
-                // Quachil Uttaus: ONE ask per battle (not per killed unit, per user
-                // 2026-05-24). If any enemy unit was killed in this battle and the
-                // side has QU, the victim picks ONE killed unit to permanently
-                // remove from the game OR gives QU owner 1 ES instead.
-                sides.foreach { s =>
-                    if (s.forces.exists(_.uclass == QuachilUttaus) && !dustToDustProcessed.has(s)) {
-                        val quOwner = s
-                        val killedEnemies = s.opponent.forces.%(u => u.health == Killed)
-                        if (killedEnemies.any) {
-                            val victim = s.opponent
-                            // Mark this side as processed so we don't re-enter
-                            dustToDustProcessed :+= s
-                            // One Ask offering: for each killed unit, "permanently
-                            // remove this one" + a single "no, give QU owner 1 ES"
-                            // action. Use first killed enemy in the ES action since
-                            // we just need a unit ref for the log message.
-                            var ask = Ask(victim)
-                            killedEnemies.foreach { u =>
-                                ask = ask.add(QuachilDustToDustRemoveAction(victim, u.ref, quOwner))
+                // Quachil Uttaus: ONE ask per battle TOTAL (not per killed unit, per user
+                // 2026-05-24, fixed 2026-07-16). If any enemy unit was killed in this battle and
+                // ANY side has QU, the victim picks ONE killed unit to permanently
+                // remove from the game OR gives QU owner 1 ES instead. If BOTH sides
+                // have QU, only the FIRST side's QU triggers (the side that appears
+                // first in sides list).
+                if (dustToDustProcessed.isEmpty) {
+                    sides.foreach { s =>
+                        if (s.forces.exists(_.uclass == QuachilUttaus)) {
+                            val quOwner = s
+                            val killedEnemies = s.opponent.forces.%(u => u.health == Killed)
+                            if (killedEnemies.any) {
+                                val victim = s.opponent
+                                // Mark battle as processed so we skip remaining sides
+                                dustToDustProcessed :+= s
+                                // One Ask offering: for each killed unit, "permanently
+                                // remove this one" + a single "no, give QU owner 1 ES"
+                                // action. Use first killed enemy in the ES action since
+                                // we just need a unit ref for the log message.
+                                var ask = Ask(victim)
+                                killedEnemies.foreach { u =>
+                                    ask = ask.add(QuachilDustToDustRemoveAction(victim, u.ref, quOwner))
+                                }
+                                return ask.add(QuachilDustToDustESAction(victim, killedEnemies.head.ref, quOwner))
                             }
-                            return ask.add(QuachilDustToDustESAction(victim, killedEnemies.head.ref, quOwner))
                         }
                     }
                 }
@@ -1576,6 +1580,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 sides.foreach(_.forces.foreach(_.remove(Retreated)))
                 sides.foreach(_.forces.foreach(_.remove(Zeroed)))
                 game.factions.foreach(_.units.foreach(u => if (u.health == Pained) u.health = Alive))
+                game.factions.foreach(_.units.foreach(_.remove(Retreated)))
 
                 exempted.foreach(_.remove(Hidden))
                 exempted.foreach(_.remove(Absorbed))
@@ -1773,7 +1778,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case QuachilDustToDustESAction(self, uRef, quOwner) =>
             val u = game.unit(uRef)
+            println(s"[TRACE] QuachilDustToDustESAction: ${quOwner.short} gaining 1 ES (current: ${quOwner.es})")
             quOwner.takeES(1)
+            println(s"[TRACE] QuachilDustToDustESAction: ${quOwner.short} ES after takeES: ${quOwner.es}")
             log(quOwner.full, "gained", 1.es, "from", "Dust to Dust".styled("nt"))
             // Per-battle, not per-unit (user 2026-05-24): the ES choice means
             // "don't remove any unit permanently"; all killed units stay in
