@@ -759,6 +759,26 @@ object TBExpansion extends Expansion {
                 self.log(Autotomy.styled(TB) + ": gained", segmentsInPool.es, "for", segmentsInPool, "Segment".s(segmentsInPool), "in pool")
             }
 
+            // VENGEANCE FIX: When YS uses Vengeance, kills may have already been assigned to TB units
+            // (e.g., Head). Autotomy transfers that kill to the Segment, so we must "undo" any kill
+            // that was assigned to a TB unit (typically the Head) and restore it to Alive.
+            game.battle.foreach { b =>
+                val tbSide = if (b.attacker == TB) b.attackers else b.defenders
+                tbSide.forces.foreach { u =>
+                    if (u.health == Killed && u.ref != segment) {
+                        u.health = Alive
+                        self.log(Autotomy.styled(TB) + ": Kill on", u.uclass.styled(TB), "transferred to Segment")
+                    }
+                    // Handle double-HP units (if any future TB unit has DoubleHP)
+                    u.health = u.health match {
+                        case DoubleHP(Killed, Alive) => DoubleHP(Alive, Alive)
+                        case DoubleHP(Alive, Killed) => DoubleHP(Alive, Alive)
+                        case DoubleHP(Killed, Killed) => DoubleHP(Alive, Killed)
+                        case other => other
+                    }
+                }
+            }
+
             // Remove one Kill from opponent's rolls so TB has one fewer Kill to assign
             game.battle.foreach { b =>
                 val opponentSide = if (b.attacker == TB) b.defenders else b.attackers
