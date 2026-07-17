@@ -1444,6 +1444,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // doom phase via DoomDoneAction(BB).
     var bbAilurophobiaDone : Boolean = false
     var bbSyzygyDone       : Boolean = false
+    var bbRequiresAttentionPendingRegion : Option[Region] = None  // tracks region for TT Sycophancy resume
 
     // Tombstalker (TS) state: Death's Head counter, Cursed Tome stack index, and per-faction tome ownership
     var deathsHead : Int = 0
@@ -3541,10 +3542,26 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val enemyGate  = factions.but(self).exists(_.gates.has(r))
             val enemyGOO   = factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any)
             val esBonus    = enemyGate.??(1) + enemyGOO.??(2)
-            self.doom += 4
-            self.log(RequiresAttention.styled(BB) + ": ritual in", r, "— paid", cost.power, "— gained", 4.doom)
+            val doom       = 4
+
+            // TT Sycophancy: Requires Attention is a Ritual of Annihilation and should trigger Sycophancy
+            // Pattern matches RitualAction handler — check before doom is applied, then resume via shared action
+            // Store region in game state so Sycophancy handlers can resume properly
+            if (factions.has(TT) && self != TT && TT.has(Sycophancy)) {
+                // power already deducted above; doom/es not yet applied — pass them to the prompt continuation
+                bbRequiresAttentionPendingRegion = Some(r)
+                return Force(TTSycophancyPromptAction(self, doom, esBonus))
+            }
+
+            Force(BBRequiresAttentionResumeAction(self, doom, esBonus, r))
+
+        case BBRequiresAttentionResumeAction(self, doom, esBonus, r) =>
+            self.doom += doom
+
+            log(CthulhuWarsSolo.DottedLine)
+            self.log(RequiresAttention.styled(BB) + ": ritual in", r, "— paid", self.can(Herald).?(5).|(ritualCost).power, "— gained", doom.doom)
             if (esBonus > 0)
-                self.log(RequiresAttention.styled(BB) + ":", esBonus.es, "bonus (" + enemyGate.??("enemy gate") + (enemyGate && enemyGOO).??(", ") + enemyGOO.??("enemy GOO") + ")")
+                self.log(RequiresAttention.styled(BB) + ":", esBonus.es, "bonus (" + factions.but(self).exists(_.gates.has(r)).??("enemy gate") + (factions.but(self).exists(_.gates.has(r)) && factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any)).??(", ") + factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any).??("enemy GOO") + ")")
             self.takeES(esBonus)
             self.acted = true
             ritualHistory :+= self
@@ -3826,6 +3843,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             expansions.foreach(_.afterAction())
 
             factions.foreach(_.oncePerAction = $)
+
+            triggers()
 
             // Atlach-Nacha: Cosmic Web — immediate victory
             factions.find(f => f.upgrades.has(CosmicWeb)).foreach { winner =>

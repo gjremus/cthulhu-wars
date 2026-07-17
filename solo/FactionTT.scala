@@ -737,12 +737,26 @@ object TTExpansion extends Expansion {
 
         case TTSycophancyLoseDoomAction(ritualer, doom, es) =>
             ritualer.log("Sycophancy".styled(TT) + ": chooses to gain " + (doom - 1).doom + " (1 fewer)")
-            Force(TTSycophancyResumeRitualAction(ritualer, doom - 1, es))
+            // Check if this is BB's Requires Attention ritual (tracked in game state)
+            game.bbRequiresAttentionPendingRegion match {
+                case Some(r) =>
+                    game.bbRequiresAttentionPendingRegion = None  // clear state
+                    Force(BBRequiresAttentionResumeAction(ritualer, doom - 1, es, r))
+                case None =>
+                    Force(TTSycophancyResumeRitualAction(ritualer, doom - 1, es))
+            }
 
         case TTSycophancyGiveDoomAction(ritualer, doom, es) =>
             TT.doom += 1
             ritualer.log("Sycophancy".styled(TT) + ": gave 1", 1.doom, "to", TT)
-            Force(TTSycophancyResumeRitualAction(ritualer, doom, es))
+            // Check if this is BB's Requires Attention ritual (tracked in game state)
+            game.bbRequiresAttentionPendingRegion match {
+                case Some(r) =>
+                    game.bbRequiresAttentionPendingRegion = None  // clear state
+                    Force(BBRequiresAttentionResumeAction(ritualer, doom, es, r))
+                case None =>
+                    Force(TTSycophancyResumeRitualAction(ritualer, doom, es))
+            }
 
         // HIEROPHANTS: on any TT spellbook earn, place HP at gate or grow counter
         case TTHierophantsPlaceHPAction(self, gates, next) =>
