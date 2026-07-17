@@ -953,16 +953,23 @@ object TBExpansion extends Expansion {
             if (count <= 0 || remaining.none)
                 EndAction(TB)
             else {
+                println(s"[PSYCH SHRIEK RETREAT] Count: $count, Remaining units: ${remaining.size}")
+                println(s"[PSYCH SHRIEK RETREAT] Prior areas: ${priorAreas.mkString(", ")}")
+                println(s"[PSYCH SHRIEK RETREAT] TB gates: ${TB.gates.mkString(", ")}")
                 // Find units that have at least one valid retreat destination
                 val unitsWithDests = remaining.%(ur => {
                     val unitRegion = game.unit(ur).region
+                    val u = game.unit(ur)
                     val adjacent = game.board.connected(unitRegion)
-                    adjacent.%(r => !priorAreas.has(r) && !TB.gates.has(r)).any
+                    val validDests = adjacent.%(r => !priorAreas.has(r) && !TB.gates.has(r))
+                    println(s"[PSYCH SHRIEK RETREAT] Unit: ${u.uclass} at ${unitRegion}, Adjacent: ${adjacent.mkString(", ")}, Valid dests: ${validDests.mkString(", ")}")
+                    validDests.any
                 })
+                println(s"[PSYCH SHRIEK RETREAT] Units with valid destinations: ${unitsWithDests.size}")
                 if (unitsWithDests.none) {
                     remaining.foreach { ur =>
                         val u = game.unit(ur)
-                        println(s"[PSYCH SHRIEK TRACE] Eliminating ${u.uclass} (${u.faction}) due to no retreat destinations. Enemy faction: ${enemy}. Enemy power before: ${enemy.power}")
+                        println(s"[PSYCH SHRIEK TRACE] Eliminating ${u.uclass} (${u.faction}) at ${u.region} due to no retreat destinations. Enemy faction: ${enemy}. Enemy power before: ${enemy.power}")
                         game.eliminate(u)
                         println(s"[PSYCH SHRIEK TRACE] After eliminate: Enemy power now: ${enemy.power}")
                     }

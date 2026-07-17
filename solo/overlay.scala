@@ -1254,6 +1254,7 @@ object Overlays {
             }
             val unitFigures = parsed.zip(positions)./({ case ((src, display, hp, onMapH), (xPct, yPct)) =>
                 val spriteH = spriteHFor(onMapH)
+                println(s"[MOON UNIT SCALE] Unit: $display, onMapH: $onMapH, calculated spriteH: $spriteH%")
                 val hpOverlay = hp match {
                     case "killed" => s"""<img src="${imageSource("kill")}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;" />"""
                     case "pained" => s"""<img src="${imageSource("pain")}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;" />"""

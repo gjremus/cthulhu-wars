@@ -2198,11 +2198,21 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         triggers()
 
         gates.nex.foreach { r =>
+            if (r.toString.contains("Mantle")) {
+                println(s"[GATE CONTROL TRACE] Checking Mantle gate control for ${self.name}")
+                println(s"[GATE CONTROL TRACE] - Is it BB.moon? ${r == BB.moon}")
+                println(s"[GATE CONTROL TRACE] - Abandoned by ${self.name}? ${self.abandoned.has(r)}")
+                println(s"[GATE CONTROL TRACE] - Self units at Mantle: ${self.at(r).map(u => s"${u.uclass}(canControl=${u.canControlGate})").mkString(", ")}")
+                println(s"[GATE CONTROL TRACE] - Factions with gate at Mantle: ${factions.%(_.gates.has(r)).map(_.name).mkString(", ")}")
+            }
             if (r != BB.moon) {
                 if (self.abandoned.has(r).not) {
                     if (DS.chaosGateRegions.has(r).not || self == DS) {
                         if (factions.%(_.gates.has(r)).none) {
                             val blockers = gateControlBlockers(r)
+                            if (r.toString.contains("Mantle")) {
+                                println(s"[GATE CONTROL TRACE] - No faction has gate at Mantle yet, blockers: ${blockers.mkString(", ")}")
+                            }
 
                             if (blockers.any) {
                                 val key = self.name + "|" + r.name
