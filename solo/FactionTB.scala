@@ -938,12 +938,14 @@ object TBExpansion extends Expansion {
             RollD6(g => PsychicShriek.styled(TB) + ": second die for " + enemy.full, roll2 => {
                 val totalRoll = roll1 + roll2
                 val count = math.min(totalRoll, 2 * enemy.power)
+                println(s"[PSYCH SHRIEK TRACE] Rolled $totalRoll against ${enemy.full}. Enemy power: ${enemy.power}. Retreat count: $count")
                 self.log(PsychicShriek.styled(TB) + ": rolled", totalRoll, "— retreat", count, "unit".s(count))
                 enemy.log("must retreat", count, "unit".s(count), "(" + PsychicShriek.styled(TB) + ")")
                 // Snapshot enemy's current occupied MAP areas (before retreat) — exclude off-map units (Sorcery, Slumber, etc.)
                 val onMapUnits = enemy.allInPlay.%(_.region.onMap)
                 val priorAreas = onMapUnits./(_.region).distinct
                 val enemyUnits = onMapUnits./(_.ref)
+                println(s"[PSYCH SHRIEK TRACE] Enemy units on map: ${onMapUnits.map(u => s"${u.uclass}@${u.region}").mkString(", ")}")
                 TBPsychicShriekRetreatAction(enemy, enemy, count, priorAreas, $, enemyUnits)
             })
 
@@ -960,7 +962,9 @@ object TBExpansion extends Expansion {
                 if (unitsWithDests.none) {
                     remaining.foreach { ur =>
                         val u = game.unit(ur)
+                        println(s"[PSYCH SHRIEK TRACE] Eliminating ${u.uclass} (${u.faction}) due to no retreat destinations. Enemy faction: ${enemy}. Enemy power before: ${enemy.power}")
                         game.eliminate(u)
+                        println(s"[PSYCH SHRIEK TRACE] After eliminate: Enemy power now: ${enemy.power}")
                     }
                     TB.log(PsychicShriek.styled(TB) + ": no legal destinations — eliminated remaining units")
                     EndAction(TB)
