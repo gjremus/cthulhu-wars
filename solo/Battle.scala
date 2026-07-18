@@ -578,7 +578,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     def preroll(s : Faction) {
         val side = if (s == attacker) attackers else defenders
         // Cthugha combat bonus is a pre-battle choice not included in neutralStrength
-        val str = s.strength(s.forces, s.opponent) + side.cthughaCombatBonus
+        // Use side.forces (battle-local) not s.forces (global) — Shapestealing et al modify side.forces only
+        val str = s.strength(side.forces, s.opponent) + side.cthughaCombatBonus
 
         if (str != s.str) {
             log(s, "strength", (str > s.str).?("increased").|("decreased"), "to", str.str)
@@ -586,9 +587,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
         // Safety: Albino Penguins -2 per penguin
-        val penguinCount = s.forces.%(_.uclass == AlbinoPenguins).num
+        val penguinCount = side.forces.%(_.uclass == AlbinoPenguins).num
         if (penguinCount > 0 && s.str > 0) {
-            val withoutPenguins = s.strength(s.forces.%(_.uclass != AlbinoPenguins), s.opponent) + side.cthughaCombatBonus
+            val withoutPenguins = s.strength(side.forces.%(_.uclass != AlbinoPenguins), s.opponent) + side.cthughaCombatBonus
             val expected = withoutPenguins + penguinCount * -2
             if (s.str != expected && s.str == withoutPenguins) {
                 s.str = math.max(0, expected)
@@ -597,9 +598,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
         // Safety: Servitor of the Outer Gods -1 per servitor
-        val servitorCount = s.forces.%(_.uclass == ServitorUnit).num
+        val servitorCount = side.forces.%(_.uclass == ServitorUnit).num
         if (servitorCount > 0 && s.str > 0) {
-            val withoutServitors = s.strength(s.forces.%(_.uclass != ServitorUnit), s.opponent) + side.cthughaCombatBonus
+            val withoutServitors = s.strength(side.forces.%(_.uclass != ServitorUnit), s.opponent) + side.cthughaCombatBonus
             val expected = withoutServitors + servitorCount * -1
             if (s.str != expected && s.str == withoutServitors) {
                 s.str = math.max(0, expected)
@@ -608,30 +609,30 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
         // Elder Thing Mind Control: suppress GOO special abilities
-        if (s.has(Harbinger) && s.forces(Nyarlathotep).any && !s.forces(Nyarlathotep).exists(u => ElderThingMindControl.suppresses(u)))
+        if (s.has(Harbinger) && side.forces(Nyarlathotep).any && !side.forces(Nyarlathotep).exists(u => ElderThingMindControl.suppresses(u)))
             s.add(Harbinger)
         else if (s.has(Harbinger) && !s.has(Harbinger) && game.moonbeastOnSpellbook.values.exists(t => t._1 == s && t._2 == Harbinger))
             log(s, Harbinger.styled(s), "blocked by", "Moonbeast".styled("nt"))
 
-        if (s.can(Emissary) && s.forces(Nyarlathotep).any && s.opponent.forces.goos.none)
+        if (s.can(Emissary) && side.forces(Nyarlathotep).any && s.opponent.forces.goos.none)
             s.add(Emissary)
-        else if (s.has(Emissary) && !s.can(Emissary) && s.forces(Nyarlathotep).any && game.moonbeastOnSpellbook.values.exists(t => t._1 == s && t._2 == Emissary))
+        else if (s.has(Emissary) && !s.can(Emissary) && side.forces(Nyarlathotep).any && game.moonbeastOnSpellbook.values.exists(t => t._1 == s && t._2 == Emissary))
             log(s, Emissary.styled(s), "blocked by", "Moonbeast".styled("nt"))
 
-        if (s.has(Vengeance) && s.forces(Hastur).any && !s.forces(Hastur).exists(u => ElderThingMindControl.suppresses(u)))
+        if (s.has(Vengeance) && side.forces(Hastur).any && !side.forces(Hastur).exists(u => ElderThingMindControl.suppresses(u)))
             s.add(Vengeance)
-        else if (s.has(Vengeance) && !s.has(Vengeance) && s.forces(Hastur).any && game.moonbeastOnSpellbook.values.exists(t => t._1 == s && t._2 == Vengeance))
+        else if (s.has(Vengeance) && !s.has(Vengeance) && side.forces(Hastur).any && game.moonbeastOnSpellbook.values.exists(t => t._1 == s && t._2 == Vengeance))
             log(s, Vengeance.styled(s), "blocked by", "Moonbeast".styled("nt"))
 
         if (s.can(ChannelPower))
             s.add(ChannelPower)
 
-        if (s.has(Eternal) && s.forces(RhanTegoth).any && !s.forces(RhanTegoth).exists(u => ElderThingMindControl.suppresses(u)))
+        if (s.has(Eternal) && side.forces(RhanTegoth).any && !side.forces(RhanTegoth).exists(u => ElderThingMindControl.suppresses(u)))
             s.add(Eternal)
-        else if (s.has(Eternal) && !s.has(Eternal) && s.forces(RhanTegoth).any && game.moonbeastOnSpellbook.values.exists(t => t._1 == s && t._2 == Eternal))
+        else if (s.has(Eternal) && !s.has(Eternal) && side.forces(RhanTegoth).any && game.moonbeastOnSpellbook.values.exists(t => t._1 == s && t._2 == Eternal))
             log(s, Eternal.styled(s), "blocked by", "Moonbeast".styled("nt"))
 
-        if (s.can(Regenerate) && s.forces(Starspawn).any)
+        if (s.can(Regenerate) && side.forces(Starspawn).any)
             s.add(Regenerate)
 
         if (s.can(MillionFavoredOnes))
