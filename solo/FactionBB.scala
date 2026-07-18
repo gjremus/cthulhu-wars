@@ -38,6 +38,9 @@ case object Ailurophobia extends FactionSpellbook(BB, "Ailurophobia")
 case object Syzygy    extends FactionSpellbook(BB, "Syzygy")
 case object Carnivore extends FactionSpellbook(BB, "Carnivore") with BattleSpellbook
 
+// Battle-phase marker tags
+case object ZagazigSkipped extends FactionSpellbook(BB, "Zagazig Skipped") with BattleSpellbook
+
 // FACTION POWER — Lunacy is BB's signature unique ability (always-on).
 // Earth Cats count as Cultists for enemy-targeting effects (Zingaya, Ghroth, Dreams,
 // He Who Is Not To Be Named). Earth Cats cannot be captured. Implementation lives
@@ -150,10 +153,13 @@ case class CatnappingDoneAction(self : Faction, picked : $[Faction])
     extends BaseFactionAction(Catnapping, "Done".styled("power"))
 
 // ── ZAGAZIG (Task 3.10.2 / 3.14.2) ──────────────────────────────────────────
-case class ZagazigUseAction(self : Faction)
-    extends OptionFactionAction(("Use " + Zagazig.name).styled(BB)) with PreBattleQuestion
-case class ZagazigSkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + Zagazig.name).styled(BB)) with PreBattleQuestion
+// User directive 2026-07-17: Zagazig is now optional with post-roll prompt showing actual roll values
+case class ZagazigUseAction(self : Faction) extends BaseFactionAction(Zagazig.styled(BB), "Swap") {
+    override def question(implicit game : Game) = self.full + " — " + Zagazig.styled(BB) + ": Swap Kills and Pains for both sides"
+}
+case class ZagazigSkipAction(self : Faction) extends BaseFactionAction(Zagazig.styled(BB), "Skip") {
+    override def question(implicit game : Game) = self.full + " — " + Zagazig.styled(BB) + ": Swap Kills and Pains for both sides"
+}
 
 // ── SAVAGERY (Task 3.10.3 / 3.14.3) ─────────────────────────────────────────
 case class SavageryUseAction(self : Faction)
@@ -191,6 +197,8 @@ case class RequiresAttentionTargetAction(self : Faction, r : Region)
     extends BaseFactionAction(RequiresAttention.styled(BB) + ": resolve in", r)
 case class RequiresAttentionSkipAction(self : Faction)
     extends OptionFactionAction(("Skip " + RequiresAttention.name).styled(BB)) with MainQuestion
+case class BBRequiresAttentionResumeAction(self : Faction, doom : Int, esBonus : Int, r : Region)
+    extends ForcedAction
 
 // ── SPELLBOOK REQUIREMENTS (Task 3.12.1) ─────────────────────────────────────
 // Audit V11: handler mutates Power and ends terminally — must be HARD, not Soft.
@@ -202,18 +210,28 @@ case class Pay2ForBBAction(self : Faction)
 // BUBASTIS (BB) EXPANSION — game-loop integration
 // ============================================================================
 object BBExpansion extends Expansion {
+    override def triggers()(implicit game : Game) {
+        if (!game.setup.has(BB)) return
+
+        // Cat in every enemy start — checked here (BEFORE Cyclopean Gaze) so
+        // that momentarily having cats in all starts earns the SBR even if CG
+        // subsequently pains a cat away.
+        if (BB.needs(CatInEveryEnemyStart)) {
+            val catInEveryStart = game.factions.but(BB).forall(e => game.starting.get(e).exists(r => BB.at(r).%(u => u.uclass == EarthCat || u.uclass == CatFromMars || u.uclass == CatFromSaturn || u.uclass == CatFromUranus).any))
+            if (catInEveryStart) {
+                val bonus = game.factions.but(BB).num
+                BB.satisfy(CatInEveryEnemyStart, "A Cat in every enemy faction's Start Area")
+                if (bonus > 0) {
+                    BB.power += bonus
+                    BB.log("gained", bonus.power, "(Cat in every Start Area bonus)")
+                }
+            }
+        }
+    }
+
     override def afterAction()(implicit game : Game) {
         if (!game.setup.has(BB)) return
         BB.satisfyIf(NoEarthCatsOnMoon, "No Earth Cats on the Moon", BB.at(BB.moon).%(_.uclass == EarthCat).none)
-        val catInEveryStart = game.factions.but(BB).forall(e => game.starting.get(e).exists(r => BB.at(r).%(u => u.uclass == EarthCat || u.uclass == CatFromMars || u.uclass == CatFromSaturn || u.uclass == CatFromUranus).any))
-        if (BB.needs(CatInEveryEnemyStart) && catInEveryStart) {
-            val bonus = game.factions.but(BB).num
-            BB.satisfy(CatInEveryEnemyStart, "A Cat in every enemy faction's Start Area")
-            if (bonus > 0) {
-                BB.power += bonus
-                BB.log("gained", bonus.power, "(Cat in every Start Area bonus)")
-            }
-        }
     }
 
     override def eliminate(u : UnitFigure)(implicit game : Game) {
@@ -245,6 +263,7 @@ object BBExpansion extends Expansion {
 
         // DOOM
         case DoomAction(f : BB.type) =>
+            js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] DoomAction START: doom=${f.doom}, ailurophobiaDone=${game.bbAilurophobiaDone}, syzygyDone=${game.bbSyzygyDone}")
             implicit val asking = Asking(f)
 
             // Syzygy (alt spellbook): if BB has no units on the Moon, gain 1 Elder Sign.
@@ -253,6 +272,7 @@ object BBExpansion extends Expansion {
                 f.takeES(1)
                 f.log(Syzygy.styled(BB) + ": no units on", BB.moon, "— gained", 1.es)
                 game.bbSyzygyDone = true
+                js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] Syzygy triggered")
             }
 
             // Ailurophobia: gain 1 Doom per distinct Cat variety that shares at least
@@ -265,14 +285,17 @@ object BBExpansion extends Expansion {
                 val varietyCount = catClasses.count(uc =>
                     f.onMap(uc).%(_.region != BB.moon).exists(u =>
                         game.factions.but(f).exists(e => e.at(u.region).any)))
+                js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] Ailurophobia check: varietyCount=$varietyCount, doom before=${f.doom}")
                 if (varietyCount > 0) {
                     f.doom += varietyCount
+                    js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] Ailurophobia added $varietyCount doom, doom after=${f.doom}")
                     f.log(Ailurophobia.styled(BB) + ": gained", varietyCount.doom,
                         "for", varietyCount, "Cat varietie".s(varietyCount), "co-present with enemies")
                 }
                 game.bbAilurophobiaDone = true
             }
 
+            js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] Before rituals/reveals/etc: doom=${f.doom}")
             game.rituals(f)
 
             game.reveals(f)
@@ -281,21 +304,19 @@ object BBExpansion extends Expansion {
 
             game.hires(f)
 
+            js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] Before doomDone: doom=${f.doom}")
             game.doomDone(f)
 
             asking
 
         // MAIN ACTION
         case MainAction(f : BB.type) if f.active.not =>
-            js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] MainAction guard 1: BB not active")
             UnknownContinue
 
         case MainAction(f : BB.type) if f.acted =>
-            js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] MainAction guard 2: BB acted=${f.acted}, battled=${f.battled.any}")
             UnknownContinue
 
         case MainAction(f : BB.type) =>
-            js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] MainAction entered: BB acted=${f.acted}, battled=${f.battled.any}, power=${f.power}")
             implicit val asking = Asking(f)
 
             // BB v2.4.16 (game 498 full-crash fix): wrap each menu-builder call so a
@@ -366,7 +387,6 @@ object BBExpansion extends Expansion {
         // Audit V2/V3: Hard action — pay Power and move units atomically here so
         // Cancel before Done leaves Power untouched.
         case CatnappingDoneAction(self, picked) =>
-            js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] CatnappingDoneAction fired for ${self.short}, picked=${picked./(_.short).mkString(",")}, acted-before=${self.acted}")
             self.oncePerRound :+= Catnapping
             val bastetRegion = self.onMap(Bastet).headOption.map(_.region)
             bastetRegion match {
@@ -380,10 +400,8 @@ object BBExpansion extends Expansion {
                         if (units.any)
                             self.log(Catnapping.styled(BB) + ": moved", units.num, "unit".s(units.num), "of", f.full, "from", r, "to", BB.moon)
                     }
-                    js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] About to call EndAction, acted-now=${self.acted}")
                     EndAction(self)
                 case None =>
-                    js.Dynamic.global.console.log(s"[CATNAPPING-TRACE] No bastet region found, calling EndAction anyway")
                     EndAction(self)
             }
 
@@ -451,6 +469,7 @@ object BBExpansion extends Expansion {
         // ── DOOM PHASE END: reset BB doom-phase sentinels (CRIT-7) ───────────────
         // Both Ailurophobia and Syzygy must re-arm for the next Doom Phase.
         case DoomDoneAction(f) if f == BB =>
+            js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] DoomDoneAction: resetting sentinels, BB.doom=${BB.doom}")
             game.bbAilurophobiaDone = false
             game.bbSyzygyDone = false
             UnknownContinue

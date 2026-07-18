@@ -946,7 +946,7 @@ object Overlays {
         // Tombstalker (TS): faction info card showing Death March ability, units (TombHerd, DeepTendril, Gla'aki)
         case $("TS") => faction(TS, "info:ts-background", DeathMarch, "Ongoing",
             "Increment the Death's Head each time an enemy Unit dies in any Battle. In the Doom Phase, spend 1 Death's Head to place a Tomb-Herd in any Area; repeat as much as possible. Then reset the Death's Head to 0.",
-            $(), $(
+            $(ElevenRevelations, Hecatomb, Undulate), $(
             (Acolyte,    6, "1",   "0", s""""""),
             (TombHerd,   6, "2",   "3", s"""<div class=p>The first Tomb-Herd in an Area has 3 Combat. Any others have 0 Combat.</div>"""),
             (DeepTendril, 3, "3", "1-3", s"""<div class=p>Combat: 1, +1 if Gla'aki is in the same Area, +1 if in an Ocean/Sea Area.</div>"""),
@@ -973,7 +973,7 @@ object Overlays {
         // Firstborn (FB): faction info card showing unique ability (Writhe), units, and Crater building
         case $("FB") => faction(FB, "info:fb-background", Writhe, "Action: Cost 2",
             "Roll dice equal to your Power. For each Kill: Eliminate a Unit you control, any of your Acolytes Eliminated are instead replaced with Desiccated. For each Pain, relocate your Unit to any Area. Before applying these results, you may reroll ALL these dice once.<br/><br/><span class=ability-color>Crater</span> <span class=cost-color>(Building):</span> Any Gate (other than Yog-Sothoth) that coexists in an Area with a Crater is immediately destroyed.",
-            $(), $(
+            $(Augury, Carnage, DevilsMark), $(
             (Acolyte,        6, "1", "0", s""""""),
             (Desiccated,     6, "2", "0+", s"""<div class=p>Combat is 1 if in a land Area, 0 if in a sea Area.</div>"""),
             (RevenantOfKnaa, 2, "3", "?", s"""<div class=p>Combat equals the number of Desiccated in play.</div>"""),
@@ -1847,12 +1847,19 @@ object Overlays {
         // the Spellbooks list — not at the top of the faction card.
         val lunacyPhase = "Ongoing"
         val lunacyText  = "Spellbooks and abilities that affect Cultists can target Earth Cats as if they are Acolytes. They cannot be captured as Cultists nor can they create or control Gates. This ability is not optional."
-        // The variant-dependent spellbook (Catabolism or Syzygy) is rendered in
-        // the Spellbooks line below, alongside the rest of BB's library that is
-        // already shown via the per-unit Spellbook references.
+        // When alternate spellbooks are enabled, show BOTH standard and alternate
+        // spellbooks in the overlay so players can see and click on all options.
+        // Standard spellbooks: Catabolism, Zagazig, Savagery, Predator, Catnapping, Ailurophobia
+        // Alternate spellbooks: Syzygy, Carnivore (plus the standard ones that don't change)
         val variantSpellbook = if (altSB) Syzygy else Catabolism
+        val miscSpellbooks = if (altSB) {
+            // Show both standard AND alternate spellbooks when alternates are enabled
+            $(Catabolism, Zagazig, Savagery, Predator, Catnapping, Ailurophobia, Syzygy, Carnivore)
+        } else {
+            $(variantSpellbook, Catnapping, Ailurophobia)
+        }
         faction(BB, "info:bb-background", Lunacy, lunacyPhase, lunacyText,
-            $(variantSpellbook), $(
+            miscSpellbooks, $(
             (EarthCat,      6, "1",  "0",  s"""<div class=p>Special: Generates 1 Power during the Gather Power Phase</div><div class=p>Spellbook: ${reference(BB, variantSpellbook)}</div>"""),
             (CatFromMars,   2, "2",  "1",  s"""<div class=p>Special: Generates 1 Power during the Gather Power Phase</div><div class=p>Spellbook: ${reference(BB, Zagazig)}</div>"""),
             (CatFromSaturn, 2, "3",  "2",  s"""<div class=p>Special: Generates 1 Power during the Gather Power Phase</div><div class=p>Spellbook: ${reference(BB, Savagery)}</div>"""),

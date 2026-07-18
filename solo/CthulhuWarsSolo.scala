@@ -3739,14 +3739,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                             val (l, c) = game.perform(a.unwrap)
                                             game.nextReplayActionHint = None
 
-                                            // [TRACE] Track power around power gather boundaries
-                                            {
-                                                implicit val ig : Game = game
-                                                val actionStr = serializer.write(a)
-                                                if (actionStr.contains("PowerGatherAction") || actionStr.contains("ActionPhaseAction") || actionStr.contains("EndTurnAction")) {
-                                                    println("[TRACE-PWR " + n + "] " + actionStr.take(80) + " | factions: " + game.factions./(f => "" + f + "=" + f.power).mkString(","))
-                                                }
-                                            }
 
                                             l.foreach(s => log(s, showUndo(actions.num)))
 
@@ -3762,7 +3754,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         catch {
                                             case t : Throwable =>
                                                 println("[BB v2.4.16 replay-tolerance] skipping action " + actions.num + " (" + a + "): " + t.getClass.getSimpleName + ": " + t.getMessage)
-                                                log("Replay: skipped action " + actions.num + " due to " + t.getClass.getSimpleName, showUndo(actions.num))
+                                                t.printStackTrace()
+                                                log("Replay: skipped action " + actions.num + " (" + a.getClass.getSimpleName + ") due to " + t.getClass.getSimpleName + ": " + t.getMessage.take(100), showUndo(actions.num))
                                         }
                                     }
                                 }

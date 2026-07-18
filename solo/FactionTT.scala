@@ -739,10 +739,11 @@ object TTExpansion extends Expansion {
             ritualer.log("Sycophancy".styled(TT) + ": chooses to gain " + (doom - 1).doom + " (1 fewer)")
             // Check if this is BB's Requires Attention ritual (tracked in game state)
             game.bbRequiresAttentionPendingRegion match {
-                case Some(r) =>
-                    game.bbRequiresAttentionPendingRegion = None  // clear state
+                case Some(r) if ritualer == BB =>
+                    game.bbRequiresAttentionPendingRegion = None
                     Force(BBRequiresAttentionResumeAction(ritualer, doom - 1, es, r))
-                case None =>
+                case _ =>
+                    game.bbRequiresAttentionPendingRegion = None
                     Force(TTSycophancyResumeRitualAction(ritualer, doom - 1, es))
             }
 
@@ -751,10 +752,11 @@ object TTExpansion extends Expansion {
             ritualer.log("Sycophancy".styled(TT) + ": gave 1", 1.doom, "to", TT)
             // Check if this is BB's Requires Attention ritual (tracked in game state)
             game.bbRequiresAttentionPendingRegion match {
-                case Some(r) =>
-                    game.bbRequiresAttentionPendingRegion = None  // clear state
+                case Some(r) if ritualer == BB =>
+                    game.bbRequiresAttentionPendingRegion = None
                     Force(BBRequiresAttentionResumeAction(ritualer, doom, es, r))
-                case None =>
+                case _ =>
+                    game.bbRequiresAttentionPendingRegion = None
                     Force(TTSycophancyResumeRitualAction(ritualer, doom, es))
             }
 

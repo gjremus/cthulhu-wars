@@ -103,10 +103,10 @@ case class FireVampiresSkipAction(self : Faction) extends BaseFactionAction("Fir
 // rewind path (TODO).
 case class PrimeCauseChooseUnitAction(self : Faction, uRef : UnitRef) extends BaseFactionAction(
     implicit g => "Prime Cause".styled("nt"), implicit g => "Replace " + g.unit(uRef).uclass.styled(self)) {
-    override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt") + " — choose Unit to replace"
+    override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt")
 }
 case class PrimeCauseChooseReplacementAction(self : Faction, oldRef : UnitRef, newUC : UnitClass) extends BaseFactionAction(
-    implicit g => "Prime Cause".styled("nt"),
+    implicit g => "",
     implicit g => {
         val oldU = g.unit(oldRef)
         val r = oldU.region
@@ -127,7 +127,7 @@ case class PrimeCauseSkipAction(self : Faction) extends BaseFactionAction("Prime
     override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt")
 }
 case class PrimeCauseCancelReplacementAction(self : Faction) extends BaseFactionAction("Prime Cause".styled("nt"), "Cancel") {
-    override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt") + " — choose Unit to replace"
+    override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt")
 }
 
 // Quachil Uttaus: Dust to Dust choices
@@ -527,15 +527,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s == TT && s.can(TerrorSB) && !s.tag(TTReduceEnemyCombat) && !s.tag(TTBoostOwnCombat) && s.forces(ProtoShoggoth).any)
             options :+= TTTerrorPreBattleAction(TT)
 
-        // Bubastis (BB): Zagazig — auto-apply (Fix 27, user directive 2026-06-02:
-        // "Zagazig - I don't believe this is optional. For now, comment out the menu
-        // items for this, and have it auto apply.") Zagazig is not optional per rules;
-        // the swap is now applied automatically post-roll (see ChannelPowerPhase block).
-        // The Use/Skip menu items are commented out for now.
-        // if (s == BB && s.can(Zagazig) && !s.tag(Zagazig) && s.forces.%(_.uclass.utype == Monster).any) {
-        //     options :+= ZagazigUseAction(s)
-        //     options :+= ZagazigSkipAction(s)
-        // }
+        // Bubastis (BB): Zagazig — no pre-battle prompt; the choice happens post-roll
+        // at ChannelPowerPhase when the actual roll values are visible (see below).
 
         // Bubastis (BB): Savagery — pre-battle pay 1 Power for +4 strength per CatFromSaturn (task 3.10.3/3.14.3)
         if (s == BB && s.can(Savagery) && !s.tag(Savagery) && s.forces.%(_.uclass == CatFromSaturn).any && s.power >= 1) {
@@ -1049,11 +1042,20 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Bubastis (BB): Zagazig — swap Kills<->Pains for BOTH sides FIRST in the post-roll
                 // resolution chain, BEFORE Leng Spider Bloodthirst and BEFORE Demand Sacrifice's
                 // Kills->Pains conversion (rulebook FAQ #3 and FAQ #17).
-                // Fix 27 (user directive 2026-06-02): Zagazig is NOT optional — auto-apply
-                // whenever BB is participating in the battle, has Zagazig researched,
-                // AND a Cat from Mars is present in BB's forces (per rulebook text).
-                // Per-faction roll-change line emitted to game log so the new totals are visible.
-                if (sides.has(BB) && BB.can(Zagazig) && BB.forces.%(_.uclass == CatFromMars).any) {
+                // User directive 2026-07-17: Zagazig is now optional — prompt BB player to choose
+                // after rolls are visible, showing the actual roll counts that will be swapped.
+                if (sides.has(BB) && BB.can(Zagazig) && !BB.tag(Zagazig) && !BB.tag(ZagazigSkipped) && BB.forces.%(_.uclass == CatFromMars).any) {
+                    val replayBlocksZagazig = game.nextReplayActionHint.exists(h => !h.contains("Zagazig"))
+                    if (replayBlocksZagazig) {
+                        // Old builds auto-applied Zagazig — replicate that during replay
+                        BB.add(Zagazig)
+                    } else {
+                        return Ask(BB).add(ZagazigUseAction(BB)).add(ZagazigSkipAction(BB))
+                    }
+                }
+
+                // Apply the swap if BB chose to use Zagazig (or auto-applied during replay compat)
+                if (sides.has(BB) && BB.can(Zagazig) && BB.tag(Zagazig) && BB.forces.%(_.uclass == CatFromMars).any) {
                     sides.%(f => f == BB).foreach { bbSide =>
                         def swapRolls(side : Side) {
                             side.rolls = side.rolls./(r => if (r == Kill) Pain else if (r == Pain) Kill else r)
@@ -1061,7 +1063,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         swapRolls(bbSide)
                         swapRolls(bbSide.opponent)
                         log(Zagazig.styled(BB) + ": swapped Kills and Pains for both sides")
-                        // One line per faction in the battle showing post-swap roll tokens.
                         sides.foreach { f =>
                             val side = if (f == attacker) attackers else defenders
                             log(f.full, "rolls changed to", side.rolls.mkString(" "), "due to", Zagazig.styled(BB))
@@ -1356,29 +1357,28 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(ElderShoggothPrimeCausePhase)
 
             case ElderShoggothPrimeCausePhase =>
-                sides.foreach { s =>
-                    if (s.forces.exists(_.uclass == ElderShoggoth) && s.forces.exists(_.health != Killed) && !primeCauseUsed.has(s)) {
-                        val units = s.forces.%(_.health != Killed)
-                        return Ask(s)
-                            .each(units)(u => PrimeCauseChooseUnitAction(s, u.ref))
-                            .add(PrimeCauseSkipAction(s))
+                val replayBlocksPC = game.nextReplayActionHint.exists(h => !h.contains("PrimeCause"))
+                if (!replayBlocksPC) {
+                    sides.foreach { s =>
+                        if (s.forces.exists(_.uclass == ElderShoggoth) && s.forces.exists(_.health != Killed) && !primeCauseUsed.has(s)) {
+                            val units = s.forces.%(_.health != Killed)
+                            return Ask(s)
+                                .each(units)(u => PrimeCauseChooseUnitAction(s, u.ref))
+                                .add(PrimeCauseSkipAction(s))
+                        }
                     }
                 }
                 jump(QuachilDustToDustPhase)
 
             case QuachilDustToDustPhase =>
-                println(s"[TRACE QU] Entering QuachilDustToDustPhase — dustToDustProcessed=${dustToDustProcessed}")
-                if (dustToDustProcessed.isEmpty) {
+                val replayBlocksQU = game.nextReplayActionHint.exists(h => !h.contains("QuachilDustToDust"))
+                if (dustToDustProcessed.isEmpty && !replayBlocksQU) {
                     sides.foreach { s =>
                         if (s.forces.exists(_.uclass == QuachilUttaus)) {
                             val quOwner = s
                             val killedEnemies = s.opponent.forces.%(u => u.health == Killed)
                             if (killedEnemies.any) {
                                 val victim = s.opponent
-                                // One Ask offering: for each killed unit, "permanently
-                                // remove this one" + a single "no, give QU owner 1 ES"
-                                // action. Use first killed enemy in the ES action since
-                                // we just need a unit ref for the log message.
                                 var ask = Ask(victim)
                                 killedEnemies.foreach { u =>
                                     ask = ask.add(QuachilDustToDustRemoveAction(victim, u.ref, quOwner))
@@ -1391,22 +1391,20 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(DholePlanetaryDestructionPhase)
 
             case DholePlanetaryDestructionPhase =>
-                // Check if any Dhole was killed in this battle
-                sides.foreach { s =>
-                    val killedDholes = s.forces(Dhole).%(_.health == Killed)
-                    if (killedDholes.any) {
-                        val dholeOwner = s
-                        val opponent = s.opponent
-                        // Owner gains 2 ES
-                        dholeOwner.takeES(2)
-                        log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
-                        // Exempt Dhole from forces to prevent re-trigger on re-entry
-                        // Don't eliminate yet — EliminatePhase will handle that (avoids stale UnitRef crash)
-                        killedDholes.foreach(exempt)
-                        // OWNER chooses what opponent gains (card: "your opponent gains your choice")
-                        return Ask(dholeOwner)
-                            .add(DholePlanetaryDestructionDoomAction(opponent, dholeOwner))
-                            .add(DholePlanetaryDestructionPowerAction(opponent, dholeOwner))
+                val replayBlocksDhole = game.nextReplayActionHint.exists(h => !h.contains("DholePlanetaryDestruction"))
+                if (!replayBlocksDhole) {
+                    sides.foreach { s =>
+                        val killedDholes = s.forces(Dhole).%(_.health == Killed)
+                        if (killedDholes.any) {
+                            val dholeOwner = s
+                            val opponent = s.opponent
+                            dholeOwner.takeES(2)
+                            log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
+                            killedDholes.foreach(exempt)
+                            return Ask(dholeOwner)
+                                .add(DholePlanetaryDestructionDoomAction(opponent, dholeOwner))
+                                .add(DholePlanetaryDestructionPowerAction(opponent, dholeOwner))
+                        }
                     }
                 }
                 jump(EliminatePhase)
@@ -1944,10 +1942,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 exempt(u)
                 self.units = self.units.%(_.ref != uRef)
                 log(self.full, "permanently removed", u.uclass.styled(self), "from the game via", "Dust to Dust".styled("nt"))
-                println(s"[TRACE QU] Remove executed for ${self} — dustToDustProcessed was empty")
-            }
-            else {
-                println(s"[TRACE QU] Remove SKIPPED for ${self} — already in dustToDustProcessed: ${dustToDustProcessed}")
             }
             dustToDustProcessed :+= quOwner
             proceed()
@@ -1957,10 +1951,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             if (!dustToDustProcessed.has(quOwner)) {
                 quOwner.takeES(1)
                 log(quOwner.full, "gained", 1.es, "from", "Dust to Dust".styled("nt"), "(", u.uclass.styled(self), "killed)")
-                println(s"[TRACE QU] ES awarded to ${quOwner} — dustToDustProcessed was empty")
-            }
-            else {
-                println(s"[TRACE QU] ES SKIPPED for ${quOwner} — already in dustToDustProcessed: ${dustToDustProcessed}")
             }
             dustToDustProcessed :+= quOwner
             proceed()
@@ -2621,10 +2611,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // BUBASTIS (BB): ZAGAZIG — pre-battle declare (task 3.10.2 / 3.14.2)
         case ZagazigUseAction(self) =>
             (self : Side).add(Zagazig)
-            self.log(Zagazig.styled(BB) + ": will swap Kills and Pains after roll")
+            self.log(Zagazig.styled(BB) + ": will swap Kills and Pains")
             proceed()
 
         case ZagazigSkipAction(self) =>
+            (self : Side).add(ZagazigSkipped)
             self.log(Zagazig.styled(BB) + ": skipped")
             proceed()
 

@@ -2711,9 +2711,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             SetupFactionsAction
 
         case PowerGatherAction(last) =>
-            // [TRACE] Hibernate bug investigation — dump faction power before calc
-            println("[TRACE PowerGather] turn=" + turn + " shepherdDone=" + TSExpansion.shepherdDoneThisGather + " factions: " + factions./(f => f + "=" + f.power).mkString(", "))
-
             // [2026-05-24] Guard the whole power-calc / per-turn-reset / log
             // block so it only fires on FIRST entry. The TS Shepherd of the
             // Crypt re-enters PowerGatherAction via
@@ -3043,7 +3040,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 FirstPlayerDeterminationAction // Then(...)
 
         case DoomPhaseAction =>
-            println(s"[DOOM-TRACE] DoomPhaseAction: turn=$turn, factions=${factions.mkString(",")}")
             doomPhase = true
 
             // Library at Celaeno: distribute Silence Tokens at start of Doom Phase
@@ -3113,7 +3109,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             CheckSpellbooksAction(DoomNextPlayerAction(game.first))
 
         case ActionPhaseAction =>
-            println(s"[DOOM-TRACE] ActionPhaseAction: turn=$turn, doomPhase was=$doomPhase")
             if (factions.%(_.doom >= 30).any || ritualTrack(ritualMarker) == 999)
                 return GameOverPhaseAction
 
@@ -3224,7 +3219,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             log("Play order", factions.mkString(", "))
 
             if (turn == 1) {
-                println(s"[DOOM-TRACE] Turn 1: skipping doom, going to ActionPhaseAction")
                 ActionPhaseAction // Then(...)
             } else {
                 log(CthulhuWarsSolo.DottedLine)
@@ -3242,18 +3236,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 factions.foreach(f => f.satisfyIf(FirstDoomPhase, "The first Doom phase", turn == 2))
                 factions.foreach(f => f.satisfyIf(FiveSpellbooks, "Have five spellbooks", f.unfulfilled.num == 1))
 
-                scala.scalajs.js.Dynamic.global.console.log(s"[SPELLBOOK-TRACE] PlayDirectionAction: returning CheckSpellbooksAction(DoomPhaseAction), turn=$turn")
                 CheckSpellbooksAction(DoomPhaseAction) // Then(...)
             }
 
         // SPELLBOOK
         case CheckSpellbooksAction(next) =>
-            scala.scalajs.js.Dynamic.global.console.log(s"[SPELLBOOK-TRACE] CheckSpellbooksAction entered with next=${next.getClass.getSimpleName}")
             val fs = factions.%(f => f.unfulfilled.num + f.spellbooks.num < f.library.num)
             val fe = factions.%(f => f.es.%(_.value == 0).any)
 
             if (fs.any) {
-                scala.scalajs.js.Dynamic.global.console.log(s"[SPELLBOOK-TRACE] fs=${fs.mkString(",")}, offering spellbook with next=${next.getClass.getSimpleName}")
                 val f = fs(0)
                 // Map library names for buff option spellbook swaps before filtering
                 val effectiveLibrary = f.library.map { sb => (f, sb) match {
@@ -3787,7 +3778,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             MainGatesAction(f)
 
         case MainGatesAction(f) =>
-            scala.scalajs.js.Dynamic.global.console.log(s"[SPELLBOOK-TRACE] MainGatesAction($f) -> CheckSpellbooksAction(MainAction($f))")
             checkGatesGained(f)
 
             CheckSpellbooksAction(MainAction(f))
