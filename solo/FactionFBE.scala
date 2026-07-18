@@ -521,26 +521,27 @@ object FBEExpansion extends Expansion {
             }
 
         case ShapestealingTargetAction(self, enemyMonster) =>
-            // Discard the LOWEST card die (weakest first, protects strong dice per
-            // Q2 resolution), then roll a fresh d6 (card text: "roll a die from your
-            // Faction Card"). The fresh roll's pip is compared to the Monster's Cost.
+            // Take the LOWEST card die (weakest first, protects strong dice per
+            // Q2 resolution) and use its pip value (1-6) for the Shapestealing check.
+            // The die was already rolled when placed on the Faction Card; we use that
+            // value and discard the die (§1.10 SB3: "the value compared to the enemy
+            // Monster's Cost is the literal pip value (1-6) printed on the rolled card die").
             val sorted = game.fbeCardDice.sortBy(x => x)
-            val discarded = sorted.head
+            val dieValue = sorted.head
             game.fbeCardDice = sorted.drop(1)
-            self.log(Shapestealing.styled(FBE) + ": discarded lowest card die (value", discarded.toString + ")")
-            RollD6(_ => Shapestealing.styled(FBE) + ": roll for Shapestealing",
-                roll => ShapestealingResolveAction(self, enemyMonster, roll))
+            self.log(Shapestealing.styled(FBE) + ": using card die (value", dieValue.toString + ")")
+            Force(ShapestealingResolveAction(self, enemyMonster, dieValue))
 
         case ShapestealingResolveAction(self, enemyMonster, roll) =>
             val mon = game.unit(enemyMonster)
             val cost = mon.uclass.cost
             if (roll > cost) {
                 game.fbeShapestolen :+= enemyMonster
-                self.log(Shapestealing.styled(FBE) + ": rolled", roll.toString + "; vs Cost",
+                self.log(Shapestealing.styled(FBE) + ": die value", roll.toString + " vs Cost",
                     cost.toString + " —", mon.uclass.styled(mon.faction), "fights for", FBE.full, "this Combat")
             }
             else
-                self.log(Shapestealing.styled(FBE) + ": rolled", roll.toString + "; vs Cost",
+                self.log(Shapestealing.styled(FBE) + ": die value", roll.toString + " vs Cost",
                     cost.toString + " — failed")
             UnknownContinue   // Battle.scala ShapestealingResolveAction case resumes via proceed()
 
