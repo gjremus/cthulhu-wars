@@ -83,7 +83,7 @@ case object OW extends Faction { f =>
         units(Mutant).num * 1 +
         units(Abomination).num * 2 +
         units(SpawnOW).num * 3 +
-        units(YogSothoth).not(Zeroed).num * (2 * factions.but(f)./(e => if (e == TB) e.goos.factionGOOs.any.??(1) else e.factionGOOs.num).sum + (AN.can(HolyGround) && game.cathedrals.num == 4).??(2)) +
+        units(YogSothoth).not(Zeroed).num * (2 * factions.but(f)./(_.factionGOOs.num).sum) +
         neutralStrength(units, opponent)
 }
 
@@ -122,21 +122,12 @@ case class DragonAscendingCancelAction(self : OW, then : ForcedAction) extends B
 
 
 object OWExpansion extends Expansion {
-    override def afterAction()(implicit game : Game) {
-        if (!game.setup.has(OW)) return
-        val f = OW
-        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.goos.%(_.region == r).any).any).any)
-        val unitsAtEnemyGatesThreshold = if (game.options.has(OpenerCheapMutants)) 3 else 2
-        val unitsAtEnemyGatesLabel = if (game.options.has(OpenerCheapMutants)) "Units at three enemy Gates" else "Units at two enemy Gates"
-        f.satisfyIf(UnitsAtEnemyGates, unitsAtEnemyGatesLabel, areas.%(r => f.at(r).any && f.enemies.%(_.gates.has(r)).any).num >= unitsAtEnemyGatesThreshold)
-    }
-
     override def triggers()(implicit game : Game) {
         val f = OW
         f.satisfyIf(EightGates, "Eight Gates on the map", game.allGates.onMap.num >= 8)
         f.satisfyIf(TenGates, "Ten Gates on the map", game.allGates.onMap.num >= 10)
         f.satisfyIf(TwelveGates, "Twelve Gates on the map", game.allGates.onMap.num >= 12)
-        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.goos.%(_.region == r).any).any).any)
+        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.at(r).goos.any).any).any)
         val unitsAtEnemyGatesThreshold = if (game.options.has(OpenerCheapMutants)) 3 else 2
         val unitsAtEnemyGatesLabel = if (game.options.has(OpenerCheapMutants)) "Units at three enemy Gates" else "Units at two enemy Gates"
         f.satisfyIf(UnitsAtEnemyGates, unitsAtEnemyGatesLabel, areas.%(r => f.at(r).any && f.enemies.%(_.gates.has(r)).any).num >= unitsAtEnemyGatesThreshold)
@@ -200,8 +191,8 @@ object OWExpansion extends Expansion {
 
             game.moves(f)
 
-            if (f.can(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(r => f.affords(1)(r) && f.enemies.%(_.at(r, GOO, ElderGod).any).none).any)
-                game.gates.%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
+            if (f.can(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(f.affords(1)).any)
+                game.gates.%(r => f.enemies.%(_.at(r, GOO).any).none).%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
                     + BeyondOneMainAction(f, _)
                 }
 
@@ -264,7 +255,7 @@ object OWExpansion extends Expansion {
             Ask(self).each(l./~(r => self.at(r).%(_.uclass.cost >= 3)).%(u => u.canMove || u.uclass == HoundOfTindalos))(u => BeyondOneUnitAction(self, u.region, u.uclass)).cancel
 
         case BeyondOneUnitAction(self, o, uc) =>
-            Ask(self).each(areas.diff(game.gates).%(r => self.affords(1)(r) && self.enemies.%(_.at(r, GOO, ElderGod).any).none))(r => BeyondOneAction(self, o, uc, r)).cancel
+            Ask(self).each(areas.diff(game.gates).%(self.affords(1)))(r => BeyondOneAction(self, o, uc, r)).cancel
 
         case BeyondOneAction(self, o, uc, r) =>
             self.power -= 1
@@ -276,6 +267,23 @@ object OWExpansion extends Expansion {
                 f.gates :+= r
                 f.at(o).%(_.onGate).single.foreach(_.region = r)
             }
+            // 2026-07-18: Beyond One must also update chaos gate tracking when moving DS chaos gates.
+            // Without this, moving a chaos gate leaves it in the old location's chaosGateRegions list,
+            // causing the map to show both a chaos gate (at old location) and a normal gate (at new location).
+            if (game.factions.has(DS) && DS.chaosGateRegions.has(o)) {
+                DS.chaosGateRegions = DS.chaosGateRegions.%(c => c != o)
+                DS.chaosGateRegions :+= r
+            }
+            // 2026-05-27 (mirrored from Library 2026-05-11 fix): use
+            // `headOption` instead of `.one` here. When OW Beyond One's its
+            // own gate, the only OW unit OW can use to occupy the gate
+            // (cost-3+) is a High Priest, which IS the on-gate keeper. The
+            // loop above already moved that HP to `r`, so
+            // `self.at(o).one(uc)` would crash with head-of-empty-list. The
+            // intent of this line is "also move the unit OW spent to power
+            // Beyond One" — but when that unit was the keeper, the loop did
+            // it already, so we no-op. Yog-Sothoth IS a gate (not on a gate)
+            // and can't be the `uc` here.
             self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
             self.log("moved gate with", uc.styled(self), "from", o, "to", r)
             EndAction(self)
@@ -340,17 +348,16 @@ object OWExpansion extends Expansion {
 
             killall.foreach(f => f.at(r).foreach(_.health = Killed))
 
-            val painall = ee.%(f => f.at(r).%(u => u.uclass != Cathedral).num == p.count(f))
+            val painall = ee.%(f => f.at(r).num == p.count(f))
 
-            painall.foreach(f => f.at(r).%(u => u.uclass != Cathedral).foreach(_.health = Pained))
+            painall.foreach(f => f.at(r).foreach(_.health = Pained))
 
             val aa = ee.diff(killall).diff(painall)
 
             if (aa.any) {
                 val f = aa(0)
                 val rs = (k.count(f) - f.at(r).%(_.health == Killed).num).times(Kill) ++ (p.count(f) - f.at(r).%(_.health == Pained).num).times(Pain)
-                val painableUnits = f.at(r).%(_.health == Alive).%(u => !(u.uclass == Cathedral && rs.first == Pain))./(_.uclass).sortBy(_.cost)
-                val us = if (rs.first == Pain) painableUnits else f.at(r).%(_.health == Alive)./(_.uclass).sortBy(_.cost)
+                val us = f.at(r).%(_.health == Alive)./(_.uclass).sortBy(_.cost)
                 val uu = (us.num > 1).?(us).|(us.take(1))
                 Ask(f).each(uu)(u => DreadCurseAssignAction(self, r, e, k, p, f, rs.first, u))
             }
