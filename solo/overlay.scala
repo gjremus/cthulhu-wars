@@ -1324,8 +1324,8 @@ object Overlays {
                 else ""
                 (assetId, src, display, onMapH)
             }).filter { case (_, src, _, _) => src.nonEmpty }
-            val spriteScale = 12.0 / 60.0
-            def spriteHFor(onMapH : Double) : Double = onMapH * spriteScale
+            val spriteScale = 10.0 / 70.0
+            def spriteHFor(onMapH : Double) : Double = (onMapH * spriteScale).min(12.0)
             val gateEntries = parsed.filter(_._1 == "gate")
             val unitEntries = parsed.filter(_._1 != "gate")
             val gateControlled = gateEntries.exists(_._3.contains("controlled"))
@@ -2060,12 +2060,15 @@ object Overlays {
         // the Spellbooks list — not at the top of the faction card.
         val lunacyPhase = "Ongoing"
         val lunacyText  = "Spellbooks and abilities that affect Cultists can target Earth Cats as if they are Acolytes. They cannot be captured as Cultists nor can they create or control Gates. This ability is not optional."
-        // The variant-dependent spellbook (Catabolism or Syzygy) is rendered in
-        // the Spellbooks line below, alongside the rest of BB's library that is
-        // already shown via the per-unit Spellbook references.
+        // When alternative spellbooks are chosen (altSB = true), show the alt variants
+        // (Syzygy and Carnivore) in the top-level spellbooks section of the faction overlay.
+        // When standard spellbooks are used (altSB = false), show only Catabolism.
+        // Standard spellbooks: Catabolism, Zagazig, Savagery, Predator, Catnapping, Ailurophobia
+        // Alt variants: Catabolism→Syzygy, Ailurophobia→Carnivore (4 unchanged)
+        val spellbooksList = if (altSB) $(Syzygy, Carnivore) else $(Catabolism)
         val variantSpellbook = if (altSB) Syzygy else Catabolism
         faction(BB, "info:bb-background", Lunacy, lunacyPhase, lunacyText,
-            $(variantSpellbook), $(
+            spellbooksList, $(
             (EarthCat,      6, "1",  "0",  s"""<div class=p>Special: Generates 1 Power during the Gather Power Phase</div><div class=p>Spellbook: ${reference(BB, variantSpellbook)}</div>"""),
             (CatFromMars,   2, "2",  "1",  s"""<div class=p>Special: Generates 1 Power during the Gather Power Phase</div><div class=p>Spellbook: ${reference(BB, Zagazig)}</div>"""),
             (CatFromSaturn, 2, "3",  "2",  s"""<div class=p>Special: Generates 1 Power during the Gather Power Phase</div><div class=p>Spellbook: ${reference(BB, Savagery)}</div>"""),
