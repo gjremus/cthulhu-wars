@@ -241,6 +241,13 @@ object OWExpansion extends Expansion {
                 f.gates :+= r
                 f.at(o).%(_.onGate).single.foreach(_.region = r)
             }
+            // 2026-07-18: Beyond One must also update chaos gate tracking when moving DS chaos gates.
+            // Without this, moving a chaos gate leaves it in the old location's chaosGateRegions list,
+            // causing the map to show both a chaos gate (at old location) and a normal gate (at new location).
+            if (game.factions.has(DS) && DS.chaosGateRegions.has(o)) {
+                DS.chaosGateRegions = DS.chaosGateRegions.%(c => c != o)
+                DS.chaosGateRegions :+= r
+            }
             // 2026-05-11 (HP expansion): use `headOption` instead of `.one` here.
             // When OW Beyond One's its own gate, the only OW unit OW can use to
             // occupy the gate (cost-3+) is a High Priest, which IS the on-gate
