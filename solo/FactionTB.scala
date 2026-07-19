@@ -968,11 +968,17 @@ object TBExpansion extends Expansion {
                 })
                 println(s"[PSYCH SHRIEK RETREAT] Units with valid destinations: ${unitsWithDests.size}")
                 if (unitsWithDests.none) {
+                    // Defense-in-depth: never eliminate GOOs or Buildings (they were already filtered at line 946,
+                    // but if this action was recorded in an old game log before the filter, replay-protect by skipping them here)
                     remaining.foreach { ur =>
                         val u = game.unit(ur)
-                        println(s"[PSYCH SHRIEK TRACE] Eliminating ${u.uclass} (${u.faction}) at ${u.region} due to no retreat destinations. Enemy faction: ${enemy}. Enemy power before: ${enemy.power}")
-                        game.eliminate(u)
-                        println(s"[PSYCH SHRIEK TRACE] After eliminate: Enemy power now: ${enemy.power}")
+                        if (u.uclass.utype == GOO || u.uclass.utype == Building) {
+                            println(s"[PSYCH SHRIEK DEFENSE] Refusing to eliminate ${u.uclass.utype} ${u.uclass} (recorded in old game log before GOO/Building filter fix)")
+                        } else {
+                            println(s"[PSYCH SHRIEK TRACE] Eliminating ${u.uclass} (${u.faction}) at ${u.region} due to no retreat destinations. Enemy faction: ${enemy}. Enemy power before: ${enemy.power}")
+                            game.eliminate(u)
+                            println(s"[PSYCH SHRIEK TRACE] After eliminate: Enemy power now: ${enemy.power}")
+                        }
                     }
                     TB.log(PsychicShriek.styled(TB) + ": no legal destinations — eliminated remaining units")
                     EndAction(TB)
