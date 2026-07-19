@@ -737,12 +737,15 @@ object TTExpansion extends Expansion {
 
         case TTSycophancyLoseDoomAction(ritualer, doom, es) =>
             ritualer.log("Sycophancy".styled(TT) + ": chooses to gain " + (doom - 1).doom + " (1 fewer)")
+            println(s"[BB-SYCOPHANCY-LOSE] ritualer=${ritualer.short}, ritualer==BB=${ritualer == BB}, bbRequiresAttentionPendingRegion=${game.bbRequiresAttentionPendingRegion}")
             // Check if this is BB's Requires Attention ritual (tracked in game state)
             game.bbRequiresAttentionPendingRegion match {
                 case Some(r) if ritualer == BB =>
+                    println(s"[BB-SYCOPHANCY-LOSE] Matched BB case: calling BBRequiresAttentionResumeAction with doom=${doom - 1}, es=${es}, r=${r}")
                     game.bbRequiresAttentionPendingRegion = None
                     Force(BBRequiresAttentionResumeAction(ritualer, doom - 1, es, r))
                 case _ =>
+                    println(s"[BB-SYCOPHANCY-LOSE] Did NOT match BB case: calling TTSycophancyResumeRitualAction")
                     game.bbRequiresAttentionPendingRegion = None
                     Force(TTSycophancyResumeRitualAction(ritualer, doom - 1, es))
             }
@@ -750,12 +753,15 @@ object TTExpansion extends Expansion {
         case TTSycophancyGiveDoomAction(ritualer, doom, es) =>
             TT.doom += 1
             ritualer.log("Sycophancy".styled(TT) + ": gave 1", 1.doom, "to", TT)
+            println(s"[BB-SYCOPHANCY-GIVE] ritualer=${ritualer.short}, ritualer==BB=${ritualer == BB}, bbRequiresAttentionPendingRegion=${game.bbRequiresAttentionPendingRegion}")
             // Check if this is BB's Requires Attention ritual (tracked in game state)
             game.bbRequiresAttentionPendingRegion match {
                 case Some(r) if ritualer == BB =>
+                    println(s"[BB-SYCOPHANCY-GIVE] Matched BB case: calling BBRequiresAttentionResumeAction with doom=${doom}, es=${es}, r=${r}")
                     game.bbRequiresAttentionPendingRegion = None
                     Force(BBRequiresAttentionResumeAction(ritualer, doom, es, r))
                 case _ =>
+                    println(s"[BB-SYCOPHANCY-GIVE] Did NOT match BB case: calling TTSycophancyResumeRitualAction")
                     game.bbRequiresAttentionPendingRegion = None
                     Force(TTSycophancyResumeRitualAction(ritualer, doom, es))
             }
