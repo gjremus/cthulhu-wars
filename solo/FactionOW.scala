@@ -236,19 +236,33 @@ object OWExpansion extends Expansion {
             self.payTax(r)
 
             // 2026-07-19: Beyond One CAN move DS chaos gates. When moving a chaos gate,
-            // update DS.chaosGateRegions tracking (remove from old, add to new).
+            // update BOTH DS.chaosGateRegions AND DS.gates (same pattern as Animate Matter).
             val isChaosGate = game.factions.has(DS) && DS.chaosGateRegions.has(o)
+            println(s"[BEYOND-ONE-TRACE] Moving gate from $o to $r. isChaosGate=$isChaosGate")
+            println(s"[BEYOND-ONE-TRACE] Before: game.gates=${game.gates}, DS.chaosGateRegions=${if (game.factions.has(DS)) DS.chaosGateRegions else "N/A"}, DS.gates=${if (game.factions.has(DS)) DS.gates else "N/A"}")
             if (isChaosGate) {
+                println(s"[BEYOND-ONE-TRACE] Updating DS.chaosGateRegions: removing $o, adding $r")
                 DS.chaosGateRegions = DS.chaosGateRegions.%(region => region != o)
                 DS.chaosGateRegions :+= r
+                // FIX: Also update DS.gates to match Animate Matter pattern (FactionDS.scala line 491/504)
+                println(s"[BEYOND-ONE-TRACE] Updating DS.gates: removing $o, adding $r")
+                DS.gates = DS.gates.%(region => region != o)
+                DS.gates :+= r
+                println(s"[BEYOND-ONE-TRACE] After DS update: DS.chaosGateRegions=${DS.chaosGateRegions}, DS.gates=${DS.gates}")
             }
 
             game.gates :-= o
             game.gates :+= r
+            println(s"[BEYOND-ONE-TRACE] After game.gates update: game.gates=${game.gates}")
             factions.%(_.gates.contains(o)).foreach { f =>
+                println(s"[BEYOND-ONE-TRACE] Updating ${f.short} faction gates: before=${f.gates}")
                 f.gates :-= o
                 f.gates :+= r
-                f.at(o).%(_.onGate).single.foreach(_.region = r)
+                println(s"[BEYOND-ONE-TRACE] Updating ${f.short} faction gates: after=${f.gates}")
+                f.at(o).%(_.onGate).single.foreach(u => {
+                    println(s"[BEYOND-ONE-TRACE] Moving on-gate unit ${u.uclass} from $o to $r")
+                    u.region = r
+                })
             }
 
             // 2026-05-11 (HP expansion): use `headOption` instead of `.one` here.
@@ -260,8 +274,16 @@ object OWExpansion extends Expansion {
             // Beyond One" — but when that unit was the keeper, the loop did
             // it already, so we no-op. Yog-Sothoth IS a gate (not on a gate)
             // and can't be the `uc` here.
-            self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
-            self.log("moved gate with", uc.styled(self), "from", o, "to", r)
+            self.at(o).%(_.uclass == uc).headOption.foreach(u => {
+                println(s"[BEYOND-ONE-TRACE] Moving power unit ${uc} from $o to $r")
+                u.region = r
+            })
+            // Log explicitly calls out chaos gates for clarity in player log
+            if (isChaosGate)
+                self.log("moved", ChaosGate.styled(self), "with", uc.styled(self), "from", o, "to", r)
+            else
+                self.log("moved gate with", uc.styled(self), "from", o, "to", r)
+            println(s"[BEYOND-ONE-TRACE] Final state: game.gates=${game.gates}, DS.chaosGateRegions=${if (game.factions.has(DS)) DS.chaosGateRegions else "N/A"}, DS.gates=${if (game.factions.has(DS)) DS.gates else "N/A"}")
             EndAction(self)
 
         // DREAD CURSE
