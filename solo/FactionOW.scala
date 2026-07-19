@@ -289,7 +289,10 @@ object OWExpansion extends Expansion {
             // it already, so we no-op. Yog-Sothoth IS a gate (not on a gate)
             // and can't be the `uc` here.
             self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
-            self.log("moved gate with", uc.styled(self), "from", o, "to", r)
+            if (isChaosGate)
+                self.log("moved", "Chaos Gate".styled("ds"), "with", uc.styled(self), "from", o, "to", r)
+            else
+                self.log("moved gate with", uc.styled(self), "from", o, "to", r)
             EndAction(self)
 
         // DREAD CURSE

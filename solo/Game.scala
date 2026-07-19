@@ -3060,11 +3060,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Round 8 Bug 40: also check facedown state for IGOO spellbooks
                 val brood = f.enemies.%(e => e.has(TheBrood) && !e.oncePerGame.has(TheBrood))
                 val yogDoomSuppressed = f.unitGate.exists(u => ElderThingMindControl.suppresses(u))
-                val gates = f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region))
+                val gates = f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region)) ++ (if (f == BB) $(BB.moon) else $)
                 val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
 
+                if (f == BB) {
+                    println(s"[BB-MOON-DOOM-TRACE] Faction=${f.short}, f.gates=${f.gates.mkString(",")}, moon=${BB.moon}, gates-after-moon=${gates.mkString(",")}, gates-total=${gates.num}, valid-gates=${valid.num}, doom-before=${f.doom}")
+                }
                 f.doom += valid.num
                 f.log("got", valid.num.doom)
+                if (f == BB) {
+                    println(s"[BB-MOON-DOOM-TRACE] After gate doom: doom-after=${f.doom}")
+                }
 
                 if (f.loyaltyCards.has(GnorriCard)) {
                     val gnorriCount = f.all(Gnorri).num
@@ -3547,7 +3553,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Force(BBRequiresAttentionResumeAction(self, doom, esBonus, r))
 
         case BBRequiresAttentionResumeAction(self, doom, esBonus, r) =>
+            println(s"[BB-REQ-ATT-TRACE] Before doom add: faction=${self.short}, doom-before=${self.doom}, adding=${doom}, region=${r}")
             self.doom += doom
+            println(s"[BB-REQ-ATT-TRACE] After doom add: doom-after=${self.doom}")
 
             log(CthulhuWarsSolo.DottedLine)
             self.log(RequiresAttention.styled(BB) + ": ritual in", r, "— paid", self.can(Herald).?(5).|(ritualCost).power, "— gained", doom.doom)
