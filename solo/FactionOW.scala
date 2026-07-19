@@ -234,18 +234,23 @@ object OWExpansion extends Expansion {
         case BeyondOneAction(self, o, uc, r) =>
             self.power -= 1
             self.payTax(r)
-            // 2026-07-19: Beyond One should NOT move DS chaos gates. Chaos gates are immovable.
-            // Only move the gate in game.gates if it's not a chaos gate.
+
+            // 2026-07-19: Beyond One CAN move DS chaos gates. When moving a chaos gate,
+            // update DS.chaosGateRegions tracking (remove from old, add to new).
             val isChaosGate = game.factions.has(DS) && DS.chaosGateRegions.has(o)
-            if (!isChaosGate) {
-                game.gates :-= o
-                game.gates :+= r
-                factions.%(_.gates.contains(o)).foreach { f =>
-                    f.gates :-= o
-                    f.gates :+= r
-                    f.at(o).%(_.onGate).single.foreach(_.region = r)
-                }
+            if (isChaosGate) {
+                DS.chaosGateRegions = DS.chaosGateRegions.%(region => region != o)
+                DS.chaosGateRegions :+= r
             }
+
+            game.gates :-= o
+            game.gates :+= r
+            factions.%(_.gates.contains(o)).foreach { f =>
+                f.gates :-= o
+                f.gates :+= r
+                f.at(o).%(_.onGate).single.foreach(_.region = r)
+            }
+
             // 2026-05-11 (HP expansion): use `headOption` instead of `.one` here.
             // When OW Beyond One's its own gate, the only OW unit OW can use to
             // occupy the gate (cost-3+) is a High Priest, which IS the on-gate
