@@ -1096,6 +1096,7 @@ object TBExpansion extends Expansion {
             // Remove gate from source area
             self.gates = self.gates.but(source)
             game.gates = game.gates.but(source)
+            game.tbSBR4Gates = game.tbSBR4Gates.but(source)  // Clean up SBR4 flag if transferring an SBR4 gate
             // Transfer gate to the Mantle
             self.gates :+= TB.mantle
             game.gates :+= TB.mantle
@@ -1151,6 +1152,7 @@ object TBExpansion extends Expansion {
             self.at(removedGate).%(_.onGate).foreach(_.onGate = false)
             self.gates = self.gates.but(removedGate)
             game.gates = game.gates.but(removedGate)
+            game.tbSBR4Gates = game.tbSBR4Gates.but(removedGate)  // Clean up SBR4 flag when removing gate
             self.log("Removed Gate in", removedGate)
             // Place Chthonian
             self.place(Chthonian, dest)
