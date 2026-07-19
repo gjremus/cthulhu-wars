@@ -122,15 +122,6 @@ case class DragonAscendingCancelAction(self : OW, then : ForcedAction) extends B
 
 
 object OWExpansion extends Expansion {
-    override def afterAction()(implicit game : Game) {
-        if (!game.setup.has(OW)) return
-        val f = OW
-        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.at(r).goos.any).any).any)
-        val unitsAtEnemyGatesThreshold = if (game.options.has(OpenerCheapMutants)) 3 else 2
-        val unitsAtEnemyGatesLabel = if (game.options.has(OpenerCheapMutants)) "Units at three enemy Gates" else "Units at two enemy Gates"
-        f.satisfyIf(UnitsAtEnemyGates, unitsAtEnemyGatesLabel, areas.%(r => f.at(r).any && f.enemies.%(_.gates.has(r)).any).num >= unitsAtEnemyGatesThreshold)
-    }
-
     override def triggers()(implicit game : Game) {
         val f = OW
         f.satisfyIf(EightGates, "Eight Gates on the map", game.allGates.onMap.num >= 8)
@@ -201,6 +192,8 @@ object OWExpansion extends Expansion {
             game.moves(f)
 
             if (f.can(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(f.affords(1)).any)
+                // 2026-07-19: Chaos gates (ElderGod) must not be movable by Beyond One.
+                // Include ElderGod in the enemy unit check to exclude DS chaos gates from Beyond One targets.
                 game.gates.%(r => f.enemies.%(_.at(r, GOO, ElderGod).any).none).%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
                     + BeyondOneMainAction(f, _)
                 }
@@ -227,17 +220,7 @@ object OWExpansion extends Expansion {
                 if (game.options.has(OpenerYogCurseDie) && f.allInPlay.%(_.uclass == YogSothoth).any)
                     n += 1
                 if (n > 0) {
-                    // BB Tasks #43: Dread Curse may also be aimed at the Moon when
-                    // BB has units there. The Moon is a valid Dread Curse target
-                    // region — BB units on the Moon can be pained off it (and BB
-                    // units pained from the Moon may retreat to any map area, per
-                    // BB Implementation Guide §2.6c / Fix 55). `areas` excludes
-                    // BB.moon, so we append it explicitly when an enemy of OW has
-                    // units there (only BB ever does, but we keep the same
-                    // `f.enemies` predicate for symmetry with the map-area path).
-                    val mapTargets = areas.%(f.affords(2)).%(r => f.enemies.exists(_.at(r).any))
-                    val moonTarget = (f.affords(2)(BB.moon) && f.enemies.exists(_.at(BB.moon).any)).??($(BB.moon))
-                    val l = mapTargets ++ moonTarget
+                    val l = areas.%(f.affords(2)).%(r => f.enemies.exists(_.at(r).any))
                     if (l.any)
                         + DreadCurseMainAction(f, n, l)
                 }
@@ -286,6 +269,16 @@ object OWExpansion extends Expansion {
                 f.gates :+= r
                 f.at(o).%(_.onGate).single.foreach(_.region = r)
             }
+            // 2026-05-27 (mirrored from Library 2026-05-11 fix): use
+            // `headOption` instead of `.one` here. When OW Beyond One's its
+            // own gate, the only OW unit OW can use to occupy the gate
+            // (cost-3+) is a High Priest, which IS the on-gate keeper. The
+            // loop above already moved that HP to `r`, so
+            // `self.at(o).one(uc)` would crash with head-of-empty-list. The
+            // intent of this line is "also move the unit OW spent to power
+            // Beyond One" — but when that unit was the keeper, the loop did
+            // it already, so we no-op. Yog-Sothoth IS a gate (not on a gate)
+            // and can't be the `uc` here.
             self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
             self.log("moved gate with", uc.styled(self), "from", o, "to", r)
             EndAction(self)
@@ -405,19 +398,7 @@ object OWExpansion extends Expansion {
             Ask(f).add(DreadCurseSplitAction(f, r, $, e, k, p))
 
         case DreadCurseRetreatAction(self, r, e, f, uc) =>
-            // BB Tasks #43 / BB Implementation Guide §2.6c + Fix 55:
-            //   - If Dread Curse was aimed at the Moon, pained units can retreat
-            //     to any map area (Moon is "adjacent to all regions"). The set
-            //     `r.connectedForRetreat` is empty for BB.moon, so we substitute
-            //     the full map area list.
-            //   - If Dread Curse was aimed at a map area, only BB-owned pained
-            //     units may retreat TO the Moon (non-BB pain destinations exclude
-            //     the Moon). Map.scala's `connectedForRetreat` already omits the
-            //     Moon for map regions, so we append BB.moon only when f == BB.
-            val moonOriginDests = (r == BB.moon).??(areas)
-            val moonDest = (r != BB.moon && f == BB).??($(BB.moon))
-            val dests = (r.connectedForRetreat ++ moonOriginDests ++ moonDest).distinct
-            Ask(self).each(dests)(d => DreadCurseRetreatToAction(self, r, e, f, uc, d))
+            Ask(self).each(r.connectedForRetreat)(d => DreadCurseRetreatToAction(self, r, e, f, uc, d))
 
         case DreadCurseRetreatToAction(self, r, e, f, uc, d) =>
             val u = f.at(r, uc).%(_.health == Pained).sortP.first
