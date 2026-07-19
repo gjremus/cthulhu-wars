@@ -92,6 +92,8 @@ case class GameOverAction(winners : $[Faction], msg : String) extends Action wit
 object CthulhuWarsSolo {
     val original = dom.document.documentElement.outerHTML
 
+    var pendingRandomNeutrals : Option[Setup => Unit] = None
+
     def main(args : Array[String]) {
         if (dom.document.readyState == dom.DocumentReadyState.complete)
             setupUI()
@@ -763,8 +765,8 @@ object CthulhuWarsSolo {
             // on every map redraw — consuming 85% of all CPU time.
             val glyphPosCache = scala.collection.mutable.Map[(Int, Int), (Int, Int)]()
             var glyphPosCacheHorizontal : Boolean = false
-            def findStaticGlyphPos(gx : Int, gy : Int) : (Int, Int) =
-                glyphPosCache.getOrElseUpdate((gx, gy), activeGlyphPlacer.findStaticGlyphPos(gx, gy, halfGlyph = (33 * board.unitScale).toInt, halfGate = (38 * board.unitScale).toInt, maxRadius = (200 * board.unitScale).toInt))
+            def findStaticGlyphPos(gx : Int, gy : Int, explicitRegionColor : Int = -1) : (Int, Int) =
+                glyphPosCache.getOrElseUpdate((gx, gy), activeGlyphPlacer.findStaticGlyphPos(gx, gy, halfGlyph = (33 * board.unitScale).toInt, halfGate = (38 * board.unitScale).toInt, maxRadius = (200 * board.unitScale).toInt, explicitRegionColor = explicitRegionColor))
 
             case object DesecrationToken extends FactionUnitClass(YS, "Desecration", Token, 0)
             case object IceAgeToken extends FactionUnitClass(WW, "Ice Age", Token, 0)
@@ -1812,8 +1814,15 @@ object CthulhuWarsSolo {
                                     dy += step
                                 }
                                 (bestX, bestY)
-                            } else
-                                findStaticGlyphPos(rawPx, rawPy)
+                            } else if (!horizontal && !board.isLibraryMap) {
+                                val (ox, oy) = (rawPy, mp.height - rawPx)
+                                val rc = EarthRegionPalette.get(board.id, r).getOrElse(-1)
+                                val (fx, fy) = findStaticGlyphPos(ox, oy, rc)
+                                (mp.height - fy, fx)
+                            } else {
+                                val rc = if (!board.isLibraryMap) EarthRegionPalette.get(board.id, r).getOrElse(-1) else -1
+                                findStaticGlyphPos(rawPx, rawPy, rc)
+                            }
                             fixed +:= DrawItem(r, f, StartingGlyph, Alive, $, glyphX, glyphY)
                         }
                     }
@@ -2083,7 +2092,15 @@ object CthulhuWarsSolo {
                     game.starting.get(DS).foreach { r =>
                         val (gx, gy) = gateXY(r)
                         val size = (60 * board.unitScale).toInt
-                        val (sx, sy) = findStaticGlyphPos(gx, gy)
+                        val (sx, sy) = if (!horizontal && !board.isLibraryMap) {
+                            val (ox, oy) = (gy, mp.height - gx)
+                            val rc = EarthRegionPalette.get(board.id, r).getOrElse(-1)
+                            val (fx, fy) = findStaticGlyphPos(ox, oy, rc)
+                            (mp.height - fy, fx)
+                        } else {
+                            val rc = if (!board.isLibraryMap) EarthRegionPalette.get(board.id, r).getOrElse(-1) else -1
+                            findStaticGlyphPos(gx, gy, rc)
+                        }
                         g.drawImage(getAsset("ds-glyph"), sx - size / 2, sy - size / 2, size, size)
                     }
                 }
@@ -3521,6 +3538,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
             val setup = new Setup(seatings(0), Human)
 
+            pendingRandomNeutrals.foreach(_(setup))
+            pendingRandomNeutrals = None
+
             // 2026-05-21: online-only option defaults per user spec.
             //   GateDiplomacy + AsyncActions → on by default.
             //   Opener4P10Gates → on when OW is in a 4-player game.
@@ -3793,6 +3813,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
             val setup = new Setup(seatings(0), Human)
 
+            pendingRandomNeutrals.foreach(_(setup))
+            pendingRandomNeutrals = None
+
             def showMapPreview() {
                 val mapDiv = getElem("map-small")
                 setup.options.of[MapOption].lastOption.foreach { opt =>
@@ -4060,6 +4083,429 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Tombstalker (TS), Firstborn (FB), and Daemon Sultan (DS): included in the master faction list for game setup and replay parsing
         val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, TS, FB, DS)
 
+        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, AN, TS, FB, DS)
+
+        def altFactionPicker(pn : Int, onContinue : $[Faction] => Unit = startSetup) {
+            clear(actionDiv)
+            if (dom.document.getElementById("alt-picker-style") == null) {
+                val style = dom.document.createElement("style").asInstanceOf[html.Style]
+                style.id = "alt-picker-style"
+                style.innerHTML = """
+                    @media (max-width: 720px) {
+                        .alt-picker-cb-wrap { flex-basis: 100% !important; }
+                    }
+                """
+                dom.document.head.appendChild(style)
+            }
+            val playerNames = scala.collection.mutable.ArrayBuffer.fill(pn)("")
+            for (i <- 0 until pn) playerNames(i) = "Player " + (i + 1)
+            val enabledFactions = scala.collection.mutable.ArrayBuffer.fill(pn)(scala.collection.mutable.Set[Faction]())
+            for (i <- 0 until pn) altPickerFactions.foreach(f => enabledFactions(i) += f)
+            var randomizeOrder = false
+
+            val randMonsterPool : $[GameOption] = $(UseGhast, UseGug, UseShantak, UseStarVampire, UseVoonith, UseDimensionalShamblers, UseGnorri)
+            val randIGOOPool : $[GameOption] = $(UseByatis, UseAbhoth, UseDaoloth, UseNyogtha, UseTulzscha, UseYgolonac)
+            var randMonsters = false
+            var randIGOOs = false
+            var randMonsterCount = math.max(1, pn)
+            var randIGOOCount = math.max(1, pn)
+
+            val sectionsToHide = $("map-west", "map-east", "log", "status-1", "status-2", "status-3", "status-4", "status-5")
+            val savedDisplays = scala.collection.mutable.Map[String, String]()
+            val actionOuter = actionDiv.parentNode.parentNode.asInstanceOf[html.Element]
+            val savedActionOuter = actionOuter.style.cssText
+            def hideOtherSections() {
+                sectionsToHide.foreach { id =>
+                    val el = dom.document.getElementById(id)
+                    if (el != null) {
+                        val outer = el.parentNode.parentNode.asInstanceOf[html.Element]
+                        savedDisplays(id) = outer.style.display
+                        outer.style.display = "none"
+                    }
+                }
+                actionOuter.style.cssText =
+                    "position:absolute; left:0; top:0; width:100vw; height:100vh; " +
+                    "left:0dvw; top:0dvh; width:100dvw; height:100dvh; background:#0d1117; z-index:100;"
+            }
+            def restoreOtherSections() {
+                sectionsToHide.foreach { id =>
+                    val el = dom.document.getElementById(id)
+                    if (el != null) {
+                        val outer = el.parentNode.parentNode.asInstanceOf[html.Element]
+                        outer.style.display = savedDisplays.getOrElse(id, "")
+                    }
+                }
+                actionOuter.style.cssText = savedActionOuter
+            }
+            hideOtherSections()
+
+            val root = dom.document.createElement("div").asInstanceOf[html.Div]
+            root.style.cssText =
+                "padding:14px 16px; max-width:100%; box-sizing:border-box; height:100%; overflow-y:auto;" +
+                "font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;" +
+                "color:#e6edf3;"
+
+            def computeLocks() : Map[Faction, Int] = {
+                val effective = scala.collection.mutable.ArrayBuffer[scala.collection.mutable.Set[Faction]]()
+                for (i <- 0 until pn) effective += enabledFactions(i).clone()
+                var locked : Map[Faction, Int] = Map()
+                var changed = true
+                while (changed) {
+                    changed = false
+                    for (i <- 0 until pn) {
+                        val pool = effective(i) -- locked.keySet
+                        if (pool.size == 1 && !locked.values.toSet.contains(i)) {
+                            val f = pool.head
+                            if (!locked.contains(f)) {
+                                locked = locked + (f -> i)
+                                changed = true
+                            }
+                        }
+                    }
+                }
+                locked
+            }
+
+            def isFeasible() : Boolean = {
+                def search(remaining : List[Int], used : Set[Faction]) : Boolean = remaining match {
+                    case Nil => true
+                    case _ =>
+                        val p = remaining.minBy(i => (enabledFactions(i) -- used).size)
+                        val pool = (enabledFactions(p) -- used).toList
+                        if (pool.isEmpty) false
+                        else pool.exists(f => search(remaining.filterNot(_ == p), used + f))
+                }
+                search((0 until pn).toList, Set.empty)
+            }
+
+            def generateAssignment() : |[$[Faction]] = {
+                val locked = computeLocks()
+                val assignment = scala.collection.mutable.Map[Int, Faction]()
+                locked.foreach { case (f, i) => assignment(i) = f }
+
+                val remaining = (0 until pn).toList.filterNot(assignment.contains)
+                val usedFactions = scala.collection.mutable.Set[Faction]() ++ assignment.values
+
+                def backtrack(rem : List[Int]) : Boolean = rem match {
+                    case Nil => true
+                    case _ =>
+                        val p = rem.minBy(i => (enabledFactions(i) -- usedFactions -- locked.keySet).size)
+                        val pool = (enabledFactions(p).toList.diff(locked.keySet.toList).diff(usedFactions.toList))
+                        if (pool.isEmpty) false
+                        else {
+                            val shuffled = scala.util.Random.shuffle(pool)
+                            shuffled.find { f =>
+                                usedFactions += f
+                                assignment(p) = f
+                                val ok = backtrack(rem.filterNot(_ == p))
+                                if (!ok) { usedFactions -= f; assignment -= p }
+                                ok
+                            }.isDefined
+                        }
+                }
+                if (!backtrack(remaining)) None
+                else |((0 until pn).toList.map(assignment))
+            }
+
+            def glyphSrc(f : Faction) : String =
+                "webp/images/" + f.short.toLowerCase + "-glyph.webp"
+
+            def render() {
+                clear(root)
+                val title = dom.document.createElement("div").asInstanceOf[html.Div]
+                title.style.cssText = "font-size:14pt;font-weight:600;margin-bottom:8px;color:#fff;"
+                title.innerHTML = "Choose factions included for random selection"
+                root.appendChild(title)
+
+                val help = dom.document.createElement("div").asInstanceOf[html.Div]
+                help.style.cssText = "font-size:9.5pt;color:#8c95a0;margin-bottom:16px;"
+                help.innerHTML = "Type each player's name. Uncheck factions you don't want that player to be eligible for. When a player has only ONE faction checked, that faction is reserved for them — it's auto-greyed-out in every other player's row."
+                root.appendChild(help)
+
+                val locked = computeLocks()
+                val lockedFactions = locked.keySet
+
+                for (i <- 0 until pn) {
+                    val row = dom.document.createElement("div").asInstanceOf[html.Div]
+                    row.style.cssText =
+                        "display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;" +
+                        "padding:8px 6px;border-bottom:1px solid #2a2e36;margin-bottom:6px;"
+
+                    val nameIn = dom.document.createElement("input").asInstanceOf[html.Input]
+                    nameIn.`type` = "text"
+                    nameIn.value = playerNames(i)
+                    nameIn.style.cssText = "flex:0 0 140px;padding:5px 8px;background:#0d1117;border:1px solid #30363d;border-radius:5px;color:#e6edf3;font-family:inherit;font-size:10.5pt;"
+                    nameIn.oninput = (_) => { playerNames(i) = nameIn.value }
+                    row.appendChild(nameIn)
+
+                    val cbWrap = dom.document.createElement("div").asInstanceOf[html.Div]
+                    cbWrap.className = "alt-picker-cb-wrap"
+                    cbWrap.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;flex:1 1 auto;"
+
+                    val allLbl = dom.document.createElement("label").asInstanceOf[html.Label]
+                    allLbl.style.cssText = "display:inline-flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5pt;color:#8c95a0;"
+                    val allCb = dom.document.createElement("input").asInstanceOf[html.Input]
+                    allCb.`type` = "checkbox"
+                    val unlockableForThisPlayer = altPickerFactions.filter(f => !lockedFactions.contains(f) || locked(f) == i)
+                    allCb.checked = unlockableForThisPlayer.forall(enabledFactions(i).contains)
+                    allCb.style.cssText = "margin:0;cursor:pointer;"
+                    allLbl.appendChild(newDiv("", "All"))
+                    allLbl.appendChild(allCb)
+                    cbWrap.appendChild(allLbl)
+
+                    val factionCbs = scala.collection.mutable.ArrayBuffer[(Faction, html.Input)]()
+                    altPickerFactions.foreach { f =>
+                        val lockedElsewhere = lockedFactions.contains(f) && locked(f) != i
+                        val lbl = dom.document.createElement("label").asInstanceOf[html.Label]
+                        lbl.style.cssText =
+                            "display:inline-flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5pt;color:#8c95a0;" +
+                            (if (lockedElsewhere) "opacity:0.35;cursor:not-allowed;" else "")
+
+                        val glyph = dom.document.createElement("img").asInstanceOf[html.Image]
+                        glyph.src = glyphSrc(f)
+                        glyph.alt = f.short
+                        glyph.style.cssText = "width:32px;height:32px;object-fit:contain;"
+                        glyph.title = f.name
+
+                        val cb = dom.document.createElement("input").asInstanceOf[html.Input]
+                        cb.`type` = "checkbox"
+                        cb.checked = enabledFactions(i).contains(f) && !lockedElsewhere
+                        cb.disabled = lockedElsewhere
+                        cb.style.cssText = "margin:0;cursor:" + (if (lockedElsewhere) "not-allowed" else "pointer") + ";"
+                        cb.onchange = (_) => {
+                            if (cb.checked) enabledFactions(i) += f else enabledFactions(i) -= f
+                            render()
+                        }
+                        lbl.appendChild(glyph)
+                        lbl.appendChild(cb)
+                        cbWrap.appendChild(lbl)
+                        factionCbs += ((f, cb))
+                    }
+                    allCb.onchange = (_) => {
+                        enabledFactions(i).clear()
+                        if (allCb.checked) {
+                            altPickerFactions.foreach { f =>
+                                if (!lockedFactions.contains(f) || locked(f) == i)
+                                    enabledFactions(i) += f
+                            }
+                        }
+                        render()
+                    }
+
+                    row.appendChild(cbWrap)
+                    root.appendChild(row)
+                }
+
+                var rnHardBlock = false
+                val rnHeading = dom.document.createElement("div").asInstanceOf[html.Div]
+                rnHeading.style.cssText = "margin-top:14px;font-size:12pt;font-weight:600;color:#fff;border-top:1px solid #2a2e36;padding-top:10px;"
+                rnHeading.innerHTML = "Random Neutrals"
+                root.appendChild(rnHeading)
+
+                def renderRandRow(
+                    label : String,
+                    poolSize : Int,
+                    getEnabled : () => Boolean,
+                    setEnabled : Boolean => Unit,
+                    getCount : () => Int,
+                    setCount : Int => Unit
+                ) {
+                    val r = dom.document.createElement("div").asInstanceOf[html.Div]
+                    r.style.cssText = "padding:6px 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"
+                    val cb = dom.document.createElement("input").asInstanceOf[html.Input]
+                    cb.`type` = "checkbox"
+                    cb.checked = getEnabled()
+                    cb.style.cssText = "margin:0;cursor:pointer;"
+                    val lbl = dom.document.createElement("label").asInstanceOf[html.Label]
+                    lbl.style.cssText = "color:#e6edf3;font-size:10.5pt;cursor:pointer;"
+                    lbl.innerHTML = label + " (from " + poolSize + " total)"
+                    lbl.onclick = (_) => { cb.checked = !cb.checked; setEnabled(cb.checked); render() }
+                    cb.onchange = (_) => { setEnabled(cb.checked); render() }
+
+                    val stepWrap = dom.document.createElement("div").asInstanceOf[html.Div]
+                    stepWrap.style.cssText = "display:inline-flex;align-items:center;gap:0;border:1px solid #30363d;border-radius:5px;background:#0d1117;overflow:hidden;"
+
+                    val btnStyle =
+                        "padding:4px 10px;background:#161b22;color:#e6edf3;border:none;" +
+                        "cursor:pointer;font-family:inherit;font-size:11pt;font-weight:600;" +
+                        "user-select:none;line-height:1;"
+
+                    val downBtn = dom.document.createElement("button").asInstanceOf[html.Button]
+                    downBtn.`type` = "button"
+                    downBtn.innerHTML = "&#9660;"
+                    downBtn.style.cssText = btnStyle
+                    downBtn.title = "Decrease"
+                    downBtn.onclick = (_) => {
+                        val n = math.max(0, getCount() - 1)
+                        setCount(n)
+                        if (n <= 0) setEnabled(false)
+                        render()
+                    }
+
+                    val valSpan = dom.document.createElement("span").asInstanceOf[html.Span]
+                    valSpan.style.cssText = "min-width:32px;padding:4px 8px;text-align:center;color:#e6edf3;font-family:inherit;font-size:10.5pt;background:#0d1117;border-left:1px solid #30363d;border-right:1px solid #30363d;"
+                    valSpan.innerHTML = getCount().toString
+
+                    val upBtn = dom.document.createElement("button").asInstanceOf[html.Button]
+                    upBtn.`type` = "button"
+                    upBtn.innerHTML = "&#9650;"
+                    upBtn.style.cssText = btnStyle
+                    upBtn.title = "Increase"
+                    upBtn.onclick = (_) => {
+                        val n = math.min(poolSize, getCount() + 1)
+                        setCount(n)
+                        render()
+                    }
+
+                    stepWrap.appendChild(downBtn)
+                    stepWrap.appendChild(valSpan)
+                    stepWrap.appendChild(upBtn)
+
+                    r.appendChild(cb)
+                    r.appendChild(lbl)
+                    r.appendChild(stepWrap)
+                    if (getEnabled()) {
+                        val n = getCount()
+                        if (n >= poolSize) {
+                            val warn = dom.document.createElement("span").asInstanceOf[html.Span]
+                            warn.style.cssText = "color:#f85149;font-size:10pt;font-weight:600;"
+                            warn.innerHTML = "Only " + poolSize + " units available, choose a number less than " + poolSize
+                            r.appendChild(warn)
+                            rnHardBlock = true
+                        }
+                    }
+                    root.appendChild(r)
+                }
+
+                renderRandRow("Monsters", randMonsterPool.num,
+                    () => randMonsters, v => randMonsters = v,
+                    () => randMonsterCount, v => randMonsterCount = v)
+                renderRandRow("iGOOs", randIGOOPool.num,
+                    () => randIGOOs, v => randIGOOs = v,
+                    () => randIGOOCount, v => randIGOOCount = v)
+
+                val rndRow = dom.document.createElement("div").asInstanceOf[html.Div]
+                rndRow.style.cssText = "padding:10px 6px;display:flex;align-items:center;gap:8px;margin-top:6px;"
+                val rndCb = dom.document.createElement("input").asInstanceOf[html.Input]
+                rndCb.`type` = "checkbox"
+                rndCb.checked = randomizeOrder
+                rndCb.style.cssText = "margin:0;cursor:pointer;"
+                rndCb.onchange = (_) => { randomizeOrder = rndCb.checked }
+                val rndLbl = dom.document.createElement("label").asInstanceOf[html.Label]
+                rndLbl.style.cssText = "color:#e6edf3;font-size:10.5pt;cursor:pointer;"
+                rndLbl.innerHTML = "Randomize player order"
+                rndLbl.onclick = (_) => { rndCb.checked = !rndCb.checked; randomizeOrder = rndCb.checked }
+                rndRow.appendChild(rndCb)
+                rndRow.appendChild(rndLbl)
+                root.appendChild(rndRow)
+
+                val feasible = isFeasible() && !rnHardBlock
+                if (!feasible) {
+                    val warn = dom.document.createElement("div").asInstanceOf[html.Div]
+                    warn.style.cssText = "color:#f85149;font-weight:600;font-size:11pt;margin-top:10px;"
+                    warn.innerHTML = "Not enough factions selected — some players will have no eligible faction. Widen the checkboxes."
+                    root.appendChild(warn)
+                }
+
+                val btnRow = dom.document.createElement("div").asInstanceOf[html.Div]
+                btnRow.style.cssText = "display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;"
+                val genBtn = dom.document.createElement("button").asInstanceOf[html.Button]
+                genBtn.innerHTML = "Generate"
+                genBtn.disabled = !feasible
+                genBtn.style.cssText =
+                    "padding:8px 18px;border:none;border-radius:6px;font-weight:600;font-size:11pt;" +
+                    (if (feasible) "background:#2f81f7;color:#fff;cursor:pointer;"
+                     else "background:#30363d;color:#7d8590;cursor:not-allowed;")
+                genBtn.onclick = (_) => if (feasible) attemptGenerate()
+                val backBtn = dom.document.createElement("button").asInstanceOf[html.Button]
+                backBtn.innerHTML = "Back"
+                backBtn.style.cssText = "padding:8px 18px;background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;cursor:pointer;font-size:11pt;"
+                backBtn.onclick = (_) => { restoreOtherSections(); clear(actionDiv); dom.window.location.reload() }
+                btnRow.appendChild(genBtn)
+                btnRow.appendChild(backBtn)
+                root.appendChild(btnRow)
+            }
+
+            def attemptGenerate() {
+                generateAssignment() match {
+                    case None =>
+                        dom.window.alert("No valid assignment exists. Widen at least one player's faction set.")
+                    case Some(picked) =>
+                        val pairs : $[(String, Faction)] =
+                            picked.zipWithIndex.map { case (f, idx) => (playerNames(idx), f) }
+                        val orderedPairs : $[(String, Faction)] =
+                            if (randomizeOrder) {
+                                val seatings = allSeatings(picked.toList)
+                                if (seatings.nonEmpty) {
+                                    val chosen = seatings(scala.util.Random.nextInt(seatings.size))
+                                    chosen.map(f => pairs.find(_._2 == f).get)
+                                } else pairs
+                            } else pairs
+                        showConfirmation(orderedPairs)
+                }
+            }
+
+            def showConfirmation(ordered : $[(String, Faction)]) {
+                clear(actionDiv)
+                val box = dom.document.createElement("div").asInstanceOf[html.Div]
+                box.style.cssText = "padding:10px 12px;color:#e6edf3;font-family:-apple-system,sans-serif;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;box-sizing:border-box;overflow-y:auto;"
+                val ttl = dom.document.createElement("div").asInstanceOf[html.Div]
+                ttl.style.cssText = "font-size:13pt;font-weight:600;margin-bottom:8px;color:#fff;text-align:center;"
+                ttl.innerHTML = "Player seating order"
+                box.appendChild(ttl)
+                ordered.foreach { case (name, f) =>
+                    val block = dom.document.createElement("div").asInstanceOf[html.Div]
+                    block.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;margin:6px 0;text-align:center;"
+                    val nm = dom.document.createElement("div").asInstanceOf[html.Div]
+                    nm.style.cssText = "font-size:15pt;font-weight:700;color:#fff;line-height:1.1;"
+                    nm.innerHTML = name
+                    block.appendChild(nm)
+                    val gImg = dom.document.createElement("img").asInstanceOf[html.Image]
+                    gImg.src = glyphSrc(f)
+                    gImg.alt = f.name
+                    gImg.title = f.name
+                    gImg.style.cssText = "width:64px;height:64px;object-fit:contain;"
+                    block.appendChild(gImg)
+                    box.appendChild(block)
+                }
+
+                val br = dom.document.createElement("div").asInstanceOf[html.Div]
+                br.style.cssText = "display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;justify-content:center;"
+                val cont = dom.document.createElement("button").asInstanceOf[html.Button]
+                cont.innerHTML = "Continue"
+                cont.style.cssText = "padding:8px 18px;background:#3fb950;color:#0d1117;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:11pt;"
+                cont.onclick = (_) => {
+                    restoreOtherSections()
+                    clear(actionDiv)
+                    pendingRandomNeutrals = Some({ setup =>
+                        if (randMonsters && randMonsterCount > 0) {
+                            val picks = scala.util.Random.shuffle(randMonsterPool.toList).take(randMonsterCount)
+                            setup.options = (setup.options.notOf[NeutralMonsterOption]).but(NeutralMonsters)
+                            setup.options ++= (NeutralMonsters +: picks)
+                        }
+                        if (randIGOOs && randIGOOCount > 0) {
+                            val picks = scala.util.Random.shuffle(randIGOOPool.toList).take(randIGOOCount)
+                            setup.options = (setup.options.notOf[IGOOOption]).but(IGOOs)
+                            setup.options ++= (IGOOs +: picks)
+                        }
+                    })
+                    onContinue(ordered.map(_._2))
+                }
+                val backBtn = dom.document.createElement("button").asInstanceOf[html.Button]
+                backBtn.innerHTML = "Back to picker"
+                backBtn.style.cssText = "padding:8px 18px;background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;cursor:pointer;font-size:11pt;"
+                backBtn.onclick = (_) => { clear(actionDiv); render(); actionDiv.appendChild(root) }
+                br.appendChild(cont)
+                br.appendChild(backBtn)
+                box.appendChild(br)
+
+                actionDiv.appendChild(box)
+            }
+
+            render()
+            actionDiv.appendChild(root)
+        }
+
         val replay = getElem("replay").?./(_.innerHTML).|("")
 
         if (replay.trim != "") {
@@ -4272,9 +4718,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             if (n < 3) {
                                 val pn = n + 3
                                 val combinations = allFactions.combinations(pn).toList
-                                ask("Choose factions", combinations./(_.mkString(", "))./(smaller) :+ "Back", n => {
-                                    if (n < combinations.num)
-                                        startSetup(combinations(n))
+                                val opts = (("Alt faction picker".hl) +: combinations./(_.mkString(", "))./(smaller).toList) :+ "Back"
+                                ask("Choose factions", opts, n2 => {
+                                    if (n2 == 0)
+                                        altFactionPicker(pn)
+                                    else if (n2 - 1 < combinations.num)
+                                        startSetup(combinations(n2 - 1))
                                     else
                                         topMenu()
                                 })
@@ -4287,9 +4736,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             if (n < 3) {
                                 val pn = n + 3
                                 val combinations = allFactions.combinations(pn).toList
-                                ask("Choose factions", combinations./(_.mkString(", "))./(smaller) :+ "Back", n => {
-                                    if (n < combinations.num)
-                                        startOnlineSetup(combinations(n))
+                                val opts = (("Alt faction picker".hl) +: combinations./(_.mkString(", "))./(smaller).toList) :+ "Back"
+                                ask("Choose factions", opts, n2 => {
+                                    if (n2 == 0)
+                                        altFactionPicker(pn, startOnlineSetup)
+                                    else if (n2 - 1 < combinations.num)
+                                        startOnlineSetup(combinations(n2 - 1))
                                     else
                                         topMenu()
                                 })

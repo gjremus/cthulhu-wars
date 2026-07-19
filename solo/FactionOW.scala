@@ -235,8 +235,11 @@ object OWExpansion extends Expansion {
             self.power -= 1
             self.payTax(r)
 
-            // 2026-07-19: Beyond One CAN move DS chaos gates. When moving a chaos gate,
-            // update BOTH DS.chaosGateRegions AND DS.gates (same pattern as Animate Matter).
+            // 2026-07-19: Beyond One CAN move DS chaos gates.
+            // KEY: DS.chaosGateRegions is a separate list from DS.gates. When moving a chaos gate:
+            // - Update DS.chaosGateRegions (remove old, add new) BEFORE the faction loop
+            // - Let the faction loop handle DS.gates (it will find DS via _.gates.contains(o))
+            // If we updated DS.gates here, the loop wouldn't find DS and would skip it.
             val isChaosGate = game.factions.has(DS) && DS.chaosGateRegions.has(o)
             println(s"[BEYOND-ONE-TRACE] Moving gate from $o to $r. isChaosGate=$isChaosGate")
             println(s"[BEYOND-ONE-TRACE] Before: game.gates=${game.gates}, DS.chaosGateRegions=${if (game.factions.has(DS)) DS.chaosGateRegions else "N/A"}, DS.gates=${if (game.factions.has(DS)) DS.gates else "N/A"}")
@@ -244,11 +247,7 @@ object OWExpansion extends Expansion {
                 println(s"[BEYOND-ONE-TRACE] Updating DS.chaosGateRegions: removing $o, adding $r")
                 DS.chaosGateRegions = DS.chaosGateRegions.%(region => region != o)
                 DS.chaosGateRegions :+= r
-                // FIX: Also update DS.gates to match Animate Matter pattern (FactionDS.scala line 491/504)
-                println(s"[BEYOND-ONE-TRACE] Updating DS.gates: removing $o, adding $r")
-                DS.gates = DS.gates.%(region => region != o)
-                DS.gates :+= r
-                println(s"[BEYOND-ONE-TRACE] After DS update: DS.chaosGateRegions=${DS.chaosGateRegions}, DS.gates=${DS.gates}")
+                println(s"[BEYOND-ONE-TRACE] After DS.chaosGateRegions update: DS.chaosGateRegions=${DS.chaosGateRegions}")
             }
 
             game.gates :-= o

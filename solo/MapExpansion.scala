@@ -390,7 +390,7 @@ object LibraryExpansion extends Expansion {
             val validRegions = game.board.regions.%(_.glyph.onMap).%(r =>
                 overdueHolders.exists(_.at(r).%(u => u.uclass.utype != MapUnit).any))
 
-            val stayActions = currentRegion./(r => LibrarianStayAction(self, r)).$
+            val stayActions = currentRegion.%(r => overdueHolders.exists(_.at(r).%(u => u.uclass.utype != MapUnit).any))./(r => LibrarianStayAction(self, r)).$
             val moveActions = validRegions.%(r => !currentRegion.has(r))./( r =>
                 LibrarianMoveAction(self, r))
             val allActions = stayActions ++ moveActions
@@ -485,7 +485,7 @@ object LibraryExpansion extends Expansion {
             if (agony <= 0)
                 Force(LibrarianResolveAgonyAction(activator, remaining, order))
             else {
-                val hasUnits = target.allInPlay.%(u => u.uclass.utype != MapUnit).any
+                val hasUnits = game.librarianRegion./(r => target.at(r).%(u => u.uclass.utype != MapUnit).any).|(false)
                 val hasDoom = target.doom > 0
                 val hasOverdueTomes = game.tomeOverdue.exists { case (tome, overdue) =>
                     overdue && game.tomeHolders.get(tome).flatten.has(target) }
@@ -500,11 +500,12 @@ object LibraryExpansion extends Expansion {
             }
 
         case LibrarianEliminateUnitMainAction(self, agony, remaining, activator, order) =>
-            // Step 1: choose a single region to eliminate units from
-            val regions = game.board.regions.%(r => self.at(r).%(u => u.uclass.utype != MapUnit).any)
-            Ask(self).each(regions)(r =>
-                LibrarianEliminateRegionAction(self, r, agony, remaining, activator, order, $)
-                    .as(r)("Choose a region to eliminate units from"))
+            val libRegion = game.librarianRegion.get
+            val units = self.at(libRegion).%(u => u.uclass.utype != MapUnit)
+            if (units.none)
+                Force(LibrarianEliminateDoneAction(self, agony, remaining, activator, order, $))
+            else
+                Force(LibrarianEliminateRegionAction(self, libRegion, agony, remaining, activator, order, $))
 
         case LibrarianEliminateRegionAction(self, r, agony, remaining, activator, order, eliminated) =>
             // Step 2: choose units in the selected region (with cancel/done)
