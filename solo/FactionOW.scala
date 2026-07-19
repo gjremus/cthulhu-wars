@@ -262,6 +262,15 @@ object OWExpansion extends Expansion {
         case BeyondOneAction(self, o, uc, r) =>
             self.power -= 1
             self.payTax(r)
+
+            // 2026-07-19: Beyond One CAN move DS chaos gates. When moving a chaos gate,
+            // update DS.chaosGateRegions tracking (remove from old, add to new).
+            val isChaosGate = game.factions.has(DS) && DS.chaosGateRegions.has(o)
+            if (isChaosGate) {
+                DS.chaosGateRegions = DS.chaosGateRegions.%(region => region != o)
+                DS.chaosGateRegions :+= r
+            }
+
             game.gates :-= o
             game.gates :+= r
             factions.%(_.gates.contains(o)).foreach { f =>
