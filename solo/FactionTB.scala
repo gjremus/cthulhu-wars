@@ -942,7 +942,8 @@ object TBExpansion extends Expansion {
                 self.log(PsychicShriek.styled(TB) + ": rolled", totalRoll, "— retreat", count, "unit".s(count))
                 enemy.log("must retreat", count, "unit".s(count), "(" + PsychicShriek.styled(TB) + ")")
                 // Snapshot enemy's current occupied MAP areas (before retreat) — exclude off-map units (Sorcery, Slumber, etc.)
-                val onMapUnits = enemy.allInPlay.%(_.region.onMap)
+                // Also exclude GOOs and Buildings (they cannot be forced to retreat per standard CW rules)
+                val onMapUnits = enemy.allInPlay.%(u => u.region.onMap && u.uclass.utype != GOO && u.uclass.utype != Building)
                 val priorAreas = onMapUnits./(_.region).distinct
                 val enemyUnits = onMapUnits./(_.ref)
                 println(s"[PSYCH SHRIEK TRACE] Enemy units on map: ${onMapUnits.map(u => s"${u.uclass}@${u.region}").mkString(", ")}")
@@ -1014,10 +1015,18 @@ object TBExpansion extends Expansion {
 
         case TBPsychicShriekRetreatPickAction(self, enemy, u, dest, count, priorAreas, retreated, remaining) =>
             val unit = game.unit(u)
-            unit.region = dest
-            unit.onGate = false
-            TB.log(PsychicShriek.styled(TB) + ": retreated", unit.uclass.styled(enemy), "to", dest)
-            Force(TBPsychicShriekRetreatAction(self, enemy, count - 1, priorAreas, retreated :+ u, remaining.but(u)))
+            // Defense-in-depth: refuse to move GOOs or Buildings even if they were somehow recorded
+            // in an old game log before the 2026-07-17 filter fix
+            if (unit.uclass.utype == GOO || unit.uclass.utype == Building) {
+                println(s"[PSYCH SHRIEK DEFENSE] Refusing to retreat ${unit.uclass.utype} ${unit.uclass} (recorded in old game log before GOO/Building filter fix)")
+                // Skip this unit and continue with remaining count
+                Force(TBPsychicShriekRetreatAction(self, enemy, count - 1, priorAreas, retreated :+ u, remaining.but(u)))
+            } else {
+                unit.region = dest
+                unit.onGate = false
+                TB.log(PsychicShriek.styled(TB) + ": retreated", unit.uclass.styled(enemy), "to", dest)
+                Force(TBPsychicShriekRetreatAction(self, enemy, count - 1, priorAreas, retreated :+ u, remaining.but(u)))
+            }
 
         // ====================================================================
         // SBR-1: OVERLAY THE MANTLE (§3.12.1)
