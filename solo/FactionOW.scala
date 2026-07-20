@@ -122,15 +122,6 @@ case class DragonAscendingCancelAction(self : OW, then : ForcedAction) extends B
 
 
 object OWExpansion extends Expansion {
-    override def afterAction()(implicit game : Game) {
-        if (!game.setup.has(OW)) return
-        val f = OW
-        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.at(r).goos.any).any).any)
-        val unitsAtEnemyGatesThreshold = if (game.options.has(OpenerCheapMutants)) 3 else 2
-        val unitsAtEnemyGatesLabel = if (game.options.has(OpenerCheapMutants)) "Units at three enemy Gates" else "Units at two enemy Gates"
-        f.satisfyIf(UnitsAtEnemyGates, unitsAtEnemyGatesLabel, areas.%(r => f.at(r).any && f.enemies.%(_.gates.has(r)).any).num >= unitsAtEnemyGatesThreshold)
-    }
-
     override def triggers()(implicit game : Game) {
         val f = OW
         f.satisfyIf(EightGates, "Eight Gates on the map", game.allGates.onMap.num >= 8)
@@ -276,8 +267,26 @@ object OWExpansion extends Expansion {
                 f.gates :+= r
                 f.at(o).%(_.onGate).single.foreach(_.region = r)
             }
+            // 2026-07-18: Beyond One must also update chaos gate tracking when moving DS chaos gates.
+            // Without this, moving a chaos gate leaves it in the old location's chaosGateRegions list,
+            // causing the map to show both a chaos gate (at old location) and a normal gate (at new location).
+            if (game.factions.has(DS) && DS.chaosGateRegions.has(o)) {
+                DS.chaosGateRegions = DS.chaosGateRegions.%(c => c != o)
+                DS.chaosGateRegions :+= r
+            }
+            // 2026-05-27 (mirrored from Library 2026-05-11 fix): use
+            // `headOption` instead of `.one` here. When OW Beyond One's its
+            // own gate, the only OW unit OW can use to occupy the gate
+            // (cost-3+) is a High Priest, which IS the on-gate keeper. The
+            // loop above already moved that HP to `r`, so
+            // `self.at(o).one(uc)` would crash with head-of-empty-list. The
+            // intent of this line is "also move the unit OW spent to power
+            // Beyond One" — but when that unit was the keeper, the loop did
+            // it already, so we no-op. Yog-Sothoth IS a gate (not on a gate)
+            // and can't be the `uc` here.
             self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
-            self.log("moved gate with", uc.styled(self), "from", o, "to", r)
+            val gateType = if (game.factions.has(DS) && DS.chaosGateRegions.has(r)) "Chaos Gate" else "gate"
+            self.log("moved", gateType, "with", uc.styled(self), "from", o, "to", r)
             EndAction(self)
 
         // DREAD CURSE
@@ -365,7 +374,6 @@ object OWExpansion extends Expansion {
 
                 e.foreach { f =>
                     f.at(r).%(_.health == Killed).foreach { u =>
-                        println(s"[DREAD-CURSE-TRACE] KILL: ${u.faction} ${u.uclass} id=${u.index} in ${u.region}")
                         log(u, "was", "killed".styled("kill"))
                         game.eliminate(u)
 
@@ -381,7 +389,6 @@ object OWExpansion extends Expansion {
                 }
 
                 var m = e./~(f => f.at(r).%(_.health == Pained))
-                m.foreach(u => println(s"[DREAD-CURSE-TRACE] PAIN: ${u.faction} ${u.uclass} id=${u.index} in ${u.region}"))
 
                 m = m.take(1)
 
@@ -401,7 +408,6 @@ object OWExpansion extends Expansion {
 
         case DreadCurseRetreatToAction(self, r, e, f, uc, d) =>
             val u = f.at(r, uc).%(_.health == Pained).sortP.first
-            println(s"[DREAD-CURSE-TRACE] RETREAT: ${u.faction} ${u.uclass} id=${u.index} from ${u.region} to $d")
             game.fbSuppressCGForPlacement = true
             u.region = d
             game.fbSuppressCGForPlacement = false
