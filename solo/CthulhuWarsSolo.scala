@@ -1716,6 +1716,7 @@ object CthulhuWarsSolo {
                     if (DS.chaosGateRegions.has(r))
                         fixed +:= DrawItem(r, DS, ChaosGate, Alive, $, adjGatePx, adjGatePy)
 
+
                     keeper match {
                         case Some(u) =>
                             val tags = u.state ++ game.mummifiedCultists.has(u.ref).$(Mummified)

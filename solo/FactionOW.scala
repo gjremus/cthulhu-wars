@@ -267,9 +267,6 @@ object OWExpansion extends Expansion {
                 f.gates :+= r
                 f.at(o).%(_.onGate).single.foreach(_.region = r)
             }
-            // 2026-07-18: Beyond One must also update chaos gate tracking when moving DS chaos gates.
-            // Without this, moving a chaos gate leaves it in the old location's chaosGateRegions list,
-            // causing the map to show both a chaos gate (at old location) and a normal gate (at new location).
             if (game.factions.has(DS) && DS.chaosGateRegions.has(o)) {
                 DS.chaosGateRegions = DS.chaosGateRegions.%(c => c != o)
                 DS.chaosGateRegions :+= r
