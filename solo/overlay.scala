@@ -750,7 +750,7 @@ object Overlays {
         // Tombstalker (TS): faction info card showing Death March ability, units (TombHerd, DeepTendril, Gla'aki)
         case $("TS") => faction(TS, "info:ts-background", DeathMarch, "Ongoing",
             "Increment the Death's Head each time an enemy Unit dies in any Battle. In the Doom Phase, spend 1 Death's Head to place a Tomb-Herd in any Area; repeat as much as possible. Then reset the Death's Head to 0.",
-            $(), $(
+            $(ElevenRevelations, Hecatomb, Undulate), $(
             (Acolyte,    6, "1",   "0", s""""""),
             (TombHerd,   6, "2",   "3", s"""<div class=p>The first Tomb-Herd in an Area has 3 Combat. Any others have 0 Combat.</div><div class=p>Spellbook: ${reference(TS, GraspingDead)}</div>"""),
             (DeepTendril, 3, "3", "1-3", s"""<div class=p>Combat: 1, +1 if Gla'aki is in the same Area, +1 if in an Ocean/Sea Area.</div><div class=p>Spellbook: ${reference(TS, Oleaginous)}</div>"""),
@@ -777,7 +777,7 @@ object Overlays {
         // Firstborn (FB): faction info card showing unique ability (Writhe), units, and Crater building
         case $("FB") => faction(FB, "info:fb-background", Writhe, "Action: Cost 2",
             "Roll dice equal to your Power. For each Kill: Eliminate a Unit you control, any of your Acolytes Eliminated are instead replaced with Desiccated. For each Pain, relocate your Unit to any Area. Before applying these results, you may reroll ALL these dice once.<br/><br/><span class=ability-color>Crater</span> <span class=cost-color>(Building):</span> Any Gate (other than Yog-Sothoth) that coexists in an Area with a Crater is immediately destroyed.",
-            $(), $(
+            $(Augury, Carnage, DevilsMark), $(
             (Acolyte,        6, "1", "0", s""""""),
             (Desiccated,     6, "2", "0+", s"""<div class=p>Combat is 1 if in a land Area, 0 if in a sea Area.</div><div class=p>Spellbook: ${reference(FB, TheEyeOpens)}</div>"""),
             (RevenantOfKnaa, 2, "3", "?", s"""<div class=p>Combat equals the number of Desiccated in play.</div><div class=p>Spellbooks: ${reference(FB, CyclopeanGaze)}, ${reference(FB, CallOfTheFaithful)}</div>"""),
@@ -815,7 +815,7 @@ object Overlays {
                 <div class=p>${cost("3)")} Eliminate the High Priest, then place Ubbo-Sathla at your Controlled Gate.</div>
                 <div class=p>${combat} Equals the Growth counter value on the Doom track.</div>
                 <div class=p><span class=ability-color>Hell's Banquet</span> ${cost("(Doom Phase):")} Once Ubbo-Sathla has been Awakened, each Doom Phase (whether or not Ubbo-Sathla is still in play), roll 1d6 and increase the Growth counter by the die roll.</div>""")
-        ), "Faction Card Text reflects Tsang Tribe spellbooks regardless of which tribe was chosen, similar to real world faction card.")
+        ), s"""<div style="font-weight:bold;margin-bottom:0.5ex;">Tsang Spellbooks:</div><div style="margin-bottom:1ex;">${reference(TT, Idolatry)}, ${reference(TT, Martyrdom)}, ${reference(TT, TabletsOfTheGods)}</div><div style="font-weight:bold;margin-bottom:0.5ex;">Leng Spellbooks:</div><div style="margin-bottom:1ex;">${reference(TT, DarkRituals)}, ${reference(TT, Fulmination)}, ${reference(TT, SurpriseSB)}</div><div style="font-weight:bold;margin-bottom:0.5ex;">Sarkomand Spellbooks:</div><div>${reference(TT, Doomsday)}, ${reference(TT, Inerrant)}, ${reference(TT, OtherworldAlliances)}</div>""")
 
         // Tcho-Tcho (TT): spellbook requirement info card overlays
         case $("TT", TTSycophancyTrigger.text)    => requirement("Another faction performs a Ritual of Annihilation OR reaches 15 Doom.")
