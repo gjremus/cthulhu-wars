@@ -3450,12 +3450,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             // TT Sycophancy: when an ENEMY performs a ritual, pause before doom resolves and prompt the ritualer
             if (factions.has(TT) && f != TT && TT.has(Sycophancy)) {
-                val replayBlocksSycophancy = nextReplayActionHint.exists(h => !h.contains("Sycophancy"))
-                if (replayBlocksSycophancy) {
-                    println(s"[RITUAL-SYCOPHANCY] Replay-compat: skipping Sycophancy (next action doesn't match)")
-                } else {
-                    return Force(TTSycophancyPromptAction(f, doom, es))
-                }
+                return Force(TTSycophancyPromptAction(f, doom, es))
             }
 
             Force(TTSycophancyResumeRitualAction(f, doom, es))
@@ -3549,17 +3544,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             println(s"[BB-REQ-ATT-TARGET] Calculated: cost=${cost}, doom=${doom}, esBonus=${esBonus}, hasTT=${factions.has(TT)}, TT-has-Sycophancy=${factions.has(TT) && TT.has(Sycophancy)}")
 
             // TT Sycophancy: Requires Attention is a Ritual of Annihilation and should trigger Sycophancy
-            // Pattern matches RitualAction handler — check before doom is applied, then resume via shared action
-            // Store region in game state so Sycophancy handlers can resume properly
-            // Replay-compat: if replaying a game recorded before Sycophancy was integrated with Requires Attention,
-            // the next action in the log won't be a Sycophancy choice — skip Sycophancy and apply doom directly.
             if (factions.has(TT) && self != TT && TT.has(Sycophancy)) {
-                val replayBlocksSycophancy = nextReplayActionHint.exists(h => !h.contains("Sycophancy"))
-                if (replayBlocksSycophancy) {
-                    println(s"[BB-REQ-ATT-TARGET] Replay-compat: skipping Sycophancy (next action doesn't match)")
-                    return Force(BBRequiresAttentionResumeAction(self, doom, esBonus, r))
-                }
-                // power already deducted above; doom/es not yet applied — pass them to the prompt continuation
                 bbRequiresAttentionPendingRegion = Some(r)
                 println(s"[BB-REQ-ATT-TARGET] Triggering Sycophancy: set bbRequiresAttentionPendingRegion=${r}")
                 return Force(TTSycophancyPromptAction(self, doom, esBonus))

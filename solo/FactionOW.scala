@@ -220,7 +220,8 @@ object OWExpansion extends Expansion {
                 if (game.options.has(OpenerYogCurseDie) && f.allInPlay.%(_.uclass == YogSothoth).any)
                     n += 1
                 if (n > 0) {
-                    val l = areas.%(f.affords(2)).%(r => f.enemies.exists(_.at(r).any))
+                    val allAreas = areas ++ game.factions.has(BB).??($(BB.moon))
+                    val l = allAreas.%(f.affords(2)).%(r => f.enemies.exists(_.at(r).any))
                     if (l.any)
                         + DreadCurseMainAction(f, n, l)
                 }
@@ -410,7 +411,8 @@ object OWExpansion extends Expansion {
             Ask(f).add(DreadCurseSplitAction(f, r, $, e, k, p))
 
         case DreadCurseRetreatAction(self, r, e, f, uc) =>
-            Ask(self).each(r.connectedForRetreat)(d => DreadCurseRetreatToAction(self, r, e, f, uc, d))
+            val retreatDests = r.connectedForRetreat ++ (r == BB.moon).??(areas)
+            Ask(self).each(retreatDests)(d => DreadCurseRetreatToAction(self, r, e, f, uc, d))
 
         case DreadCurseRetreatToAction(self, r, e, f, uc, d) =>
             val u = f.at(r, uc).%(_.health == Pained).sortP.first

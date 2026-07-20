@@ -184,10 +184,12 @@ object YSExpansion extends Expansion {
                 }
             }
 
-            if (f.can(Zingaya) && f.pool(Undead).any)
-                areas.%(f.affords(1)).%(r => f.at(r, Undead).any).%(r => f.enemies.exists(e => e.at(r).%(_.targetableAsCultistByEnemy).any)).some.foreach { l =>
+            if (f.can(Zingaya) && f.pool(Undead).any) {
+                val allAreas = areas ++ game.factions.has(BB).??($(BB.moon))
+                allAreas.%(f.affords(1)).%(r => f.at(r, Undead).any).%(r => f.enemies.exists(e => e.at(r).%(_.targetableAsCultistByEnemy).any)).some.foreach { l =>
                     + ZingayaMainAction(f, l)
                 }
+            }
 
             if (f.can(Shriek) && f.has(Byakhee))
                 areas.%(f.affords(1)).%(r => f.all(Byakhee).%(_.region != r).any).some.foreach { l =>

@@ -401,9 +401,10 @@ object TSExpansion extends Expansion {
                 + TSElevenRevelationsMainAction(f)
 
             // GRASPING DEAD: battle with only Tomb-Herds
-            if (f.can(GraspingDead) && f.onMap(TombHerd).any &&
-                areas.%(r => f.at(r, TombHerd).any && f.enemies.exists(_.at(r).any)).any &&
-                (f.power >= 1 || game.deathsHead >= 2))
+            if (f.can(GraspingDead) && f.onMap(TombHerd).any && {
+                val allAreas = areas ++ game.factions.has(BB).??($(BB.moon))
+                allAreas.%(r => f.at(r, TombHerd).any && f.enemies.exists(_.at(r).any)).any
+            } && (f.power >= 1 || game.deathsHead >= 2))
                 + GraspingDeadMainAction(f)
 
             game.neutralSpellbooks(f)
@@ -558,7 +559,8 @@ object TSExpansion extends Expansion {
         case GraspingDeadChooseRegionAction(self) =>
             // Add any newly eligible regions (e.g., TombHerds pained into regions with enemies)
             val alreadyScheduled = TSExpansion.graspingDeadRemaining ++ TSExpansion.graspingDeadFought
-            val newRegions = areas.%(r => self.at(r, TombHerd).any && self.enemies.exists(_.at(r).any) && !alreadyScheduled.has(r))
+            val allAreas = areas ++ game.factions.has(BB).??($(BB.moon))
+            val newRegions = allAreas.%(r => self.at(r, TombHerd).any && self.enemies.exists(_.at(r).any) && !alreadyScheduled.has(r))
             if (newRegions.any)
                 TSExpansion.graspingDeadRemaining ++= newRegions
             // Filter to regions still valid (TombHerd present + enemy present) from the remaining list
