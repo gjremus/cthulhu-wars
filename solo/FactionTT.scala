@@ -733,10 +733,8 @@ object TTExpansion extends Expansion {
 
         // SYCOPHANCY: prompt the ritualING faction — they choose, then ritual completes via TTSycophancyRitualAction
         case TTSycophancyPromptAction(ritualer, doom, es) =>
-            js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-PROMPT] Presenting choice to ${ritualer.short}: doom=${doom}, es=${es}, bbPending=${game.bbRequiresAttentionPendingRegion}")
             val replayAutoResolve = game.nextReplayActionHint.exists(h => !h.contains("Sycophancy"))
             if (replayAutoResolve) {
-                js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-PROMPT] Replay auto-resolve: giving 1 doom to TT (next action not Sycophancy)")
                 Force(TTSycophancyGiveDoomAction(ritualer, doom, es))
             } else
             Ask(ritualer)
@@ -744,32 +742,24 @@ object TTExpansion extends Expansion {
                 .add(TTSycophancyGiveDoomAction(ritualer, doom, es))
 
         case TTSycophancyLoseDoomAction(ritualer, doom, es) =>
-            js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-LOSE] ENTERED HANDLER: ritualer=${ritualer.short}, ritualer==BB=${ritualer == BB}, bbRequiresAttentionPendingRegion=${game.bbRequiresAttentionPendingRegion}")
             ritualer.log("Sycophancy".styled(TT) + ": chooses to gain " + (doom - 1).doom + " (1 fewer)")
-            // Check if this is BB's Requires Attention ritual (tracked in game state)
             game.bbRequiresAttentionPendingRegion match {
                 case Some(r) if ritualer == BB =>
-                    js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-LOSE] Matched BB case: calling BBRequiresAttentionResumeAction with doom=${doom - 1}, es=${es}, r=${r}")
                     game.bbRequiresAttentionPendingRegion = None
                     Force(BBRequiresAttentionResumeAction(ritualer, doom - 1, es, r))
                 case _ =>
-                    js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-LOSE] Did NOT match BB case: calling TTSycophancyResumeRitualAction")
                     game.bbRequiresAttentionPendingRegion = None
                     Force(TTSycophancyResumeRitualAction(ritualer, doom - 1, es))
             }
 
         case TTSycophancyGiveDoomAction(ritualer, doom, es) =>
-            js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-GIVE] ENTERED HANDLER: ritualer=${ritualer.short}, ritualer==BB=${ritualer == BB}, bbRequiresAttentionPendingRegion=${game.bbRequiresAttentionPendingRegion}")
             TT.doom += 1
             ritualer.log("Sycophancy".styled(TT) + ": gave", 1.doom, "to", TT)
-            // Check if this is BB's Requires Attention ritual (tracked in game state)
             game.bbRequiresAttentionPendingRegion match {
                 case Some(r) if ritualer == BB =>
-                    js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-GIVE] Matched BB case: calling BBRequiresAttentionResumeAction with doom=${doom}, es=${es}, r=${r}")
                     game.bbRequiresAttentionPendingRegion = None
                     Force(BBRequiresAttentionResumeAction(ritualer, doom, es, r))
                 case _ =>
-                    js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-GIVE] Did NOT match BB case: calling TTSycophancyResumeRitualAction")
                     game.bbRequiresAttentionPendingRegion = None
                     Force(TTSycophancyResumeRitualAction(ritualer, doom, es))
             }

@@ -3063,14 +3063,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val gates = f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region)) ++ (if (f == BB) $(BB.moon) else $)
                 val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
 
-                if (f == BB) {
-                    println(s"[BB-MOON-DOOM-TRACE] Faction=${f.short}, f.gates=${f.gates.mkString(",")}, moon=${BB.moon}, gates-after-moon=${gates.mkString(",")}, gates-total=${gates.num}, valid-gates=${valid.num}, doom-before=${f.doom}")
-                }
                 f.doom += valid.num
                 f.log("got", valid.num.doom)
-                if (f == BB) {
-                    println(s"[BB-MOON-DOOM-TRACE] After gate doom: doom-after=${f.doom}")
-                }
 
                 if (f.loyaltyCards.has(GnorriCard)) {
                     val gnorriCount = f.all(Gnorri).num
@@ -3525,7 +3519,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             EndAction(self)
 
         case RequiresAttentionTargetAction(self, r) =>
-            println(s"[BB-REQ-ATT-TARGET] Starting: faction=${self.short}, region=${r}, doom-before=${self.doom}, power-before=${self.power}")
             // BB v2.4.17: Requires Attention is now treated as a true Ritual of
             // Annihilation for cost / track / glyph purposes — it pays the
             // current RoA Power cost (Herald discount honoured), places BB on
@@ -3541,22 +3534,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val esBonus    = enemyGate.??(1) + enemyGOO.??(2)
             val doom       = 4
 
-            println(s"[BB-REQ-ATT-TARGET] Calculated: cost=${cost}, doom=${doom}, esBonus=${esBonus}, hasTT=${factions.has(TT)}, TT-has-Sycophancy=${factions.has(TT) && TT.has(Sycophancy)}")
-
             // TT Sycophancy: Requires Attention is a Ritual of Annihilation and should trigger Sycophancy
             if (factions.has(TT) && self != TT && TT.has(Sycophancy)) {
                 bbRequiresAttentionPendingRegion = Some(r)
-                println(s"[BB-REQ-ATT-TARGET] Triggering Sycophancy: set bbRequiresAttentionPendingRegion=${r}")
                 return Force(TTSycophancyPromptAction(self, doom, esBonus))
             }
 
-            println(s"[BB-REQ-ATT-TARGET] No Sycophancy, calling BBRequiresAttentionResumeAction directly")
             Force(BBRequiresAttentionResumeAction(self, doom, esBonus, r))
 
         case BBRequiresAttentionResumeAction(self, doom, esBonus, r) =>
-            println(s"[BB-REQ-ATT-TRACE] Before doom add: faction=${self.short}, doom-before=${self.doom}, adding=${doom}, region=${r}")
             self.doom += doom
-            println(s"[BB-REQ-ATT-TRACE] After doom add: doom-after=${self.doom}")
 
             log(CthulhuWarsSolo.DottedLine)
             self.log(RequiresAttention.styled(BB) + ": ritual in", r, "— paid", self.can(Herald).?(5).|(ritualCost).power, "— gained", doom.doom)
