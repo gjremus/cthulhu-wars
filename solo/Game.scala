@@ -3450,8 +3450,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             // TT Sycophancy: when an ENEMY performs a ritual, pause before doom resolves and prompt the ritualer
             if (factions.has(TT) && f != TT && TT.has(Sycophancy)) {
-                // power already deducted above; doom/es not yet applied — pass them to the prompt continuation
-                return Force(TTSycophancyPromptAction(f, doom, es))
+                val replayBlocksSycophancy = nextReplayActionHint.exists(h => !h.contains("Sycophancy"))
+                if (replayBlocksSycophancy) {
+                    println(s"[RITUAL-SYCOPHANCY] Replay-compat: skipping Sycophancy (next action doesn't match)")
+                } else {
+                    return Force(TTSycophancyPromptAction(f, doom, es))
+                }
             }
 
             Force(TTSycophancyResumeRitualAction(f, doom, es))
