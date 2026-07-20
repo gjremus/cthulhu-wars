@@ -236,23 +236,18 @@ object OWExpansion extends Expansion {
             self.payTax(r)
 
             // 2026-07-19: Beyond One CAN move DS chaos gates.
-            // KEY: DS chaos gates are NOT tracked in DS.gates when placed (only in DS.chaosGateRegions).
-            // Match Animate Matter's pattern: explicitly update DS.gates and DS.chaosGateRegions for chaos gates.
+            // ROOT CAUSE (found on 4th attempt): Previous code updated DS.gates BEFORE the faction loop,
+            // so when the loop checked factions.%(_.gates.contains(o)), DS was NOT found (o was already removed).
+            // FIX: Only update DS.chaosGateRegions in the special block. Let the faction loop below handle
+            // DS.gates naturally (it will find DS because DS.gates still contains o at that point).
             val isChaosGate = game.factions.has(DS) && DS.chaosGateRegions.has(o)
             println(s"[BEYOND-ONE-TRACE] Moving gate from $o to $r. isChaosGate=$isChaosGate")
             println(s"[BEYOND-ONE-TRACE] Before: game.gates=${game.gates}, DS.chaosGateRegions=${if (game.factions.has(DS)) DS.chaosGateRegions else "N/A"}, DS.gates=${if (game.factions.has(DS)) DS.gates else "N/A"}")
-            if (isChaosGate) {
-                println(s"[BEYOND-ONE-TRACE] Chaos gate detected - explicitly updating DS lists")
-                DS.chaosGateRegions = DS.chaosGateRegions.%(region => region != o)
-                DS.chaosGateRegions :+= r
-                DS.gates = DS.gates.%(region => region != o)
-                DS.gates :+= r
-                println(s"[BEYOND-ONE-TRACE] After DS update: DS.chaosGateRegions=${DS.chaosGateRegions}, DS.gates=${DS.gates}")
-            }
 
             game.gates :-= o
             game.gates :+= r
             println(s"[BEYOND-ONE-TRACE] After game.gates update: game.gates=${game.gates}")
+
             factions.%(_.gates.contains(o)).foreach { f =>
                 println(s"[BEYOND-ONE-TRACE] Updating ${f.short} faction gates: before=${f.gates}")
                 f.gates :-= o
@@ -262,6 +257,14 @@ object OWExpansion extends Expansion {
                     println(s"[BEYOND-ONE-TRACE] Moving on-gate unit ${u.uclass} from $o to $r")
                     u.region = r
                 })
+            }
+
+            // Update DS chaos gate tracking AFTER the faction loop (which already updated DS.gates)
+            if (isChaosGate) {
+                println(s"[BEYOND-ONE-TRACE] Chaos gate detected - updating DS.chaosGateRegions")
+                DS.chaosGateRegions = DS.chaosGateRegions.%(region => region != o)
+                DS.chaosGateRegions :+= r
+                println(s"[BEYOND-ONE-TRACE] After chaos gate update: DS.chaosGateRegions=${DS.chaosGateRegions}")
             }
 
             // 2026-05-11 (HP expansion): use `headOption` instead of `.one` here.
