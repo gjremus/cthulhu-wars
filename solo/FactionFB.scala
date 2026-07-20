@@ -1738,7 +1738,8 @@ object FBExpansion extends Expansion {
         case PreMainAction(f) if f != FB && game.factions.has(FB) && FB.can(CyclopeanGaze) =>
             // Clear stale entries from doom phase (Death March, etc.)
             game.fbCyclopeanGazeActionRegions = $
-            val gazeRegions = areas.%(r => FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any)
+            val allRegions = areas ++ (game.factions.has(BB)).??($(BB.moon))
+            val gazeRegions = allRegions.%(r => FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any)
             game.fbCyclopeanGazeSnapshot = (for {
                 r <- gazeRegions
                 ef <- game.factions.but(FB)
@@ -1781,7 +1782,8 @@ object FBExpansion extends Expansion {
             // Fix: update the snapshot to current counts BEFORE checking deltas, so that
             // pains already dealt are reflected and the re-check finds delta = 0.
             //
-            val gazeRegions = areas.%(r => FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any)
+            val allRegions = areas ++ (game.factions.has(BB)).??($(BB.moon))
+            val gazeRegions = allRegions.%(r => FB.at(r, RevenantOfKnaa).any || FB.at(r, Ghatanothoa).any)
 
             // Check for zero-delta edge cases: actions that target a region but don't move
             // units (snapshot delta = 0). Each action handler appends its target region to

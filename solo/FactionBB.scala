@@ -263,7 +263,6 @@ object BBExpansion extends Expansion {
 
         // DOOM
         case DoomAction(f : BB.type) =>
-            js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] DoomAction START: doom=${f.doom}, ailurophobiaDone=${game.bbAilurophobiaDone}, syzygyDone=${game.bbSyzygyDone}")
             implicit val asking = Asking(f)
 
             // Syzygy (alt spellbook): if BB has no units on the Moon, gain 1 Elder Sign.
@@ -272,7 +271,6 @@ object BBExpansion extends Expansion {
                 f.takeES(1)
                 f.log(Syzygy.styled(BB) + ": no units on", BB.moon, "— gained", 1.es)
                 game.bbSyzygyDone = true
-                js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] Syzygy triggered")
             }
 
             // Ailurophobia: gain 1 Doom per distinct Cat variety that shares at least
@@ -285,17 +283,14 @@ object BBExpansion extends Expansion {
                 val varietyCount = catClasses.count(uc =>
                     f.onMap(uc).%(_.region != BB.moon).exists(u =>
                         game.factions.but(f).exists(e => e.at(u.region).any)))
-                js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] Ailurophobia check: varietyCount=$varietyCount, doom before=${f.doom}")
                 if (varietyCount > 0) {
                     f.doom += varietyCount
-                    js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] Ailurophobia added $varietyCount doom, doom after=${f.doom}")
                     f.log(Ailurophobia.styled(BB) + ": gained", varietyCount.doom,
                         "for", varietyCount, "Cat varietie".s(varietyCount), "co-present with enemies")
                 }
                 game.bbAilurophobiaDone = true
             }
 
-            js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] Before rituals/reveals/etc: doom=${f.doom}")
             game.rituals(f)
 
             game.reveals(f)
@@ -304,7 +299,6 @@ object BBExpansion extends Expansion {
 
             game.hires(f)
 
-            js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] Before doomDone: doom=${f.doom}")
             game.doomDone(f)
 
             asking
@@ -469,7 +463,6 @@ object BBExpansion extends Expansion {
         // ── DOOM PHASE END: reset BB doom-phase sentinels (CRIT-7) ───────────────
         // Both Ailurophobia and Syzygy must re-arm for the next Doom Phase.
         case DoomDoneAction(f) if f == BB =>
-            js.Dynamic.global.console.log(s"[BB-DOOM-TRACE] DoomDoneAction: resetting sentinels, BB.doom=${BB.doom}")
             game.bbAilurophobiaDone = false
             game.bbSyzygyDone = false
             UnknownContinue
