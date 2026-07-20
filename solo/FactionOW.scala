@@ -267,6 +267,13 @@ object OWExpansion extends Expansion {
                 f.gates :+= r
                 f.at(o).%(_.onGate).single.foreach(_.region = r)
             }
+            // 2026-07-18: Beyond One must also update chaos gate tracking when moving DS chaos gates.
+            // Without this, moving a chaos gate leaves it in the old location's chaosGateRegions list,
+            // causing the map to show both a chaos gate (at old location) and a normal gate (at new location).
+            if (game.factions.has(DS) && DS.chaosGateRegions.has(o)) {
+                DS.chaosGateRegions = DS.chaosGateRegions.%(c => c != o)
+                DS.chaosGateRegions :+= r
+            }
             // 2026-05-27 (mirrored from Library 2026-05-11 fix): use
             // `headOption` instead of `.one` here. When OW Beyond One's its
             // own gate, the only OW unit OW can use to occupy the gate
@@ -278,7 +285,8 @@ object OWExpansion extends Expansion {
             // it already, so we no-op. Yog-Sothoth IS a gate (not on a gate)
             // and can't be the `uc` here.
             self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
-            self.log("moved gate with", uc.styled(self), "from", o, "to", r)
+            val gateType = if (game.factions.has(DS) && DS.chaosGateRegions.has(r)) "Chaos Gate" else "gate"
+            self.log("moved", gateType, "with", uc.styled(self), "from", o, "to", r)
             EndAction(self)
 
         // DREAD CURSE
