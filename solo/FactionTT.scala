@@ -4,6 +4,8 @@ import hrf.colmat._
 
 import html._
 
+import scala.scalajs.js
+
 
 // ============================================================================
 // Tcho-Tcho (TT) UNITS: Acolyte (cultist), High Priest (cultist),
@@ -731,37 +733,38 @@ object TTExpansion extends Expansion {
 
         // SYCOPHANCY: prompt the ritualING faction — they choose, then ritual completes via TTSycophancyRitualAction
         case TTSycophancyPromptAction(ritualer, doom, es) =>
+            js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-PROMPT] Presenting choice to ${ritualer.short}: doom=${doom}, es=${es}, bbPending=${game.bbRequiresAttentionPendingRegion}")
             Ask(ritualer)
                 .add(TTSycophancyLoseDoomAction(ritualer, doom, es))
                 .add(TTSycophancyGiveDoomAction(ritualer, doom, es))
 
         case TTSycophancyLoseDoomAction(ritualer, doom, es) =>
+            js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-LOSE] ENTERED HANDLER: ritualer=${ritualer.short}, ritualer==BB=${ritualer == BB}, bbRequiresAttentionPendingRegion=${game.bbRequiresAttentionPendingRegion}")
             ritualer.log("Sycophancy".styled(TT) + ": chooses to gain " + (doom - 1).doom + " (1 fewer)")
-            println(s"[BB-SYCOPHANCY-LOSE] ritualer=${ritualer.short}, ritualer==BB=${ritualer == BB}, bbRequiresAttentionPendingRegion=${game.bbRequiresAttentionPendingRegion}")
             // Check if this is BB's Requires Attention ritual (tracked in game state)
             game.bbRequiresAttentionPendingRegion match {
                 case Some(r) if ritualer == BB =>
-                    println(s"[BB-SYCOPHANCY-LOSE] Matched BB case: calling BBRequiresAttentionResumeAction with doom=${doom - 1}, es=${es}, r=${r}")
+                    js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-LOSE] Matched BB case: calling BBRequiresAttentionResumeAction with doom=${doom - 1}, es=${es}, r=${r}")
                     game.bbRequiresAttentionPendingRegion = None
                     Force(BBRequiresAttentionResumeAction(ritualer, doom - 1, es, r))
                 case _ =>
-                    println(s"[BB-SYCOPHANCY-LOSE] Did NOT match BB case: calling TTSycophancyResumeRitualAction")
+                    js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-LOSE] Did NOT match BB case: calling TTSycophancyResumeRitualAction")
                     game.bbRequiresAttentionPendingRegion = None
                     Force(TTSycophancyResumeRitualAction(ritualer, doom - 1, es))
             }
 
         case TTSycophancyGiveDoomAction(ritualer, doom, es) =>
+            js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-GIVE] ENTERED HANDLER: ritualer=${ritualer.short}, ritualer==BB=${ritualer == BB}, bbRequiresAttentionPendingRegion=${game.bbRequiresAttentionPendingRegion}")
             TT.doom += 1
             ritualer.log("Sycophancy".styled(TT) + ": gave 1", 1.doom, "to", TT)
-            println(s"[BB-SYCOPHANCY-GIVE] ritualer=${ritualer.short}, ritualer==BB=${ritualer == BB}, bbRequiresAttentionPendingRegion=${game.bbRequiresAttentionPendingRegion}")
             // Check if this is BB's Requires Attention ritual (tracked in game state)
             game.bbRequiresAttentionPendingRegion match {
                 case Some(r) if ritualer == BB =>
-                    println(s"[BB-SYCOPHANCY-GIVE] Matched BB case: calling BBRequiresAttentionResumeAction with doom=${doom}, es=${es}, r=${r}")
+                    js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-GIVE] Matched BB case: calling BBRequiresAttentionResumeAction with doom=${doom}, es=${es}, r=${r}")
                     game.bbRequiresAttentionPendingRegion = None
                     Force(BBRequiresAttentionResumeAction(ritualer, doom, es, r))
                 case _ =>
-                    println(s"[BB-SYCOPHANCY-GIVE] Did NOT match BB case: calling TTSycophancyResumeRitualAction")
+                    js.Dynamic.global.console.log(s"[BB-SYCOPHANCY-GIVE] Did NOT match BB case: calling TTSycophancyResumeRitualAction")
                     game.bbRequiresAttentionPendingRegion = None
                     Force(TTSycophancyResumeRitualAction(ritualer, doom, es))
             }
