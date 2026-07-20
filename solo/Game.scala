@@ -3893,19 +3893,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case EndPhasePromptsAction(next, Nil) =>
             endActionPhasePrompts = false
 
-            // Check if any faction became active from end-of-phase actions (e.g. Unspeakable Oath)
-            val activeFactions = factions.filter(_.active).map(f => s"${f.short}(power=${f.power})").mkString(", ")
-            println(s"[END-PHASE-TRACE] All end-phase prompts complete. Active factions: ${if (activeFactions.isEmpty) "NONE" else activeFactions}")
-
-            if (factions.exists(_.active)) {
-                val resumeFrom = factions.%(_.active).head
-                println(s"[END-PHASE-TRACE] Resuming action phase with ${resumeFrom.short}")
-                CheckSpellbooksAction(PreMainAction(resumeFrom))
-            }
-            else {
-                println(s"[END-PHASE-TRACE] No active factions, going to PowerGatherAction")
+            // If any faction became active from an end-of-phase action (e.g. Unspeakable Oath
+            // sacrifice granting power), resume the action phase for that faction instead of
+            // transitioning to power gather.
+            if (factions.exists(_.active))
+                CheckSpellbooksAction(PreMainAction(factions.%(_.active).head))
+            else
                 Then(PowerGatherAction(next))
-            }
 
         case EndPhasePromptsAction(next, l) =>
             endActionPhasePrompts = true
@@ -4549,8 +4543,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
             val c = candidates.head
 
-            println(s"[UNSPEAKABLE-OATH-TRACE] ${self.short} sacrificing HP at ${r}, power before: ${self.power}, active before: ${self.active}, hibernating: ${self.hibernating}, then action: ${then.getClass.getSimpleName}")
-
             eliminate(c)
 
             self.oncePerAction :-= Passion
@@ -4563,8 +4555,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             if (self.hibernating.not)
                 self.active = true
-
-            println(s"[UNSPEAKABLE-OATH-TRACE] ${self.short} after HP sacrifice: power=${self.power}, active=${self.active}")
 
             triggers()
 
