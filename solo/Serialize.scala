@@ -197,6 +197,8 @@ class Serialize(val game : Game) {
         // [LEGACY REPLAY] Pre-6d1ee19 "Done" — old move-all-at-once (self, source, dest, k, picked).
         case EApply("AnimatedRushDoneAction", ps) =>
             AnimatedRushDoneAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[Int], parseExpr(ps(4)).asInstanceOf[$[UnitRef]])
+        case EApply("FBWritheRollResultAction", ps) if ps.num == 3 => FBWritheRollResultAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[$[BattleRoll]])
+        case EApply("FBWritheRollResultAction", ps) if ps.num == 4 => FBWritheRollResultAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[$[BattleRoll]], parseExpr(ps(3)).asInstanceOf[Boolean])
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 
