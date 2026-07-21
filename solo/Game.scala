@@ -1732,6 +1732,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         // Shadow Pharaoh: Hebephrenia — gates in SP's area cannot be controlled
                         val shadowPharaohBlocks = factions.exists(f2 => f2.allInPlay.%(_.uclass == ShadowPharaoh).exists(_.region == r))
 
+                        // DIAGNOSTIC TRACE for Shadow Pharaoh gate blocking (2026-07-21)
+                        if (shadowPharaohBlocks) {
+                            val pharaohs = factions./~(f2 => f2.allInPlay.%(_.uclass == ShadowPharaoh))
+                            println(s"[SP-TRACE] Shadow Pharaoh blocks gate control in $r. SP locations: ${pharaohs./(u => s"${u.faction.short}:${u.region}").mkString(", ")}. Self=$self trying to control at $r with units: ${self.at(r)./(_.uclass).mkString(",")}")
+                        }
+
                         if (libraryBlocker.any || shadowPharaohBlocks) {
                             // Silently block — don't log repeatedly (checkGatesGained is called every action cycle)
                         }
@@ -3314,7 +3320,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 CheckSpellbooksAction(DragonAscendingInstantAction(DragonAscendingUpAction("power gather", EndPhasePromptsAction(next, factions))))
 
         case EndPhasePromptsAction(next, Nil) =>
-            Then(PowerGatherAction(next))
+            endActionPhasePrompts = false
+
+            if (factions.exists(_.active))
+                CheckSpellbooksAction(PreMainAction(factions.%(_.active).head))
+            else
+                Then(PowerGatherAction(next))
 
         case EndPhasePromptsAction(next, l) =>
             // 2026-05-30 gate-diplomacy lock (mirrored from Library v5.2): leading edge of
@@ -3340,7 +3351,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (asks.any)
                 MultiAsk(asks)
             else
-                Then(PowerGatherAction(next))
+                EndPhasePromptsAction(next, Nil)
 
 
         // PASS
