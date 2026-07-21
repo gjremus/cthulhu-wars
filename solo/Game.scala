@@ -2161,7 +2161,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def captures(f : Faction)(implicit w : AskWrapper) {
-        areas.nex.%(f.affords(1)).%(r => factionlike.but(f).%(f.canCapture(r)).any).some.foreach { l =>
+        // BB (Bubastis) is an Elder God faction and can capture enemy cultists on the Moon
+        // (e.g. a Tcho-Tcho High Priest on the Moon). The Moon is off-map (not in
+        // board.regions), so like summonRegions / awakens / battleAreas we must explicitly
+        // append BB.moon to the capture region set — otherwise no capture is ever offered
+        // there. canCapture() already grants BB's ElderGod (Bastet) the right to capture.
+        val captureAreas = areas ++ game.factions.has(BB).??($(BB.moon))
+        captureAreas.nex.%(f.affords(1)).%(r => factionlike.but(f).%(f.canCapture(r)).any).some.foreach { l =>
             + CaptureMainAction(f, l, None)
         }
         // Mind Parasite: separate capture action for parasitized cultists
