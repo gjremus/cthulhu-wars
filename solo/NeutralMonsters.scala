@@ -559,8 +559,13 @@ object NeutralMonstersExpansion extends Expansion {
         // trigger cycle with no turn check, so a cultist pained out of SP's region (e.g. by Dread Curse
         // on another player's turn) would seize a gate out of turn. Blocking-only means the standard,
         // turn-scoped checkGatesGained naturally re-grants control on the owner's own turn once SP leaves.
-        factions./~(f => f.allInPlay.%(_.uclass == ShadowPharaoh)).foreach { sp =>
+        val allShadowPharaohs = factions./~(f => f.allInPlay.%(_.uclass == ShadowPharaoh))
+        if (allShadowPharaohs.any) {
+            log("[SP-DEBUG]".styled("nt"), allShadowPharaohs.num, "Shadow Pharaoh(s) in play:", allShadowPharaohs./(sp => s"${sp.faction.short}@${sp.region}").mkString(", "))
+        }
+        allShadowPharaohs.foreach { sp =>
             val r = sp.region
+            log("[SP-DEBUG]".styled("nt"), "Processing", sp.faction.short, "Shadow Pharaoh at", r)
             // Force lose control — all factions (OW's unitGate is a separate field, unaffected)
             factions.foreach { gateOwner =>
                 if (gateOwner.gates.has(r)) {
