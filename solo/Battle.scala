@@ -651,7 +651,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 azathothNeedsKillRoll = false
                 val azUnit = s.forces.%(_.uclass == AzathothIGOO).head
                 if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
-                    val roll = (1::2::3::4::5::6).shuffle.first
+                    val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
                     game.azathothGlyphPosition -= roll
                     log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(azUnit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
                     if (game.azathothGlyphPosition <= 0) {
@@ -1128,7 +1128,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                         azathothNeedsKillRoll = false
                                         val azUnit = enemy.forces.%(_.uclass == AzathothIGOO).head
                                         if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
-                                            val roll = (1::2::3::4::5::6).shuffle.first
+                                            val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
                                             game.azathothGlyphPosition -= roll
                                             log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(azUnit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
                                             if (game.azathothGlyphPosition <= 0) {
