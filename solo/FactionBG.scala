@@ -198,7 +198,7 @@ object BGExpansion extends Expansion {
 
             game.reveals(f)
 
-            game.endTurn(f)(f.battled.any || f.oncePerRound.contains(Fertility))
+            game.endTurn(f)(f.battled.any)
 
             asking
 
