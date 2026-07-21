@@ -260,33 +260,33 @@ object OWExpansion extends Expansion {
         case BeyondOneAction(self, o, uc, r) =>
             self.power -= 1
             self.payTax(r)
-            game.gates :-= o
-            game.gates :+= r
-            factions.%(_.gates.contains(o)).foreach { f =>
-                f.gates :-= o
-                f.gates :+= r
-                f.at(o).%(_.onGate).single.foreach(_.region = r)
-            }
-            // 2026-07-18: Beyond One must also update chaos gate tracking when moving DS chaos gates.
-            // Without this, moving a chaos gate leaves it in the old location's chaosGateRegions list,
-            // causing the map to show both a chaos gate (at old location) and a normal gate (at new location).
-            if (game.factions.has(DS) && DS.chaosGateRegions.has(o)) {
-                DS.chaosGateRegions = DS.chaosGateRegions.%(c => c != o)
+            val isChaosGate = game.factions.has(DS) && DS.chaosGateRegions.has(o)
+            if (isChaosGate) {
+                DS.chaosGateRegions = DS.chaosGateRegions.%(region => region != o)
                 DS.chaosGateRegions :+= r
+                val keeper = DS.at(o).%(_.onGate)
+                keeper.foreach { u => u.onGate = false; u.region = r }
+                game.gates :-= o
+                game.gates :+= r
+                if (DS.gates.has(o)) {
+                    DS.gates = DS.gates.%(region => region != o)
+                    DS.gates :+= r
+                }
+                keeper.foreach(_.onGate = true)
+            } else {
+                game.gates :-= o
+                game.gates :+= r
+                factions.%(_.gates.contains(o)).foreach { f =>
+                    f.gates :-= o
+                    f.gates :+= r
+                    f.at(o).%(_.onGate).single.foreach(_.region = r)
+                }
             }
-            // 2026-05-27 (mirrored from Library 2026-05-11 fix): use
-            // `headOption` instead of `.one` here. When OW Beyond One's its
-            // own gate, the only OW unit OW can use to occupy the gate
-            // (cost-3+) is a High Priest, which IS the on-gate keeper. The
-            // loop above already moved that HP to `r`, so
-            // `self.at(o).one(uc)` would crash with head-of-empty-list. The
-            // intent of this line is "also move the unit OW spent to power
-            // Beyond One" — but when that unit was the keeper, the loop did
-            // it already, so we no-op. Yog-Sothoth IS a gate (not on a gate)
-            // and can't be the `uc` here.
             self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
-            val gateType = if (game.factions.has(DS) && DS.chaosGateRegions.has(r)) "Chaos Gate" else "gate"
-            self.log("moved", gateType, "with", uc.styled(self), "from", o, "to", r)
+            if (isChaosGate)
+                self.log("moved", "Chaos Gate".styled("ds"), "with", uc.styled(self), "from", o, "to", r)
+            else
+                self.log("moved gate with", uc.styled(self), "from", o, "to", r)
             EndAction(self)
 
         // DREAD CURSE
