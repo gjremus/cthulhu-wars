@@ -90,10 +90,16 @@ case object FBE extends Faction { f =>
         // Byagoona's Combat = count of Kill/Pain faces on the Faction-Card dice
         // (§1.8). Pip >= 4 is a Pain or Kill face (4/5 Pain, 6 Kill). Fungal
         // Thralls use their cost (2) as combat. Acolytes (Cultists) have 0 combat.
-        // Neutral Monsters use neutralStrength.
+        // Neutral Monsters are scored ONLY by neutralStrength below — they must be
+        // excluded from this cost term or a controlled Neutral Monster (e.g. a Gug)
+        // gets double-counted (once by cost here, once by neutralStrength).
+        // Exclude by unit CLASS, not by .faction: a controlled/Shapestolen neutral
+        // monster carries the real controlling faction, so a faction-based filter
+        // would never exclude it. Fungal Thralls and Shapestolen enemy-faction
+        // monsters are not NeutralMonster classes, so they stay counted here.
         val byagoonaCount = units.%(_.uclass == Byagoona).num
         val byagoonaStr   = (byagoonaCount > 0).??(game.fbeCardDice.count(_ >= 4))
-        units.%(u => u.uclass != Byagoona && u.uclass.utype == Monster).not(Zeroed)./(_.uclass.cost).sum +
+        units.%(u => u.uclass != Byagoona && u.uclass.utype == Monster && !u.uclass.is[NeutralMonster]).not(Zeroed)./(_.uclass.cost).sum +
         byagoonaStr +
         neutralStrength(units, opponent)
     }
@@ -194,8 +200,14 @@ case class OverlordOfDeathPickAction(self : Faction, picked : $[UnitRef], remain
     override def question(implicit game : Game) =
         OverlordOfDeath.styled(FBE) + ": choose Monsters to Eliminate (discount so far: " + picked.num.power + ")"
 }
+// HB OoD-Hard fix: was `with Soft`, but the handler MUTATES state (eliminates the
+// picked Monsters + sets the discount). Soft actions are excluded from undo replay,
+// so undoing across a discounted action re-ran the later action with a 0 discount —
+// Power was spent instead of the Monster Eliminations. Now Hard so undo correctly
+// reverses the elimination + discount and replay re-applies them. Mirrors FB's The
+// Eye Opens Soft→Hard fix (Round 8 Bug 42).
 case class OverlordOfDeathDoneAction(self : Faction, picked : $[UnitRef])
-    extends OptionFactionAction("Done".styled("power")) with Soft with PowerNeutral { def question(implicit game : Game) = OverlordOfDeath.styled(FBE) }
+    extends OptionFactionAction("Done".styled("power")) with PowerNeutral { def question(implicit game : Game) = OverlordOfDeath.styled(FBE) }
 case class OverlordOfDeathCancelAction(self : Faction)
     extends OptionFactionAction("Cancel " + OverlordOfDeath.styled(FBE)) with PowerNeutral { def question(implicit game : Game) = OverlordOfDeath.styled(FBE) }
 case class OverlordOfDeathCancelMainAction(self : Faction)
