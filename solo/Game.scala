@@ -5072,7 +5072,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
 
         case SummonedAction(self, uc, r, l) =>
-            EndAction(self)
+            // BG Fertility Cult: unlimited action (return to main menu after summon)
+            if (self.name == "BG" && self.oncePerRound.contains(Fertility)) {
+                triggers()
+                Force(MainAction(self))
+            }
+            else
+                EndAction(self)
 
         // AWAKEN
         case AwakenMainAction(self, uc, locations) =>
@@ -5118,6 +5124,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case SacrificeHighPriestAction(self, r, then) =>
             val c = self.at(r).one(HighPriest)
 
+            println(s"[UNSPEAKABLE-OATH-TRACE] ${self.short} sacrificing HP at ${r}, power before: ${self.power}, active before: ${self.active}, hibernating: ${self.hibernating}, then action: ${then.getClass.getSimpleName}")
+
             fbeHPSacrificeInProgress = true
             eliminate(c)
             fbeHPSacrificeInProgress = false
@@ -5132,6 +5140,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             if (self.hibernating.not)
                 self.active = true
+
+            println(s"[UNSPEAKABLE-OATH-TRACE] ${self.short} after HP sacrifice: power=${self.power}, active=${self.active}")
 
             triggers()
 
