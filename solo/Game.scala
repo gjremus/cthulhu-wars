@@ -4505,7 +4505,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
 
         case SummonedAction(self, uc, r, l) =>
-            EndAction(self)
+            // BG Fertility Cult: unlimited action (return to main menu after summon)
+            if (self.name == "BG" && self.oncePerRound.contains(Fertility)) {
+                triggers()
+                Force(MainAction(self))
+            }
+            else
+                EndAction(self)
 
         // AWAKEN
         case AwakenMainAction(self, uc, locations) =>
