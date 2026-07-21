@@ -667,6 +667,20 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (refugees.none)
             return proceed()
 
+        // Tombstalker (TS) Oleaginous: pains on Gla'aki and Deep Tendrils become free
+        // retreats to any adjacent area. Handled here inside the normal retreat step so
+        // that attacker-first ordering is preserved (defender resolves after attacker),
+        // rather than in a separate post-battle phase.
+        if (s.can(Oleaginous)) {
+            val oleagPained = refugees.%(u => u.uclass == Glaaki || u.uclass == DeepTendril)
+            if (oleagPained.any) {
+                val u = oleagPained.first
+                val destinations = arena.connected
+                if (destinations.any)
+                    return Ask(s).each(destinations)(r => OleaginousRetreatAction(TS, u, r))
+            }
+        }
+
         val destinations = arena.connectedForRetreat.%(r => s.opponent.at(r).none)
 
         val chooser : Faction = retreater(s)
@@ -1371,18 +1385,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(OleaginousPhase)
 
             case OleaginousPhase =>
-                // Tombstalker (TS) Oleaginous: pains on Gla'aki and Deep Tendrils become free retreats to any adjacent area
-                sides.foreach { s =>
-                    if (s.can(Oleaginous)) {
-                        val oleagPained = s.forces.%(u => u.health == Pained && (u.uclass == Glaaki || u.uclass == DeepTendril))
-                        if (oleagPained.any) {
-                            val u = oleagPained.first
-                            val destinations = arena.connected // ANY adjacent area, no enemy restriction
-                            if (destinations.any)
-                                return Ask(s).each(destinations)(r => OleaginousRetreatAction(TS, u, r))
-                        }
-                    }
-                }
+                // Oleaginous now handled during normal retreat phase (attacker-first ordering preserved)
                 jump(HarbingerPainPhase)
 
             case HarbingerPainPhase =>
@@ -1967,7 +1970,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val u = game.unit(ur)
             retreat(u, r)
             log(u, "retreated to", r, "with", Oleaginous, "(Pain became Retreat)")
-            jump(OleaginousPhase)
+            proceed()
 
         case EliminateNoWayAction(self, u) =>
             if (self == DS && u.goo && DS.all(AvatarSynthesis).any) {
