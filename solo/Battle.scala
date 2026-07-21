@@ -373,7 +373,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log("Azathoth Daemon Sultan".styled("nt"), "blocked by", "Elder Thing".styled("nt"), "—", "Azathoth".styled(unit.faction), "can be killed normally")
         }
         if (unit.uclass == AzathothIGOO && !ElderThingMindControl.suppresses(unit)) {
-            val roll = (1::2::3::4::5::6).shuffle.first
+            val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
             game.azathothGlyphPosition -= roll
             log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(unit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
             if (game.azathothGlyphPosition <= 0) {
