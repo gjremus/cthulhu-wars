@@ -757,7 +757,7 @@ object Overlays {
         // Tombstalker (TS): faction info card showing Death March ability, units (TombHerd, DeepTendril, Gla'aki)
         case $("TS") => faction(TS, "info:ts-background", DeathMarch, "Ongoing",
             "Increment the Death's Head each time an enemy Unit dies in any Battle. In the Doom Phase, spend 1 Death's Head to place a Tomb-Herd in any Area; repeat as much as possible. Then reset the Death's Head to 0.",
-            $(), $(
+            $(ElevenRevelations, Hecatomb, Undulate), $(
             (Acolyte,    6, "1",   "0", s""""""),
             (TombHerd,   6, "2",   "3", s"""<div class=p>The first Tomb-Herd in an Area has 3 Combat. Any others have 0 Combat.</div><div class=p>Spellbook: ${reference(TS, GraspingDead)}</div>"""),
             (DeepTendril, 3, "3", "1-3", s"""<div class=p>Combat: 1, +1 if Gla'aki is in the same Area, +1 if in an Ocean/Sea Area.</div><div class=p>Spellbook: ${reference(TS, Oleaginous)}</div>"""),
@@ -786,7 +786,7 @@ object Overlays {
             val ghatoCost = math.max(1, 11 - RitualTrackOverlay.ritualCost)
             faction(FB, "info:fb-background", Writhe, "Action: Cost 2",
             "Roll dice equal to your Power. For each Kill: Eliminate a Unit you control, any of your Acolytes Eliminated are instead replaced with Desiccated. For each Pain, relocate your Unit to any Area. Before applying these results, you may reroll ALL these dice once.<br/><br/><span class=ability-color>Crater</span> <span class=cost-color>(Building):</span> Any Gate (other than Yog-Sothoth) that coexists in an Area with a Crater is immediately destroyed.",
-            $(), $(
+            $(Augury, Carnage, DevilsMark), $(
             (Acolyte,        6, "1", "0", s""""""),
             (Desiccated,     6, "2", "0+", s"""<div class=p>Combat is 1 if in a land Area, 0 if in a sea Area.</div><div class=p>Spellbook: ${reference(FB, TheEyeOpens)}</div>"""),
             (RevenantOfKnaa, 2, "3", "?", s"""<div class=p>Combat equals the number of Desiccated in play.</div><div class=p>Spellbooks: ${reference(FB, CyclopeanGaze)}, ${reference(FB, CallOfTheFaithful)}</div>"""),

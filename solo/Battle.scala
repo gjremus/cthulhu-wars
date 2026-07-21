@@ -103,10 +103,10 @@ case class FireVampiresSkipAction(self : Faction) extends BaseFactionAction("Fir
 // rewind path (TODO).
 case class PrimeCauseChooseUnitAction(self : Faction, uRef : UnitRef) extends BaseFactionAction(
     implicit g => "Prime Cause".styled("nt"), implicit g => "Replace " + g.unit(uRef).uclass.styled(self)) {
-    override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt") + " — choose Unit to replace"
+    override def question(implicit game : Game) = self.full + " — " + "Prime Cause".styled("nt")
 }
 case class PrimeCauseChooseReplacementAction(self : Faction, oldRef : UnitRef, newUC : UnitClass) extends BaseFactionAction(
-    implicit g => "Prime Cause".styled("nt"),
+    implicit g => "",
     implicit g => {
         val oldU = g.unit(oldRef)
         val r = oldU.region
@@ -1216,13 +1216,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // have QU, only the FIRST side's QU triggers (the side that appears
                 // first in sides list).
                 //
-                // Replay protection (2026-07-16): Check if a Dust to Dust action is already in
-                // the log for this battle. If yes, skip generating the Ask (the logged action
-                // will be performed directly during replay).
-                val dustActionInLog = game.nextReplayActionHint.exists(h =>
-                    h.contains("QuachilDustToDustES") || h.contains("QuachilDustToDustRemove"))
-
-                if (dustToDustProcessed.isEmpty && !dustActionInLog) {
+                // Replay protection (2026-07-16): dustToDustProcessed is marked in the action
+                // perform handlers, so on replay the action executes and marks the battle
+                // as processed before we reach this phase check. This prevents re-generating
+                // the Ask during replay.
+                if (dustToDustProcessed.isEmpty) {
                     sides.foreach { s =>
                         if (s.forces.exists(_.uclass == QuachilUttaus)) {
                             val quOwner = s
@@ -1781,6 +1779,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // never returns to pool)
             self.units = self.units.%(_.ref != uRef)
             log(self.full, "permanently removed", u.uclass.styled(self), "from the game via", "Dust to Dust".styled("nt"))
+            // Mark as processed so replay doesn't re-trigger (2026-07-16 FIX)
+            dustToDustProcessed :+= quOwner
             proceed()
 
         case QuachilDustToDustESAction(self, uRef, quOwner) =>
@@ -1793,6 +1793,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // "don't remove any unit permanently"; all killed units stay in
             // their normal killed state and will be eliminated by
             // EliminatePhase (which also triggers checkKillSpellbooks).
+            // Mark as processed so replay doesn't re-trigger (2026-07-16 FIX)
+            dustToDustProcessed :+= quOwner
             proceed()
 
         case DholePlanetaryDestructionDoomAction(self, owner) =>
