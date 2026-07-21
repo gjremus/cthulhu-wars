@@ -1,0 +1,19 @@
+[info] Full optimizing /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/target/scala-2.13/cthulhu-wars-solo-hrf-opt
+[debug] Linker: Compute reachability: 2017967 us
+[debug] Linker: Assemble LinkedClasses: 34638 us
+[debug] Linker: Check IR: 342003 us
+[debug] Linker: 2436014 us
+[debug] Module Splitter: Calculate Dependency Info: 1831 us
+[debug] Module Splitter: Analyze Modules: 564 us
+[debug] Module Splitter: Assemble Modules: 7246 us
+[debug] Module Splitter: 10101 us
+[debug] Emitter: Generate Classes: 1319765 us
+[debug] Emitter: Write trees: 19712 us
+[debug] Emitter: Class tree cache stats: reused: 0 -- invalidated: 2640
+[debug] Emitter: Method tree cache stats: reused: 0 -- invalidated: 32023
+[debug] Emitter: Pre prints: 39906
+[debug] Emitter: 1382998 us
+[debug] Closure: Create trees): 1521035 us
+[info] Closure: 0 error(s), 0 warning(s)
+[debug] Closure: Compiler pass: 32230296 us
+[debug] Closure: Write result: 956008 us

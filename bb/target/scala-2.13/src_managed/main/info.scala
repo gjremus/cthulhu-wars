@@ -1,0 +1,1 @@
+package hrf { object BuildInfo { val name = "Cthulhu Wars Solo HRF" ; val version = "bubastis-v2.4.36" ; val time = 43758572 ; val seed = "Stream(M, ?)" } }

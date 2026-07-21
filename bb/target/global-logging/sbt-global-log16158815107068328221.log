@@ -1,0 +1,175 @@
+[debug] > Exec(early(addDefaultCommands), None, None)
+[debug] > Exec(addDefaultCommands, None, None)
+[debug] > Exec(early(initialize), None, None)
+[debug] > Exec(initialize, None, None)
+[debug] > Exec(boot, None, None)
+[debug] > Exec(writeSbtVersion, None, None)
+[debug] > Exec(reload, None, None)
+[debug] > Exec(sbtStashOnFailure, None, None)
+[debug] > Exec(onFailure loadFailed, None, None)
+[debug] > Exec(loadp, None, None)
+[info] welcome to sbt 1.10.7 (Azul Systems, Inc. Java 21.0.11)
+[debug] Load.defaultLoad until apply took 27.098083ms
+[debug]           Load.loadUnit: plugins took 19.36375ms
+[debug]           Load.loadUnit: defsScala took 0.054917ms
+[debug] [Loading] Scanning directory /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/project
+[debug]             Load.loadUnit: mkEval took 1.747292ms
+[debug] [Loading] Found non-root projects 
+[debug] [Loading] Done in /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/project, returning: ()
+[debug] deducing auto plugins based on known facts Set(Atom(sbt.plugins.CorePlugin)) and clauses Clauses(Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.IvyPlugin)))
+[debug] Clause(Atom(sbt.ScriptedPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.SbtPlugin),Set(Atom(sbt.ScriptedPlugin)))
+[debug] Clause(Atom(sbt.plugins.SemanticdbPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.JUnitXmlReportPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.MiniDependencyTreePlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.CorePlugin),Set(Atom(sbt.plugins.IvyPlugin)))
+[debug] Clause(Atom(sbt.plugins.IvyPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.SemanticdbPlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.JUnitXmlReportPlugin)))
+[debug] Clause(Atom(sbt.plugins.CorePlugin),Set(Atom(sbt.plugins.Giter8TemplatePlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.MiniDependencyTreePlugin))))
+[debug]   :: deduced result: Matched(sbt.plugins.CorePlugin,sbt.plugins.Giter8TemplatePlugin,sbt.plugins.IvyPlugin,sbt.plugins.JvmPlugin,sbt.plugins.MiniDependencyTreePlugin,sbt.plugins.JUnitXmlReportPlugin,sbt.plugins.SemanticdbPlugin)
+[debug] Plugins.deducer#function took 4.115417 ms
+[info] loading settings for project bb-build from plugins.sbt...
+[debug]               Load.resolveProject(bb-build) took 13.586333ms
+[debug]             Load.loadTransitive: finalizeProject(Project(id bb-build, base: /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/project, plugins: List(<none>))) took 24.813917ms
+[debug] [Loading] Done in /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/project, returning: (bb-build)
+[debug]           Load.loadUnit: loadedProjectsRaw took 87.821208ms
+[debug]           Load.loadUnit: cleanEvalClasses took 1.216375ms
+[debug]         Load.loadUnit(file:/Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/project/, ...) took 109.8405ms
+[debug]       Load.apply: load took 324.314375ms
+[debug]       Load.apply: resolveProjects took 1.789208ms
+[debug]       Load.apply: finalTransforms took 21.37825ms
+[debug]       Load.apply: config.delegates took 1.711833ms
+[debug]       Load.apply: Def.make(settings)... took 124.142875ms
+[debug]       Load.apply: structureIndex took 38.901667ms
+[debug]       Load.apply: mkStreams took 0.431958ms
+[info] loading project definition from /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/project
+[debug] Running task... Cancel: Signal, check cycles: false, forcegc: true
+[debug]     Load.loadUnit: plugins took 791.855167ms
+[debug]     Load.loadUnit: defsScala took 0.001792ms
+[debug] [Loading] Scanning directory /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb
+[debug]       Load.loadUnit: mkEval took 0.08425ms
+[debug] [Loading] Found non-root projects 
+[debug] [Loading] Done in /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb, returning: ()
+[debug] deducing auto plugins based on known facts Set(Atom(org.scalajs.sbtplugin.ScalaJSPlugin), Atom(sbt.plugins.CorePlugin)) and clauses Clauses(Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.IvyPlugin)))
+[debug] Clause(Atom(sbt.ScriptedPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.SbtPlugin),Set(Atom(sbt.ScriptedPlugin)))
+[debug] Clause(Atom(sbt.plugins.SemanticdbPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.JUnitXmlReportPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.MiniDependencyTreePlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(org.scalajs.sbtplugin.ScalaJSPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(org.portablescala.sbtplatformdeps.PlatformDepsPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.CorePlugin),Set(Atom(sbt.plugins.IvyPlugin)))
+[debug] Clause(Atom(sbt.plugins.IvyPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.SemanticdbPlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.JUnitXmlReportPlugin)))
+[debug] Clause(Atom(sbt.plugins.CorePlugin),Set(Atom(sbt.plugins.Giter8TemplatePlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.MiniDependencyTreePlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(org.portablescala.sbtplatformdeps.PlatformDepsPlugin))))
+[debug]   :: deduced result: Matched(sbt.plugins.CorePlugin,org.scalajs.sbtplugin.ScalaJSPlugin,sbt.plugins.Giter8TemplatePlugin,sbt.plugins.IvyPlugin,sbt.plugins.JvmPlugin,org.portablescala.sbtplatformdeps.PlatformDepsPlugin,sbt.plugins.MiniDependencyTreePlugin,sbt.plugins.JUnitXmlReportPlugin,sbt.plugins.SemanticdbPlugin)
+[debug] Plugins.deducer#function took 0.772417 ms
+[info] loading settings for project bb from build.sbt, common.sbt...
+[debug]         Load.resolveProject(bb) took 5.80425ms
+[debug]       Load.loadTransitive: finalizeProject(Project(id bb, base: /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb, plugins: List(<none>))) took 6.913833ms
+[debug] [Loading] Done in /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb, returning: (bb)
+[debug]     Load.loadUnit: loadedProjectsRaw took 55.040041ms
+[debug]     Load.loadUnit: cleanEvalClasses took 1.647417ms
+[debug]   Load.loadUnit(file:/Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/, ...) took 848.963417ms
+[debug] Load.apply: load took 853.112541ms
+[debug] Load.apply: resolveProjects took 0.04875ms
+[debug] Load.apply: finalTransforms took 5.126167ms
+[debug] Load.apply: config.delegates took 0.149708ms
+[debug] Load.apply: Def.make(settings)... took 37.202708ms
+[debug] Load.apply: structureIndex took 12.357333ms
+[debug] Load.apply: mkStreams took 0.001583ms
+[info] set current project to Cthulhu Wars Solo HRF (in build file:/Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/)
+[debug] > Exec(sbtPopOnFailure, None, None)
+[debug] > Exec(resumeFromFailure, None, None)
+[debug] > Exec(notifyUsersAboutShell, None, None)
+[debug] > Exec(iflast shell, None, None)
+[debug] > Exec(fullLinkJS, None, None)
+[debug] Evaluating tasks: Compile / fullLinkJS
+[debug] Running task... Cancel: Signal, check cycles: false, forcegc: true
+[info] compiling 55 Scala sources to /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/target/scala-2.13/classes ...
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotOW.scala:695:69: cws.UnitFigure and cws.UnitRef are unrelated: they will most likely always compare unequal
+[warn]                     self.at(d).%(iu => iu.uclass.utype == GOO && iu != u).none
+[warn]                                                                     ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotTS.scala:1631:68: cws.UnitFigure and cws.UnitRef are unrelated: they will most likely never compare equal
+[warn]                 val fromOwnGate = self.gates.%(g => self.at(g).%(_ == u).any).any
+[warn]                                                                    ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotTS.scala:1635:67: cws.UnitFigure and cws.UnitRef are unrelated: they will most likely never compare equal
+[warn]                 val gateRegion = self.gates.%(g => self.at(g).%(_ == u).any).headOption
+[warn]                                                                   ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/CthulhuWarsSolo.scala:4925:49: method -- in trait SetOps is deprecated (since 2.13.0): Consider requiring an immutable Set
+[warn]                         val pool = effective(i) -- locked.keySet
+[warn]                                                 ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/FactionDS.scala:63:172: method any2stringadd in object Predef is deprecated (since 2.13.0): Implicit injection of + is deprecated. Convert to String to call +
+[warn] case class PowerDoomChoicePowerAction(self : Faction, target : Faction, remaining : $[Faction], powerCount : Int, doomCount : Int) extends BaseFactionAction(implicit g => self + " offers you your choice of", "Gain 1 Power")
+[warn]                                                                                                                                                                            ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/FactionDS.scala:64:171: method any2stringadd in object Predef is deprecated (since 2.13.0): Implicit injection of + is deprecated. Convert to String to call +
+[warn] case class PowerDoomChoiceDoomAction(self : Faction, target : Faction, remaining : $[Faction], powerCount : Int, doomCount : Int) extends BaseFactionAction(implicit g => self + " offers you your choice of", "Gain 1 Doom")
+[warn]                                                                                                                                                                           ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/FactionDS.scala:112:70: method any2stringadd in object Predef is deprecated (since 2.13.0): Implicit injection of + is deprecated. Convert to String to call +
+[warn]     extends BaseFactionAction(AvatarThesis.styled(DS), implicit g => target + " gains 2 Power")
+[warn]                                                                      ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/FactionDS.scala:120:74: method any2stringadd in object Predef is deprecated (since 2.13.0): Implicit injection of + is deprecated. Convert to String to call +
+[warn]     extends BaseFactionAction(AvatarAntithesis.styled(DS), implicit g => target + " gains 1 Elder Sign")
+[warn]                                                                          ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/FactionDS.scala:388:94: method + in class Int is deprecated (since 2.13.0): Adding a number and a String is deprecated. Use the string interpolation `s"$num$str"`
+[warn]                 log("Halved to", "[" + demand.styled("doom") + "]", "for", game.factions.num + "-player game")
+[warn]                                                                                              ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/FactionTT.scala:215:87: method + in class Int is deprecated (since 2.13.0): Adding a number and a String is deprecated. Use the string interpolation `s"$num$str"`
+[warn]     "Reduce enemy combat by " + n + " (" + TerrorSB.styled(TT) + ")", implicit g => n + " Proto-Shoggoth".s(n) + " in battle"
+[warn]                                                                                       ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/FactionTT.scala:218:87: method + in class Int is deprecated (since 2.13.0): Adding a number and a String is deprecated. Use the string interpolation `s"$num$str"`
+[warn]     "Increase own combat by " + n + " (" + TerrorSB.styled(TT) + ")", implicit g => n + " Proto-Shoggoth".s(n) + " in battle"
+[warn]                                                                                       ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/IGOOs.scala:283:88: method + in class Int is deprecated (since 2.13.0): Adding a number and a String is deprecated. Use the string interpolation `s"$num$str"`
+[warn]     implicit g => replacedGOO.styled(self) + " in " + r + " — " + (if (cost >= 0) cost + " " + "Power".styled("power") else "Gain " + (-cost) + " " + "Power".styled("power"))
+[warn]                                                                                        ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/NeutralMonsters.scala:635:119: method any2stringadd in object Predef is deprecated (since 2.13.0): Implicit injection of + is deprecated. Convert to String to call +
+[warn]                     f.log("Angles of Time".styled("nt") + ":", HoundOfTindalos.styled(f), "eliminated (no Gate in", h.region + ")")
+[warn]                                                                                                                       ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/web.scala:101:50: scala.scalajs.js.Any and String are unrelated: they will most likely always compare unequal
+[warn]                     if (dom.window.history.state != gizmo) {
+[warn]                                                  ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/Bot3.scala:826:52: unreachable code
+[warn]                 case ControlGateAction(_, r, u, _) =>
+[warn]                                                    ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotAN.scala:1140:22: unreachable code
+[warn]                 true |=> 1000000 -> "always"
+[warn]                      ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotCC.scala:806:22: unreachable code
+[warn]                 true |=> 1000000 -> "always"
+[warn]                      ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotGC.scala:606:22: unreachable code
+[warn]                 true |=> 1000000 -> "always"
+[warn]                      ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotOW.scala:640:22: unreachable code
+[warn]                 true |=> 1000000 -> "always"
+[warn]                      ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotSL.scala:781:22: unreachable code
+[warn]                 true |=> 1000000 -> "always"
+[warn]                      ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotTS.scala:275:40: unreachable code
+[warn]                 case ElevenRevelations =>
+[warn]                                        ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotWW.scala:690:22: unreachable code
+[warn]                 true |=> 1000000 -> "always"
+[warn]                      ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotYS.scala:984:22: unreachable code
+[warn]                 true |=> 1000000 -> "always"
+[warn]                      ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotYSOld.scala:607:22: unreachable code
+[warn]                 true |=> 1000000 -> "always"
+[warn]                      ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotFB.scala:66:63: Reference to uninitialized value writheDice
+[warn]         self.onMap(Ghatanothoa).any && self.gates.num >= 1 && writheDice >= 4 &&
+[warn]                                                               ^
+[warn] /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/BotFB.scala:93:63: Reference to uninitialized value writheDice
+[warn]         self.onMap(Ghatanothoa).any && self.gates.num >= 1 && writheDice >= 4 &&
+[warn]                                                               ^
+[warn] 26 warnings found
+[info] done compiling
+[info] Full optimizing /Users/gremus/Claude-Projects/cthulhu-wars-TchoTcho_Cats_Yuggoth/bb/target/scala-2.13/cthulhu-wars-solo-hrf-opt
