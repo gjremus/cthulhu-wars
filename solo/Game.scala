@@ -1730,12 +1730,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         } else None
 
                         // Shadow Pharaoh: Hebephrenia — gates in SP's area cannot be controlled
-                        val shadowPharaohBlocks = factions.exists(f2 => f2.allInPlay.%(_.uclass == ShadowPharaoh).exists(_.region == r))
+                        // ENHANCED DIAGNOSTIC (2026-07-21 07:52): show which Pharaohs match the region check
+                        val allPharaohs = factions./~(f2 => f2.allInPlay.%(_.uclass == ShadowPharaoh))
+                        val pharaohsAtR = allPharaohs.%(_.region == r)
+                        val shadowPharaohBlocks = pharaohsAtR.any
+                        
+                        // Always trace when checking gate control (not just when blocking)
+                        if (allPharaohs.any) {
+                            val matchStr = pharaohsAtR.any.?("MATCH").|("NO MATCH")
+                            println(s"[SP-TRACE-ENHANCED] checkGatesGained for $self at region $r. SP check result: $matchStr. All SPs: ${allPharaohs./(u => s"${u.faction.short}:${u.region}:${u.region == r}").mkString(", ")}. Self units at $r: ${self.at(r)./(_.uclass).mkString(",")}")
 
-                        // DIAGNOSTIC TRACE for Shadow Pharaoh gate blocking (2026-07-21)
-                        if (shadowPharaohBlocks) {
-                            val pharaohs = factions./~(f2 => f2.allInPlay.%(_.uclass == ShadowPharaoh))
-                            println(s"[SP-TRACE] Shadow Pharaoh blocks gate control in $r. SP locations: ${pharaohs./(u => s"${u.faction.short}:${u.region}").mkString(", ")}. Self=$self trying to control at $r with units: ${self.at(r)./(_.uclass).mkString(",")}")
                         }
 
                         if (libraryBlocker.any || shadowPharaohBlocks) {
