@@ -314,6 +314,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // otherwise hit the CG hook again with the same Ghatanothoa/Revenant sources.
     var fbCyclopeanGazeFiredThisBattle : Boolean = false
 
+    // Azathoth: track whether Azathoth received a kill this battle (Daemon Sultan absorbed it
+    // as a glyph-track roll instead of dying). If so, Azathoth cannot ALSO be assigned a pain
+    // in the same battle — Azathoth gets exactly ONE battle result per battle (even if BG
+    // Necrophagy brings a ghoul). Mirrors the Bubastis build's guard.
+    var azathothReceivedKill : Boolean = false
+
     def exempt(u : UnitFigure) {
         exempted :+= u
         sides.foreach(_.forces :-= u)
@@ -338,7 +344,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     def assignedKills(unit : UnitFigure) : Int =
-        unit.health match {
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill && unit.health != Killed) 1
+        else unit.health match {
             case Killed => 1
             case DoubleHP(Killed, Killed) => 2
             case DoubleHP(Killed, _) => 1
@@ -349,6 +356,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     def canAssignKills(unit : UnitFigure) : Int =
         // Hound of Tindalos: Angles of Time — cannot be assigned a Kill
         if (unit.uclass == HoundOfTindalos) 0
+        // Azathoth: one battle result per battle — no second kill once it already took one
+        else if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
         else unit.health match {
             case DoubleHP(Killed, Killed) => 0
             case DoubleHP(Killed, _) => 1
@@ -365,6 +374,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log("ERROR: Kill assigned to Hound of Tindalos — Angles of Time should prevent this")
             return
         }
+        // Azathoth: already took its one battle result this battle — ignore any further kill.
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill) return
         // Azathoth IGOO: Daemon Sultan spellbook — roll 1d6, lower glyph position instead of Kill.
         // Logs prefix the spellbook name with "Azathoth" so it never collides with the
         // DS faction name (also "Daemon Sultan") in stats parsing or game-log search.
@@ -373,6 +384,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log("Azathoth Daemon Sultan".styled("nt"), "blocked by", "Elder Thing".styled("nt"), "—", "Azathoth".styled(unit.faction), "can be killed normally")
         }
         if (unit.uclass == AzathothIGOO && !ElderThingMindControl.suppresses(unit)) {
+            azathothReceivedKill = true
             val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
             game.azathothGlyphPosition -= roll
             log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(unit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
@@ -407,7 +419,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
     def canAssignPains(unit : UnitFigure) : Int =
-        unit.health match {
+        // Azathoth: if it already received a kill this battle (Daemon Sultan absorbed it),
+        // it cannot also be assigned a pain in the same battle — one battle result per battle.
+        if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
+        else unit.health match {
             case DoubleHP(Alive, Alive) => 2
             case DoubleHP(Alive, _) => 1
             case DoubleHP(_, Alive) => 1
