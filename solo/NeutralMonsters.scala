@@ -557,9 +557,11 @@ object NeutralMonstersExpansion extends Expansion {
         factions.foreach { f =>
             f.allInPlay.%(_.uclass == ShadowPharaoh).foreach { sp =>
                 val r = sp.region
+                println(s"[HEBEPHRENIA-TRACE] Shadow Pharaoh owned by ${f.short} is in region $r, health=${sp.health}")
                 // Force abandon all gates in this region — Yog-Sothoth exempt
                 factions.foreach { gateOwner =>
                     if (gateOwner.gates.has(r) && gateOwner != OW) {
+                        println(s"[HEBEPHRENIA-TRACE] Forcing ${gateOwner.short} to abandon gate in $r")
                         gateOwner.at(r).foreach(_.onGate = false)
                         gateOwner.gates = gateOwner.gates.but(r)
                         gateOwner.abandoned :+= r
