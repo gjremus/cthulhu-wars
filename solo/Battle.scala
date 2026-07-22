@@ -2958,8 +2958,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // This code path now just logs and proceeds (ownership transfer happened
             // in FactionFBE.scala ShapestealingResolveAction).
             game.fbeShapestolen.foreach { ref =>
-                game.units.find(_.ref == ref).foreach { u =>
-                    if (u.faction == FBE && game.fbeShapestolenPermanent.contains(ref)) {
+                if (game.fbeShapestolenPermanent.contains(ref)) {
+                    val u = game.unit(ref)
+                    if (u.faction == FBE) {
                         val originalOwner = game.fbeShapestolenPermanent(ref)
                         log(u.uclass.styled(originalOwner), "now belongs to", FBE.full, "(Shapestealing, permanent)")
                     }

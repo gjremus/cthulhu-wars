@@ -231,7 +231,7 @@ case object ShapestealingContext extends DieSelectionContext
 case object DistributedDeathContext extends DieSelectionContext
 
 // Manual die picker: player chooses which dice to discard from the faction card.
-case class ManualDiePickAction(self : Faction, context : DieSelectionContext, needed : Int, selected : $[Int], continuation : $[Int] => GameAction)
+case class ManualDiePickAction(self : Faction, context : DieSelectionContext, needed : Int, selected : $[Int], continuation : $[Int] => ForcedAction)
     extends ForcedAction with PowerNeutral with Soft {
     override def question(implicit game : Game) = {
         val abilityName = context match {
@@ -244,7 +244,7 @@ case class ManualDiePickAction(self : Faction, context : DieSelectionContext, ne
 }
 
 // Individual die choice during manual selection.
-case class ManualDieChooseAction(self : Faction, context : DieSelectionContext, needed : Int, selected : $[Int], dieValue : Int, continuation : $[Int] => GameAction)
+case class ManualDieChooseAction(self : Faction, context : DieSelectionContext, needed : Int, selected : $[Int], dieValue : Int, continuation : $[Int] => ForcedAction)
     extends OptionFactionAction(implicit g => "Discard die: " + dieValue.toString) with PowerNeutral with Soft {
     override def question(implicit game : Game) = {
         val abilityName = context match {
@@ -257,7 +257,7 @@ case class ManualDieChooseAction(self : Faction, context : DieSelectionContext, 
 }
 
 // Undo a die selection during manual picking.
-case class ManualDieUndoLastAction(self : Faction, context : DieSelectionContext, needed : Int, selected : $[Int], continuation : $[Int] => GameAction)
+case class ManualDieUndoLastAction(self : Faction, context : DieSelectionContext, needed : Int, selected : $[Int], continuation : $[Int] => ForcedAction)
     extends OptionFactionAction("Undo last selection") with PowerNeutral with Soft {
     override def question(implicit game : Game) = {
         val abilityName = context match {
@@ -865,7 +865,6 @@ object FBEExpansion extends Expansion {
                 val available = game.fbeCardDice.diff(selected)
                 available.foreach { dieValue =>
                     + ManualDieChooseAction(self, context, needed, selected, dieValue, continuation)
-                        .as("Discard die: " + dieValue.toString)
                 }
                 if (selected.nonEmpty)
                     + ManualDieUndoLastAction(self, context, needed, selected, continuation)
