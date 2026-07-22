@@ -2971,13 +2971,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // battle-end so control reverts automatically (§1.10 SB3 / §3.10.3).
             // Mark as used for this Action Phase (hard ability).
             game.fbeShapestealingUsedThisActionPhase = true
-            // Move any newly-shapestolen enemy Monster from its owner's side into
+            // Move any successfully-shapestolen enemy Monster from its owner's side into
             // FBE's side so it rolls and assigns hits as FBE this Combat. Battle owns
             // the live forces lists, so the swap is applied here (not in FactionFBE).
-            game.fbeShapestolen.foreach { ref =>
+            // Check if this specific unit is in game.fbeShapestolen (set by FactionFBE's
+            // handler when roll > cost). Use the enemyMonster from THIS action for replay safety.
+            if (game.fbeShapestolen.contains(enemyMonster)) {
                 sides.foreach { fac =>
                     val side = if (fac == attacker) attackers else defenders
-                    side.forces.%(_.ref == ref).foreach { u =>
+                    side.forces.%(_.ref == enemyMonster).foreach { u =>
                         if (fac != FBE) {
                             side.forces :-= u
                             val fbeSide = if (attacker == FBE) attackers else defenders

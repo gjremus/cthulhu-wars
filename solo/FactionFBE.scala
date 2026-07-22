@@ -151,12 +151,11 @@ case class NecromanticSporesEliminateAction(self : Faction, monster : UnitRef, r
 
 // ── SHAPESTEALING (Pre-Battle, §1.10 SB3 / §3.10.3 / §4.4.3) ─────────────────
 case class ShapestealingPreBattleAction(self : Faction)
-    extends OptionFactionAction(Shapestealing.styled(FBE)) with PreBattleQuestion with Soft
+    extends OptionFactionAction(Shapestealing.styled(FBE)) with PreBattleQuestion
 case class ShapestealingSkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + Shapestealing.name).styled(FBE)) with PreBattleQuestion with Soft
+    extends OptionFactionAction(("Skip " + Shapestealing.name).styled(FBE)) with PreBattleQuestion
 case class ShapestealingTargetAction(self : Faction, enemyMonster : UnitRef)
-    extends BaseFactionAction(Shapestealing.styled(FBE) + ": roll on", implicit g => g.unit(enemyMonster).uclass.styled(g.unit(enemyMonster).faction) + " (Cost " + g.unit(enemyMonster).uclass.cost + ")") with Soft
-// Replay-safe roll capture: rolled pip baked into the terminal action.
+    extends BaseFactionAction(Shapestealing.styled(FBE) + ": roll on", implicit g => g.unit(enemyMonster).uclass.styled(g.unit(enemyMonster).faction) + " (Cost " + g.unit(enemyMonster).uclass.cost + ")")
 case class ShapestealingResolveAction(self : Faction, enemyMonster : UnitRef, roll : Int)
     extends ForcedAction
 
@@ -636,7 +635,7 @@ object FBEExpansion extends Expansion {
             val dieValue = sorted.head
             game.fbeCardDice = sorted.drop(1)
             self.log(Shapestealing.styled(FBE) + ": using card die (value", dieValue.toString + ")")
-            Force(ShapestealingResolveAction(self, enemyMonster, dieValue))
+            Then(ShapestealingResolveAction(self, enemyMonster, dieValue))
 
         case ShapestealingResolveAction(self, enemyMonster, roll) =>
             val mon = game.unit(enemyMonster)
