@@ -579,8 +579,15 @@ object FBEExpansion extends Expansion {
         case NecromanticSporesMainAction(self, n) =>
             game.battle match {
                 case Some(b) =>
-                    // Exclude shapestolen units from Necromantic Spores (per user requirement)
-                    val monsters = controlledMonsters(b.arena).%(u => !game.fbeShapestolenPermanent.contains(u.ref))
+                    // Exclude shapestolen units from Necromantic Spores (per user requirement).
+                    // Replay-compat: older recordings could eliminate a shapestolen unit here;
+                    // if the recorded next action is a Necromantic Spores elimination, keep the
+                    // full (unfiltered) list so those old games still replay.
+                    val replayExpectsEliminate =
+                        game.nextReplayActionHint.exists(_.startsWith("NecromanticSporesEliminate"))
+                    val monsters =
+                        if (replayExpectsEliminate) controlledMonsters(b.arena)
+                        else controlledMonsters(b.arena).%(u => !game.fbeShapestolenPermanent.contains(u.ref))
                     if (monsters.num == 1)
                         Force(NecromanticSporesEliminateAction(self, monsters.head.ref, b.arena, n))
                     else if (monsters.nonEmpty)
