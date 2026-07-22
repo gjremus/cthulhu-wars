@@ -1872,7 +1872,15 @@ object CthulhuWarsSolo {
                     factionlike.foreach { f =>
                         f.at(r).diff(keeper.$).foreach { u =>
                             val tags = u.state ++ game.mummifiedCultists.has(u.ref).$(Mummified)
-                            all +:= DrawItem(r, f, u.uclass, u.health, tags, 0, 0)
+                            // Faceless Blight Shapestealing (§1.10 SB3): a successfully
+                            // stolen enemy Monster fights for FBE for the current Combat.
+                            // Render it in FBE's color while control is active so the
+                            // player can actually see the steal on the map — control (and
+                            // this override) revert automatically at battle-end. Without
+                            // this the unit kept its original owner's color and the steal
+                            // looked like it "vanished" (esp. after a page refresh).
+                            val drawFaction = if (game.fbeShapestolen.contains(u.ref)) FBE else f
+                            all +:= DrawItem(r, drawFaction, u.uclass, u.health, tags, 0, 0)
                         }
                     }
 
@@ -5983,7 +5991,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 // Round 8: replaced hardcoded cwo.im URL with the page's own origin so the
                 // "Online game" link goes to localhost when running locally. For production
                 // (data-server set to a real backend URL), the link still goes to that URL.
-                ask("Cthulhu Wars", $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='" + origin + "' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "Extra", "About", "Test", "Betas".hl).take(menu), {
+                ask("Cthulhu Wars", $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='" + origin + "' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "More Factions/ Units".hl, "Extra", "About", "Test").take(menu), {
                     case 998_0 =>
                         val setup = new Setup(randomSeating($(GC, BG, WW, OW)), Normal)
                         setup.difficulty += OW -> Debug
@@ -6061,7 +6069,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             else
                                 topMenu()
                         })
-                    case 3 => ask("Cthulhu Wars Extra", $("Survival mode".styled("kill"), "Download Offline Version".hl, "<a href='https://necronomicon.app/' target='_blank'><div>Necronomicon</div></a>", "<a href='https://cthulhuwars.fandom.com/' target='_blank'><div>Cthulhu Wars Strategy Wiki</div></a>", "Back"), {
+                    case 4 => ask("Cthulhu Wars Extra", $("Survival mode".styled("kill"), "Download Offline Version".hl, "<a href='https://necronomicon.app/' target='_blank'><div>Necronomicon</div></a>", "<a href='https://cthulhuwars.fandom.com/' target='_blank'><div>Cthulhu Wars Strategy Wiki</div></a>", "Back"), {
                         case 0 =>
                             val base = allFactions.take(4)
                             ask("Choose faction", base./(f => f.full) :+ "Back", nf => {
@@ -6082,7 +6090,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         case 2 | 3 | 4 =>
                             topMenu()
                     })
-                    case 4 =>
+                    case 5 =>
                         ask("Cthulhu Wars Solo", $(
                             "<a href='https://boardgamegeek.com/filepage/152635/cthulhu-wars-solo-hrf-19' target='_blank'><div>Project Homepage</div></a>",
                             "Developed by " + "Haunt Roll Fail".hl,
@@ -6092,17 +6100,15 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             "All graphics in the app belong to Petersen Games.<br>Used with permission.",
                             "Back"
                         ), { _ => topMenu() })
-                    case 6 =>
-                        // "Beta builds" — links to all other builds.
-                        // Colors: TT=faction pink, BB=faction gold, MNU=light grey, HB=rainbow per-letter
-                        ask("Beta builds", $(
+                    case 3 =>
+                        ask("More Factions/ Units", $(
                             "<a href='/' target='_blank'><div>Library at Celaeno (main)</div></a>",
                             "<a href='/mnu/' target='_blank'><div><span style='color:#b8b8b8'>More Neutral Units (MNU)</span></div></a>",
                             "<a href='/TchoTcho/' target='_blank'><div><span style='color:#fc9ca0'>TchoTcho</span></div></a>",
                             "<a href='/BB/' target='_blank'><div><span style='color:#c8a84b'>Bubastis</span></div></a>",
                             "Cancel"
                         ), { _ => topMenu() })
-                    case 5 =>
+                    case 6 =>
                         val setup = new Setup(randomSeating($(GC, BG, WW)), Normal)
                         setup.difficulty += GC -> Human
                         setup.difficulty += BG -> Normal
