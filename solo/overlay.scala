@@ -740,9 +740,9 @@ object Overlays {
         case $("AN", Consecration.name) => spellbook(Consecration.name, "Doom Phase", "When you perform a Ritual of Annihilation, gain <span style=es>1 Elder Sign</span> if at least one Cathedral is in play. If all four Cathedrals are in play, gain <span style=es>2 Elder Signs</span> instead.")
         case $("AN", WorshipServices.name) => spellbook(WorshipServices.name, "Gather Power Phase", "Gain 1 Power for each Cathedral that shares an Area with an enemy Gate. Those enemies each gain 1 Power.")
         // Alt Ancients (AA) replacement spellbooks
-        case $("AN", HolyGround.name) => spellbook(HolyGround.name, "Ongoing (Action Phase Only)", "Your Cathedrals count as 3 Cost Great Old One Units with 0 Combat. They cannot be assigned a Pain, Moved or Retreated but can be Killed like any other Unit.")
-        case $("AN", Sanguinessence.name) => spellbook(Sanguinessence.name, "Ongoing", "Any time you Kill 1 or more enemy Units in or adjacent to an Area with a Cathedral, gain 1 Doom. If you Killed any Great Old Ones, gain an Elder Sign instead.")
-        case $("AN", Crusade.name) => spellbook(Crusade.name, "Ongoing", "Declaring Battle against a player with equal or more Power than you costs 0 Power.")
+        case $("AN", HolyGround.name) => spellbook(HolyGround.name, "Ongoing", "Only In the Action Phase, your Cathedrals now count as 3 Cost Great Old One Units with 0 Combat. They cannot be assigned a Pain, Moved or Retreated but can be Killed like any other Unit.")
+        case $("AN", Sanguinessence.name) => spellbook(Sanguinessence.name, "Ongoing", "Any time you Kill 1 or more enemy Units in or adjacent to an Area with a Cathedral, gain 1 Doom. If you Killed any Great Old Ones in this manner, Gain an Elder Sign instead (ONLY the Elder Sign — no Doom is gained when the Elder Sign triggers).")
+        case $("AN", Crusade.name) => spellbook(Crusade.name, "Ongoing", "Declaring Battle against a player with equal or more Power than you costs 0 (zero) Power.")
 
             case $("DS") => dsFactionOverlay(false)
             case $("DS", altSB : Boolean) => dsFactionOverlay(altSB)
