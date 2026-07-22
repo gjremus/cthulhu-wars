@@ -2952,10 +2952,27 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case ShapestealingResolveAction(self, enemyMonster, _) =>
             // Shapestealing grants temporary battle-scoped control (FBE rolls combat dice
-            // for the stolen unit and assigns its hits). The unit stays with its original
-            // owner; tracking is cleared at battle-end automatically.
+            // for the stolen unit and assigns its hits). The unit stays owned by its
+            // original faction; the tracking in game.fbeShapestolen is cleared at
+            // battle-end so control reverts automatically (§1.10 SB3 / §3.10.3).
             // Mark as used for this Action Phase (hard ability).
             game.fbeShapestealingUsedThisActionPhase = true
+            // Move any newly-shapestolen enemy Monster from its owner's side into
+            // FBE's side so it rolls and assigns hits as FBE this Combat. Battle owns
+            // the live forces lists, so the swap is applied here (not in FactionFBE).
+            game.fbeShapestolen.foreach { ref =>
+                sides.foreach { fac =>
+                    val side = if (fac == attacker) attackers else defenders
+                    side.forces.%(_.ref == ref).foreach { u =>
+                        if (fac != FBE) {
+                            side.forces :-= u
+                            val fbeSide = if (attacker == FBE) attackers else defenders
+                            fbeSide.forces :+= u
+                            log(u.uclass.styled(u.faction), "fights for", FBE.full, "(Shapestealing)")
+                        }
+                    }
+                }
+            }
             proceed()
 
         case NecromanticSporesMainAction(self, _) =>

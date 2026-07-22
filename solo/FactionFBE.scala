@@ -307,7 +307,11 @@ object FBEExpansion extends Expansion {
         if (!game.setup.has(FBE)) return
         if (game.fbeHPSacrificeInProgress) return
         if (!game.fbeActionInProgress) return
-        game.fbeSelfConsumingDeaths :+= (u.faction == FBE)
+        // FBE-controlled = owned by FBE OR currently Shapestolen (battle-scoped control):
+        // a Shapestolen Monster that dies in this Combat counts toward the 3+ Doom clause
+        // (user requirement: killing the stolen unit works for Self Consuming doom).
+        val fbeControlled = u.faction == FBE || game.fbeShapestolen.contains(u.ref)
+        game.fbeSelfConsumingDeaths :+= fbeControlled
     }
 
     // ── SELF CONSUMING resolution (fires at end of every Action) (§3.6) ───────
