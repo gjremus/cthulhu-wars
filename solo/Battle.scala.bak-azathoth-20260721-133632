@@ -555,9 +555,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         // Faceless Blight (FBE): Shapestealing (Pre-Battle, §1.10 SB3 / §3.14.2).
         // Offer if FBE has the SB, has at least one card die to roll, there is
-        // an enemy Monster present in the battle, and it hasn't been used this Action Phase.
-        // Hard ability: once used/skipped, remains unavailable until next Action Phase.
-        if (s == FBE && s.can(Shapestealing) && !game.fbeShapestealingUsedThisActionPhase && game.fbeCardDice.nonEmpty &&
+        // an enemy Monster present in the battle, and it hasn't been used/skipped yet.
+        if (s == FBE && s.can(Shapestealing) && !s.tag(Shapestealing) && game.fbeCardDice.nonEmpty &&
             s.opponent.forces.%(_.uclass.utype == Monster).any) {
             options :+= ShapestealingPreBattleAction(FBE)
             options :+= ShapestealingSkipAction(FBE)
@@ -698,7 +697,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 azathothNeedsKillRoll = false
                 val azUnit = s.forces.%(_.uclass == AzathothIGOO).head
                 if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
-                    val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
+                    val roll = (1::2::3::4::5::6).shuffle.first
                     game.azathothGlyphPosition -= roll
                     log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(azUnit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
                     if (game.azathothGlyphPosition <= 0) {
@@ -1281,7 +1280,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                         azathothNeedsKillRoll = false
                                         val azUnit = enemy.forces.%(_.uclass == AzathothIGOO).head
                                         if (game.nextReplayActionHint.exists(h => !h.contains("AzathothDaemonSultanKillRoll"))) {
-                                            val roll = (1::2::3::4::5::6).shuffleSeed(game.azathothGlyphPosition * 7 + 31).first
+                                            val roll = (1::2::3::4::5::6).shuffle.first
                                             game.azathothGlyphPosition -= roll
                                             log("Azathoth Daemon Sultan".styled("nt") + ":", "Azathoth".styled(azUnit.faction), "hit — rolled", s"$roll, glyph now at", game.azathothGlyphPosition)
                                             if (game.azathothGlyphPosition <= 0) {
@@ -2066,10 +2065,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                // Faceless Blight (FBE): clear per-battle state. Shapestolen Monsters
-                // are PERMANENTLY transferred (ownership changed to FBE), so they stay
-                // with FBE after battle. Only clear the temporary battle-participation list.
-                // The permanent tracking (fbeShapestolenPermanent) persists for death handling.
+                // Faceless Blight (FBE): clear per-battle Shapestealing / Distributed
+                // Death state. Shapestolen Monsters were only moved between battle
+                // sides (ownership/region untouched), so control reverts naturally
+                // when the battle ends and forces are discarded (§1.10 SB3).
                 game.fbeShapestolen = $
                 game.fbeByagoonaKillPrevented = false
 
@@ -2946,24 +2945,26 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case ShapestealingSkipAction(self) =>
-            game.fbeShapestealingUsedThisActionPhase = true
+            (FBE : Side).add(Shapestealing)
             proceed()
 
         case ShapestealingTargetAction(self, _) =>
             proceed()
 
         case ShapestealingResolveAction(self, enemyMonster, _) =>
-            game.fbeShapestealingUsedThisActionPhase = true
-            // Shapestolen units are now permanently transferred to FBE ownership
-            // (faction field changed to FBE), so they're already on the FBE side.
-            // This code path now just logs and proceeds (ownership transfer happened
-            // in FactionFBE.scala ShapestealingResolveAction).
+            (FBE : Side).add(Shapestealing)
+            // Move any newly-shapestolen enemy Monster from its owner's side into
+            // FBE's side so it rolls and assigns hits as FBE this Combat (§1.10 SB3).
             game.fbeShapestolen.foreach { ref =>
-                if (game.fbeShapestolenPermanent.contains(ref)) {
-                    val u = game.unit(ref)
-                    if (u.faction == FBE) {
-                        val originalOwner = game.fbeShapestolenPermanent(ref)
-                        log(u.uclass.styled(originalOwner), "now belongs to", FBE.full, "(Shapestealing, permanent)")
+                sides.foreach { fac =>
+                    val side = if (fac == attacker) attackers else defenders
+                    side.forces.%(_.ref == ref).foreach { u =>
+                        if (fac != FBE) {
+                            side.forces :-= u
+                            val fbeSide = if (attacker == FBE) attackers else defenders
+                            fbeSide.forces :+= u
+                            log(u.uclass.styled(u.faction), "fights for", FBE.full, "(Shapestealing)")
+                        }
                     }
                 }
             }

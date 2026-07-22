@@ -1599,6 +1599,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // (between action start and AfterAction). Deaths outside this window (CG,
     // triggers, phase transitions) do not count.
     var fbeActionInProgress : Boolean = false
+    // Shapestealing "hard" ability tracking — once used in an Action Phase, cannot
+    // be used again until the next Action Phase. Reset at PreMainAction.
+    var fbeShapestealingUsedThisActionPhase : Boolean = false
 
     // Defilers Court (DC) state — per guide G29 (CRIT): Sin pool lives on Game.scala
     // for undo safety (NOT on DCExpansion singleton). HB Fix 96 (2026-06-07):
@@ -4264,6 +4267,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             factions.foreach(_.acted = false)
             factions.foreach(_.battled = $)
             factions.foreach(_.oncePerRound = $)
+            fbeShapestealingUsedThisActionPhase = false
 
             round += 1
 

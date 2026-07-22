@@ -40,7 +40,7 @@ case object Byagoona     extends FactionUnitClass(FBE, "Byagoona",      GOO,    
 // ── SPELLBOOKS (§1.10) ──────────────────────────────────────────────────────
 case object ChangelingAdherents extends FactionSpellbook(FBE, "Changeling Adherents")
 case object NecromanticSpores   extends FactionSpellbook(FBE, "Necromantic Spores")
-case object Shapestealing        extends FactionSpellbook(FBE, "Shapestealing") with BattleSpellbook
+case object Shapestealing        extends FactionSpellbook(FBE, "Shapestealing")
 case object AnimatedRush         extends FactionSpellbook(FBE, "Animated Rush")
 case object Succor               extends FactionSpellbook(FBE, "Succor")
 case object OverlordOfDeath      extends FactionSpellbook(FBE, "Overlord of Death")
