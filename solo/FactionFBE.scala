@@ -543,12 +543,18 @@ object FBEExpansion extends Expansion {
         case NecromanticSporesMainAction(self, n) =>
             game.battle match {
                 case Some(b) =>
-                    val monsters = controlledMonsters(b.arena)
+                    // Exclude shapestolen units from Necromantic Spores (per user requirement)
+                    val monsters = controlledMonsters(b.arena).%(u => !game.fbeShapestolenPermanent.contains(u.ref))
                     if (monsters.num == 1)
                         Force(NecromanticSporesEliminateAction(self, monsters.head.ref, b.arena, n))
-                    else
+                    else if (monsters.nonEmpty)
                         Ask(self).each(monsters)(u =>
                             NecromanticSporesEliminateAction(self, u.ref, b.arena, n))
+                    else {
+                        // No eligible monsters (all are shapestolen)
+                        self.log("Necromantic Spores".styled(FBE) + ": no eligible Monsters (stolen units excluded)")
+                        UnknownContinue
+                    }
                 case None => UnknownContinue
             }
 
@@ -595,9 +601,19 @@ object FBEExpansion extends Expansion {
             val mon = game.unit(enemyMonster)
             val cost = mon.uclass.cost
             if (roll > cost) {
-                game.fbeShapestolen :+= enemyMonster
+                val originalOwner = mon.faction
+                val region = mon.region
+                // Permanently transfer ownership: remove old unit, create new FBE unit
+                // (similar to Albino Penguins transfer pattern)
+                originalOwner.units :-= mon
+                val stolen = new UnitFigure(FBE, mon.uclass, mon.index, region, mon.onGate, mon.state, mon.health)
+                FBE.units :+= stolen
+                // Track permanent ownership for proper death handling and Necromantic Spores exclusion
+                game.fbeShapestolenPermanent += (stolen.ref -> originalOwner)
+                // Also add to temporary battle list for immediate combat participation
+                game.fbeShapestolen :+= stolen.ref
                 self.log(Shapestealing.styled(FBE) + ": die value", roll.toString + " vs Cost",
-                    cost.toString + " —", mon.uclass.styled(mon.faction), "fights for", FBE.full, "this Combat")
+                    cost.toString + " —", mon.uclass.styled(originalOwner), "now belongs to", FBE.full, "(permanent)")
             }
             else
                 self.log(Shapestealing.styled(FBE) + ": die value", roll.toString + " vs Cost",

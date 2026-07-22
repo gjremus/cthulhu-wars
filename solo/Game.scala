@@ -1562,9 +1562,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     //  • fbeSelfConsumingDeaths : Self Consuming per-Action death tally; one entry
     //    per FBE-controlled Monster that died this Action. Triggers at 2+.
     //  • fbeShapestolen : enemy Monsters temporarily fighting for FBE this Battle.
+    //  • fbeShapestolenPermanent : map of (new FBE unit ref -> original faction) for
+    //    permanently stolen Monsters (hard ability, persists after battle and refresh).
     var fbeCardDice : $[Int] = $
     var fbeSelfConsumingDeaths : $[Boolean] = $
     var fbeShapestolen : $[UnitRef] = $
+    var fbeShapestolenPermanent : Map[UnitRef, Faction] = Map.empty
 
     // Xyrious Storm (XSS) state — Cloud Of Ashes holding zone (§1.10 SB3).
     // Monsters placed on the Faction Card during elimination; returned to map at Doom.

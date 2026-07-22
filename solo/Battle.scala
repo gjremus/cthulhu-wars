@@ -2065,10 +2065,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                // Faceless Blight (FBE): clear per-battle Shapestealing / Distributed
-                // Death state. Shapestolen Monsters were only moved between battle
-                // sides (ownership/region untouched), so control reverts naturally
-                // when the battle ends and forces are discarded (§1.10 SB3).
+                // Faceless Blight (FBE): clear per-battle state. Shapestolen Monsters
+                // are PERMANENTLY transferred (ownership changed to FBE), so they stay
+                // with FBE after battle. Only clear the temporary battle-participation list.
+                // The permanent tracking (fbeShapestolenPermanent) persists for death handling.
                 game.fbeShapestolen = $
                 game.fbeByagoonaKillPrevented = false
 
@@ -2953,18 +2953,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case ShapestealingResolveAction(self, enemyMonster, _) =>
             (FBE : Side).add(Shapestealing)
-            // Move any newly-shapestolen enemy Monster from its owner's side into
-            // FBE's side so it rolls and assigns hits as FBE this Combat (§1.10 SB3).
+            // Shapestolen units are now permanently transferred to FBE ownership
+            // (faction field changed to FBE), so they're already on the FBE side.
+            // This code path now just logs and proceeds (ownership transfer happened
+            // in FactionFBE.scala ShapestealingResolveAction).
             game.fbeShapestolen.foreach { ref =>
-                sides.foreach { fac =>
-                    val side = if (fac == attacker) attackers else defenders
-                    side.forces.%(_.ref == ref).foreach { u =>
-                        if (fac != FBE) {
-                            side.forces :-= u
-                            val fbeSide = if (attacker == FBE) attackers else defenders
-                            fbeSide.forces :+= u
-                            log(u.uclass.styled(u.faction), "fights for", FBE.full, "(Shapestealing)")
-                        }
+                game.units.find(_.ref == ref).foreach { u =>
+                    if (u.faction == FBE && game.fbeShapestolenPermanent.contains(ref)) {
+                        val originalOwner = game.fbeShapestolenPermanent(ref)
+                        log(u.uclass.styled(originalOwner), "now belongs to", FBE.full, "(Shapestealing, permanent)")
                     }
                 }
             }
