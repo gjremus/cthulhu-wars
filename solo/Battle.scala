@@ -2068,6 +2068,20 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
                 // Faceless Blight (FBE): clear per-battle state. Shapestolen units revert
                 // to their original owner when battle ends (Shapestealing is battle-scoped only).
+                // First, restore shapestolen units to their original sides.
+                game.fbeShapestolen.foreach { ref =>
+                    // Find the unit in FBE's forces list (it was moved there during combat)
+                    val fbeSide = if (attacker == FBE) attackers else defenders
+                    fbeSide.forces.%(_.ref == ref).foreach { u =>
+                        // Move it back to its original owner's side
+                        val originalFaction = u.faction  // .faction still holds the original owner
+                        val originalSide = if (originalFaction == attacker) attackers else defenders
+                        if (originalFaction != FBE) {
+                            fbeSide.forces :-= u
+                            originalSide.forces :+= u
+                        }
+                    }
+                }
                 game.fbeShapestolen = $
                 game.fbeByagoonaKillPrevented = false
 
