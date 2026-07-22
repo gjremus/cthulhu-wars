@@ -580,14 +580,8 @@ object FBEExpansion extends Expansion {
             game.battle match {
                 case Some(b) =>
                     // Exclude shapestolen units from Necromantic Spores (per user requirement).
-                    // Replay-compat: older recordings could eliminate a shapestolen unit here;
-                    // if the recorded next action is a Necromantic Spores elimination, keep the
-                    // full (unfiltered) list so those old games still replay.
-                    val replayExpectsEliminate =
-                        game.nextReplayActionHint.exists(_.startsWith("NecromanticSporesEliminate"))
-                    val monsters =
-                        if (replayExpectsEliminate) controlledMonsters(b.arena)
-                        else controlledMonsters(b.arena).%(u => !game.fbeShapestolenPermanent.contains(u.ref))
+                    // Shapestolen units are battle-temp controlled, not owned.
+                    val monsters = controlledMonsters(b.arena).%(u => !game.fbeShapestolen.contains(u.ref))
                     if (monsters.num == 1)
                         Force(NecromanticSporesEliminateAction(self, monsters.head.ref, b.arena, n))
                     else if (monsters.nonEmpty)
@@ -644,19 +638,13 @@ object FBEExpansion extends Expansion {
             val mon = game.unit(enemyMonster)
             val cost = mon.uclass.cost
             if (roll > cost) {
-                val originalOwner = mon.faction
-                val region = mon.region
-                // Permanently transfer ownership: remove old unit, create new FBE unit
-                // (similar to Albino Penguins transfer pattern)
-                originalOwner.units :-= mon
-                val stolen = new UnitFigure(FBE, mon.uclass, mon.index, region, mon.onGate, mon.state, mon.health)
-                FBE.units :+= stolen
-                // Track permanent ownership for proper death handling and Necromantic Spores exclusion
-                game.fbeShapestolenPermanent += (stolen.ref -> originalOwner)
-                // Also add to temporary battle list for immediate combat participation
-                game.fbeShapestolen :+= stolen.ref
+                // Battle-scoped control: track the unit for this Combat only.
+                // Ownership stays with the original faction; FBE gains temporary control
+                // for combat dice and hit assignment during this battle.
+                // On battle-end, this tracking is cleared and control reverts automatically.
+                game.fbeShapestolen :+= enemyMonster
                 self.log(Shapestealing.styled(FBE) + ": die value", roll.toString + " vs Cost",
-                    cost.toString + " —", mon.uclass.styled(originalOwner), "now belongs to", FBE.full, "(permanent)")
+                    cost.toString + " —", mon.uclass.styled(mon.faction), "fights for", FBE.full, "this Combat")
             }
             else
                 self.log(Shapestealing.styled(FBE) + ": die value", roll.toString + " vs Cost",

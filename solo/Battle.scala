@@ -2066,10 +2066,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                // Faceless Blight (FBE): clear per-battle state. Shapestolen Monsters
-                // are PERMANENTLY transferred (ownership changed to FBE), so they stay
-                // with FBE after battle. Only clear the temporary battle-participation list.
-                // The permanent tracking (fbeShapestolenPermanent) persists for death handling.
+                // Faceless Blight (FBE): clear per-battle state. Shapestolen units revert
+                // to their original owner when battle ends (Shapestealing is battle-scoped only).
                 game.fbeShapestolen = $
                 game.fbeByagoonaKillPrevented = false
 
@@ -2953,20 +2951,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case ShapestealingResolveAction(self, enemyMonster, _) =>
+            // Shapestealing grants temporary battle-scoped control (FBE rolls combat dice
+            // for the stolen unit and assigns its hits). The unit stays with its original
+            // owner; tracking is cleared at battle-end automatically.
+            // Mark as used for this Action Phase (hard ability).
             game.fbeShapestealingUsedThisActionPhase = true
-            // Shapestolen units are now permanently transferred to FBE ownership
-            // (faction field changed to FBE), so they're already on the FBE side.
-            // This code path now just logs and proceeds (ownership transfer happened
-            // in FactionFBE.scala ShapestealingResolveAction).
-            game.fbeShapestolen.foreach { ref =>
-                if (game.fbeShapestolenPermanent.contains(ref)) {
-                    val u = game.unit(ref)
-                    if (u.faction == FBE) {
-                        val originalOwner = game.fbeShapestolenPermanent(ref)
-                        log(u.uclass.styled(originalOwner), "now belongs to", FBE.full, "(Shapestealing, permanent)")
-                    }
-                }
-            }
             proceed()
 
         case NecromanticSporesMainAction(self, _) =>
