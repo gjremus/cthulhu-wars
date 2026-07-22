@@ -213,6 +213,23 @@ case class OverlordOfDeathCancelAction(self : Faction)
 case class OverlordOfDeathCancelMainAction(self : Faction)
     extends OptionFactionAction("Cancel " + OverlordOfDeath.styled(FBE)) with MainQuestion with PowerNeutral
 
+// USER-2026-07-22: Overlord of Death may be used in the Doom Phase to discount a
+// Ritual (unlike Infernal Pact). Separate Doom-phase classes preserve replay of
+// existing games (the Main-phase pick actions kept their original signatures) and
+// route Done/Cancel back to DoomAction so the player stays in the Doom Phase.
+// Mirrors FB's FBInfernalPactDoom* pattern.
+case class OverlordOfDeathDoomMainAction(self : Faction)
+    extends OptionFactionAction("Discount with " + OverlordOfDeath.styled(FBE)) with DoomQuestion with Soft with PowerNeutral
+case class OverlordOfDeathDoomPickAction(self : Faction, picked : $[UnitRef], remaining : $[UnitRef])
+    extends ForcedAction with PowerNeutral with Soft {
+    override def question(implicit game : Game) =
+        OverlordOfDeath.styled(FBE) + ": choose Monsters to Eliminate (discount so far: " + picked.num.power + ")"
+}
+case class OverlordOfDeathDoomDoneAction(self : Faction, picked : $[UnitRef])
+    extends OptionFactionAction("Done".styled("power")) with PowerNeutral { def question(implicit game : Game) = OverlordOfDeath.styled(FBE) }
+case class OverlordOfDeathDoomCancelAction(self : Faction)
+    extends OptionFactionAction("Cancel " + OverlordOfDeath.styled(FBE)) with PowerNeutral { def question(implicit game : Game) = OverlordOfDeath.styled(FBE) }
+
 // ── NECROMANTIC SPORES REQUIREMENT — Eliminate Two Fungal Thralls (§3.12.2) ──
 // 0 Power Common Action; the two Eliminations DO trigger Self Consuming (+1 Power).
 case class EliminateTwoFungalThrallsMainAction(self : Faction)
@@ -383,6 +400,13 @@ object FBEExpansion extends Expansion {
         case DoomAction(f : FBE.type) =>
             implicit val asking = Asking(f)
 
+            // USER-2026-07-22: transient power boost so a pending Overlord of Death
+            // discount lets the Ritual be OFFERED at its effective (discounted) cost.
+            // Same pattern as the Main-phase offer below; restored before returning.
+            val doomOodBoost = game.fbeOverlordDiscount
+            if (doomOodBoost > 0)
+                f.power += doomOodBoost
+
             game.rituals(f)
 
             game.reveals(f)
@@ -394,6 +418,18 @@ object FBEExpansion extends Expansion {
             // Succor — offer once per Doom phase if acquired and FBE has any unit.
             if (f.can(Succor) && f.units.%(_.region.onMap).any && !f.oncePerAction.has(Succor))
                 + SuccorMainAction(f)
+
+            // USER-2026-07-22: Overlord of Death discount usable in the Doom Phase to
+            // reduce a Ritual's cost (unlike Infernal Pact). Same eligibility as the
+            // Main-phase offer: Byagoona on map, spellbook owned, monsters to eliminate,
+            // no discount already pending.
+            if (game.fbeOverlordDiscount > 0)
+                + OverlordOfDeathDoomCancelAction(f)
+            if (f.can(OverlordOfDeath) && f.all(Byagoona).any && controlledMonstersAnywhere.any && game.fbeOverlordDiscount == 0)
+                + OverlordOfDeathDoomMainAction(f)
+
+            if (doomOodBoost > 0)
+                f.power -= doomOodBoost
 
             game.doomDone(f)
 
@@ -826,6 +862,37 @@ object FBEExpansion extends Expansion {
             game.fbeOverlordDiscount = 0
             self.log(OverlordOfDeath.styled(FBE) + ": discount cancelled")
             Force(MainAction(self))
+
+        // ── OVERLORD OF DEATH — DOOM PHASE (USER-2026-07-22) ─────────────────
+        // Mirror of the Main-phase handlers; Done/Cancel route to DoomAction so the
+        // player stays in the Doom Phase to spend the discount on a Ritual.
+        case OverlordOfDeathDoomMainAction(self) =>
+            Force(OverlordOfDeathDoomPickAction(self, $, controlledMonstersAnywhere./(_.ref)))
+
+        case OverlordOfDeathDoomPickAction(self, picked, remaining) =>
+            implicit val asking = Asking(self)
+            remaining.foreach { ur =>
+                val u = game.unit(ur)
+                + OverlordOfDeathDoomPickAction(self, picked :+ ur, remaining.but(ur))
+                    .as(u.full + " in " + u.region + " (Cost " + u.uclass.cost + ")")
+            }
+            if (picked.any)
+                + OverlordOfDeathDoomDoneAction(self, picked)
+            + OverlordOfDeathDoomCancelAction(self)
+            asking
+
+        case OverlordOfDeathDoomDoneAction(self, picked) =>
+            picked.foreach(ur => game.eliminate(game.unit(ur)))
+            game.fbeOverlordDiscount = picked.num
+            self.log(OverlordOfDeath.styled(FBE) + ": Eliminated", picked.num, "Monster" + (picked.num > 1).??("s") +
+                ", next action discounted by", picked.num.power)
+            Force(DoomAction(self))
+
+        case OverlordOfDeathDoomCancelAction(self) =>
+            // Forfeit a pending discount (monsters already eliminated); undo restores them.
+            game.fbeOverlordDiscount = 0
+            self.log(OverlordOfDeath.styled(FBE) + ": discount cancelled")
+            Force(DoomAction(self))
 
         // ── NECROMANTIC SPORES REQUIREMENT (§3.12.2) ─────────────────────────
         case EliminateTwoFungalThrallsMainAction(self) =>
