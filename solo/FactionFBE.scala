@@ -222,6 +222,53 @@ case class EliminateTwoFungalThrallsPickAction(self : Faction, picked : $[UnitRe
 case class EliminateTwoFungalThrallsDoneAction(self : Faction, picked : $[UnitRef])
     extends BaseFactionAction(("Eliminate two " + FungalThrall.name + "s").styled(FBE), "Done".styled("power"))
 
+// ── MANUAL DIE SELECTION FRAMEWORK (§USER-2026-07-22) ────────────────────────
+// Optional flow for manual die selection instead of auto-selecting lowest.
+// Sealed trait to indicate which ability is requesting die selection.
+sealed trait DieSelectionContext
+case object AnimatedRushContext extends DieSelectionContext
+case object ShapestealingContext extends DieSelectionContext
+case object DistributedDeathContext extends DieSelectionContext
+
+// Manual die picker: player chooses which dice to discard from the faction card.
+case class ManualDiePickAction(self : Faction, context : DieSelectionContext, needed : Int, selected : $[Int], continuation : $[Int] => GameAction)
+    extends ForcedAction with PowerNeutral with Soft {
+    override def question(implicit game : Game) = {
+        val abilityName = context match {
+            case AnimatedRushContext => "Animated Rush"
+            case ShapestealingContext => "Shapestealing"
+            case DistributedDeathContext => "Distributed Death"
+        }
+        abilityName.styled(FBE) + ": choose " + (needed - selected.num) + " more " + ((needed - selected.num) == 1).?("die").|("dice") + " to discard"
+    }
+}
+
+// Individual die choice during manual selection.
+case class ManualDieChooseAction(self : Faction, context : DieSelectionContext, needed : Int, selected : $[Int], dieValue : Int, continuation : $[Int] => GameAction)
+    extends OptionFactionAction(implicit g => "Discard die: " + dieValue.toString) with PowerNeutral with Soft {
+    override def question(implicit game : Game) = {
+        val abilityName = context match {
+            case AnimatedRushContext => "Animated Rush"
+            case ShapestealingContext => "Shapestealing"
+            case DistributedDeathContext => "Distributed Death"
+        }
+        abilityName.styled(FBE) + ": choose dice to discard"
+    }
+}
+
+// Undo a die selection during manual picking.
+case class ManualDieUndoLastAction(self : Faction, context : DieSelectionContext, needed : Int, selected : $[Int], continuation : $[Int] => GameAction)
+    extends OptionFactionAction("Undo last selection") with PowerNeutral with Soft {
+    override def question(implicit game : Game) = {
+        val abilityName = context match {
+            case AnimatedRushContext => "Animated Rush"
+            case ShapestealingContext => "Shapestealing"
+            case DistributedDeathContext => "Distributed Death"
+        }
+        abilityName.styled(FBE) + ": choose dice to discard"
+    }
+}
+
 
 // ============================================================================
 // FACELESS BLIGHT (FBE) EXPANSION — game-loop integration
@@ -710,13 +757,15 @@ object FBEExpansion extends Expansion {
                 game.fbeSelfConsumingDeaths = $
                 val sum = rolls.sum
                 val ritual = game.ritualCost
+                // Format rolls as "1+2+2 = 5" for display (user request 2026-07-22)
+                val rollDisplay = if (rolls.num > 1) rolls.mkString("+") + " = " + sum.toString else sum.toString
                 if (sum > ritual) {
                     self.takeES(1)
-                    self.log(Succor.styled(FBE) + ": Eliminated", y, "Units, rolled", sum.toString,
+                    self.log(Succor.styled(FBE) + ": Eliminated", y, "Units, rolled", rollDisplay,
                         "vs Ritual Marker", ritual.toString + " — gained", 1.es)
                 }
                 else
-                    self.log(Succor.styled(FBE) + ": Eliminated", y, "Units, rolled", sum.toString,
+                    self.log(Succor.styled(FBE) + ": Eliminated", y, "Units, rolled", rollDisplay,
                         "vs Ritual Marker", ritual.toString + " — no Elder Sign")
                 FBE.oncePerAction :+= Succor
                 Force(DoomAction(FBE))
@@ -785,6 +834,35 @@ object FBEExpansion extends Expansion {
             self.log(("Eliminated two " + FungalThrall.name + "s").styled(FBE))
             self.satisfy(NecromanticSporesReq, NecromanticSporesReq.text)
             EndAction(self)
+
+        // ── MANUAL DIE SELECTION FRAMEWORK (§USER-2026-07-22) ────────────────
+        // Player manually chooses which dice to discard instead of auto-selecting lowest.
+        // NOTE: This framework is PREPARED but NOT ACTIVE. To activate, modify the
+        // AnimatedRushMainAction, ShapestealingTargetAction, and DistributedDeathMainAction
+        // handlers to call ManualDiePickAction instead of auto-discarding.
+        case ManualDiePickAction(self, context, needed, selected, continuation) =>
+            if (selected.num >= needed) {
+                // Done selecting — execute the continuation with selected dice
+                Force(continuation(selected))
+            } else {
+                implicit val asking = Asking(self)
+                val available = game.fbeCardDice.diff(selected)
+                available.foreach { dieValue =>
+                    + ManualDieChooseAction(self, context, needed, selected, dieValue, continuation)
+                        .as("Discard die: " + dieValue.toString)
+                }
+                if (selected.nonEmpty)
+                    + ManualDieUndoLastAction(self, context, needed, selected, continuation)
+                asking
+            }
+
+        case ManualDieChooseAction(self, context, needed, selected, dieValue, continuation) =>
+            // Add this die to the selected list
+            Force(ManualDiePickAction(self, context, needed, selected :+ dieValue, continuation))
+
+        case ManualDieUndoLastAction(self, context, needed, selected, continuation) =>
+            // Remove the last selected die
+            Force(ManualDiePickAction(self, context, needed, selected.dropRight(1), continuation))
 
         // ── OVERLORD OF DEATH — turn-end cleanup (HB Fix 127) ────────────────
         // If the discount is still active when the turn ends without having
