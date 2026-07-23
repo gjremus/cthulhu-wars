@@ -992,6 +992,8 @@ object IGOOsExpansion extends Expansion {
                 game.ritualMarker += 1
             game.showROAT()
             self.acted = true
+            game.ritualHistory :+= self
+            game.ritualHistoryCeremony :+= true
             self.satisfy(PerformRitual, "Perform Ritual of Annihilation")
             self.log("used", CeremonyOfAnnihilation.styled(self), "and earned", earned.power, "(no Doom or Elder Signs)")
             CheckSpellbooksAction(DoomAction(self))
