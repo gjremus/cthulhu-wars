@@ -3863,7 +3863,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             CheckSpellbooksAction(PreMainAction(f))
 
         case PreMainAction(f) if f.active.not && f.hibernating.not =>
-            if (f == DC) println(s"[DC-TRACE] PreMainAction INACTIVE branch: power=${f.power}, active=${f.active}")
             implicit val asking = Asking(f)
 
             + GroupAction("Before " + f + " turn")
@@ -3972,7 +3971,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             asking.ask.useIf(_.actions.exists(_.isInfo.not))(_.add(NeedOk).add(OutOfTurnRefresh(PreMainAction(f))).add(SacrificeHighPriestAllowedAction).group(" ")).skip(MainAction(f))
 
         case PreMainAction(f) if f.active =>
-            if (f == DC) println(s"[DC-TRACE] PreMainAction ACTIVE branch: power=${f.power}, active=${f.active}")
             PreActionPromptsAction(f, f.enemies)
 
         case PreActionPromptsAction(e, l) =>
@@ -4137,9 +4135,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case MainGatesAction(f) =>
             gateBlockedLog = $
-            if (f == DC) println(s"[DC-TRACE] MainGatesAction BEFORE checkGatesGained: DC power=${f.power}, active=${f.active}, acted=${f.acted}, gates=${f.gates}")
             checkGatesGained(f)
-            if (f == DC) println(s"[DC-TRACE] MainGatesAction AFTER checkGatesGained: DC power=${f.power}, active=${f.active}, acted=${f.acted}, gates=${f.gates}")
 
             // TB: immediately trigger Mantle overlay if 2 adjacent gates now exist
             if (f == TB && TB.needs(OverlayMantleReq) && !tbMantleInPlay) {
@@ -4154,12 +4150,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             CheckSpellbooksAction(MainAction(f))
 
         case MainAction(f) if f.active.not =>
-            if (f == DC) println(s"[DC-TRACE] Game.scala MainAction(DC) INACTIVE branch: power=${f.power}, active=${f.active}, acted=${f.acted}")
             implicit val asking = Asking(f)
 
             game.reveals(f)
 
-            log(f, "passed (no power)")
             + NextPlayerAction(f).as("Skip")
 
             asking
@@ -4275,24 +4269,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 f.active = (f.power > 0) && f.hibernating.not
             }
 
-            if (setup.has(DC)) println(s"[DC-TRACE] NextPlayerAction: DC power=${DC.power}, active=${DC.active}")
-
             factions = factions.drop(1) ++ factions.take(1)
 
             val next = factions.first
 
             if (factions.exists(_.active)) {
-                // HB Fix: Skip inactive players entirely - don't prompt them at all.
-                // Particularly important for DC: Sin can't start a main action, so
-                // zero-power DC should be completely skipped in turn order.
-                if (next.active) {
+                if (next.active)
                     log(CthulhuWarsSolo.DottedLine)
-                    CheckSpellbooksAction(PreMainAction(next))
-                }
-                else {
-                    // Next player is inactive - skip them and move to next
-                    NextPlayerAction(next)
-                }
+
+                CheckSpellbooksAction(PreMainAction(next))
             }
             else
                 CheckSpellbooksAction(DragonAscendingInstantAction(DragonAscendingUpAction("power gather", EndPhasePromptsAction(next, factions))))
