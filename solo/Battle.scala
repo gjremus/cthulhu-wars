@@ -3033,8 +3033,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // More kills than n — player picks which units to save
                 Ask(FBE).each(fbeKilled)(u => DistributedDeathPickAction(FBE, $(u.ref), fbeKilled.%(_.ref != u.ref)./(_.ref), n))
             } else {
-                fbeDistributedDeathSave(fbeKilled, n)
-                proceed()
+                // Manual die selection: player chooses which dice to discard
+                fbeDistributedDeathSaveWithManualDice(fbeKilled, n)
+                UnknownContinue
             }
 
         case DistributedDeathPickAction(self, toSave, remaining, diceToDiscard) =>
@@ -3043,11 +3044,18 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 Ask(FBE).each(remaining./(r => game.unitOpt(r)).flatten)(u => DistributedDeathPickAction(FBE, toSave :+ u.ref, remaining.%(r => r != u.ref), diceToDiscard))
             } else {
                 val units = toSave./~(r => game.unitOpt(r))
-                fbeDistributedDeathSave(units, diceToDiscard)
-                proceed()
+                // Manual die selection: player chooses which dice to discard
+                fbeDistributedDeathSaveWithManualDice(units, diceToDiscard)
+                UnknownContinue
             }
 
         case DistributedDeathSkipAction(self) =>
+            proceed()
+
+        // Manual die selection finished (fbeDistributedDeathSaveWithManualDice's
+        // continuation) — the saves and dice discard are already applied, so
+        // resume the battle.
+        case DistributedDeathDiceSelectedAction(self) =>
             proceed()
 
         // ── XYRIOUS STORM (XSS) battle-action resume cases ───────────────────────
@@ -3092,5 +3100,30 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         val discard = math.min(diceToDiscard, game.fbeCardDice.num)
         game.fbeCardDice = game.fbeCardDice.sortBy(x => x).drop(discard)
         log("Distributed Death".styled(FBE) + ": discarded", discard, (discard == 1).?("die").|("dice") + ", prevented", toSave.num, ("Kill".s(toSave.num)).styled("kill"))
+    }
+
+    def fbeDistributedDeathSaveWithManualDice(toSave : $[UnitFigure], diceToDiscard : Int) {
+        if (toSave.none) {
+            proceed()
+            return
+        }
+        val discard = math.min(diceToDiscard, game.fbeCardDice.num)
+        // Manual die selection: player chooses which dice to discard
+        game.perform(ManualDiePickAction(FBE, DistributedDeathContext, discard, $, selectedDice => {
+            toSave.foreach { u =>
+                // Spared(Alive): unit cannot receive any further combat result this battle
+                // (same immunity as Eternal — prevents excess pains being assigned to saved units)
+                u.health = Spared(Alive)
+                // Record that a Kill was cancelled on this Unit: the Kill was still
+                // applied, so enemy Kill-triggered rewards (e.g. CC Harbinger) still fire.
+                fbeDistributedDeathPrevented :+= u.ref
+                if (u.uclass == Byagoona) game.fbeByagoonaKillPrevented = true
+                log(u.uclass.styled(FBE), "saved by", "Distributed Death".styled(FBE))
+            }
+            game.fbeCardDice = game.fbeCardDice.diff(selectedDice)
+            log("Distributed Death".styled(FBE) + ": discarded", discard, (discard == 1).?("die").|("dice") + ", prevented", toSave.num, ("Kill".s(toSave.num)).styled("kill"))
+            // Create an action that will resume the battle after the manual die selection
+            DistributedDeathDiceSelectedAction(FBE)
+        }))
     }
 }

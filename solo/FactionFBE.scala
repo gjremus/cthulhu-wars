@@ -140,6 +140,8 @@ case class DistributedDeathPickAction(self : Faction, toSave : $[UnitRef], remai
     extends BaseFactionAction("Distributed Death".styled(FBE) + ": save", implicit g => g.unitOpt(toSave.last)./(_.uclass.styled(FBE)).|("unit"))
 case class DistributedDeathSkipAction(self : Faction)
     extends OptionFactionAction("Distributed Death".styled(FBE) + ": skip") with PostBattleQuestion
+case class DistributedDeathDiceSelectedAction(self : Faction)
+    extends ForcedAction with PowerNeutral with Soft
 
 // ── NECROMANTIC SPORES (Post-Battle, §1.10 SB2 / §3.10.2 / §4.4.2) ───────────
 case class NecromanticSporesMainAction(self : Faction, n : Int)
@@ -576,6 +578,9 @@ object FBEExpansion extends Expansion {
         case DistributedDeathSkipAction(self) =>
             UnknownContinue
 
+        case DistributedDeathDiceSelectedAction(self) =>
+            UnknownContinue
+
         // ── NECROMANTIC SPORES (§1.10 SB2 / §3.10.2) ─────────────────────────
         // FBE-side logic (Eliminate a controlled Monster, spawn Fungal Thralls);
         // Battle.scala's matching cases resume the battle via proceed().
@@ -626,16 +631,16 @@ object FBEExpansion extends Expansion {
             }
 
         case ShapestealingTargetAction(self, enemyMonster) =>
-            // Take the LOWEST card die (weakest first, protects strong dice per
-            // Q2 resolution) and use its pip value (1-6) for the Shapestealing check.
+            // Manual die selection: player chooses which die to use for Shapestealing.
             // The die was already rolled when placed on the Faction Card; we use that
             // value and discard the die (§1.10 SB3: "the value compared to the enemy
             // Monster's Cost is the literal pip value (1-6) printed on the rolled card die").
-            val sorted = game.fbeCardDice.sortBy(x => x)
-            val dieValue = sorted.head
-            game.fbeCardDice = sorted.drop(1)
-            self.log(Shapestealing.styled(FBE) + ": using card die (value", dieValue.toString + ")")
-            Then(ShapestealingResolveAction(self, enemyMonster, dieValue))
+            Force(ManualDiePickAction(self, ShapestealingContext, 1, $, selectedDice => {
+                val dieValue = selectedDice.head
+                game.fbeCardDice = game.fbeCardDice.diff(selectedDice)
+                self.log(Shapestealing.styled(FBE) + ": using card die (value", dieValue.toString + ")")
+                ShapestealingResolveAction(self, enemyMonster, dieValue)
+            }))
 
         case ShapestealingResolveAction(self, enemyMonster, roll) =>
             val mon = game.unit(enemyMonster)
@@ -671,12 +676,14 @@ object FBEExpansion extends Expansion {
             asking
 
         case AnimatedRushMainAction(self, source, dest, n) =>
-            val sorted = game.fbeCardDice.sortBy(x => x)
-            val discarded = sorted.take(n)
-            game.fbeCardDice = sorted.drop(n)
-            self.log("Animated Rush".styled(FBE) + ": discarded", n, (n == 1).?("die").|("dice"),
-                "— moving", 2 * n, "Units")
-            Force(AnimatedRushUnitPickAction(self, 2 * n, $, discarded, $, source, dest))
+            // Manual die selection: player chooses which dice to discard
+            Force(ManualDiePickAction(self, AnimatedRushContext, n, $, selectedDice => {
+                val discarded = selectedDice
+                game.fbeCardDice = game.fbeCardDice.diff(selectedDice)
+                self.log("Animated Rush".styled(FBE) + ": discarded", n, (n == 1).?("die").|("dice"),
+                    "— moving", 2 * n, "Units")
+                AnimatedRushUnitPickAction(self, 2 * n, $, discarded, $, source, dest)
+            }))
 
         case AnimatedRushSkipAction(self) =>
             self.log("Animated Rush".styled(FBE) + ": declined")
