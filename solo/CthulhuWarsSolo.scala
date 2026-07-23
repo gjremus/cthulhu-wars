@@ -2258,22 +2258,37 @@ object CthulhuWarsSolo {
                         g.drawImage(getAsset(d.icon.get.key), d.icon.get.x, d.icon.get.y)
                 }
 
-                // Library: draw hint card, tome info, and white Custodian/Librarian silhouettes in top-right corner
+                // Library: draw hint card, tome info, and white Custodian/Librarian silhouettes
+                // Horizontal: top-right corner (left-to-right: hint, tome, custodian/librarian stacked)
+                // Vertical: top-left side (top-to-bottom: hint, tome, custodian, librarian, below ritual tracker)
                 if (board.isLibraryMap) {
                     val silSize = 100
-                    val silX = mp.width - 120
                     val tomeInfoW = 80
                     val tomeInfoH = 112
-                    val tomeInfoX = silX - tomeInfoW - 10
                     val hintW = 100
                     val hintH = 140
-                    val hintX = tomeInfoX - hintW - 10
+                    val (hintX, hintY, tomeInfoX, tomeInfoY, silX, silY1, silY2) = if (horizontal) {
+                        // Horizontal: top-right corner, left-to-right
+                        val silX = mp.width - 120
+                        val tomeInfoX = silX - tomeInfoW - 10
+                        val hintX = tomeInfoX - hintW - 10
+                        (hintX, 10, tomeInfoX, 10, silX, 10, 120)
+                    } else {
+                        // Vertical: left side, stacked top-to-bottom below ritual tracker
+                        val leftMargin = 10
+                        val startY = 160  // below ritual tracker overlay
+                        val hintY = startY
+                        val tomeY = hintY + hintH + 10
+                        val silY1 = tomeY + tomeInfoH + 10
+                        val silY2 = silY1 + silSize + 10
+                        (leftMargin, hintY, leftMargin, tomeY, leftMargin, silY1, silY2)
+                    }
                     g.globalAlpha = 0.85
-                    g.drawImage(getAsset("library-hint-card"), hintX, 10, hintW, hintH)
-                    g.drawImage(getAsset("library-tome-card"), tomeInfoX, 10, tomeInfoW, tomeInfoH)
+                    g.drawImage(getAsset("library-hint-card"), hintX, hintY, hintW, hintH)
+                    g.drawImage(getAsset("library-tome-card"), tomeInfoX, tomeInfoY, tomeInfoW, tomeInfoH)
                     g.globalAlpha = 0.8
-                    g.drawImage(getAsset("custodian-silhouette"), silX, 10, silSize, silSize)
-                    g.drawImage(getAsset("librarian-silhouette"), silX, 120, silSize, silSize)
+                    g.drawImage(getAsset("custodian-silhouette"), silX, silY1, silSize, silSize)
+                    g.drawImage(getAsset("librarian-silhouette"), silX, silY2, silSize, silSize)
                     g.globalAlpha = 1.0
                 }
             }
@@ -2318,15 +2333,32 @@ object CthulhuWarsSolo {
                     }
                 }
 
-                // Check tome info card and hint card (to the left of silhouettes)
+                // Check tome info card, hint card, custodian/librarian silhouettes
+                // Positions match the drawing code above (conditional on horizontal/vertical)
                 val silSize = (100 * imgScale).toInt
                 val tomeInfoW = (80 * imgScale).toInt
                 val tomeInfoH = (112 * imgScale).toInt
                 val hintW = (100 * imgScale).toInt
                 val hintH = (140 * imgScale).toInt
-                val (silX, silY1) = imgToCanvas(mp.width - 120, 10)
-                val (tomeInfoCX, tomeInfoCY) = imgToCanvas(mp.width - 120 - 80 - 10, 10)
-                val (hintCX, hintCY) = imgToCanvas(mp.width - 120 - 80 - 10 - 100 - 10, 10)
+                val (hintCX, hintCY, tomeInfoCX, tomeInfoCY, silX, silY1, silY2) = if (horizontal) {
+                    // Horizontal: top-right corner
+                    val (silX, silY1) = imgToCanvas(mp.width - 120, 10)
+                    val (tomeInfoCX, tomeInfoCY) = imgToCanvas(mp.width - 120 - 80 - 10, 10)
+                    val (hintCX, hintCY) = imgToCanvas(mp.width - 120 - 80 - 10 - 100 - 10, 10)
+                    val (_, silY2) = imgToCanvas(mp.width - 120, 120)
+                    (hintCX, hintCY, tomeInfoCX, tomeInfoCY, silX, silY1, silY2)
+                } else {
+                    // Vertical: left side, stacked below ritual tracker
+                    val leftMargin = 10
+                    val startY = 160
+                    val (hintCX, hintCY) = imgToCanvas(leftMargin, startY)
+                    val tomeY = startY + 140 + 10
+                    val (tomeInfoCX, tomeInfoCY) = imgToCanvas(leftMargin, tomeY)
+                    val silY1Base = tomeY + 112 + 10
+                    val (silX, silY1) = imgToCanvas(leftMargin, silY1Base)
+                    val (_, silY2) = imgToCanvas(leftMargin, silY1Base + 100 + 10)
+                    (hintCX, hintCY, tomeInfoCX, tomeInfoCY, silX, silY1, silY2)
+                }
                 if (cx >= tomeInfoCX && cx <= tomeInfoCX + tomeInfoW && cy >= tomeInfoCY && cy <= tomeInfoCY + tomeInfoH) {
                     Overlays.onExternalClick("LibraryTomeInfo", true)
                     return true
@@ -2335,9 +2367,6 @@ object CthulhuWarsSolo {
                     Overlays.onExternalClick("LibraryHintCard", true)
                     return true
                 }
-
-                // Check custodian/librarian silhouettes (top-right corner of map)
-                val (_, silY2) = imgToCanvas(mp.width - 120, 120)
                 if (cx >= silX && cx <= silX + silSize && cy >= silY1 && cy <= silY1 + silSize) {
                     Overlays.onExternalClick("Custodian", true)
                     return true
@@ -5130,7 +5159,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 // Round 8: replaced hardcoded cwo.im URL with the page's own origin so the
                 // "Online game" link goes to localhost when running locally. For production
                 // (data-server set to a real backend URL), the link still goes to that URL.
-                ask("Cthulhu Wars", $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='" + origin + "' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "Extra", "About", "Test", "Betas".hl).take(menu), {
+                ask("Cthulhu Wars", $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='" + origin + "' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "More Factions/ Units".hl, "Extra", "About", "Test").take(menu), {
                     case 998_0 =>
                         val setup = new Setup(randomSeating($(GC, BG, WW, OW)), Normal)
                         setup.difficulty += OW -> Debug
@@ -5208,7 +5237,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             else
                                 topMenu()
                         })
-                    case 3 => ask("Cthulhu Wars Extra", $("Survival mode".styled("kill"), "Download Offline Version".hl, "<a href='https://necronomicon.app/' target='_blank'><div>Necronomicon</div></a>", "<a href='https://cthulhuwars.fandom.com/' target='_blank'><div>Cthulhu Wars Strategy Wiki</div></a>", "Back"), {
+                    case 4 => ask("Cthulhu Wars Extra", $("Survival mode".styled("kill"), "Download Offline Version".hl, "<a href='https://necronomicon.app/' target='_blank'><div>Necronomicon</div></a>", "<a href='https://cthulhuwars.fandom.com/' target='_blank'><div>Cthulhu Wars Strategy Wiki</div></a>", "Back"), {
                         case 0 =>
                             val base = allFactions.take(4)
                             ask("Choose faction", base./(f => f.full) :+ "Back", nf => {
@@ -5229,27 +5258,29 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         case 2 | 3 | 4 =>
                             topMenu()
                     })
-                    case 4 =>
+                    case 5 =>
                         ask("Cthulhu Wars Solo", $(
                             "<a href='https://boardgamegeek.com/filepage/152635/cthulhu-wars-solo-hrf-19' target='_blank'><div>Project Homepage</div></a>",
                             "Developed by " + "Haunt Roll Fail".hl,
                             "Additional AI programming by " + "ricedwlit".hl,
-                            "Ancients, High Priests, Neutral Monsters, Independent Great Old Ones developed by " + "Legrasse81".hl,
+                            "Ancients, High Priests, first Neutral Monsters (Ghast, Gug, Shanktak, and Star Vampires) and first Independent Great Old Ones (Aboth, Byatis, Daoloth, Nyogtha) developed by " + "Legrasse81".hl,
+                            "Daemon Sultan developed by " + "KillahGraham".hl,
+                            "Bubastis, TchoTcho, Firstborn, TombStalker, Defiler's Court, Library Map, remainder of Neutral Monsters, Terrors, and Independent Great Old Ones developed by " + "CavySupreme".hl,
+                            "Faceless Blight, Xyrious Storm developed by " + "Zehknaerun".hl,
+                            "The Burrowers Beneath, Yuggoth Map developed by " + "iikpickle".hl,
                             "Board game by " + "Peterson Games".hl,
                             "All graphics in the app belong to Petersen Games.<br>Used with permission.",
                             "Back"
                         ), { _ => topMenu() })
-                    case 6 =>
-                        // "Beta builds" — links to all other builds.
-                        // Colors: TT=faction pink, BB=faction gold, MNU=light grey, HB=rainbow per-letter
-                        ask("Beta builds", $(
+                    case 3 =>
+                        ask("More Factions/ Units", $(
                             "<a href='/' target='_blank'><div>Library at Celaeno (main)</div></a>",
                             "<a href='/mnu/' target='_blank'><div><span style='color:#b8b8b8'>More Neutral Units (MNU)</span></div></a>",
                             "<a href='/BB/' target='_blank'><div><span style='color:#c8a84b'>Bubastis</span></div></a>",
                             "<a href='/HB/' target='_blank'><div><span style='color:#ff4444'>H</span><span style='color:#ff8c00'>o</span><span style='color:#ffd700'>m</span><span style='color:#44cc44'>e</span><span style='color:#4488ff'>b</span><span style='color:#8844ff'>r</span><span style='color:#cc44cc'>e</span><span style='color:#ff4444'>w</span></div></a>",
                             "Cancel"
                         ), { _ => topMenu() })
-                    case 5 =>
+                    case 6 =>
                         val setup = new Setup(randomSeating($(GC, BG, WW)), Normal)
                         setup.difficulty += GC -> Human
                         setup.difficulty += BG -> Normal
