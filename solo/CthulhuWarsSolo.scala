@@ -2429,22 +2429,37 @@ object CthulhuWarsSolo {
                         g.drawImage(getAsset(d.icon.get.key), d.icon.get.x, d.icon.get.y)
                 }
 
-                // Library: draw hint card, tome info, and white Custodian/Librarian silhouettes in top-right corner
+                // Library: draw hint card, tome info, and white Custodian/Librarian silhouettes
+                // Horizontal: top-right corner (left-to-right: hint, tome, custodian/librarian stacked)
+                // Vertical: top-left side (top-to-bottom: hint, tome, custodian, librarian, below ritual tracker)
                 if (board.isLibraryMap) {
                     val silSize = 100
-                    val silX = mp.width - 120
                     val tomeInfoW = 80
                     val tomeInfoH = 112
-                    val tomeInfoX = silX - tomeInfoW - 10
                     val hintW = 100
                     val hintH = 140
-                    val hintX = tomeInfoX - hintW - 10
+                    val (hintX, hintY, tomeInfoX, tomeInfoY, silX, silY1, silY2) = if (horizontal) {
+                        // Horizontal: top-right corner, left-to-right
+                        val silX = mp.width - 120
+                        val tomeInfoX = silX - tomeInfoW - 10
+                        val hintX = tomeInfoX - hintW - 10
+                        (hintX, 10, tomeInfoX, 10, silX, 10, 120)
+                    } else {
+                        // Vertical: left side, stacked top-to-bottom below ritual tracker
+                        val leftMargin = 10
+                        val startY = 160  // below ritual tracker overlay
+                        val hintY = startY
+                        val tomeY = hintY + hintH + 10
+                        val silY1 = tomeY + tomeInfoH + 10
+                        val silY2 = silY1 + silSize + 10
+                        (leftMargin, hintY, leftMargin, tomeY, leftMargin, silY1, silY2)
+                    }
                     g.globalAlpha = 0.85
-                    g.drawImage(getAsset("library-hint-card"), hintX, 10, hintW, hintH)
-                    g.drawImage(getAsset("library-tome-card"), tomeInfoX, 10, tomeInfoW, tomeInfoH)
+                    g.drawImage(getAsset("library-hint-card"), hintX, hintY, hintW, hintH)
+                    g.drawImage(getAsset("library-tome-card"), tomeInfoX, tomeInfoY, tomeInfoW, tomeInfoH)
                     g.globalAlpha = 0.8
-                    g.drawImage(getAsset("custodian-silhouette"), silX, 10, silSize, silSize)
-                    g.drawImage(getAsset("librarian-silhouette"), silX, 120, silSize, silSize)
+                    g.drawImage(getAsset("custodian-silhouette"), silX, silY1, silSize, silSize)
+                    g.drawImage(getAsset("librarian-silhouette"), silX, silY2, silSize, silSize)
                     g.globalAlpha = 1.0
                 }
 
@@ -2509,15 +2524,32 @@ object CthulhuWarsSolo {
                     }
                 }
 
-                // Check tome info card and hint card (to the left of silhouettes)
+                // Check tome info card, hint card, custodian/librarian silhouettes
+                // Positions match the drawing code above (conditional on horizontal/vertical)
                 val silSize = (100 * imgScale).toInt
                 val tomeInfoW = (80 * imgScale).toInt
                 val tomeInfoH = (112 * imgScale).toInt
                 val hintW = (100 * imgScale).toInt
                 val hintH = (140 * imgScale).toInt
-                val (silX, silY1) = imgToCanvas(mp.width - 120, 10)
-                val (tomeInfoCX, tomeInfoCY) = imgToCanvas(mp.width - 120 - 80 - 10, 10)
-                val (hintCX, hintCY) = imgToCanvas(mp.width - 120 - 80 - 10 - 100 - 10, 10)
+                val (hintCX, hintCY, tomeInfoCX, tomeInfoCY, silX, silY1, silY2) = if (horizontal) {
+                    // Horizontal: top-right corner
+                    val (silX, silY1) = imgToCanvas(mp.width - 120, 10)
+                    val (tomeInfoCX, tomeInfoCY) = imgToCanvas(mp.width - 120 - 80 - 10, 10)
+                    val (hintCX, hintCY) = imgToCanvas(mp.width - 120 - 80 - 10 - 100 - 10, 10)
+                    val (_, silY2) = imgToCanvas(mp.width - 120, 120)
+                    (hintCX, hintCY, tomeInfoCX, tomeInfoCY, silX, silY1, silY2)
+                } else {
+                    // Vertical: left side, stacked below ritual tracker
+                    val leftMargin = 10
+                    val startY = 160
+                    val (hintCX, hintCY) = imgToCanvas(leftMargin, startY)
+                    val tomeY = startY + 140 + 10
+                    val (tomeInfoCX, tomeInfoCY) = imgToCanvas(leftMargin, tomeY)
+                    val silY1Base = tomeY + 112 + 10
+                    val (silX, silY1) = imgToCanvas(leftMargin, silY1Base)
+                    val (_, silY2) = imgToCanvas(leftMargin, silY1Base + 100 + 10)
+                    (hintCX, hintCY, tomeInfoCX, tomeInfoCY, silX, silY1, silY2)
+                }
                 if (cx >= tomeInfoCX && cx <= tomeInfoCX + tomeInfoW && cy >= tomeInfoCY && cy <= tomeInfoCY + tomeInfoH) {
                     Overlays.onExternalClick("LibraryTomeInfo", true)
                     return true
@@ -2526,9 +2558,6 @@ object CthulhuWarsSolo {
                     Overlays.onExternalClick("LibraryHintCard", true)
                     return true
                 }
-
-                // Check custodian/librarian silhouettes (top-right corner of map)
-                val (_, silY2) = imgToCanvas(mp.width - 120, 120)
                 if (cx >= silX && cx <= silX + silSize && cy >= silY1 && cy <= silY1 + silSize) {
                     Overlays.onExternalClick("Custodian", true)
                     return true
