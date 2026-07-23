@@ -337,6 +337,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // is re-entered after the player chooses N.
     var fbeDistributedDeathOffered : Boolean = false
 
+    // Faceless Blight (FBE): Units whose assigned Kill was cancelled by Distributed
+    // Death this Battle. The Kill was still APPLIED (only its effect was prevented),
+    // so later phases that reward an enemy for Killing a GOO — e.g. Crawling Chaos's
+    // Harbinger — must still fire on these Units even though their health has been
+    // reset to Spared(Alive) before those phases run.
+    var fbeDistributedDeathPrevented : $[UnitRef] = $
+
     def exempt(u : UnitFigure) {
         exempted :+= u
         sides.foreach(_.forces :-= u)
@@ -1310,7 +1317,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     if (s.tag(Harbinger)) {
                         // Holy Ground: Cathedrals count as GOOs during Action Phase (cost 3 for Harbinger)
                         val harbingerGoos = s.opponent.units.goos ++ (game.inActionPhase && AN.can(HolyGround)).??(s.opponent.units(Cathedral))
-                        harbingerGoos.%(_.health == Killed).not(Harbinged).some.foreach { l =>
+                        // A GOO whose Kill was cancelled by Distributed Death still counts as Killed
+                        // for Harbinger — the Kill was applied, only its effect was prevented (§3.14.3).
+                        harbingerGoos.%(u => u.health == Killed || fbeDistributedDeathPrevented.contains(u.ref)).not(Harbinged).some.foreach { l =>
                             val u = l.first
                             val cost = u.uclass match {
                                 case AvatarThesis      => DS.azathothTrack
@@ -3074,6 +3083,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Spared(Alive): unit cannot receive any further combat result this battle
             // (same immunity as Eternal — prevents excess pains being assigned to saved units)
             u.health = Spared(Alive)
+            // Record that a Kill was cancelled on this Unit: the Kill was still
+            // applied, so enemy Kill-triggered rewards (e.g. CC Harbinger) still fire.
+            fbeDistributedDeathPrevented :+= u.ref
             if (u.uclass == Byagoona) game.fbeByagoonaKillPrevented = true
             log(u.uclass.styled(FBE), "saved by", "Distributed Death".styled(FBE))
         }
