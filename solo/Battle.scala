@@ -3035,7 +3035,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             } else {
                 // Manual die selection: player chooses which dice to discard
                 fbeDistributedDeathSaveWithManualDice(fbeKilled, n)
-                UnknownContinue
             }
 
         case DistributedDeathPickAction(self, toSave, remaining, diceToDiscard) =>
@@ -3046,7 +3045,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 val units = toSave./~(r => game.unitOpt(r))
                 // Manual die selection: player chooses which dice to discard
                 fbeDistributedDeathSaveWithManualDice(units, diceToDiscard)
-                UnknownContinue
             }
 
         case DistributedDeathSkipAction(self) =>
@@ -3102,14 +3100,28 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         log("Distributed Death".styled(FBE) + ": discarded", discard, (discard == 1).?("die").|("dice") + ", prevented", toSave.num, ("Kill".s(toSave.num)).styled("kill"))
     }
 
-    def fbeDistributedDeathSaveWithManualDice(toSave : $[UnitFigure], diceToDiscard : Int) {
-        if (toSave.none) {
-            proceed()
-            return
-        }
+    def fbeDistributedDeathSaveWithManualDice(toSave : $[UnitFigure], diceToDiscard : Int) : Continue = {
+        if (toSave.none)
+            return proceed()
+
         val discard = math.min(diceToDiscard, game.fbeCardDice.num)
-        // Manual die selection: player chooses which dice to discard
-        game.perform(ManualDiePickAction(FBE, DistributedDeathContext, discard, $, selectedDice => {
+
+        // REPLAY COMPATIBILITY: the manual die-selection actions (ManualDiePick/
+        // Choose/UndoLast + DistributedDeathDiceSelected) are Soft and therefore
+        // NEVER recorded in the game log. Games recorded before manual selection was
+        // activated (and every game, since the picks aren't logged) have no die-pick
+        // action to replay — the next recorded action is the following battle action.
+        // So during replay we must auto-resolve deterministically (discard the lowest
+        // dice, exactly as the pre-e4f1866 behaviour did) and proceed(); only offer the
+        // interactive menu during genuine live play.
+        val replaying = game.nextReplayActionHint.any
+        if (replaying) {
+            fbeDistributedDeathSave(toSave, discard)
+            return proceed()
+        }
+
+        // Live play: player manually chooses which dice to discard.
+        Force(ManualDiePickAction(FBE, DistributedDeathContext, discard, $, selectedDice => {
             toSave.foreach { u =>
                 // Spared(Alive): unit cannot receive any further combat result this battle
                 // (same immunity as Eternal — prevents excess pains being assigned to saved units)
