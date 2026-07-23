@@ -2264,9 +2264,11 @@ object CthulhuWarsSolo {
                         val hintX = tomeInfoX - hintW - 10
                         (hintX, 10, tomeInfoX, 10, silX, 10, 120)
                     } else {
-                        // Vertical: left side, stacked top-to-bottom below ritual tracker
-                        val leftMargin = 10
-                        val startY = 160  // below ritual tracker overlay
+                        // Vertical: left side, stacked top-to-bottom below ritual tracker, centered on ritual circle
+                        // Ritual circle center ~75px from left; icons centered on that point
+                        val ritualCircleCenterX = 75
+                        val leftMargin = ritualCircleCenterX - (hintW / 2)  // center hint card on ritual circle
+                        val startY = 180  // top of hint card just below bottom of ritual circle
                         val hintY = startY
                         val tomeY = hintY + hintH + 10
                         val silY1 = tomeY + tomeInfoH + 10
@@ -2338,9 +2340,10 @@ object CthulhuWarsSolo {
                     val (_, silY2) = imgToCanvas(mp.width - 120, 120)
                     (hintCX, hintCY, tomeInfoCX, tomeInfoCY, silX, silY1, silY2)
                 } else {
-                    // Vertical: left side, stacked below ritual tracker
-                    val leftMargin = 10
-                    val startY = 160
+                    // Vertical: left side, stacked below ritual tracker, centered on ritual circle
+                    val ritualCircleCenterX = 75
+                    val leftMargin = ritualCircleCenterX - (100 / 2)  // center on ritual circle (hint card width = 100)
+                    val startY = 180
                     val (hintCX, hintCY) = imgToCanvas(leftMargin, startY)
                     val tomeY = startY + 140 + 10
                     val (tomeInfoCX, tomeInfoCY) = imgToCanvas(leftMargin, tomeY)
