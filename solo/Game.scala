@@ -2664,7 +2664,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 CheckSpellbooksAction(DragonAscendingInstantAction(DragonAscendingUpAction("power gather", EndPhasePromptsAction(next, factions))))
 
         case EndPhasePromptsAction(next, Nil) =>
-            Then(PowerGatherAction(next))
+            endActionPhasePrompts = false
+
+            if (factions.exists(_.active))
+                CheckSpellbooksAction(PreMainAction(factions.%(_.active).head))
+            else
+                Then(PowerGatherAction(next))
 
         case EndPhasePromptsAction(next, l) =>
             // 2026-05-30 gate-diplomacy lock: from here until ActionPhaseAction next round,
@@ -2691,7 +2696,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (asks.any)
                 MultiAsk(asks)
             else
-                Then(PowerGatherAction(next))
+                EndPhasePromptsAction(next, Nil)
 
 
         // PASS
@@ -3149,7 +3154,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
 
         case SummonedAction(self, uc, r, l) =>
-            EndAction(self)
+            // BG Fertility Cult: unlimited action (return to main menu after summon)
+            if (self.name == "BG" && self.oncePerRound.contains(Fertility)) {
+                triggers()
+                Force(MainAction(self))
+            }
+            else
+                EndAction(self)
 
         // AWAKEN
         case AwakenMainAction(self, uc, locations) =>
