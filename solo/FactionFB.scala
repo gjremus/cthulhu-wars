@@ -469,6 +469,11 @@ object FBExpansion extends Expansion {
     def flipSpellbookDown(sb : Spellbook)(implicit game : Game) {
         FB.oncePerGame :+= sb
         FB.log(sb.name.styled(FB), "flipped facedown")
+        // Clear stored Augury kills when Augury is flipped face-down
+        if (sb == Augury && game.fbAuguryKills > 0) {
+            game.fbAuguryKills = 0
+            FB.log("Augury kills cleared (spellbook flipped facedown)")
+        }
     }
 
     // Flip a spellbook faceup (restore from facedown). Widened to Spellbook for IGOO support.

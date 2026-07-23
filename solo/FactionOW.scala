@@ -235,57 +235,38 @@ object OWExpansion extends Expansion {
             self.power -= 1
             self.payTax(r)
 
-            // 2026-07-19: Beyond One CAN move DS chaos gates.
-            // ROOT CAUSE (found on 4th attempt): Previous code updated DS.gates BEFORE the faction loop,
-            // so when the loop checked factions.%(_.gates.contains(o)), DS was NOT found (o was already removed).
-            // FIX: Only update DS.chaosGateRegions in the special block. Let the faction loop below handle
-            // DS.gates naturally (it will find DS because DS.gates still contains o at that point).
             val isChaosGate = game.factions.has(DS) && DS.chaosGateRegions.has(o)
-            println(s"[BEYOND-ONE-TRACE] Moving gate from $o to $r. isChaosGate=$isChaosGate")
-            println(s"[BEYOND-ONE-TRACE] Before: game.gates=${game.gates}, DS.chaosGateRegions=${if (game.factions.has(DS)) DS.chaosGateRegions else "N/A"}, DS.gates=${if (game.factions.has(DS)) DS.gates else "N/A"}")
-
-            game.gates :-= o
-            game.gates :+= r
-            println(s"[BEYOND-ONE-TRACE] After game.gates update: game.gates=${game.gates}")
-
-            factions.%(_.gates.contains(o)).foreach { f =>
-                println(s"[BEYOND-ONE-TRACE] Updating ${f.short} faction gates: before=${f.gates}")
-                f.gates :-= o
-                f.gates :+= r
-                println(s"[BEYOND-ONE-TRACE] Updating ${f.short} faction gates: after=${f.gates}")
-                f.at(o).%(_.onGate).single.foreach(u => {
-                    println(s"[BEYOND-ONE-TRACE] Moving on-gate unit ${u.uclass} from $o to $r")
-                    u.region = r
-                })
-            }
-
-            // Update DS chaos gate tracking AFTER the faction loop (which already updated DS.gates)
             if (isChaosGate) {
-                println(s"[BEYOND-ONE-TRACE] Chaos gate detected - updating DS.chaosGateRegions")
                 DS.chaosGateRegions = DS.chaosGateRegions.%(region => region != o)
                 DS.chaosGateRegions :+= r
-                println(s"[BEYOND-ONE-TRACE] After chaos gate update: DS.chaosGateRegions=${DS.chaosGateRegions}")
+                val keeper = DS.at(o).%(_.onGate)
+                keeper.foreach { u => u.onGate = false; u.region = r }
+                game.gates :-= o
+                game.gates :+= r
+                if (DS.gates.has(o)) {
+                    DS.gates = DS.gates.%(region => region != o)
+                    DS.gates :+= r
+                }
+                keeper.foreach(_.onGate = true)
+            } else if (game.gates.has(o)) {
+                // 2026-07-23: only move the gate when the source region actually has one.
+                // Without this guard a repeated Beyond One from a now-gateless source added a
+                // gate at the destination while removing nothing, leaving a phantom gate behind
+                // (game 540 South Pacific). Gate must LEAVE the source, not be duplicated.
+                game.gates :-= o
+                game.gates :+= r
+                factions.%(_.gates.contains(o)).foreach { f =>
+                    f.gates :-= o
+                    f.gates :+= r
+                    f.at(o).%(_.onGate).single.foreach(_.region = r)
+                }
             }
 
-            // 2026-05-11 (HP expansion): use `headOption` instead of `.one` here.
-            // When OW Beyond One's its own gate, the only OW unit OW can use to
-            // occupy the gate (cost-3+) is a High Priest, which IS the on-gate
-            // keeper. The loop above already moved that HP to `r`, so
-            // `self.at(o).one(uc)` would crash with head-of-empty-list. The
-            // intent of this line is "also move the unit OW spent to power
-            // Beyond One" — but when that unit was the keeper, the loop did
-            // it already, so we no-op. Yog-Sothoth IS a gate (not on a gate)
-            // and can't be the `uc` here.
-            self.at(o).%(_.uclass == uc).headOption.foreach(u => {
-                println(s"[BEYOND-ONE-TRACE] Moving power unit ${uc} from $o to $r")
-                u.region = r
-            })
-            // Log explicitly calls out chaos gates for clarity in player log
+            self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
             if (isChaosGate)
                 self.log("moved", ChaosGate.styled(self), "with", uc.styled(self), "from", o, "to", r)
             else
                 self.log("moved gate with", uc.styled(self), "from", o, "to", r)
-            println(s"[BEYOND-ONE-TRACE] Final state: game.gates=${game.gates}, DS.chaosGateRegions=${if (game.factions.has(DS)) DS.chaosGateRegions else "N/A"}, DS.gates=${if (game.factions.has(DS)) DS.gates else "N/A"}")
             EndAction(self)
 
         // DREAD CURSE
