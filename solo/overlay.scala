@@ -1121,7 +1121,7 @@ object Overlays {
         // Bubastis (BB): spellbook requirement info card overlays
         case $("BB", Pay2ForBB.text)            => requirement("As your Action, pay 2 Power.")
         case $("BB", NoEarthCatsOnMoon.text)    => requirement("None of your Earth Cats are on the Moon.")
-        case $("BB", CatInEveryEnemyStart.text) => requirement("One of your Cats is in every enemy faction's Start Area.")
+        case $("BB", CatInEveryEnemyStart.text) => requirement("A Cat is in every enemy Faction's Start Area; gain 1 Power per enemy Faction.")
         case $("BB", MarsOrSaturnLost.text)     => requirement("A Cat from Mars or Saturn is Killed or Eliminated.")
         case $("BB", UranusLost.text)           => requirement("A Cat from Uranus is Killed or Eliminated.")
         case $("BB", AwakenBastet.text)         => requirement("Awaken Bastet.")
@@ -1230,12 +1230,11 @@ object Overlays {
             // real on-map sprite height, so the Moon matches the regular map (a
             // Bastet towers over an Earth Cat, exactly as on the board) instead of
             // every unit being a flat 14%-tall sprite. The Earth Cat (on-map height
-            // 70px) is the anchor: scaled to 10% moon height (reduced from 14% to
-            // prevent large TB units from dominating). Other units scale relative
-            // to it by the same 0.143 (= 10/70) %-per-map-pixel factor. Cap at 12%
-            // to prevent large GOOs (TB Shudde M'ell Head/Segments, etc.) from dominating.
-            val moonSpriteScale = 10.0 / 70.0
-            def spriteHFor(onMapH : Double) : Double = (onMapH * moonSpriteScale).min(12.0)
+            // 70px) is the anchor: it keeps its established 14%-of-moon-height
+            // size, and every other unit scales relative to it by the same
+            // 0.2 (= 14.0/70.0) %-per-map-pixel factor used here.
+            val moonSpriteScale = 14.0 / 70.0
+            def spriteHFor(onMapH : Double) : Double = onMapH * moonSpriteScale
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
             val seed = parsed.length * 31 + parsed./({ case (s, _, _, _) => s }).mkString.hashCode
             val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
@@ -1254,7 +1253,6 @@ object Overlays {
             }
             val unitFigures = parsed.zip(positions)./({ case ((src, display, hp, onMapH), (xPct, yPct)) =>
                 val spriteH = spriteHFor(onMapH)
-                println(s"[MOON UNIT SCALE] Unit: $display, onMapH: $onMapH, calculated spriteH: $spriteH%")
                 val hpOverlay = hp match {
                     case "killed" => s"""<img src="${imageSource("kill")}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;" />"""
                     case "pained" => s"""<img src="${imageSource("pain")}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;" />"""
