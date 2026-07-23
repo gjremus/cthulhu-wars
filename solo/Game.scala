@@ -1734,13 +1734,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         val allPharaohs = factions./~(f2 => f2.allInPlay.%(_.uclass == ShadowPharaoh))
                         val pharaohsAtR = allPharaohs.%(_.region == r)
                         val shadowPharaohBlocks = pharaohsAtR.any
-                        
-                        // Always trace when checking gate control (not just when blocking)
-                        if (allPharaohs.any) {
-                            val matchStr = pharaohsAtR.any.?("MATCH").|("NO MATCH")
-                            println(s"[SP-TRACE-ENHANCED] checkGatesGained for $self at region $r. SP check result: $matchStr. All SPs: ${allPharaohs./(u => s"${u.faction.short}:${u.region}:${u.region == r}").mkString(", ")}. Self units at $r: ${self.at(r)./(_.uclass).mkString(",")}")
-
-                        }
 
                         if (libraryBlocker.any || shadowPharaohBlocks) {
                             // Silently block — don't log repeatedly (checkGatesGained is called every action cycle)
@@ -3214,7 +3207,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             CheckSpellbooksAction(MainAction(f))
 
         case MainAction(f) if f.active.not =>
-            f.log("passed (0 power)")
             implicit val asking = Asking(f)
 
             game.reveals(f)
@@ -3971,8 +3963,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case SacrificeHighPriestAction(self, r, then) =>
             val c = self.at(r).one(HighPriest)
 
-            println(s"[UNSPEAKABLE-OATH-TRACE] ${self.short} sacrificing HP at ${r}, power before: ${self.power}, active before: ${self.active}, hibernating: ${self.hibernating}, then action: ${then.getClass.getSimpleName}")
-
             eliminate(c)
 
             self.oncePerAction :-= Passion
@@ -3985,8 +3975,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             if (self.hibernating.not)
                 self.active = true
-
-            println(s"[UNSPEAKABLE-OATH-TRACE] ${self.short} after HP sacrifice: power=${self.power}, active=${self.active}")
 
             triggers()
 
