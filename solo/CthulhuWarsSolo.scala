@@ -2433,36 +2433,58 @@ object CthulhuWarsSolo {
                 // Horizontal: top-right corner (left-to-right: hint, tome, custodian/librarian stacked)
                 // Vertical: top-left side (top-to-bottom: hint, tome, custodian, librarian, below ritual tracker)
                 if (board.isLibraryMap) {
-                    val silSize = 100
-                    val tomeInfoW = 80
-                    val tomeInfoH = 112
-                    val hintW = 100
-                    val hintH = 140
-                    val (hintX, hintY, tomeInfoX, tomeInfoY, silX, silY1, silY2) = if (horizontal) {
-                        // Horizontal: top-right corner, left-to-right
+                    if (horizontal) {
+                        // Horizontal: top-right corner, left-to-right (image space)
+                        val silSize = 100
+                        val tomeInfoW = 80
+                        val tomeInfoH = 112
+                        val hintW = 100
+                        val hintH = 140
                         val silX = mp.width - 120
                         val tomeInfoX = silX - tomeInfoW - 10
                         val hintX = tomeInfoX - hintW - 10
-                        (hintX, 10, tomeInfoX, 10, silX, 10, 120)
+                        g.globalAlpha = 0.85
+                        g.drawImage(getAsset("library-hint-card"), hintX, 10, hintW, hintH)
+                        g.drawImage(getAsset("library-tome-card"), tomeInfoX, 10, tomeInfoW, tomeInfoH)
+                        g.globalAlpha = 0.8
+                        g.drawImage(getAsset("custodian-silhouette"), silX, 10, silSize, silSize)
+                        g.drawImage(getAsset("librarian-silhouette"), silX, 120, silSize, silSize)
+                        g.globalAlpha = 1.0
                     } else {
-                        // Vertical: left side, stacked top-to-bottom below ritual tracker, centered on ritual circle
-                        // Ritual circle center ~75px from left; icons centered on that point
-                        val ritualCircleCenterX = 75
-                        val leftMargin = ritualCircleCenterX - (hintW / 2)  // center hint card on ritual circle
-                        val startY = 180  // top of hint card just below bottom of ritual circle
-                        val hintY = startY
-                        val tomeY = hintY + hintH + 10
-                        val silY1 = tomeY + tomeInfoH + 10
-                        val silY2 = silY1 + silSize + 10
-                        (leftMargin, hintY, leftMargin, tomeY, leftMargin, silY1, silY2)
+                        // Vertical: stacked top-to-bottom just below the ritual circle and
+                        // horizontally centered on it. The circle is a viewport-fixed HTML
+                        // element, so draw the icons in backing-store pixels (identity
+                        // transform) anchored to the circle's live on-screen rect. imgScale
+                        // matches the map fit-scale so the icons keep a consistent size.
+                        val dwv = 12
+                        val dhv = 12
+                        val fitWv = (dwv + mp.width + dwv) * bitmap.height < bitmap.width * (dhv + mp.height + dhv)
+                        val imgScale = if (fitWv) 1.0 * bitmap.height / (dhv + mp.height + dhv) else 1.0 * bitmap.width / (dwv + mp.width + dwv)
+                        val silSize = 100 * imgScale
+                        val tomeInfoW = 80 * imgScale
+                        val tomeInfoH = 112 * imgScale
+                        val hintW = 100 * imgScale
+                        val hintH = 140 * imgScale
+                        val gap = 10 * imgScale
+                        val (colCX, stackTopY) = libraryVerticalAnchor(bitmap.canvas, bitmap.width, bitmap.height, imgScale)
+                        val hintX = colCX - hintW / 2
+                        val hintY = stackTopY
+                        val tomeInfoX = colCX - tomeInfoW / 2
+                        val tomeY = hintY + hintH + gap
+                        val silX = colCX - silSize / 2
+                        val silY1 = tomeY + tomeInfoH + gap
+                        val silY2 = silY1 + silSize + gap
+                        g.save()
+                        g.setTransform(1, 0, 0, 1, 0, 0)
+                        g.globalAlpha = 0.85
+                        g.drawImage(getAsset("library-hint-card"), hintX, hintY, hintW, hintH)
+                        g.drawImage(getAsset("library-tome-card"), tomeInfoX, tomeY, tomeInfoW, tomeInfoH)
+                        g.globalAlpha = 0.8
+                        g.drawImage(getAsset("custodian-silhouette"), silX, silY1, silSize, silSize)
+                        g.drawImage(getAsset("librarian-silhouette"), silX, silY2, silSize, silSize)
+                        g.globalAlpha = 1.0
+                        g.restore()
                     }
-                    g.globalAlpha = 0.85
-                    g.drawImage(getAsset("library-hint-card"), hintX, hintY, hintW, hintH)
-                    g.drawImage(getAsset("library-tome-card"), tomeInfoX, tomeInfoY, tomeInfoW, tomeInfoH)
-                    g.globalAlpha = 0.8
-                    g.drawImage(getAsset("custodian-silhouette"), silX, silY1, silSize, silSize)
-                    g.drawImage(getAsset("librarian-silhouette"), silX, silY2, silSize, silSize)
-                    g.globalAlpha = 1.0
                 }
 
                 // TB Mantle: draw "to mantle" text on areas adjacent to the Mantle
@@ -2483,6 +2505,28 @@ object CthulhuWarsSolo {
                         g.strokeText("to Mantle", gx, textY)
                         g.fillText("to Mantle", gx, textY)
                     }
+                }
+            }
+
+            // Library (vertical only): the ritual-circle HUD marker is a viewport-fixed
+            // HTML element, but the overlay icons are painted on the map canvas. To keep
+            // the icon stack directly below the circle and centered on it at every screen
+            // size, read the circle's live on-screen rect and convert it into the canvas
+            // backing-store pixel space. Returns (columnCenterX, stackTopY) in backing px.
+            def libraryVerticalAnchor(cv : dom.html.Canvas, bw : Int, bh : Int, imgScale : Double) : (Double, Double) = {
+                val bRect = cv.getBoundingClientRect()
+                val vpx = if (bRect.width > 0) bw / bRect.width else 1.0
+                val vpy = if (bRect.height > 0) bh / bRect.height else 1.0
+                val roaNum = dom.document.getElementById("roa-cost-num")
+                if (roaNum != null && roaNum.parentNode != null) {
+                    val circle = roaNum.parentNode.asInstanceOf[dom.Element]
+                    val cr = circle.getBoundingClientRect()
+                    val cx = (cr.left + cr.width / 2 - bRect.left) * vpx
+                    val bottom = (cr.bottom - bRect.top) * vpy
+                    (cx, bottom + 10 * imgScale)
+                } else {
+                    // Fallback if the circle element is not present yet
+                    (75.0 * imgScale, 180.0 * imgScale)
                 }
             }
 
@@ -2541,16 +2585,18 @@ object CthulhuWarsSolo {
                     val (_, silY2) = imgToCanvas(mp.width - 120, 120)
                     (hintCX, hintCY, tomeInfoCX, tomeInfoCY, silX, silY1, silY2)
                 } else {
-                    // Vertical: left side, stacked below ritual tracker, centered on ritual circle
-                    val ritualCircleCenterX = 75
-                    val leftMargin = ritualCircleCenterX - (100 / 2)  // center on ritual circle (hint card width = 100)
-                    val startY = 180
-                    val (hintCX, hintCY) = imgToCanvas(leftMargin, startY)
-                    val tomeY = startY + 140 + 10
-                    val (tomeInfoCX, tomeInfoCY) = imgToCanvas(leftMargin, tomeY)
-                    val silY1Base = tomeY + 112 + 10
-                    val (silX, silY1) = imgToCanvas(leftMargin, silY1Base)
-                    val (_, silY2) = imgToCanvas(leftMargin, silY1Base + 100 + 10)
+                    // Vertical: stacked below the ritual circle, centered on it — matches
+                    // the draw code, which anchors to the circle's live on-screen rect in
+                    // backing-store pixels (cx/cy above are already in backing px).
+                    val (colCX, stackTopY) = libraryVerticalAnchor(canvas, canvas.width, canvas.height, imgScale)
+                    val gap = 10 * imgScale
+                    val hintCX = (colCX - hintW / 2).toInt
+                    val hintCY = stackTopY.toInt
+                    val tomeInfoCX = (colCX - tomeInfoW / 2).toInt
+                    val tomeInfoCY = (stackTopY + hintH + gap).toInt
+                    val silX = (colCX - silSize / 2).toInt
+                    val silY1 = (tomeInfoCY + tomeInfoH + gap).toInt
+                    val silY2 = (silY1 + silSize + gap).toInt
                     (hintCX, hintCY, tomeInfoCX, tomeInfoCY, silX, silY1, silY2)
                 }
                 if (cx >= tomeInfoCX && cx <= tomeInfoCX + tomeInfoW && cy >= tomeInfoCY && cy <= tomeInfoCY + tomeInfoH) {
@@ -5215,11 +5261,20 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // from DC.short.toLowerCase, matching every other faction.
         // Faceless Blight (FBE): Homebrew faction appended to the alt picker (§3.13.1)
         val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB)
+        // [2026-07-23] §3.13.5: OW / SL / DS each get a SECOND ("alt") entry
+        // immediately after their standard entry, matching the AN and BB alt
+        // entries added earlier. Picking an alt entry auto-flips that
+        // faction's variant option bundle on the resulting setup (see the
+        // per-faction blocks in startSetup / startOnlineSetup). Standard and
+        // alt collapse to the same Faction for the locking/matching logic, so
+        // picking either form blocks BOTH for every other player.
         val altPickerEntries : $[PickerEntry] =
             altPickerFactions./(f => PickerEntry(f, false)).flatMap {
-                // Insert the AN-alt entry immediately after standard AN.
+                // Insert the alt entry immediately after each faction that has one.
+                case e if e.faction == OW => $(e, PickerEntry(OW, true))
+                case e if e.faction == SL => $(e, PickerEntry(SL, true))
                 case e if e.faction == AN => $(e, PickerEntry(AN, true))
-                // Insert the BB-alt entry immediately after standard BB.
+                case e if e.faction == DS => $(e, PickerEntry(DS, true))
                 case e if e.faction == BB => $(e, PickerEntry(BB, true))
                 case e                    => $(e)
             }
@@ -5447,14 +5502,34 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 }
             }
 
+            // [2026-07-23] §3.13.5: generalized alt-detection for the three
+            // NEW alt entries (OW / SL / DS). Same rule as bbAlt/anAlt above:
+            // the player who ended up with the faction chose the alt form iff
+            // their alt entry was checked and their standard entry was NOT.
+            // Returns the set of factions whose variant bundle should be
+            // pre-toggled on the resulting setup.
+            def altSetForAssignment(picked : $[Faction]) : Set[Faction] = {
+                $(OW, SL, DS).toList.filter { f =>
+                    val idx = picked.indexOf(f)
+                    idx >= 0 &&
+                    enabledEntries(idx).exists(e => e.faction == f && e.alt) &&
+                    !enabledEntries(idx).exists(e => e.faction == f && !e.alt)
+                }.toSet
+            }
+
             def glyphSrc(f : Faction) : String =
                 "webp/images/" + f.short.toLowerCase + "-glyph.webp"
             // [2026-06-02] §3.13.3 / §3.13.4: BB-alt picker entry uses the
             // homebrew glyph (bb-glyph-hb) so users can tell the two BB rows
             // apart at a glance. Standard BB keeps the regular glyph. Other
             // entries fall through to the by-Faction glyph.
+            // [2026-07-23] §3.13.5: every alt picker entry shows the whited-out
+            // "-glyph-hb" version so users can tell the two rows for a faction
+            // apart at a glance. These whited glyphs are ONLY used in the
+            // picker; once the game starts the normal colored glyph is used.
             def entryGlyphSrc(e : PickerEntry) : String =
-                if (e.faction == BB && e.alt) "webp/images/bb-glyph-hb.webp"
+                if (e.alt && (e.faction == OW || e.faction == SL || e.faction == AN || e.faction == DS || e.faction == BB))
+                    "webp/images/" + e.faction.short.toLowerCase + "-glyph-hb.webp"
                 else glyphSrc(e.faction)
 
             def render() {
@@ -5744,6 +5819,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         // it (carrying each player name with its faction).
                         val bbAlt = bbAltForAssignment(picked)
                         val anAlt = anAltForAssignment(picked)
+                        val altSet = altSetForAssignment(picked)
                         val pairs : $[(String, Faction)] =
                             picked.zipWithIndex.map { case (f, idx) => (playerNames(idx), f) }
                         val orderedPairs : $[(String, Faction)] =
@@ -5755,11 +5831,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     chosen.map(f => pairs.find(_._2 == f).get)
                                 } else pairs
                             } else pairs
-                        showConfirmation(orderedPairs, bbAlt, anAlt)
+                        showConfirmation(orderedPairs, bbAlt, anAlt, altSet)
                 }
             }
 
-            def showConfirmation(ordered : $[(String, Faction)], bbAlt : Boolean, anAlt : Boolean = false) {
+            def showConfirmation(ordered : $[(String, Faction)], bbAlt : Boolean, anAlt : Boolean = false, altSet : Set[Faction] = Set.empty) {
                 clear(actionDiv)
                 val box = dom.document.createElement("div").asInstanceOf[html.Div]
                 // [2026-05-23] Per user: each player is centered, name above
@@ -5781,8 +5857,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     // [2026-06-02] §3.13.3: confirmation screen mirrors the
                     // picker glyph — when BB-alt or AN-alt was the chosen entry, show
                     // the homebrew glyph here too.
-                    gImg.src = if (f == BB && bbAlt) "webp/images/bb-glyph-hb.webp" else glyphSrc(f)
-                    val labelTxt = if (f == BB && bbAlt) f.full + " (alt SBs)" else if (f == AN && anAlt) f.full + " (alt SBs)" else f.full
+                    // [2026-07-23] §3.13.5: confirmation mirrors the picker glyph.
+                    // BB/AN alt keep their existing flags; OW/SL/DS alt come
+                    // from altSet. Any alt selection shows the whited glyph +
+                    // an "(alt)" label so the seating screen matches the picker.
+                    val isAlt = (f == BB && bbAlt) || (f == AN && anAlt) || altSet.contains(f)
+                    gImg.src = if (isAlt) "webp/images/" + f.short.toLowerCase + "-glyph-hb.webp" else glyphSrc(f)
+                    val labelTxt = if (isAlt) f.full + " (alt)" else f.full
                     gImg.alt = labelTxt
                     gImg.title = labelTxt
                     gImg.style.cssText = "width:64px;height:64px;object-fit:contain;"
@@ -5818,6 +5899,33 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             val picks = scala.util.Random.shuffle(randIGOOPool.toList).take(randIGOOCount)
                             setup.options = (setup.options.notOf[IGOOOption]).but(IGOOs)
                             setup.options ++= (IGOOs +: picks)
+                        }
+                        // [2026-07-23] §3.13.5: apply the OW / SL / DS alt-entry
+                        // option bundles. BB/AN alts are handled by their own
+                        // bbAlt/anAlt flags in startSetup/startOnlineSetup; the
+                        // three new alts flip their variant options here. Each
+                        // bundle is only applied when its faction is actually in
+                        // the game (altSet was derived from the picked lineup).
+                        // OW alt: Cheap Mutants + Harder SBR, Yog Curse Die + DC
+                        //         GOO ES, and (in 4-player games) OW needs 10
+                        //         gates. SL alt: Demand Tsathoggua, easier SBR,
+                        //         Energy Nexus pre-battle. DS alt: alt spellbooks.
+                        // Options are a set-like list; guard against duplicates
+                        // so re-applying an auto-default (e.g. DemandTsathoggua)
+                        // doesn't add it twice.
+                        def addOpt(o : GameOption) { if (!setup.options.has(o)) setup.options :+= o }
+                        if (altSet.contains(OW)) {
+                            addOpt(OpenerCheapMutants)
+                            addOpt(OpenerYogCurseDie)
+                            if (ordered.num == 4) addOpt(Opener4P10Gates)
+                        }
+                        if (altSet.contains(SL)) {
+                            addOpt(DemandTsathoggua)
+                            addOpt(SleeperEasierSBR)
+                            addOpt(SleeperEnergyNexusPreBattle)
+                        }
+                        if (altSet.contains(DS)) {
+                            addOpt(DSAlternateSpellbooks)
                         }
                     })
                     onContinue(ordered.map(_._2), bbAlt, anAlt)
@@ -6127,7 +6235,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             "<a href='https://boardgamegeek.com/filepage/152635/cthulhu-wars-solo-hrf-19' target='_blank'><div>Project Homepage</div></a>",
                             "Developed by " + "Haunt Roll Fail".hl,
                             "Additional AI programming by " + "ricedwlit".hl,
-                            "Ancients, High Priests, Neutral Monsters, Independent Great Old Ones developed by " + "Legrasse81".hl,
+                            "Ancients, High Priests, first Neutral Monsters (Ghast, Gug, Shanktak, and Star Vampires) and first Independent Great Old Ones (Aboth, Byatis, Daoloth, Nyogtha) developed by " + "Legrasse81".hl,
+                            "Daemon Sultan developed by " + "KillahGraham".hl,
+                            "Bubastis, TchoTcho, Firstborn, TombStalker, Defiler's Court, Library Map, remainder of Neutral Monsters, Terrors, and Independent Great Old Ones developed by " + "CavySupreme".hl,
+                            "Faceless Blight, Xyrious Storm developed by " + "Zehknaerun".hl,
+                            "The Burrowers Beneath, Yuggoth Map developed by " + "iikpickle".hl,
                             "Board game by " + "Peterson Games".hl,
                             "All graphics in the app belong to Petersen Games.<br>Used with permission.",
                             "Back"
