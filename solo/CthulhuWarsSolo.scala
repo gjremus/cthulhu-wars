@@ -2369,10 +2369,17 @@ object CthulhuWarsSolo {
                 val roaNum = dom.document.getElementById("roa-cost-num")
                 if (roaNum != null && roaNum.parentNode != null) {
                     val circle = roaNum.parentNode.asInstanceOf[dom.Element]
-                    val cr = circle.getBoundingClientRect()
-                    val cx = (cr.left + cr.width / 2 - bRect.left) * vpx
+                    // Find the IMG element inside the circle span to measure the actual image bottom
+                    val imgOpt = circle.querySelector("img")
+                    val measureFrom = if (imgOpt != null) imgOpt.asInstanceOf[dom.Element] else circle
+                    val cr = measureFrom.getBoundingClientRect()
+                    // Horizontal center from the ritual circle's center (use circle, not img)
+                    val circleRect = circle.getBoundingClientRect()
+                    val cx = (circleRect.left + circleRect.width / 2 - bRect.left) * vpx
+                    // Vertical: start just below the bottom edge of the IMAGE with a small gap
                     val bottom = (cr.bottom - bRect.top) * vpy
-                    (cx, bottom + 10 * imgScale)
+                    // 10px gap below the image's bottom edge
+                    (cx, bottom + 10.0 * imgScale)
                 } else {
                     // Fallback if the circle element is not present yet
                     (75.0 * imgScale, 180.0 * imgScale)
