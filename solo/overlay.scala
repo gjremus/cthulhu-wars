@@ -228,27 +228,38 @@ object TSCursedTomesOverlay {
 // image height as its scatter radius, which sent sprite centres beyond the
 // image edges and produced "cats spread across the whole screen" behaviour.
 //
-// Fix (2026-06-02): use a dedicated placement BITMAP — same approach as
-// earth*-place.webp / library*-place.webp. The bitmap is map-shaped (so the
-// circle's centre can be calibrated against the map for future re-use), with
-// a single solid-colour magenta (#FF00FF) circle covering 90% of the moon
-// disc's diameter. Magenta is verified distinct from every Earth and Library
+// Fix 58 (BB v2.4.24, 2026-06-04): rewrite to follow the standard map placement
+// pipeline used by GlyphPlacement.scala (findAnother / findStaticGlyphPos). The
+// placement bitmap is now PIXEL-1:1 with the displayed moon image — both
+// bb-moon-place.webp and bb-moon-h-place.webp are 1024×878 (matching
+// bb-moon-high-res.webp), with the magenta disc painted at the SAME center and
+// radius as the visible moon disc on bb-moon-high-res.webp (center (515, 440),
+// radius ≈ 363 — about 93% of the 391-pixel disc radius, leaving ~7% inset for
+// sprite half-height). sample() returns RAW PIXEL COORDINATES on that bitmap.
+// The overlay rendering converts those pixel coords into CSS percentages of
+// the displayed moon image dimensions (1024×878) — no normalize-then-stretch
+// detour, no fixed disc-rectangle constants. This is exactly how map glyph
+// placement works (sample placement bitmap, emit pixel coords, convert to
+// drawing coords once at render time).
+//
+// Propagated to HB (2026-07-23): the HB build still shipped the OLD map-shaped
+// placement bitmaps (894×1791 / 1791×894) plus a rectangular-stretch model
+// (fractions mapped onto a 76%×89% rectangle around the image center), which
+// pushed large sprites off the visible moon disc. This is the same disc-aligned
+// pixel-precise fix already approved and live on BB, brought forward per the
+// build-order propagation rule.
+//
+// Magenta = (255, 0, 255). Verified distinct from every Earth and Library
 // region colour in EarthRegionPalette / RegionPalette.
-//
-// Two bitmaps:
-//   bb-moon-h-place.webp  — horizontal landscape (1791×894), circle at
-//                           (75%, 25%) of the map = top-right of map view.
-//   bb-moon-place.webp    — vertical portrait    (894×1791), circle at
-//                           (75%, 25%) of the rotated canvas.
-//
-// At runtime this object samples the chosen bitmap once, finds every magenta
-// pixel, normalises each pixel position to a fraction of the bitmap circle's
-// bounding box, and exposes those normalised points so the overlay layer can
-// map them onto the moon disc image. This guarantees every sprite lands
-// strictly inside the moon disc.
 object MoonPlacement {
     private var pointsHorizontal : scala.Option[Array[(Double, Double)]] = scala.None
     private var pointsVertical   : scala.Option[Array[(Double, Double)]] = scala.None
+
+    // Native dimensions of the moon image (bb-moon-high-res.webp). Both
+    // placement bitmaps are sized to match these dimensions exactly so each
+    // magenta pixel coordinate maps 1:1 onto the rendered moon image.
+    val moonImageW : Int = 1024
+    val moonImageH : Int = 878
 
     private def sample(assetId : String) : Array[(Double, Double)] = {
         val img = dom.document.getElementById(assetId).asInstanceOf[html.Image]
@@ -261,42 +272,22 @@ object MoonPlacement {
         val ctx = canvas.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D]
         ctx.drawImage(img, 0, 0)
         val data = ctx.getImageData(0, 0, w, h).data
-        // First pass: find bounding box of magenta circle.
-        var minX = w; var maxX = -1; var minY = h; var maxY = -1
-        var y = 0
-        while (y < h) {
-            var x = 0
-            while (x < w) {
-                val i = (y * w + x) * 4
-                val r = data(i)
-                val g = data(i + 1)
-                val b = data(i + 2)
-                if (r > 200 && g < 60 && b > 200) {
-                    if (x < minX) minX = x
-                    if (x > maxX) maxX = x
-                    if (y < minY) minY = y
-                    if (y > maxY) maxY = y
-                }
-                x += 1
-            }
-            y += 1
-        }
-        if (maxX < 0 || maxY < 0) return Array.empty
-        val bw = (maxX - minX).max(1).toDouble
-        val bh = (maxY - minY).max(1).toDouble
-        // Second pass: every 6th pixel — plenty of candidates without O(W·H) cost
-        // each render. Stored as (xFrac, yFrac) in [0..1] of the circle's bbox.
+        // Fix 58 (BB v2.4.24): emit RAW PIXEL COORDINATES directly — no bounding
+        // box, no normalisation. The placement bitmap is pixel-1:1 with the
+        // moon image, so each magenta pixel's (x, y) is the on-image position
+        // where a sprite may be centred. Sample every 6th pixel (same density
+        // as before) to keep the candidate pool a manageable size.
         val buf = scala.collection.mutable.ArrayBuffer.empty[(Double, Double)]
-        var py = minY
-        while (py <= maxY) {
-            var px = minX
-            while (px <= maxX) {
+        var py = 0
+        while (py < h) {
+            var px = 0
+            while (px < w) {
                 val i = (py * w + px) * 4
                 val r = data(i)
                 val g = data(i + 1)
                 val b = data(i + 2)
                 if (r > 200 && g < 60 && b > 200) {
-                    buf += (((px - minX) / bw, (py - minY) / bh))
+                    buf += ((px.toDouble, py.toDouble))
                 }
                 px += 6
             }
@@ -322,29 +313,33 @@ object MoonPlacement {
         val rng = new scala.util.Random(seed)
         val out = scala.collection.mutable.ArrayBuffer.empty[(Double, Double)]
 
+        val cx = moonImageW / 2.0
+        val cy = moonImageH / 2.0
+        val maxR = Math.min(cx, cy)
+
         val textZones : Array[(Double, Double, Double, Double)] = Array(
-            (0.13, 0.57, 0.88, 0.90)
+            (130.0, 500.0, 900.0, 790.0)
         )
 
-        def inTextZone(xf : Double, yf : Double) : Boolean = {
+        def inTextZone(px : Double, py : Double) : Boolean = {
             var z = 0
             while (z < textZones.length) {
                 val (x1, y1, x2, y2) = textZones(z)
-                if (xf >= x1 && xf <= x2 && yf >= y1 && yf <= y2) return true
+                if (px >= x1 && px <= x2 && py >= y1 && py <= y2) return true
                 z += 1
             }
             false
         }
 
-        def centerWeight(xf : Double, yf : Double) : Double = {
-            val dx = (xf - 0.5) * 2.0
-            val dy = (yf - 0.5) * 2.0
+        def centerWeight(px : Double, py : Double) : Double = {
+            val dx = (px - cx) / maxR
+            val dy = (py - cy) / maxR
             val dist = Math.sqrt(dx * dx + dy * dy)
             val w = 1.0 - 0.6 * dist * dist
             if (w < 0.1) 0.1 else w
         }
 
-        val innerPool = pool.filter { case (xf, yf) => !inTextZone(xf, yf) }
+        val innerPool = pool.filter { case (px, py) => !inTextZone(px, py) }
         val usePool = if (innerPool.nonEmpty) innerPool else pool
 
         val startIdx = rng.nextInt(usePool.length)
@@ -1217,39 +1212,34 @@ object Overlays {
                 } else ""
                 (src, display, hp, onMapH)
             }).filter { case (src, _, _, _) => src.nonEmpty }
-            // [v2.4.10] Use the dedicated Moon placement bitmap (bb-moon-place /
-            // bb-moon-h-place) to scatter sprites strictly inside the moon disc.
-            // The bitmap drives placement just like earth*-place / library*-place
-            // bitmaps drive map region placement: a single solid magenta circle
-            // marks the valid zone. MoonPlacement samples that circle once and
-            // hands back farthest-point-spread (xFrac, yFrac) pairs in [0..1]
-            // of the circle's bounding box. We map those onto the moon image
-            // rect so every cat sprite lands inside the disc.
+            // Fix 58 (propagated to HB 2026-07-23): use the dedicated Moon
+            // placement bitmap (bb-moon-place / bb-moon-h-place, both now
+            // pixel-1:1 with the moon image at 1024×878) to scatter sprites
+            // strictly inside the moon disc. MoonPlacement.scatter returns RAW
+            // PIXEL coordinates on that bitmap; we convert them to CSS % of the
+            // moon image's dimensions once here — the same model the standard
+            // map uses, with no normalize-then-stretch detour.
             val n = parsed.length
-            // BB Moon sizing: render each sprite at a height PROPORTIONAL to its
-            // real on-map sprite height, so the Moon matches the regular map (a
-            // Bastet towers over an Earth Cat, exactly as on the board) instead of
-            // every unit being a flat 14%-tall sprite. The Earth Cat (on-map height
-            // 70px) is the anchor: it keeps its established 14%-of-moon-height
-            // size, and every other unit scales relative to it by the same
-            // 0.2 (= 14.0/70.0) %-per-map-pixel factor used here.
-            val moonSpriteScale = 14.0 / 70.0
-            def spriteHFor(onMapH : Double) : Double = onMapH * moonSpriteScale
+            // Moon sizing: FLAT 14% of moon height for EVERY unit. This is the
+            // original, known-good sizing that shipped before Jun-19 commit
+            // a3cff0d changed sprites to be proportional to raw on-map height
+            // (onMapH * 14/70), which ballooned big units — a Bastet at 210px
+            // on-map hit 42% of the moon and spilled off the disc. The July "22%
+            // cap" band-aid still left large units ~1.5× oversize. Restoring the
+            // flat 14% every unit had before the regression: a Bastet renders the
+            // same height as an Earth Cat on the Moon, fitting cleanly inside the
+            // disc. The onMapH field is still parsed for backward payload compat
+            // but no longer scales the sprite.
+            def spriteHFor(onMapH : Double) : Double = 14.0
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
             val seed = parsed.length * 31 + parsed./({ case (s, _, _, _) => s }).mkString.hashCode
             val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
-            // Map each (xFrac, yFrac) of the circle bbox onto the moon image:
-            // the moon disc fills ~76% horizontally and ~89% vertically of
-            // bb-moon-high-res. Center each sprite around the disc's image
-            // center and scale by the disc's coverage fraction.
-            val discCx = 50.0
-            val discCy = 50.0
-            val discWPct = 76.0  // disc horizontal coverage of moon image
-            val discHPct = 89.0  // disc vertical   coverage of moon image
-            val positions : List[(Double, Double)] = rawScatter.toList./ { case (xf, yf) =>
-                val dx = (xf - 0.5) * discWPct
-                val dy = (yf - 0.5) * discHPct
-                (discCx + dx, discCy + dy)
+            // Convert pixel coords on the placement bitmap (1:1 with the
+            // displayed moon image) into CSS % of the moon image's dimensions.
+            val moonW = MoonPlacement.moonImageW.toDouble
+            val moonH = MoonPlacement.moonImageH.toDouble
+            val positions : List[(Double, Double)] = rawScatter.toList./ { case (px, py) =>
+                (px / moonW * 100.0, py / moonH * 100.0)
             }
             val unitFigures = parsed.zip(positions)./({ case ((src, display, hp, onMapH), (xPct, yPct)) =>
                 val spriteH = spriteHFor(onMapH)
