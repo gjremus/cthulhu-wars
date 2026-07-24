@@ -52,11 +52,22 @@ class GlyphPlacement(boardId : String) {
     // on Library maps where joined bitmaps may share colors between floors.
     // Vertical images split top/bottom (by Y); horizontal images split left/right (by X).
     val isHorizontal : Boolean = placeb.width > placeb.height
+    // The half-split below exists ONLY to avoid cross-floor color collisions on the
+    // Library joined bitmaps (upper/lower floors are stacked into one image and can
+    // reuse colors). On the Earth maps it wrongly confines any region that straddles
+    // the bitmap centerline — e.g. Arctic Ocean, which spans the entire top of the map
+    // — to a single half, bunching all of that region's units to one side (right in
+    // horizontal view, bottom after the 90° rotate to vertical). Restrict the split to
+    // the joined Library bitmaps; everywhere else search the full bitmap (the color
+    // match on `p` already confines the result to the exact region).
+    private val isJoinedBitmap : Boolean = boardId.startsWith("library")
     def findAnother(x : Int, y : Int) : (Int, Int) = {
         if (x < 0 || x >= placeb.width || y < 0 || y >= placeb.height)
             return (x, y)
         val p = place(x)(y)
-        val (xMin, xMax, yMin, yMax) = if (isHorizontal) {
+        val (xMin, xMax, yMin, yMax) = if (!isJoinedBitmap) {
+            (0, placeb.width, 0, placeb.height)
+        } else if (isHorizontal) {
             val halfW = placeb.width / 2
             if (x < halfW) (0, halfW, 0, placeb.height) else (halfW, placeb.width, 0, placeb.height)
         } else {
