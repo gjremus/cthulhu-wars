@@ -831,6 +831,7 @@ trait TBStalkThreat extends TBStalkPlan { override val requires = $($(TBStalkSki
 case object TBStalkThreatToGate extends TBStalkPlan("...enemy moves to a Gated Area") with TBStalkThreat
 case object TBStalkThreatToGOO extends TBStalkPlan("...enemy moves to GOO's Area") with TBStalkThreat
 case object TBStalkThreatOfCapture extends TBStalkPlan("...threat of capture to a Cultist") with TBStalkThreat
+case object TBStalkThreatNoTBUnit extends TBStalkPlan("...no TB Unit in the Area moved to") with TBStalkThreat
 
 sealed abstract class TBRemoveGatePlan(val label : String) extends Plan {
     val group = "Remove Gate, Place Chthonian".styled(TB)
@@ -4540,6 +4541,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         reasons = reasons || tbStalkDests.exists(r => f.all(GOO).exists(_.region == r))
                     if (f.commands.has(TBStalkThreatOfCapture))
                         reasons = reasons || tbStalkDests.exists(r => f.at(r).%(_.uclass.utype == Cultist).any && self != f)
+                    if (f.commands.has(TBStalkThreatNoTBUnit))
+                        reasons = reasons || tbStalkDests.exists(r => f.at(r).none)
                     reasons
                 }
                 if (shouldPrompt)
@@ -5156,8 +5159,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             // Safety: init TB Stalk plans for games saved before they existed
             if (f == TB && f.plans.of[TBStalkPlan].none) {
-                f.plans ++= $(TBStalkPrompt, TBStalkSkipAll, TBStalkThreatToGate, TBStalkThreatToGOO, TBStalkThreatOfCapture)
+                f.plans ++= $(TBStalkPrompt, TBStalkSkipAll, TBStalkThreatToGate, TBStalkThreatToGOO, TBStalkThreatOfCapture, TBStalkThreatNoTBUnit)
                 f.commands :+= TBStalkPrompt
+            }
+
+            // Safety: add TBStalkThreatNoTBUnit to existing games (2026-07-24)
+            if (f == TB && f.plans.of[TBStalkPlan].any && !f.plans.has(TBStalkThreatNoTBUnit)) {
+                f.plans :+= TBStalkThreatNoTBUnit
             }
 
             val visiblePlans = f.plans
