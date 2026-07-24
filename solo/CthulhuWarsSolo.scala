@@ -2252,36 +2252,80 @@ object CthulhuWarsSolo {
                 // Horizontal: top-right corner (left-to-right: hint, tome, custodian/librarian stacked)
                 // Vertical: top-left side (top-to-bottom: hint, tome, custodian, librarian, below ritual tracker)
                 if (board.isLibraryMap) {
-                    val silSize = 100
-                    val tomeInfoW = 80
-                    val tomeInfoH = 112
-                    val hintW = 100
-                    val hintH = 140
-                    val (hintX, hintY, tomeInfoX, tomeInfoY, silX, silY1, silY2) = if (horizontal) {
-                        // Horizontal: top-right corner, left-to-right
+                    if (horizontal) {
+                        // Horizontal: top-right corner, left-to-right (image space)
+                        val silSize = 100
+                        val tomeInfoW = 80
+                        val tomeInfoH = 112
+                        val hintW = 100
+                        val hintH = 140
                         val silX = mp.width - 120
                         val tomeInfoX = silX - tomeInfoW - 10
                         val hintX = tomeInfoX - hintW - 10
-                        (hintX, 10, tomeInfoX, 10, silX, 10, 120)
+                        g.globalAlpha = 0.85
+                        g.drawImage(getAsset("library-hint-card"), hintX, 10, hintW, hintH)
+                        g.drawImage(getAsset("library-tome-card"), tomeInfoX, 10, tomeInfoW, tomeInfoH)
+                        g.globalAlpha = 0.8
+                        g.drawImage(getAsset("custodian-silhouette"), silX, 10, silSize, silSize)
+                        g.drawImage(getAsset("librarian-silhouette"), silX, 120, silSize, silSize)
+                        g.globalAlpha = 1.0
                     } else {
-                        // Vertical: left side, stacked top-to-bottom below ritual tracker, centered on ritual circle
-                        // Ritual circle center ~75px from left; icons centered on that point
-                        val ritualCircleCenterX = 75
-                        val leftMargin = ritualCircleCenterX - (hintW / 2)  // center hint card on ritual circle
-                        val startY = 180  // top of hint card just below bottom of ritual circle
-                        val hintY = startY
-                        val tomeY = hintY + hintH + 10
-                        val silY1 = tomeY + tomeInfoH + 10
-                        val silY2 = silY1 + silSize + 10
-                        (leftMargin, hintY, leftMargin, tomeY, leftMargin, silY1, silY2)
+                        // Vertical: stacked top-to-bottom just below the ritual circle and
+                        // horizontally centered on it. The circle is a viewport-fixed HTML
+                        // element, so draw the icons in backing-store pixels (identity
+                        // transform) anchored to the circle's live on-screen rect. imgScale
+                        // matches the map fit-scale so the icons keep a consistent size.
+                        val dwv = 12
+                        val dhv = 12
+                        val fitWv = (dwv + mp.width + dwv) * bitmap.height < bitmap.width * (dhv + mp.height + dhv)
+                        val imgScale = if (fitWv) 1.0 * bitmap.height / (dhv + mp.height + dhv) else 1.0 * bitmap.width / (dwv + mp.width + dwv)
+                        val silSize = 100 * imgScale
+                        val tomeInfoW = 80 * imgScale
+                        val tomeInfoH = 112 * imgScale
+                        val hintW = 100 * imgScale
+                        val hintH = 140 * imgScale
+                        val gap = 10 * imgScale
+                        val (colCX, stackTopY) = libraryVerticalAnchor(bitmap.canvas, bitmap.width, bitmap.height, imgScale)
+                        val hintX = colCX - hintW / 2
+                        val hintY = stackTopY
+                        val tomeInfoX = colCX - tomeInfoW / 2
+                        val tomeY = hintY + hintH + gap
+                        val silX = colCX - silSize / 2
+                        val silY1 = tomeY + tomeInfoH + gap
+                        val silY2 = silY1 + silSize + gap
+                        g.save()
+                        g.setTransform(1, 0, 0, 1, 0, 0)
+                        g.globalAlpha = 0.85
+                        g.drawImage(getAsset("library-hint-card"), hintX, hintY, hintW, hintH)
+                        g.drawImage(getAsset("library-tome-card"), tomeInfoX, tomeY, tomeInfoW, tomeInfoH)
+                        g.globalAlpha = 0.8
+                        g.drawImage(getAsset("custodian-silhouette"), silX, silY1, silSize, silSize)
+                        g.drawImage(getAsset("librarian-silhouette"), silX, silY2, silSize, silSize)
+                        g.globalAlpha = 1.0
+                        g.restore()
                     }
-                    g.globalAlpha = 0.85
-                    g.drawImage(getAsset("library-hint-card"), hintX, hintY, hintW, hintH)
-                    g.drawImage(getAsset("library-tome-card"), tomeInfoX, tomeInfoY, tomeInfoW, tomeInfoH)
-                    g.globalAlpha = 0.8
-                    g.drawImage(getAsset("custodian-silhouette"), silX, silY1, silSize, silSize)
-                    g.drawImage(getAsset("librarian-silhouette"), silX, silY2, silSize, silSize)
-                    g.globalAlpha = 1.0
+                }
+            }
+
+            // Library (vertical only): the ritual-circle HUD marker is a viewport-fixed
+            // HTML element, but the overlay icons are painted on the map canvas. To keep
+            // the icon stack directly below the circle and centered on it at every screen
+            // size, read the circle's live on-screen rect and convert it into the canvas
+            // backing-store pixel space. Returns (columnCenterX, stackTopY) in backing px.
+            def libraryVerticalAnchor(cv : dom.html.Canvas, bw : Int, bh : Int, imgScale : Double) : (Double, Double) = {
+                val bRect = cv.getBoundingClientRect()
+                val vpx = if (bRect.width > 0) bw / bRect.width else 1.0
+                val vpy = if (bRect.height > 0) bh / bRect.height else 1.0
+                val roaNum = dom.document.getElementById("roa-cost-num")
+                if (roaNum != null && roaNum.parentNode != null) {
+                    val circle = roaNum.parentNode.asInstanceOf[dom.Element]
+                    val cr = circle.getBoundingClientRect()
+                    val cx = (cr.left + cr.width / 2 - bRect.left) * vpx
+                    val bottom = (cr.bottom - bRect.top) * vpy
+                    (cx, bottom + 10 * imgScale)
+                } else {
+                    // Fallback if the circle element is not present yet
+                    (75.0 * imgScale, 180.0 * imgScale)
                 }
             }
 
@@ -2340,16 +2384,18 @@ object CthulhuWarsSolo {
                     val (_, silY2) = imgToCanvas(mp.width - 120, 120)
                     (hintCX, hintCY, tomeInfoCX, tomeInfoCY, silX, silY1, silY2)
                 } else {
-                    // Vertical: left side, stacked below ritual tracker, centered on ritual circle
-                    val ritualCircleCenterX = 75
-                    val leftMargin = ritualCircleCenterX - (100 / 2)  // center on ritual circle (hint card width = 100)
-                    val startY = 180
-                    val (hintCX, hintCY) = imgToCanvas(leftMargin, startY)
-                    val tomeY = startY + 140 + 10
-                    val (tomeInfoCX, tomeInfoCY) = imgToCanvas(leftMargin, tomeY)
-                    val silY1Base = tomeY + 112 + 10
-                    val (silX, silY1) = imgToCanvas(leftMargin, silY1Base)
-                    val (_, silY2) = imgToCanvas(leftMargin, silY1Base + 100 + 10)
+                    // Vertical: stacked below the ritual circle, centered on it — matches
+                    // the draw code, which anchors to the circle's live on-screen rect in
+                    // backing-store pixels (cx/cy above are already in backing px).
+                    val (colCX, stackTopY) = libraryVerticalAnchor(canvas, canvas.width, canvas.height, imgScale)
+                    val gap = 10 * imgScale
+                    val hintCX = (colCX - hintW / 2).toInt
+                    val hintCY = stackTopY.toInt
+                    val tomeInfoCX = (colCX - tomeInfoW / 2).toInt
+                    val tomeInfoCY = (stackTopY + hintH + gap).toInt
+                    val silX = (colCX - silSize / 2).toInt
+                    val silY1 = (tomeInfoCY + tomeInfoH + gap).toInt
+                    val silY2 = (silY1 + silSize + gap).toInt
                     (hintCX, hintCY, tomeInfoCX, tomeInfoCY, silX, silY1, silY2)
                 }
                 if (cx >= tomeInfoCX && cx <= tomeInfoCX + tomeInfoW && cy >= tomeInfoCY && cy <= tomeInfoCY + tomeInfoH) {
