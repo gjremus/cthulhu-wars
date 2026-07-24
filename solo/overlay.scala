@@ -1087,7 +1087,7 @@ object Overlays {
         // Bubastis (BB): spellbook requirement info card overlays
         case $("BB", Pay2ForBB.text)            => requirement("As your Action, pay 2 Power.")
         case $("BB", NoEarthCatsOnMoon.text)    => requirement("None of your Earth Cats are on the Moon.")
-        case $("BB", CatInEveryEnemyStart.text) => requirement("One of your Cats is in every enemy faction's Start Area.")
+        case $("BB", CatInEveryEnemyStart.text) => requirement("A Cat is in every enemy Faction's Start Area; gain 1 Power per enemy Faction.")
         case $("BB", MarsOrSaturnLost.text)     => requirement("A Cat from Mars or Saturn is Killed or Eliminated.")
         case $("BB", UranusLost.text)           => requirement("A Cat from Uranus is Killed or Eliminated.")
         case $("BB", AwakenBastet.text)         => requirement("Awaken Bastet.")
@@ -1196,15 +1196,17 @@ object Overlays {
             // bounding-box normalisation, no fixed disc-rectangle stretch
             // constants — same model as GlyphPlacement.scala for the map.
             val n = parsed.length
-            // BB Moon sizing fix: render each sprite at a height PROPORTIONAL to
-            // its real on-map sprite height, so the Moon matches the regular map
-            // (a Bastet towers over an Earth Cat, exactly as on the board) instead
-            // of every unit being a flat 14%-tall sprite. The Earth Cat (on-map
-            // height 70px) is the anchor: it keeps its established 14%-of-moon-
-            // height size, and every other unit scales relative to it by the same
-            // 0.2 (= 14.0/70.0) %-per-map-pixel factor used here.
-            val moonSpriteScale = 14.0 / 70.0
-            def spriteHFor(onMapH : Double) : Double = onMapH * moonSpriteScale
+            // Moon sizing: FLAT 14% of moon height for EVERY unit. This is the
+            // original, known-good sizing that shipped before Jun-19 commit
+            // a3cff0d changed sprites to be proportional to raw on-map height
+            // (onMapH * 14/70), which ballooned big units — a Bastet at 210px
+            // on-map hit 42% of the moon and spilled off the disc. The July "22%
+            // cap" band-aid still left large units ~1.5× oversize. Restoring the
+            // flat 14% every unit had before the regression: a Bastet renders the
+            // same height as an Earth Cat on the Moon, fitting cleanly inside the
+            // disc. The onMapH field is still parsed for backward payload compat
+            // but no longer scales the sprite.
+            def spriteHFor(onMapH : Double) : Double = 14.0
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
             // Stable seed: only the asset-id list affects scatter positions, so
             // a unit's hp transition (alive → pained → killed → eliminated)
