@@ -273,7 +273,11 @@ object OWExpansion extends Expansion {
                     DS.gates :+= r
                 }
                 keeper.foreach(_.onGate = true)
-            } else {
+            } else if (game.gates.has(o)) {
+                // 2026-07-23: only move the gate when the source region actually has one.
+                // Without this guard a repeated Beyond One from a now-gateless source added a
+                // gate at the destination while removing nothing, leaving a phantom gate behind
+                // (game 540 South Pacific). Gate must LEAVE the source, not be duplicated.
                 game.gates :-= o
                 game.gates :+= r
                 factions.%(_.gates.contains(o)).foreach { f =>

@@ -560,12 +560,8 @@ object NeutralMonstersExpansion extends Expansion {
         // on another player's turn) would seize a gate out of turn. Blocking-only means the standard,
         // turn-scoped checkGatesGained naturally re-grants control on the owner's own turn once SP leaves.
         val allShadowPharaohs = factions./~(f => f.allInPlay.%(_.uclass == ShadowPharaoh))
-        if (allShadowPharaohs.any) {
-            log("[SP-DEBUG]".styled("nt"), allShadowPharaohs.num, "Shadow Pharaoh(s) in play:", allShadowPharaohs./(sp => s"${sp.faction.short}@${sp.region}").mkString(", "))
-        }
         allShadowPharaohs.foreach { sp =>
             val r = sp.region
-            log("[SP-DEBUG]".styled("nt"), "Processing", sp.faction.short, "Shadow Pharaoh at", r)
             // Force lose control — all factions (OW's unitGate is a separate field, unaffected)
             factions.foreach { gateOwner =>
                 if (gateOwner.gates.has(r)) {
