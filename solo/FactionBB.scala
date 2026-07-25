@@ -54,7 +54,7 @@ case object RequiresAttention extends FactionSpellbook(BB, "Requires Attention")
 // ============================================================================
 case object Pay2ForBB           extends Requirement("As your Action, pay 2 Power")
 case object NoEarthCatsOnMoon   extends Requirement("No Earth Cats on the Moon")
-case object CatInEveryEnemyStart extends Requirement("A Cat is in every enemy Faction's Start Area")
+case object CatInEveryEnemyStart extends Requirement("Cats in Start Regions; 1p/")
 case object MarsOrSaturnLost    extends Requirement("A Cat from Mars or Saturn is Killed or Eliminated")
 case object UranusLost          extends Requirement("A Cat from Uranus is Killed or Eliminated")
 case object AwakenBastet        extends Requirement("Awaken Bastet")
@@ -204,7 +204,7 @@ object BBExpansion extends Expansion {
             val catInEveryStart = game.factions.but(BB).forall(e => game.starting.get(e).exists(r => BB.at(r).%(u => u.uclass == EarthCat || u.uclass == CatFromMars || u.uclass == CatFromSaturn || u.uclass == CatFromUranus).any))
             if (catInEveryStart) {
                 val bonus = game.factions.but(BB).num
-                BB.satisfy(CatInEveryEnemyStart, "A Cat in every enemy faction's Start Area")
+                BB.satisfy(CatInEveryEnemyStart, "A Cat is in every enemy Faction's Start Area; gain 1 Power per enemy Faction")
                 if (bonus > 0) {
                     BB.power += bonus
                     BB.log("gained", bonus.power, "(Cat in every Start Area bonus)")
