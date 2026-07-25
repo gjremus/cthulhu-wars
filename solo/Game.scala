@@ -4163,8 +4163,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
             val c = candidates.head
 
-            println(s"[UNSPEAKABLE-OATH-TRACE] ${self.short} sacrificing HP at ${r}, power before: ${self.power}, active before: ${self.active}, hibernating: ${self.hibernating}, then action: ${then.getClass.getSimpleName}")
-
             eliminate(c)
 
             self.oncePerAction :-= Passion
@@ -4177,8 +4175,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             if (self.hibernating.not)
                 self.active = true
-
-            println(s"[UNSPEAKABLE-OATH-TRACE] ${self.short} after HP sacrifice: power=${self.power}, active=${self.active}")
 
             triggers()
 

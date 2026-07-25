@@ -260,12 +260,18 @@ object OWExpansion extends Expansion {
         case BeyondOneAction(self, o, uc, r) =>
             self.power -= 1
             self.payTax(r)
-            game.gates :-= o
-            game.gates :+= r
-            factions.%(_.gates.contains(o)).foreach { f =>
-                f.gates :-= o
-                f.gates :+= r
-                f.at(o).%(_.onGate).single.foreach(_.region = r)
+            // 2026-07-23: only move the gate when the source region actually has one.
+            // Without this guard a repeated Beyond One from a now-gateless source added a
+            // gate at the destination while removing nothing, leaving a phantom gate behind
+            // (game 540 South Pacific). Gate must LEAVE the source, not be duplicated.
+            if (game.gates.has(o)) {
+                game.gates :-= o
+                game.gates :+= r
+                factions.%(_.gates.contains(o)).foreach { f =>
+                    f.gates :-= o
+                    f.gates :+= r
+                    f.at(o).%(_.onGate).single.foreach(_.region = r)
+                }
             }
             if (game.factions.has(DS) && DS.chaosGateRegions.has(o)) {
                 DS.chaosGateRegions = DS.chaosGateRegions.%(c => c != o)
