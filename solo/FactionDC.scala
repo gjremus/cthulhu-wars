@@ -503,14 +503,28 @@ object DCExpansion extends Expansion {
         // ── MAIN ACTION ─────────────────────────────────────────────────────
         case MainAction(f : DC.type) if f.active.not =>
             implicit val asking = Asking(f)
-            println(s"[DC-TRACE] DC MainAction inactive: power=${f.power}, active=${f.active}, acted=${f.acted}")
             game.controls(f)
             if (dcCanDeliverFactionCardAcolyte(f))
                 + DCPlaceReservedAcolyteMainAction(f)
             game.reveals(f)
-            + NextPlayerAction(f).as("Skip")
-            + NeedOk
-            asking
+            // DC zero-power turn fix (HB, 2026-07-23): if DC has a genuine optional
+            // action available at this inactive turn (reserved-Acolyte delivery,
+            // gate control, or Elder Sign reveal), keep the manual prompt so the
+            // player can choose. Otherwise DC has nothing to do with zero power —
+            // auto-skip WITHOUT forcing an Ok prompt (matching how FBE/SL auto-skip
+            // when inactive) and record a log line so the pass is visible in the
+            // player log. Previously the `+ NeedOk` forced a needless prompt at zero
+            // power, and the silent Skip left no log entry.
+            if (asking.ask.actions.%!(_.isInfo).any) {
+                + NextPlayerAction(f).as("Skip")
+                + NeedOk
+                asking
+            }
+            else {
+                f.log("skipped its turn (no power)")
+                + NextPlayerAction(f).as("Skip")
+                asking
+            }
         case MainAction(f : DC.type) if f.acted =>
             // Post-acted: still allow Tenebrosum repeat + controls + endTurn (G1)
             // HB Fix 90 (2026-06-07): dcTenebrosumExtraTurn flag retired — Tenebrosum
