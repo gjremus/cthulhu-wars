@@ -2529,8 +2529,8 @@ object CthulhuWarsSolo {
                     val cx = (circleRect.left + circleRect.width / 2 - bRect.left) * vpx
                     // Vertical: start just below the bottom edge of the IMAGE with a small gap
                     val bottom = (cr.bottom - bRect.top) * vpy
-                    // 10px gap below the image's bottom edge
-                    (cx, bottom + 10.0 * imgScale)
+                    // 20px gap below the image's bottom edge for proper spacing
+                    (cx, bottom + 20.0 * imgScale)
                 } else {
                     // Fallback if the circle element is not present yet
                     (75.0 * imgScale, 180.0 * imgScale)
@@ -2865,6 +2865,11 @@ object CthulhuWarsSolo {
                     case (DS, FiendishGrowth) if game.options.has(DSAlternateSpellbooks) => FiendishSpawn
                     case (DS, UndirectedEnergy) if game.options.has(DSAlternateSpellbooks) => DirectedEnergy
                     case (SL, EnergyNexus) if game.options.has(SleeperEnergyNexusPreBattle) => EnergyNexusPB
+                    case (BB, Catabolism)   if game.options.has(BBAlternateSpellbooks) => Syzygy
+                    case (BB, Ailurophobia) if game.options.has(BBAlternateSpellbooks) => Carnivore
+                    case (AN, UnholyGround)    if game.options.has(ANAlternateSpellbooks) => HolyGround
+                    case (AN, Consecration)    if game.options.has(ANAlternateSpellbooks) => Sanguinessence
+                    case (AN, WorshipServices) if game.options.has(ANAlternateSpellbooks) => Crusade
                     case _ => sb
                 }}
                 (1.to(f.library.num - f.spellbooks.%(effectiveLib.has).num - f.unfulfilled.num)./(x => "?".styled(f)))./(div("spellbook", f.style + "-background")).mkString("") } +
