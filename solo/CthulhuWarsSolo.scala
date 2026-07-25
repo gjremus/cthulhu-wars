@@ -2246,10 +2246,10 @@ object CthulhuWarsSolo {
                     // Horizontal center from the ritual circle's center (use circle, not img)
                     val circleRect = circle.getBoundingClientRect()
                     val cx = (circleRect.left + circleRect.width / 2 - bRect.left) * vpx
-                    // Vertical: start just below the bottom edge of the IMAGE with a small gap
+                    // Vertical: start just below the bottom edge of the IMAGE with substantial gap
                     val bottom = (cr.bottom - bRect.top) * vpy
-                    // 30px gap below the image's bottom edge per owner feedback
-                    (cx, bottom + 30.0 * vpy)
+                    // 80px gap below the ritual circle bottom per owner @@@ feedback (30px/60px were too high)
+                    (cx, bottom + 80.0 * vpy)
                 } else {
                     // Fallback if the circle element is not present yet
                     (75.0 * imgScale, 180.0 * imgScale)
