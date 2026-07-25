@@ -688,7 +688,9 @@ object TBExpansion extends Expansion {
         case TBStalkMainAction(self, movedRegions, mover) =>
             implicit val asking = Asking(self)
             + TBStalkUseAction(self, movedRegions, mover)
-            + TBStalkSkipAction(self, mover)
+            // Only show skip if there ARE TB units in the moved-to regions (2026-07-24)
+            if (movedRegions.exists(r => self.at(r).any))
+                + TBStalkSkipAction(self, mover)
             asking
 
         case TBStalkUseAction(self, movedRegions, mover) =>
