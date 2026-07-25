@@ -2529,8 +2529,8 @@ object CthulhuWarsSolo {
                     val cx = (circleRect.left + circleRect.width / 2 - bRect.left) * vpx
                     // Vertical: start just below the bottom edge of the IMAGE
                     val bottom = (cr.bottom - bRect.top) * vpy
-                    // 20px gap below ritual circle per owner @@@ - icons should start "just below" not "way too high"
-                    (cx, bottom + 20.0 * vpy)
+                    // 120px gap below ritual circle per owner @@@ Row3 - icons must stack CLEARLY below circle, not overlapping
+                    (cx, bottom + 120.0 * vpy)
                 } else {
                     // Fallback if the circle element is not present yet
                     (75.0 * imgScale, 180.0 * imgScale)
