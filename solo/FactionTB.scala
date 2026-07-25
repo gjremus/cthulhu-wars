@@ -688,9 +688,7 @@ object TBExpansion extends Expansion {
         case TBStalkMainAction(self, movedRegions, mover) =>
             implicit val asking = Asking(self)
             + TBStalkUseAction(self, movedRegions, mover)
-            // Only show skip if there ARE TB units in the moved-to regions (2026-07-24)
-            if (movedRegions.exists(r => self.at(r).any))
-                + TBStalkSkipAction(self, mover)
+            + TBStalkSkipAction(self, mover)
             asking
 
         case TBStalkUseAction(self, movedRegions, mover) =>
@@ -1162,6 +1160,8 @@ object TBExpansion extends Expansion {
             self.satisfy(RemoveGatePlaceChthonianReq, "Remove a Gate, place a Chthonian")
             self.commands = self.commands.%!(_.isInstanceOf[TBRemoveGatePlan])
             self.plans = self.plans.%!(_.isInstanceOf[TBRemoveGatePlan])
+            // Not an action: clear acted flag so player returns to full action menu
+            self.acted = false
             then
 
         // ====================================================================
