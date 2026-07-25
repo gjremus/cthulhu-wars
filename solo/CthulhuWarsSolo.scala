@@ -2248,8 +2248,8 @@ object CthulhuWarsSolo {
                     val cx = (circleRect.left + circleRect.width / 2 - bRect.left) * vpx
                     // Vertical: start just below the bottom edge of the IMAGE with a small gap
                     val bottom = (cr.bottom - bRect.top) * vpy
-                    // 5px gap below the image's bottom edge (viewport pixels → backing pixels)
-                    (cx, bottom + 5.0 * vpy)
+                    // 30px gap below the image's bottom edge per owner feedback
+                    (cx, bottom + 30.0 * vpy)
                 } else {
                     // Fallback if the circle element is not present yet
                     (75.0 * imgScale, 180.0 * imgScale)
