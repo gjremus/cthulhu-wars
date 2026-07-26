@@ -4164,8 +4164,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             game.controls(f)
 
-            if (f.hasAllSB)
+            if (f.hasAllSB) {
                 game.battles(f)
+            }
 
             game.reveals(f)
 
