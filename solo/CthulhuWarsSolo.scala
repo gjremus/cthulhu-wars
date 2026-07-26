@@ -2328,8 +2328,10 @@ object CthulhuWarsSolo {
                     val cx = (circleRect.left + circleRect.width / 2 - bRect.left) * vpx
                     // Vertical: start just below the bottom edge of the IMAGE
                     val bottom = (cr.bottom - bRect.top) * vpy
-                    // 120px gap below ritual circle per owner @@@ Row3 - icons must stack CLEARLY below circle, not overlapping
-                    (cx, bottom + 120.0 * vpy)
+                    // Row3 @@@ 2026-07-26: library hint card top positioned just below ritual circle bottom,
+                    // horizontally centered on ritual circle center, forming straight vertical stack down left side.
+                    // Increased gap to 30px for proper visual spacing per owner specification.
+                    (cx, bottom + 30.0 * vpy)
                 } else {
                     // Fallback if the circle element is not present yet
                     (75.0 * imgScale, 180.0 * imgScale)
