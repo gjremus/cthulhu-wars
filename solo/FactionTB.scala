@@ -322,7 +322,7 @@ case class TBOverlayMantleTransferAction(self : Faction, source : Region, chosen
 case class TBRemoveGatePlaceChthonianMainAction(self : Faction)
     extends OptionFactionAction(RemoveGatePlaceChthonianReq.text.styled(TB) + " (free)") with MainQuestion with Soft
 case class TBRemoveGatePlaceChthonianPromptAction(self : Faction, then : ForcedAction)
-    extends ForcedAction with Soft {
+    extends ForcedAction {
     override def question(implicit game : Game) = RemoveGatePlaceChthonianReq.text.styled(TB) + "?"
 }
 case class TBRemoveGatePlaceChthonianPickGateAction(self : Faction, then : ForcedAction)
