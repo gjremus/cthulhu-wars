@@ -229,6 +229,10 @@ object FactionCombatOverlay {
 
 object Overlays {
     val overlay = new InfoOverlay(dom.document.getElementById("overlay").asInstanceOf[html.Element])
+
+    // Live game exposed to Overlays so faction-card GOO/shared-combat rows can
+    // show a dynamic calculated value instead of "?" (set each render). Mirrors HB.
+    var currentGame : |[Game] = None
     var temp = false
 
     // [2026-04-03] Force-refresh the overlay if it's currently showing
@@ -761,7 +765,7 @@ object Overlays {
             (Acolyte,    6, "1",   "0", s""""""),
             (TombHerd,   6, "2",   "3", s"""<div class=p>The first Tomb-Herd in an Area has 3 Combat. Any others have 0 Combat.</div><div class=p>Spellbook: ${reference(TS, GraspingDead)}</div>"""),
             (DeepTendril, 3, "3", "1-3", s"""<div class=p>Combat: 1, +1 if Gla'aki is in the same Area, +1 if in an Ocean/Sea Area.</div><div class=p>Spellbook: ${reference(TS, Oleaginous)}</div>"""),
-            (Glaaki,     1, "7",   s"?(${FactionCombatOverlay.glaakiCombat})", s"""<div class=p>Combat: equals double the number of Deep Tendrils in play.</div><div class=p><b>How to Awaken Tombstalker Gla'aki:</b></div><div class=p>1) You must Control a Gate in an Ocean/Sea Area</div><div class=p>2) Pay 7 Power (you may also spend Death's Head as Power)</div><div class=p>3) Gla'aki appears in that Area</div><div class=p>Spellbooks: ${reference(TS, Oleaginous)}, ${reference(TS, GreenDecay)}</div><div class=p><span class=ability-color>Shepherd of the Crypt</span> (Gather Power Phase): choose an Area and gain 1 Power per Tomb-Herd there.</div>""")
+            (Glaaki,     1, "7",   calc(g => { implicit val gg : Game = g; 2 * TS.onMap(DeepTendril).not(Zeroed).num }), s"""<div class=p>Spellbooks: ${reference(TS, Oleaginous)}, ${reference(TS, GreenDecay)}</div><div class=p><span class=ability-color>How to Awaken Tombstalker Gla'aki:</span></div><div class=p>1) You must Control a Gate in an Ocean/Sea Area</div><div class=p>2) Pay 7 Power (you may also spend Death's Head as Power)</div><div class=p>3) Gla'aki appears in that Area</div><div class=p>${combat} Equals double the number of Deep Tendrils in play.</div><div class=p><span class=ability-color>Shepherd of the Crypt</span> (Gather Power) Gain 1 Power for each Tomb-Herd in an Area of your choice.</div>""")
         ))
 
         // Tombstalker (TS): spellbook requirement info card overlays
@@ -783,14 +787,13 @@ object Overlays {
 
         // Firstborn (FB): faction info card showing unique ability (Writhe), units, and Crater building
         case $("FB") =>
-            val ghatoCost = math.max(1, 11 - RitualTrackOverlay.ritualCost)
             faction(FB, "info:fb-background", Writhe, "Action: Cost 2",
             "Roll dice equal to your Power. For each Kill: Eliminate a Unit you control, any of your Acolytes Eliminated are instead replaced with Desiccated. For each Pain, relocate your Unit to any Area. Before applying these results, you may reroll ALL these dice once.<br/><br/><span class=ability-color>Crater</span> <span class=cost-color>(Building):</span> Any Gate (other than Yog-Sothoth) that coexists in an Area with a Crater is immediately destroyed.",
             $(Augury, Carnage, DevilsMark), $(
             (Acolyte,        6, "1", "0", s""""""),
-            (Desiccated,     6, "2", "0+", s"""<div class=p>Combat is 1 if in a land Area, 0 if in a sea Area.</div><div class=p>Spellbook: ${reference(FB, TheEyeOpens)}</div>"""),
-            (RevenantOfKnaa, 2, "3", "?", s"""<div class=p>Combat equals the number of Desiccated in play.</div><div class=p>Spellbooks: ${reference(FB, CyclopeanGaze)}, ${reference(FB, CallOfTheFaithful)}</div>"""),
-            (Ghatanothoa,    1, s"?(${ghatoCost})", s"?(${FactionCombatOverlay.ghatoCombat})", s"""<div class=p>Cost: 11 minus Ritual cost. Combat equals your Power.</div><div class=p>Spellbooks: ${reference(FB, CyclopeanGaze)}, ${reference(FB, CallOfTheFaithful)}</div><div class=p><span class=ability-color>Infernal Pact</span> (Ongoing): You may discount the cost of any Action you perform by flipping any number of your faceup spellbooks, reducing that cost by 1 per spellbook flipped.</div>""")
+            (Desiccated,     6, "2", "0+", s"""<div class=p>Spellbook: ${reference(FB, TheEyeOpens)}</div><div class=p>${combat} 1 if in a Land Area.</div>"""),
+            (RevenantOfKnaa, 2, "3", calc(g => { implicit val gg : Game = g; FB.onMap(Desiccated).not(Zeroed).num }), s"""<div class=p>Spellbooks: ${reference(FB, CyclopeanGaze)}, ${reference(FB, CallOfTheFaithful)}</div><div class=p>${combat} Equal to your number of Desiccated in play.</div>"""),
+            (Ghatanothoa,    1, calc(g => { implicit val gg : Game = g; math.max(1, 11 - g.ritualCost) }), calc(g => { implicit val gg : Game = g; FB.power }), s"""<div class=p>Spellbooks: ${reference(FB, CyclopeanGaze)}, ${reference(FB, CallOfTheFaithful)}</div><div class=p><span class=ability-color>How to Awaken Ghatanothoa, Devil-God</span></div><div class=p>1) Pay 11 Power minus the cost of a Ritual of Annihilation</div><div class=p>2) Ghatanothoa appears in your Start Area</div><div class=p>3) Flip all of your face-down spellbooks face-up</div><div class=p>${combat} Equal to your Power.</div><div class=p><span class=ability-color>Infernal Pact</span> (Ongoing) You may discount the cost of any Action you perform by flipping any number of your faceup spellbooks facedown, reducing that cost by 1 per spellbook flipped.</div>""")
         ))
 
         // Firstborn (FB): spellbook requirement info card overlays
@@ -1002,6 +1005,11 @@ object Overlays {
     }).but("")
 
     def combat = s"<span class=combat-color>Combat:</span>"
+
+    def calc(f : Game => Int) : String = Overlays.currentGame match {
+        case Some(g) => f(g).toString
+        case None    => "?"
+    }
 
     def cost(s : String) = s"<span class=cost-color>${s}</span>"
 
