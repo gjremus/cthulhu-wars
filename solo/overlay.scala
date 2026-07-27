@@ -1064,11 +1064,11 @@ object Overlays {
             "When you perform a Common or Spellbook Action, you may perform the same Action again (if it is available to you) using Sin as if it were Power.<br/><br/>" +
             "<span class=ability-color>Depravity</span> <span class=cost-color>(Gather Power):</span> Gain 1 Sin for each Cultist you have on the map. Sin is not Power & can be kept over multiple phases with a max equal to twice the Ritual Marker.",
             $(), $(
-            (Acolyte,         6, "1", "0", s"""<div class=p>Start on Spellbook requirement slots. Released into play upon SB acquisition.</div>"""),
+            (Acolyte,         6, "1", "0", s"""<div class=p>Start on Spellbook requirement slots. Released into play upon SB acquisition.</div><div class=p>Spellbook: ${reference(DC, Proselytize)}</div>"""),
             (MindlessHusk,    5, "1", "1", s"""<div class=p>Spellbook: ${reference(DC, Eschar)}</div>"""),
             (FallenProphet,   4, "3", "?", s"""<div class=p>Combat: During your turn, equals the number of enemy Cultists in the Area. Any other time, equals the number of your Cultists in the Area.</div><div class=p>Spellbook: ${reference(DC, Pilgrimage)}</div>"""),
             (YgolonacDC,      1, ygCostDisplay, calc(g => (g.dcSin + 1) / 2), s"""
-                <div class=p>Spellbooks: ${reference(DC, Lure)}, ${reference(DC, Eschar)}, ${reference(DC, DarkBargain)}</div>
+                <div class=p>Spellbooks: ${reference(DC, Lure)}, ${reference(DC, Satiate)}, ${reference(DC, DarkBargain)}</div>
                 <div class=p>${cost(s"How to Awaken ${YgolonacDC.name}:")}</div>
                 <div class=p>${cost("1)")} Pay Power equal to the number of Spellbooks on your Faction Sheet.</div>
                 <div class=p>${cost("2)")} Y'Golonac appears in a LAND AREA lacking a Controlled Gate.</div>
