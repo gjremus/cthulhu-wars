@@ -4177,6 +4177,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case MainAction(f) if f.active.not =>
             implicit val asking = Asking(f)
 
+            if (f.name.contains("Firstborn"))
+                println(s"[FB-TRACE] round=$round SKIP offered: power=${f.power} hibernating=${f.hibernating} active=${f.active} acted=${f.acted}")
+
             game.reveals(f)
 
             + NextPlayerAction(f).as("Skip")
@@ -4303,6 +4306,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             factions.foreach { f =>
                 f.active = (f.power > 0) && f.hibernating.not
+                if (f.name.contains("Firstborn"))
+                    println(s"[FB-TRACE] round=$round set-active: power=${f.power} hibernating=${f.hibernating} -> active=${f.active}")
             }
 
             factions = factions.drop(1) ++ factions.take(1)
