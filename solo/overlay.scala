@@ -1196,17 +1196,22 @@ object Overlays {
             // bounding-box normalisation, no fixed disc-rectangle stretch
             // constants — same model as GlyphPlacement.scala for the map.
             val n = parsed.length
-            // Moon sizing: FLAT 14% of moon height for EVERY unit. This is the
-            // original, known-good sizing that shipped before Jun-19 commit
-            // a3cff0d changed sprites to be proportional to raw on-map height
-            // (onMapH * 14/70), which ballooned big units — a Bastet at 210px
-            // on-map hit 42% of the moon and spilled off the disc. The July "22%
-            // cap" band-aid still left large units ~1.5× oversize. Restoring the
-            // flat 14% every unit had before the regression: a Bastet renders the
-            // same height as an Earth Cat on the Moon, fitting cleanly inside the
-            // disc. The onMapH field is still parsed for backward payload compat
-            // but no longer scales the sprite.
-            def spriteHFor(onMapH : Double) : Double = 14.0
+            // Moon sizing (OWNER-MANDATED, DO NOT FLATTEN): sprites scale
+            // PROPORTIONAL to their real on-map height, anchored on the Earth Cat,
+            // so the Moon matches the board — smallest (Earth Cat) to largest
+            // (Bastet), exactly as the physical figures scale.
+            //   EarthCat 70→14%  Mars 105→21%  Saturn 140→28%  Uranus 175→35%  Bastet 210→42%.
+            // The owner has explicitly approved Bastet at 42% of the moon height as
+            // the acceptable maximum, so we CAP at 42% — any unit at least as tall
+            // as a Bastet (e.g. a visiting GOO) renders at 42% and never spills off
+            // the disc, while everything smaller scales down proportionally.
+            //
+            // DO NOT revert this to a flat per-unit size ("= 14.0"). That
+            // regression has been re-introduced repeatedly (cda69d1, d3e8a76,
+            // ad2ec5b) and is WRONG: the owner wants the size range, not uniform
+            // sprites. This block is kept identical in behaviour to HB.
+            val moonSpriteScale = 14.0 / 70.0
+            def spriteHFor(onMapH : Double) : Double = (onMapH * moonSpriteScale).min(42.0)
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
             // Stable seed: only the asset-id list affects scatter positions, so
             // a unit's hp transition (alive → pained → killed → eliminated)
@@ -1230,27 +1235,32 @@ object Overlays {
             // Moon overlay's mid-battle cleanup state.
             val killSrc = hrf.web.getElem("kill").as[dom.html.Image]./(_.src).|("")
             val painSrc = hrf.web.getElem("pain").as[dom.html.Image]./(_.src).|("")
+            // Each sprite's height is sized in ABSOLUTE PIXELS via a CSS variable
+            // (--moon-h) that the moon <img> writes on load/resize (see onload
+            // handler below). We deliberately do NOT use height: N% here: on mobile
+            // Chrome/Safari a %-height whose ancestor has no definite height
+            // resolves to `auto`, so the sprite fell back to the image's intrinsic
+            // (huge) pixel size — the "enormous on mobile" bug. calc(var(--moon-h)
+            // * fraction) is a definite length on every engine and cannot collapse.
+            // Fallback 60vh only applies if the var is somehow unset. Same as HB.
             val unitFigures = parsed.zip(positions)./({ case ((src, display, hp, onMapH), (xPct, yPct)) =>
-                // Per-unit sprite height (% of moon image height), proportional to
-                // the unit's real on-map height — matches the regular map's sizing.
-                val spriteH = spriteHFor(onMapH)
-                // Marker covers ~50% of THIS sprite's height so it stays clearly
-                // visible over the unit without dominating the moon disc.
-                val markerH = spriteH * 0.5
+                val frac = spriteHFor(onMapH) / 100.0    // fraction of the moon height
                 val markerSrc = hp match {
                     case "killed" => killSrc
                     case "pained" => painSrc
                     case _        => ""
                 }
                 val markerImg = if (markerSrc.nonEmpty)
-                    f"""<img src="$markerSrc" style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $markerH%2.1f%%; width: auto; pointer-events: none; z-index: 2;" />"""
+                    s"""<img src="$markerSrc" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;" />"""
                 else ""
-                f"""<img src="$src"
-                         title="$display"
-                         style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />""" + markerImg
+                f"""<div style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: calc(var(--moon-h, 60vh) * $frac%1.4f); width: auto; pointer-events: none;">
+                    <img src="$src" title="$display" style="height: 100%%; width: auto; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />$markerImg</div>"""
             }).mkString("")
+            // Full-cover layer over the moon disc. Sprite heights inside are sized
+            // in absolute px via --moon-h (set by the moon <img> onload/resize),
+            // so this layer does NOT need a definite height itself.
             val figureLayer = if (count > 0)
-                s"""<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;">$unitFigures</div>"""
+                s"""<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; overflow: hidden;">$unitFigures</div>"""
             else ""
             val emptyCaption = if (count == 0)
                 s"""<div style="position: absolute; bottom: 6%; left: 0; right: 0; text-align: center; color: #c8a84b; text-shadow: 0 0 4px black, 0 0 4px black; font-size: 1.4em;">The Moon is empty.</div>"""
@@ -1267,8 +1277,9 @@ object Overlays {
               <tbody>
                 <tr>
                   <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
-                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
-                      <img src="$moonSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
+                    <div id="bb-moon-stage" style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
+                      <img src="$moonSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;"
+                           onload="var s=document.getElementById('bb-moon-stage'); if(s){var set=function(){s.style.setProperty('--moon-h', this.getBoundingClientRect().height+'px');}.bind(this); set(); if(window.ResizeObserver){new ResizeObserver(set).observe(this);} else {window.addEventListener('resize', set);}}" />
                       $figureLayer
                       $emptyCaption
                     </div>
