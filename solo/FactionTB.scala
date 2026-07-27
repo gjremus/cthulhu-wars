@@ -676,6 +676,9 @@ object TBExpansion extends Expansion {
             if (game.tbShuddeMellEverAwakened && game.tbMantleInPlay && self.pool(ShuddeMellSegment).any) {
                 self.place(ShuddeMellSegment, TB.mantle)
                 self.log(Behemoth.styled(TB) + ": Power reached 0 — placed", ShuddeMellSegment.styled(TB), "on", TB.mantle)
+                // Latch this 0-crossing so the generic watcher does not place a
+                // second Segment for the same drop to 0.
+                game.tbBehemothZeroLatched = true
             }
             Force(then)
 
@@ -1233,10 +1236,37 @@ object TBExpansion extends Expansion {
     // awakened and Mantle is in play and pool has Segments, dispatch recorded action.
     def tbCheckBehemoth(then : ForcedAction)(implicit game : Game) : Continue = {
         val f = TB
-        if (f.power == 0 && game.tbShuddeMellEverAwakened && game.tbMantleInPlay && f.pool(ShuddeMellSegment).any)
+        if (tbBehemothReady && game.tbBehemothZeroLatched.not)
             Force(TBBehemothSegmentAction(f, then))
         else
             Force(then)
+    }
+
+    // Behemoth precondition: Power at 0, Head has ever been awakened, Mantle in
+    // play, and at least one Segment left in the pool (§3.4.3).
+    def tbBehemothReady(implicit game : Game) : Boolean =
+        TB.power == 0 && game.tbShuddeMellEverAwakened && game.tbMantleInPlay && TB.pool(ShuddeMellSegment).any
+
+    // -- HELPER: generic Behemoth 0-crossing watcher (§3.4.3) ------------------
+    // The guide's wording is "WHENEVER your Power reaches 0" — not "whenever you
+    // use a Burrowers ability that costs Power". TB's Power can reach 0 through
+    // any spend, including generic ones (declaring a battle, Move, Summon,
+    // Recruit, Awaken of another GOO) that the per-handler tbCheckBehemoth calls
+    // never see. Game.scala calls this from AfterAction so every route is covered.
+    //
+    // A latch makes this an EDGE trigger: one Segment per crossing of 0, not one
+    // per action taken while already sitting at 0. It clears the moment TB has
+    // Power again, so the next drop to 0 in the same Action Phase fires again.
+    def tbBehemothWatch()(implicit game : Game) : Unit = {
+        if (TB.power > 0) {
+            game.tbBehemothZeroLatched = false
+            return
+        }
+        if (tbBehemothReady && game.tbBehemothZeroLatched.not) {
+            TB.place(ShuddeMellSegment, TB.mantle)
+            TB.log(Behemoth.styled(TB) + ": Power reached 0 — placed", ShuddeMellSegment.styled(TB), "on", TB.mantle)
+            game.tbBehemothZeroLatched = true
+        }
     }
 
     // -- HELPER: Mantle adjacency edges (§2.3 / §3.2.2) -----------------------
