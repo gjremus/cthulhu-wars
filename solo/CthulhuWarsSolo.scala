@@ -1268,6 +1268,7 @@ object CthulhuWarsSolo {
             }
 
             def drawMap(implicit game : Game) {
+                Overlays.currentGame = Some(game)
                 val upscale = 2
 
                 val dpr = dom.window.devicePixelRatio
