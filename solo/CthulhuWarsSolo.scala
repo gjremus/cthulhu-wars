@@ -1303,6 +1303,10 @@ object CthulhuWarsSolo {
             def drawMap(implicit game : Game) {
                 val upscale = 2
 
+                // Expose live game to Overlays so faction-card GOO/shared-combat
+                // rows can show a dynamic calculated value instead of "?".
+                Overlays.currentGame = Some(game)
+
                 val dpr = dom.window.devicePixelRatio
                 if (cachedMapWidth == 0 || cachedDPR != dpr) {
                     cachedMapWidth = map.node.clientWidth * dpr
