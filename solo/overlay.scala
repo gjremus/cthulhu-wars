@@ -1220,22 +1220,22 @@ object Overlays {
             // moon image's dimensions once here — the same model the standard
             // map uses, with no normalize-then-stretch detour.
             val n = parsed.length
-            // Moon sizing: FLAT 14% of the moon height for every unit — identical
-            // to the BB build (overlay.scala spriteHFor), which is the earlier
-            // build in the propagation order and the approved behaviour.
+            // Moon sizing (OWNER-MANDATED, DO NOT FLATTEN): sprites scale
+            // PROPORTIONAL to their real on-map height, anchored on the Earth Cat,
+            // so the Moon matches the board — smallest (Earth Cat) to largest
+            // (Bastet), exactly as the physical figures scale.
+            //   EarthCat 70→14%  Mars 105→21%  Saturn 140→28%  Uranus 175→35%  Bastet 210→42%.
+            // The owner has explicitly approved Bastet at 42% of the moon height as
+            // the acceptable maximum, so we CAP at 42% — any unit at least as tall
+            // as a Bastet (e.g. a visiting GOO) renders at 42% and never spills off
+            // the disc, while everything smaller scales down proportionally. This
+            // both preserves the cat→Bastet range AND prevents the mobile overflow.
             //
-            // History: Jun-19 commit a3cff0d (ported here as 59a4c50) made sprites
-            // proportional to raw on-map height (onMapH * 14/70). That ballooned
-            // large units — a Cthulhu measured 45% of the moon height live on HB
-            // and pushed its corners past the disc edge, while Deep Ones shrank to
-            // 6.2% — which is the "units are enormous and spilling off the moon"
-            // regression. Commit d3e8a76 (Jul-24) restored the flat 14%, but
-            // 3fbd8f4 (Jul-27 09:46) re-applied the proportional scale. Restoring
-            // flat 14% again and keeping HB in sync with BB.
-            //
-            // The onMapH field is still parsed for backward payload compatibility
-            // but must NOT scale the sprite.
-            def spriteHFor(onMapH : Double) : Double = 14.0
+            // DO NOT revert this to a flat per-unit size ("= 14.0" / "match BB").
+            // That regression has been re-introduced repeatedly (d3e8a76, ad2ec5b)
+            // and is WRONG: the owner wants the size range, not uniform sprites.
+            val moonSpriteScale = 14.0 / 70.0
+            def spriteHFor(onMapH : Double) : Double = (onMapH * moonSpriteScale).min(42.0)
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
             val seed = parsed.length * 31 + parsed./({ case (s, _, _, _) => s }).mkString.hashCode
             val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
@@ -1246,18 +1246,29 @@ object Overlays {
             val positions : List[(Double, Double)] = rawScatter.toList./ { case (px, py) =>
                 (px / moonW * 100.0, py / moonH * 100.0)
             }
+            // Each sprite's height is sized in ABSOLUTE PIXELS via a CSS variable
+            // (--moon-h) that the moon <img> writes on load/resize (see onload
+            // handler below). We deliberately do NOT use height: N% here: on mobile
+            // Chrome/Safari a %-height whose ancestor has no definite height
+            // resolves to `auto`, so the sprite fell back to the image's intrinsic
+            // (huge) pixel size — the "enormous on mobile" bug. calc(var(--moon-h)
+            // * fraction) is a definite length on every engine and cannot collapse.
+            // Fallback 60vh only applies if the var is somehow unset.
             val unitFigures = parsed.zip(positions)./({ case ((src, display, hp, onMapH), (xPct, yPct)) =>
-                val spriteH = spriteHFor(onMapH)
+                val frac = spriteHFor(onMapH) / 100.0    // fraction of the moon height
                 val hpOverlay = hp match {
                     case "killed" => s"""<img src="${imageSource("kill")}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;" />"""
                     case "pained" => s"""<img src="${imageSource("pain")}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;" />"""
                     case _ => ""
                 }
-                f"""<div style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none;">
+                f"""<div style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: calc(var(--moon-h, 60vh) * $frac%1.4f); width: auto; pointer-events: none;">
                     <img src="$src" title="$display" style="height: 100%%; width: auto; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />$hpOverlay</div>"""
             }).mkString("")
+            // Full-cover layer over the moon disc. Sprite heights inside are sized
+            // in absolute px via --moon-h (set by the moon <img> onload/resize),
+            // so this layer does NOT need a definite height itself.
             val figureLayer = if (count > 0)
-                s"""<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;">$unitFigures</div>"""
+                s"""<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; overflow: hidden;">$unitFigures</div>"""
             else ""
             val emptyCaption = if (count == 0)
                 s"""<div style="position: absolute; bottom: 6%; left: 0; right: 0; text-align: center; color: #c8a84b; text-shadow: 0 0 4px black, 0 0 4px black; font-size: 1.4em;">The Moon is empty.</div>"""
@@ -1274,8 +1285,9 @@ object Overlays {
               <tbody>
                 <tr>
                   <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
-                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
-                      <img src="$moonSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
+                    <div id="bb-moon-stage" style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
+                      <img src="$moonSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;"
+                           onload="var s=document.getElementById('bb-moon-stage'); if(s){var set=function(){s.style.setProperty('--moon-h', this.getBoundingClientRect().height+'px');}.bind(this); set(); if(window.ResizeObserver){new ResizeObserver(set).observe(this);} else {window.addEventListener('resize', set);}}" />
                       $figureLayer
                       $emptyCaption
                     </div>

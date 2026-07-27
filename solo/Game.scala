@@ -1581,6 +1581,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var tbShriekTargetedThisPhase : $[Faction] = $
     var tbSBR4Gates : $[Region] = $
     var tbAutotomyPendingSegments : Boolean = false
+    // Behemoth edge-trigger latch (§3.4.3). Behemoth places a Segment WHENEVER
+    // TB's Power reaches 0, so it must fire once per 0-crossing — not once per
+    // action while TB happens to be sitting at 0. Set when a Segment is placed
+    // for reaching 0; cleared as soon as TB has Power again (and at Gather).
+    var tbBehemothZeroLatched : Boolean = false
     // Set true when Distributed Death cancels a Kill assigned to Byagoona, so
     // Succor's SBR ("Byagoona Dies … do not fulfill if the Kill is prevented") is
     // NOT satisfied (§3.12.5). Reset per battle.
@@ -2356,7 +2361,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def battles(f : Faction)(implicit w : AskWrapper) {
         val enough = nexed.any.?(queue.%(_.attacker == f).%(_.effect.has(EnergyNexus))./(_.arena)).|(f.battled)
 
-        val battleAreas = areas.nex ++ tbMantleInPlay.??($(TB.mantle))
+        // The Moon (BB) and Mantle (TB) are off-map FactionRegions not in
+        // board.regions, so battle-eligibility must explicitly include them or
+        // battles there are silently unreachable. (Regression: HB was forked
+        // from tcho-tcho before BB's moon-battle fix and cd4b011 later rewrote
+        // this line for the Mantle without restoring the BB.moon clause.)
+        val battleAreas = areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ tbMantleInPlay.??($(TB.mantle))
         battleAreas.%(f.affords(1)).diff(enough).%(r => factionlike.but(f).exists(f.canAttack(r))).some.foreach { r =>
             + AttackMainAction(f, r, nexed.any.?(EnergyNexus))
         }
@@ -2430,7 +2440,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // block all non-terror monster summons (not ServitorUnit itself)
         // Blocking text shown inside summon sub-menu, not here in top-level menu
 
-        val summonAreas = areas ++ ((f == BB).??($(BB.moon))) ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))
+        val summonAreas = areas ++ ((f == BB || (f == OW && f.can(TheyBreakThrough))).??($(BB.moon))) ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))
 
         // HB Fix 113 (2026-06-13): under a DC/SL Tenebrosum repeat (dcTenebrosumGuard),
         // the action is paid in Sin, not Power — so the per-region power-affordability
@@ -2683,7 +2693,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def neutralSpellbooks(f : Faction)(implicit w : AskWrapper) {
-        if (f.has(Undimensioned) && f.units.%(_.region.glyph.onMap)./(_.region).distinct.num > 1 && f.units.%(_.region.glyph.onMap)./(_.region).%(f.affords(2)).any)
+        // Undimensioned must count the off-map Moon as a distinct region, else a
+        // BB unit split between one Map area and the Moon sees distinct-count = 1
+        // and the action is never offered though a valid Moon<->Map rearrange exists.
+        val undimRegions = f.units./(_.region).distinct.%(r => r.glyph.onMap || r == BB.moon)
+        if (f.has(Undimensioned) && undimRegions.num > 1 && undimRegions.%(f.affords(2)).any)
             + UndimensionedMainAction(f)
 
         if (f.has(Recriminations))
@@ -2999,6 +3013,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                 // Reset Gla'aki IGOO SBR tracking for the new turn
                 reachedZeroPowerFirst = None
+
+                // TB Behemoth: re-arm the 0-crossing latch for the new turn.
+                tbBehemothZeroLatched = false
 
                 // Faceless Blight (FBE): re-arm Changeling Adherents for this Gather.
                 fbeChangelingDoneThisGather = false
@@ -3375,7 +3392,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Round 8 Bug 40: also check facedown state for IGOO spellbooks
                 val brood = f.enemies.%(e => e.has(TheBrood) && !e.oncePerGame.has(TheBrood))
                 val yogDoomSuppressed = f.unitGate.exists(u => ElderThingMindControl.suppresses(u))
-                val gates = f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region))
+                val gates = f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region)) ++ (if (f == BB) $(BB.moon) else $)
                 val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
 
                 f.doom += valid.num
@@ -4215,6 +4232,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                 self.power = 0
             }
+
+            // TB Behemoth (§3.4.3): "WHENEVER your Power reaches 0, place a Segment
+            // from your pool onto the Mantle." This is a generic 0-crossing watcher,
+            // not a per-ability hook — TB's Power can reach 0 through any spend
+            // (declaring a battle, a Move, a Summon, an enemy effect), and the
+            // per-handler tbCheckBehemoth calls only cover TB's own abilities. That
+            // gap meant a second Segment was never placed when TB hit 0 by attacking.
+            // Checked after the negative-power clamps so a -1 -> 0 correction counts.
+            if (setup.has(TB))
+                TBExpansion.tbBehemothWatch()
 
             expansions.foreach(_.afterAction())
 

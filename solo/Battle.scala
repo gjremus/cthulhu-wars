@@ -779,6 +779,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
         val moonDest = (s == BB && arena != BB.moon).??($(BB.moon))
+        // Guide §2.6c: "The moon is adjacent to all regions." Pain-retreat FROM a
+        // Moon battle therefore expands destinations to every map area where the
+        // opponent has no unit (the Moon has no ordinary connectedForRetreat set).
+        val moonRetreatDests = (arena == BB.moon).??(areas.%(r => s.opponent.at(r).none))
         val mantleDest = arena.is[MantleHold].?? {
             val base = game.tbMantleAreas
             val tentacleAreas = (s == TB && TB.has(Subterrane)).??(TB.onMap(Tentacle)./(_.region).distinct)
@@ -801,7 +805,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         val allAreTwisters = hasTwisterRefugees && !hasNonTwisterRefugees
 
         // Full destination set includes Whirlwind areas if any Twister is retreating
-        val destinations = (standardDest ++ (hasTwisterRefugees.??(whirlwindDest)) ++ moonDest).distinct
+        val destinations = (standardDest ++ (hasTwisterRefugees.??(whirlwindDest)) ++ moonDest ++ moonRetreatDests).distinct
 
         val chooser : Faction = retreater(s)
 
@@ -923,20 +927,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Albino Penguins Laughingstock:
                 // Choice to involve penguins or not, then which penguins from which region
                 // Done exits entirely. Cancel goes back to main choice.
+                // Penguins may battle on the Moon. Only BB-owned Penguins are blocked
+                // from being SENT to the Moon (BB may not send any non-BB unit to the
+                // Moon, and here the loyalty-card owner is also the sender). Non-BB
+                // Penguins may be sent into a Moon battle freely.
                 factions.%(f => f.loyaltyCards.has(AlbinoPenguinsCard)).foreach { owner =>
-                    val penguinsElsewhere = owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region != arena)
-                    if (penguinsElsewhere.any) {
-                        return Ask(owner)
-                            .each(penguinsElsewhere)(u => LaughingstockMoveAction(owner, u.ref))
-                            .add(LaughingstockDoneAction(owner))
+                    if (arena == BB.moon && owner == BB) {
+                        log(BB.full, "Laughingstock".styled("nt"), "blocked: Bubastis-owned", AlbinoPenguins.styled(BB), "may not be sent to a battle on", BB.moon)
                     }
-                    // Penguins in arena but not yet assigned to a side (owner NOT in battle)
-                    if (!sides.has(owner)) {
-                        val unassigned = owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region == arena).%(u => !penguinOriginalOwner.contains(u.ref))
-                        if (unassigned.any) {
+                    else {
+                        val penguinsElsewhere = owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region != arena)
+                        if (penguinsElsewhere.any) {
                             return Ask(owner)
-                                .add(LaughingstockSideAction(owner, attacker))
-                                .add(LaughingstockSideAction(owner, defender))
+                                .each(penguinsElsewhere)(u => LaughingstockMoveAction(owner, u.ref))
+                                .add(LaughingstockDoneAction(owner))
+                        }
+                        // Penguins in arena but not yet assigned to a side (owner NOT in battle)
+                        if (!sides.has(owner)) {
+                            val unassigned = owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region == arena).%(u => !penguinOriginalOwner.contains(u.ref))
+                            if (unassigned.any) {
+                                return Ask(owner)
+                                    .add(LaughingstockSideAction(owner, attacker))
+                                    .add(LaughingstockSideAction(owner, defender))
+                            }
                         }
                     }
                 }
