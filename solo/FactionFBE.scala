@@ -17,11 +17,13 @@ import html._
 //    Storing the pip (not just the face) lets Shapestealing compare the literal pip
 //    value 1-6 to a Monster's Cost (§1.10 SB3) while Byagoona's Combat counts the
 //    Kill/Pain faces (§1.8).
-//  • Self Consuming death tally lives on game.fbeSelfConsumingDeaths : $[Boolean]
-//    (one entry per Unit of ANY faction that died this Action; the Boolean = "was
-//    FBE-controlled"). The 2+ Power trigger counts every Unit; the 3+ Doom bonus
-//    counts only FBE-controlled ones (§1.5.1). Pushed in FBEExpansion.eliminate
-//    (universal death hook), evaluated and cleared in FBEExpansion.afterAction.
+//  • Self Consuming death tally lives on game.fbeSelfConsumingDeaths : $[|[Faction]]
+//    (one entry per Unit of ANY faction that died this Action; the entry = the faction
+//    that CONTROLLED it). The 2+ Power trigger counts every Unit; the 3+ Doom bonus
+//    counts only Units controlled by the faction collecting the ability (§1.5.1) —
+//    that is FBE, or an enemy that copied Self Consuming via SL's Ancient Sorcery.
+//    Pushed in FBEExpansion.eliminate (universal death hook), evaluated and cleared
+//    in FBEExpansion.afterAction.
 //  • Ghasts are barred from any FBE game at SETUP (§1.6, creator-approved global
 //    Ghast ban — see Game.scala loyaltyCards init), so every "Monster" rule reads
 //    uniformly across Fungal Thralls and controlled Neutral Monsters with no
@@ -298,9 +300,12 @@ object FBEExpansion extends Expansion {
 
     // ── SELF CONSUMING death tally (§1.5.1 / §3.6) ───────────────────────────
     // Universal death hook: every Unit eliminated during the active Action (battle
-    // or otherwise), regardless of faction, is recorded. The Boolean records whether
-    // the dying Unit was FBE-controlled so the +1 Doom "controlled 3+" clause can be
-    // checked. Power triggers on 2+ Units of ANY faction; Doom needs 3+ FBE-controlled.
+    // or otherwise), regardless of faction, is recorded. The entry records WHICH
+    // faction controlled the dying Unit so the +1 Doom "you controlled at least
+    // three of them" clause can be checked per beneficiary (None = controller not
+    // tracked, counts for Power but for nobody's Doom clause).
+    // Power triggers on 2+ Units of ANY faction; Doom needs 3+ controlled by the
+    // faction collecting the ability.
     // Exception: High Priest sacrifices (Unspeakable Oath) are not part of Actions
     // and never count toward Self Consuming.
     // Fix: only record deaths when an action is actively resolving (fbeActionInProgress).
@@ -308,11 +313,11 @@ object FBEExpansion extends Expansion {
         if (!game.setup.has(FBE)) return
         if (game.fbeHPSacrificeInProgress) return
         if (!game.fbeActionInProgress) return
-        // FBE-controlled = owned by FBE OR currently Shapestolen (battle-scoped control):
-        // a Shapestolen Monster that dies in this Combat counts toward the 3+ Doom clause
+        // A Shapestolen Monster is FBE-controlled for this Combat (battle-scoped
+        // control), so if it dies here it counts toward FBE's 3+ Doom clause
         // (user requirement: killing the stolen unit works for Self Consuming doom).
-        val fbeControlled = u.faction == FBE || game.fbeShapestolen.contains(u.ref)
-        game.fbeSelfConsumingDeaths :+= fbeControlled
+        val controller = if (game.fbeShapestolen.contains(u.ref)) FBE else u.faction
+        game.fbeSelfConsumingDeaths :+= |(controller)
     }
 
     // ── SELF CONSUMING resolution (fires at end of every Action) (§3.6) ───────
@@ -320,13 +325,18 @@ object FBEExpansion extends Expansion {
         if (!game.setup.has(FBE)) return
         val deaths = game.fbeSelfConsumingDeaths
         // §1.5.1: 2+ Units (any faction) Killed/Eliminated in one Action → +1 Power;
-        // if FBE controlled at least 3 of those Units → also +1 Doom.
+        // if the collecting faction controlled at least 3 of those Units → also +1 Doom.
+        // 2026-07-27: award to EVERY faction that currently has Self Consuming, not
+        // just FBE — SL can copy it with Ancient Sorcery and must collect it too
+        // (reported in game 'Disaster for Lunacy': SL copied it and gained nothing).
         if (deaths.num >= 2) {
-            FBE.power += 1
-            FBE.log(SelfConsuming.styled(FBE) + ": 2+ Units died — gained", 1.power)
-            if (deaths.count(_ == true) >= 3) {
-                FBE.doom += 1
-                FBE.log(SelfConsuming.styled(FBE) + ": FBE controlled 3+ — also gained", 1.doom)
+            game.factions.%(_.has(SelfConsuming)).foreach { f =>
+                f.power += 1
+                f.log(SelfConsuming.styled(FBE) + ": 2+ Units died — gained", 1.power)
+                if (deaths.count(_ == |(f)) >= 3) {
+                    f.doom += 1
+                    f.log(SelfConsuming.styled(FBE) + ": controlled 3+ — also gained", 1.doom)
+                }
             }
         }
         game.fbeSelfConsumingDeaths = $
