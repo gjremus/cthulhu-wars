@@ -1220,17 +1220,16 @@ object Overlays {
             // moon image's dimensions once here — the same model the standard
             // map uses, with no normalize-then-stretch detour.
             val n = parsed.length
-            // Moon sizing: FLAT 14% of moon height for EVERY unit. This is the
-            // original, known-good sizing that shipped before Jun-19 commit
-            // a3cff0d changed sprites to be proportional to raw on-map height
-            // (onMapH * 14/70), which ballooned big units — a Bastet at 210px
-            // on-map hit 42% of the moon and spilled off the disc. The July "22%
-            // cap" band-aid still left large units ~1.5× oversize. Restoring the
-            // flat 14% every unit had before the regression: a Bastet renders the
-            // same height as an Earth Cat on the Moon, fitting cleanly inside the
-            // disc. The onMapH field is still parsed for backward payload compat
-            // but no longer scales the sprite.
-            def spriteHFor(onMapH : Double) : Double = 14.0
+            // Moon sizing: sprites are scaled PROPORTIONAL to their real on-map
+            // sprite height, anchored on the Earth Cat, so the Moon matches the
+            // board — a Bastet towers over an Earth Cat exactly as on the map.
+            // The Earth Cat (on-map height 70px) keeps its 14%-of-moon size; every
+            // other unit scales by the same 14/70 (=0.2) %-per-map-pixel factor:
+            //   EarthCat 70→14%  Mars 105→21%  Saturn 140→28%  Uranus 175→35%  Bastet 210→42%.
+            // This is the intended cat→Bastet scale (commit a3cff0d / port 59a4c50).
+            // Do NOT revert to a flat per-unit size — the owner wants the range.
+            val moonSpriteScale = 14.0 / 70.0
+            def spriteHFor(onMapH : Double) : Double = onMapH * moonSpriteScale
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
             val seed = parsed.length * 31 + parsed./({ case (s, _, _, _) => s }).mkString.hashCode
             val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
