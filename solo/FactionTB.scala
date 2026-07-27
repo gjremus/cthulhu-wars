@@ -1128,6 +1128,11 @@ object TBExpansion extends Expansion {
             // Gain 2 Power first (per the Spellbook Requirement)
             self.power += 2
             self.log(RemoveGatePlaceChthonianReq.text.styled(TB) + ": gained", 2.power)
+            // TB was benched when it ran out of power; the 2 Power just gained is
+            // spendable, so put TB back in the turn order (same as a High Priest
+            // sacrifice). TB has no Hibernate, but guard anyway for consistency.
+            if (self.hibernating.not)
+                self.active = true
             Force(TBRemoveGatePlaceChthonianPickGateAction(self, then))
 
         case TBRemoveGatePlaceChthonianPickGateAction(self, then) =>

@@ -3023,6 +3023,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             factions.foreach { f =>
                 val hibernate = f.power
+                // Only a faction that actually Hibernated kept its Power on purpose.
+                // Anything else carrying Power in is leftover, and must not be logged
+                // as "hibernate" (TB has no Hibernate and was being mislabelled).
+                val wasHibernating = f.hibernating
                 // Ghatanothoa IGOO: mummified cultists produce no Power during Gather Power
                 // Exclude mummified AND parasitized cultists from power calc
                 // Parasitized cultists generate power for their ORIGINAL faction, not insect owner
@@ -3077,7 +3081,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 f.power = hibernate + ownGates * 2 + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship + fbHPBonus + tbTentacleAreas + bbCats + bbHP
                 f.hibernating = false
 
-                val fromHibernate = (hibernate > 0).?(hibernate.styled("region") + " hibernate")
+                val fromHibernate = (hibernate > 0).?(hibernate.styled("region") + (wasHibernating.?(" hibernate").|(" carried over")))
                 val fromGates = (ownGates > 0).?((("2 x " + ownGates).styled("region") + " gate".s(ownGates)))
                 val fromAbandoned = (abandoned > 0).?(abandoned.styled("region") + " abandoned")
                 val fromCultist = (cultists > 0).?(cultists.styled("region") + " cultist".s(cultists))
