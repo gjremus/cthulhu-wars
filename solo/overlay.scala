@@ -331,17 +331,16 @@ object MoonPlacement {
             false
         }
 
-        def centerWeight(px : Double, py : Double) : Double = {
-            val dx = (px - cx) / maxR
-            val dy = (py - cy) / maxR
-            val dist = Math.sqrt(dx * dx + dy * dy)
-            val w = 1.0 - 0.6 * dist * dist
-            if (w < 0.1) 0.1 else w
-        }
-
         val innerPool = pool.filter { case (px, py) => !inTextZone(px, py) }
         val usePool = if (innerPool.nonEmpty) innerPool else pool
 
+        // Mitchell's best-candidate for maximal spread. Each new point is chosen
+        // to MAXIMISE its distance to the nearest already-placed point (pure
+        // farthest-point sampling). A previous version multiplied the score by a
+        // centre-weight that scored central candidates higher — which actively
+        // PULLED points toward the middle and worsened clustering. That bias is
+        // removed: we now spread as evenly as the candidate pool allows.
+        // Candidate tries raised 60 -> 150 for a tighter, more uniform spread.
         val startIdx = rng.nextInt(usePool.length)
         out += usePool(startIdx)
         var i = 1
@@ -349,7 +348,7 @@ object MoonPlacement {
             var best : (Double, Double) = usePool(rng.nextInt(usePool.length))
             var bestScore = -1.0
             var tries = 0
-            while (tries < 60) {
+            while (tries < 150) {
                 val cand = usePool(rng.nextInt(usePool.length))
                 var minD2 = Double.MaxValue
                 var k = 0
@@ -361,7 +360,7 @@ object MoonPlacement {
                     if (d2 < minD2) minD2 = d2
                     k += 1
                 }
-                val score = minD2 * centerWeight(cand._1, cand._2)
+                val score = minD2
                 if (score > bestScore) {
                     bestScore = score
                     best = cand
@@ -1235,7 +1234,31 @@ object Overlays {
             // That regression has been re-introduced repeatedly (d3e8a76, ad2ec5b)
             // and is WRONG: the owner wants the size range, not uniform sprites.
             val moonSpriteScale = 14.0 / 70.0
-            def spriteHFor(onMapH : Double) : Double = (onMapH * moonSpriteScale).min(42.0)
+            def baseSpriteHFor(onMapH : Double) : Double = (onMapH * moonSpriteScale).min(42.0)
+
+            // ANTI-OVERLAP AUTO-SHRINK (BBMoonSizing): when many units crowd the
+            // Moon their sprites overlap. Sum every sprite's box area (as a
+            // fraction of the visible disc) at default size; if the total exceeds
+            // the empirically-safe ratio (~0.65, above which some unit is likely
+            // >50% covered), shrink EVERY sprite by one uniform factor so the sum
+            // lands right at the safe ratio. aspect(w/h) per unit comes from the
+            // BB unit's on-map height (each BB unit class has a distinct onMapH:
+            // EarthCat 70, Mars 105, Saturn 140, Uranus 175, Bastet 210); any
+            // other faction's visiting unit uses the conservative default aspect.
+            def moonUnitClass(onMapH : Double) : UnitClass = onMapH.round.toInt match {
+                case 70  => EarthCat
+                case 105 => CatFromMars
+                case 140 => CatFromSaturn
+                case 175 => CatFromUranus
+                case 210 => Bastet
+                case _   => EarthCat   // aspect default handled below for non-matches
+            }
+            val sumAreaRatio = parsed.map { case (_, _, _, onMapH) =>
+                val hFrac = baseSpriteHFor(onMapH) / 100.0
+                BBMoonSizing.areaFraction(moonUnitClass(onMapH), hFrac)
+            }.sum
+            val moonShrink = BBMoonSizing.shrinkFactor(sumAreaRatio)
+            def spriteHFor(onMapH : Double) : Double = baseSpriteHFor(onMapH) * moonShrink
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
             val seed = parsed.length * 31 + parsed./({ case (s, _, _, _) => s }).mkString.hashCode
             val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
