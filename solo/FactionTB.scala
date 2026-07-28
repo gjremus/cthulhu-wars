@@ -528,12 +528,10 @@ object TBExpansion extends Expansion {
 
             // Thousand Writhing Maws: 2-Power double recruit/summon (§1.5.1 / §3.6.3)
             // Offered FIRST in the action menu (creator request 2026-06-19).
-            // Units eligible: any unit type with cost <= 2 and at least 2 in pool.
-            if (f.power >= 2) {
-                val eligibleTypes = f.allUnits.distinct.%(uc => uc.cost > 0 && uc.cost <= 2 && uc.utype != GOO && f.pool(uc).num >= 2)
-                if (eligibleTypes.any)
-                    + TBWrithingMawsMainAction(f)
-            }
+            // Eligible types come from the pool, so loyalty-card Neutrals count
+            // (see tbMawsEligibleTypes).
+            if (f.power >= 2 && tbMawsEligibleTypes(f).any)
+                + TBWrithingMawsMainAction(f)
 
             game.moves(f)
             game.captures(f)
@@ -614,7 +612,7 @@ object TBExpansion extends Expansion {
         // ====================================================================
         case TBWrithingMawsMainAction(self) =>
             implicit val asking = Asking(self)
-            self.allUnits.distinct.%(uc => uc.cost > 0 && uc.cost <= 2 && uc.utype != GOO && self.pool(uc).num >= 2).foreach { uc =>
+            tbMawsEligibleTypes(self).foreach { uc =>
                 + TBWrithingMawsTypeAction(self, uc)
             }
             + CancelAction
@@ -1230,6 +1228,31 @@ object TBExpansion extends Expansion {
         // ====================================================================
         case _ => UnknownContinue
     }
+
+    // -- HELPER: Thousand Writhing Maws eligible unit types (§1.5.1 / §3.6.3) --
+    // The creator's revised wording is "up to 2-Cost", and the eligible list is
+    // "every up-to-2-cost type the faction can currently access from its POOL,
+    // INCLUDING a Neutral Unit it holds the loyalty card of".
+    //
+    // This reads the faction's actual pool contents rather than its printed
+    // roster: Neutral Units bought with a loyalty card are added to the faction's
+    // units at reserve when the card is taken, so they are in the pool but were
+    // never on the roster. Reading the roster meant they could never be offered.
+    // Same source the standard Summon menu uses (Game.scala summons).
+    //
+    // canBeRecruited / canBeSummoned decide whether a type is legally placeable
+    // by this route at all, which is also what keeps the four special-placement
+    // Neutrals out on their own terms: the Moonbeast and the Dimensional Shambler
+    // set canBeSummoned false (they enter play only by their own card routes), and
+    // the Servitor (handed to another faction) and the Insects/Hound (their own
+    // placement rules) are 1-cost/4-cost or likewise gated, so nothing here has to
+    // invent a placement rule the cards don't give.
+    def tbMawsEligibleTypes(f : Faction)(implicit game : Game) : $[UnitClass] =
+        f.pool.sortP./(_.uclass).distinct.%(uc =>
+            uc.cost > 0 && uc.cost <= 2 && uc.utype != GOO &&
+            (if (uc.utype == Cultist) uc.canBeRecruited(f) else uc.canBeSummoned(f)) &&
+            f.pool(uc).num >= 2
+        )
 
     // -- HELPER: Behemoth Segment-on-zero-Power (§3.4.3) ----------------------
     // Called after every TB Power debit. If Power == 0 and Head has ever been
