@@ -1046,8 +1046,12 @@
 
         <img class="asset" id="info:cc-acolyte" src="webp/info/cc-acolyte.svg" />
         <img class="asset" id="info:cc-background" src="webp/info/cc-background.webp" />
-        <img class="asset" id="info:dc-background" src="webp/info/dc-background.webp" />
-        <img class="asset" id="dc-background" src="webp/images/dc-background.webp" />
+        <!-- [2026-07-27] Daemon Sultan background preloads REMOVED. DS/Daemon Sultan
+             does not exist in the Library build (no FactionDC, not in Serialize.factions),
+             and the two webp files were never shipped here - so these two <img> tags
+             fired a 404 pair on EVERY Library game load. Added 2026-06-09 by copy-paste
+             from a later build. MNU/TT/BB correctly have no such lines; only Homebrew,
+             which actually has the faction, ships the assets. Do NOT re-add to Library. -->
         <img class="asset" id="info:cc-flying-polyp" src="webp/info/cc-flying-polyp.svg" />
         <img class="asset" id="info:cc-hunting-horror" src="webp/info/cc-hunting-horror.svg" />
         <img class="asset" id="info:cc-nightgaunt" src="webp/info/cc-nightgaunt.svg" />
