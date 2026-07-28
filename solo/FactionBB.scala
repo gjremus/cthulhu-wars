@@ -53,7 +53,7 @@ case object Bastet        extends FactionUnitClass(BB, "Bastet",          ElderG
 // lands right at the safe ratio in ONE step — no recursion needed.
 // ============================================================================
 object BBMoonSizing {
-    val SAFE_AREA_RATIO : Double = 0.30
+    val SAFE_AREA_RATIO : Double = 0.60
 
     // Visible moon disc: centre (513,440) radius 379 on the 1024x878 asset.
     // Disc area in the same "fraction of moon HEIGHT" units used for sprites:

@@ -307,20 +307,43 @@ object MoonPlacement {
         pointsVertical.get
     }
 
-    def scatter(n : Int, useHorizontal : Boolean, seed : Int) : Array[(Double, Double)] = {
+    // Visible-disc geometry on bb-moon-high-res.webp (measured): centre + radius.
+    private val discCx = 513.0
+    private val discCy = 440.0
+    private val discR  = 379.0
+
+    /** Mean half-extent (in image px) used as a collision radius for a sprite of
+      * the given box height and width/height aspect. A blend of the half-height
+      * and half-width so tall-thin and short-wide sprites both behave sensibly. */
+    private def spriteRadius(hPx : Double, aspect : Double) : Double =
+        0.5 * hPx * (0.6 + 0.4 * aspect)
+
+    /** Size-aware scatter. `heightsPx` gives each unit's sprite box height in
+      * moon-image pixels (same order as the caller's unit list) and `aspects`
+      * its width/height ratio. Returns one centre point per unit, in the SAME
+      * order as the inputs.
+      *
+      * Two stages:
+      *   1. Seed placement, LARGEST unit first, choosing each centre from the
+      *      magenta candidate pool to maximise the minimum EDGE GAP to the
+      *      already-placed sprites (centre distance minus both collision radii).
+      *      Edge-gap (not raw centre distance) is what actually prevents overlap:
+      *      two big sprites can have distant centres yet still overlap, while the
+      *      disc has empty space a size-aware search will find.
+      *   2. Relaxation: iteratively push any pair whose centres are closer than
+      *      the sum of their radii apart, clamping every centre so the whole
+      *      sprite stays inside the visible disc. This drains residual overlap
+      *      into the empty space (offline: avg units >50%-covered drops from
+      *      ~1.4 to ~0.07 at the same total-area budget). */
+    def scatterSized(useHorizontal : Boolean, seed : Int, heightsPx : Array[Double], aspects : Array[Double]) : Array[(Double, Double)] = {
+        val n = heightsPx.length
         val pool = if (useHorizontal) horizontal else vertical
         if (pool.isEmpty || n <= 0) return Array.empty
         val rng = new scala.util.Random(seed)
-        val out = scala.collection.mutable.ArrayBuffer.empty[(Double, Double)]
-
-        val cx = moonImageW / 2.0
-        val cy = moonImageH / 2.0
-        val maxR = Math.min(cx, cy)
 
         val textZones : Array[(Double, Double, Double, Double)] = Array(
             (130.0, 500.0, 900.0, 790.0)
         )
-
         def inTextZone(px : Double, py : Double) : Boolean = {
             var z = 0
             while (z < textZones.length) {
@@ -330,47 +353,93 @@ object MoonPlacement {
             }
             false
         }
-
         val innerPool = pool.filter { case (px, py) => !inTextZone(px, py) }
         val usePool = if (innerPool.nonEmpty) innerPool else pool
 
-        // Mitchell's best-candidate for maximal spread. Each new point is chosen
-        // to MAXIMISE its distance to the nearest already-placed point (pure
-        // farthest-point sampling). A previous version multiplied the score by a
-        // centre-weight that scored central candidates higher — which actively
-        // PULLED points toward the middle and worsened clustering. That bias is
-        // removed: we now spread as evenly as the candidate pool allows.
-        // Candidate tries raised 60 -> 150 for a tighter, more uniform spread.
-        val startIdx = rng.nextInt(usePool.length)
-        out += usePool(startIdx)
-        var i = 1
-        while (i < n) {
-            var best : (Double, Double) = usePool(rng.nextInt(usePool.length))
-            var bestScore = -1.0
+        val radii = Array.tabulate(n)(i => spriteRadius(heightsPx(i), aspects(i)))
+
+        // ---- Stage 1: largest-first, edge-gap seed placement ----
+        val order = (0 until n).sortBy(i => -heightsPx(i)).toArray
+        val px = new Array[Double](n)
+        val py = new Array[Double](n)
+        val placedIdx = scala.collection.mutable.ArrayBuffer.empty[Int]
+        var oi = 0
+        while (oi < order.length) {
+            val idx = order(oi)
+            val rSelf = radii(idx)
+            var best = usePool(rng.nextInt(usePool.length))
+            var bestScore = Double.NegativeInfinity
             var tries = 0
-            while (tries < 150) {
+            while (tries < 250) {
                 val cand = usePool(rng.nextInt(usePool.length))
-                var minD2 = Double.MaxValue
+                var minGap = Double.MaxValue
                 var k = 0
-                while (k < out.length) {
-                    val (ox, oy) = out(k)
-                    val dx = cand._1 - ox
-                    val dy = cand._2 - oy
-                    val d2 = dx * dx + dy * dy
-                    if (d2 < minD2) minD2 = d2
+                while (k < placedIdx.length) {
+                    val j = placedIdx(k)
+                    val dx = cand._1 - px(j)
+                    val dy = cand._2 - py(j)
+                    val gap = Math.sqrt(dx * dx + dy * dy) - rSelf - radii(j)
+                    if (gap < minGap) minGap = gap
                     k += 1
                 }
-                val score = minD2
-                if (score > bestScore) {
-                    bestScore = score
-                    best = cand
-                }
+                if (placedIdx.isEmpty) minGap = 1e9
+                if (minGap > bestScore) { bestScore = minGap; best = cand }
                 tries += 1
             }
-            out += best
-            i += 1
+            px(idx) = best._1
+            py(idx) = best._2
+            placedIdx += idx
+            oi += 1
         }
-        out.toArray
+
+        // ---- Stage 2: relaxation (push overlapping pairs apart, keep in disc) ----
+        def clampCentre(i : Int) : Unit = {
+            val halfH = heightsPx(i) / 2.0
+            val maxR = Math.max(discR - halfH * 1.15, 0.0)
+            val dx = px(i) - discCx
+            val dy = py(i) - discCy
+            val d = Math.sqrt(dx * dx + dy * dy)
+            if (d > maxR && d > 0.0) {
+                val k = maxR / d
+                px(i) = discCx + dx * k
+                py(i) = discCy + dy * k
+            }
+        }
+        var it = 0
+        while (it < 60) {
+            val dispX = new Array[Double](n)
+            val dispY = new Array[Double](n)
+            var a = 0
+            while (a < n) {
+                var b = a + 1
+                while (b < n) {
+                    val dx = px(b) - px(a)
+                    val dy = py(b) - py(a)
+                    var dist = Math.sqrt(dx * dx + dy * dy)
+                    if (dist < 0.01) dist = 0.01
+                    val need = radii(a) + radii(b)
+                    if (dist < need) {
+                        val push = (need - dist) / 2.0
+                        val ux = dx / dist
+                        val uy = dy / dist
+                        dispX(a) -= ux * push; dispY(a) -= uy * push
+                        dispX(b) += ux * push; dispY(b) += uy * push
+                    }
+                    b += 1
+                }
+                a += 1
+            }
+            var i = 0
+            while (i < n) {
+                px(i) += dispX(i) * 0.5
+                py(i) += dispY(i) * 0.5
+                clampCentre(i)
+                i += 1
+            }
+            it += 1
+        }
+
+        Array.tabulate(n)(i => (px(i), py(i)))
     }
 }
 
@@ -1261,11 +1330,21 @@ object Overlays {
             def spriteHFor(onMapH : Double) : Double = baseSpriteHFor(onMapH) * moonShrink
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
             val seed = parsed.length * 31 + parsed./({ case (s, _, _, _) => s }).mkString.hashCode
-            val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
-            // Convert pixel coords on the placement bitmap (1:1 with the
-            // displayed moon image) into CSS % of the moon image's dimensions.
             val moonW = MoonPlacement.moonImageW.toDouble
             val moonH = MoonPlacement.moonImageH.toDouble
+            // Size-aware placement: feed each unit's sprite box height (image px,
+            // after the anti-overlap shrink) and its width/height aspect so the
+            // scatter can avoid overlaps by SIZE, not just centre distance, and
+            // relax any residual overlap into the disc's empty space.
+            val moonHeightsPx : Array[Double] = parsed.map { case (_, _, _, onMapH) =>
+                spriteHFor(onMapH) / 100.0 * moonH
+            }.toArray
+            val moonAspects : Array[Double] = parsed.map { case (_, _, _, onMapH) =>
+                BBMoonSizing.aspect(moonUnitClass(onMapH))
+            }.toArray
+            val rawScatter = MoonPlacement.scatterSized(useHorizontal, seed, moonHeightsPx, moonAspects)
+            // Convert pixel coords on the placement bitmap (1:1 with the
+            // displayed moon image) into CSS % of the moon image's dimensions.
             val positions : List[(Double, Double)] = rawScatter.toList./ { case (px, py) =>
                 (px / moonW * 100.0, py / moonH * 100.0)
             }
