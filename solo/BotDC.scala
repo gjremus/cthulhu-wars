@@ -12,6 +12,25 @@ class GameEvaluationDC(implicit game : Game) extends GameEvaluation(DC)(game) {
             def |=> (e : (Int, String)) { if (bool) result +:= Evaluation(e._1, e._2) }
         }
 
+        // ── Sin ceiling awareness (guide Task 3.6.3, 2026-07-27) ─────────────
+        // Sin is capped at game.dcSinCap (= 2 × Ritual Marker, §1.5.2). Every
+        // grant routes through game.grantDCSin, which silently drops the
+        // overflow. The bot had no notion of the cap anywhere, so it valued Sin
+        // it could not actually receive. headroom is the Sin still bankable.
+        val sinHeadroom = math.max(0, game.dcSinCap - game.dcSin)
+        val sinAtCap    = sinHeadroom == 0
+
+        // ── Reachability note (guide Task 3.6.3, 2026-07-27) ─────────────────
+        // Explode.explode drops every Soft action from the bot's candidate list
+        // and keeps only what the Soft menus expand INTO. DC's five ability
+        // buttons (Tenebrosum / Satiate / Lure / Pilgrimage / Dark Bargain) are
+        // all Soft, so scoring them alone never reached the picker and the
+        // reachable confirm/pick steps fell into the -1000 "unknown" catch-all
+        // — a bot DC never used any of its abilities. The Soft scores below are
+        // kept (harmless, and they document intent) and each reachable step is
+        // now scored to match, mirroring how BotTB scores both halves of the
+        // Thousand Writhing Maws chain.
+
         result ++= fbPromptedEvals(a)
 
         a.unwrap match {
@@ -68,11 +87,30 @@ class GameEvaluationDC(implicit game : Game) extends GameEvaluation(DC)(game) {
                 case DCSatiateMainAction(f) =>
                     self.power >= 2                     |=> 1100 -> "use satiate"
 
+                // Reachable step behind the Soft Satiate button. Satiate eats a
+                // Cultist in Y'Golonac's area and pays Elder Signs, so it stays
+                // worth doing even with Sin at the ceiling.
+                case DCSatiateConfirmAction(f) =>
+                    self.power >= 2                     |=> 1100 -> "commit satiate"
+
                 case DCLureMainAction(f) =>
                     self.power >= 1                     |=> 900  -> "use lure"
 
+                case DCLureConfirmAction(f) =>
+                    self.power >= 1                     |=> 900  -> "commit lure"
+
                 case DCPilgrimageMainAction(f) =>
                     self.power >= 1                     |=> 700  -> "use pilgrimage"
+
+                // Prophet pick / destination pick behind the Soft Pilgrimage
+                // button. Prefer a destination that gains ground.
+                case DCPilgrimageProphetAction(_, _) =>
+                    true                                |=> 700  -> "pick pilgrimage prophet"
+
+                case DCPilgrimageDestAction(_, _, dest) =>
+                    dest.freeGate                       |=> 900  -> "pilgrimage to free gate"
+                    dest.ownGate                        |=> 500  -> "pilgrimage to own gate"
+                    !dest.freeGate && !dest.ownGate     |=> 300  -> "pilgrimage destination"
 
                 case DCPilgrimageUnitMoveAction(_, _, _, _, _) =>
                     true                               |=> 800  -> "move unit via pilgrimage"
@@ -83,8 +121,36 @@ class GameEvaluationDC(implicit game : Game) extends GameEvaluation(DC)(game) {
                 case DCDarkBargainMainAction(f) =>
                     true                                |=> 600  -> "use dark bargain"
 
+                // Dark Bargain costs 0 Power and hands enemies Power equal to
+                // the face DC takes, so with Sin at the ceiling it is pure
+                // downside — DC gains nothing and every enemy gets paid.
+                case DCDarkBargainConfirmAction(f) =>
+                    !sinAtCap                           |=> 600  -> "commit dark bargain"
+                    sinAtCap                            |=> -2000 -> "dark bargain would only feed enemies (Sin at cap)"
+
+                // Sin above the ceiling is discarded, so a face larger than the
+                // remaining headroom still hands out its full Power to enemies
+                // while DC banks only the headroom. Value the Sin actually
+                // received, and penalise the wasted overflow.
                 case DCDarkBargainChooseSinAction(f, face) =>
-                    (face > 0)                          |=> face * 200 -> "dark bargain sin value"
+                    val dbGain  = math.min(face, sinHeadroom)
+                    val dbWaste = face - dbGain
+                    (dbGain > 0)                        |=> dbGain * 200 -> "dark bargain sin value"
+                    (dbWaste > 0)                       |=> dbWaste * -150 -> "dark bargain sin over cap is lost"
+
+                // ── Tenebrosum (spend Sin to repeat the last action) ──────────
+                // Was entirely unscored, so it landed in the -1000 "unknown"
+                // catch-all and a bot DC never spent Sin on a repeat — its
+                // signature ability went unused. Spending banked Sin is what Sin
+                // is FOR, and spending it also frees headroom under the ceiling,
+                // so this is scored generously when Sin is plentiful.
+                case DCTenebrosumMainAction(f, cost, _) =>
+                    game.dcSin >= cost                  |=> 1000 -> "repeat action with Tenebrosum"
+                    sinAtCap                            |=> 400  -> "spend Sin sitting at the cap"
+
+                case DCTenebrosumRepeatAction(f, cost, _) =>
+                    game.dcSin >= cost                  |=> 1000 -> "commit Tenebrosum repeat"
+                    sinAtCap                            |=> 400  -> "spend Sin sitting at the cap"
 
                 case DCProselytizeReqOptInAction(f) =>
                     self.needs(ProselytizeReq)          |=> 1500 -> "take Proselytize for SBR"
