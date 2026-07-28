@@ -1246,6 +1246,43 @@ object Overlays {
             val positions : List[(Double, Double)] = rawScatter.toList./ { case (px, py) =>
                 (px / moonW * 100.0, py / moonH * 100.0)
             }
+            // The scatter only guarantees the sprite's CENTRE POINT lands on the
+            // disc. Each sprite is then drawn centred on that point (translate
+            // -50%,-50%), so a TALL unit whose centre sits near the rim still
+            // hangs off the edge — a Cat from Uranus at 35% of the moon height
+            // centred near the rim overhung the disc by ~26% of the radius.
+            // That is the owner's original "spilling off the moon" complaint and
+            // it survived the sizing fix, because it is a POSITION bug, not a
+            // size bug. Pull each centre straight back toward the disc centre
+            // until the whole sprite box fits inside the visible disc. Sizing is
+            // deliberately NOT touched here — the proportional cat→Bastet range
+            // is owner-mandated (see spriteHFor above); only the centre moves.
+            // Kept identical to BB.
+            def clampToDisc(xPct : Double, yPct : Double, spriteHPct : Double) : (Double, Double) = {
+                // Visible disc on bb-moon-high-res.webp, MEASURED off the asset
+                // (opaque-pixel bounding box on the 1024x878 image, 2026-07-27):
+                // bbox x 134..892, y 60..820 -> centre (513, 440), radius 379.
+                // An earlier draft of this used radius 391, which is 12px larger
+                // than the disc really is and would have let tall sprites still
+                // overhang the rim slightly. Use the measured figure.
+                val dcx = 513.0; val dcy = 440.0; val dr = 379.0
+                val xPx = xPct / 100.0 * moonW
+                val yPx = yPct / 100.0 * moonH
+                // Sprite box half-height in image px. Width is auto; these figures
+                // are never much wider than tall, so a 1.15 factor covers the
+                // corner reach without shoving small sprites needlessly inward.
+                val halfH = spriteHPct / 100.0 * moonH / 2.0
+                val inset = halfH * 1.15
+                val maxR  = Math.max(dr - inset, 0.0)
+                val dx = xPx - dcx
+                val dy = yPx - dcy
+                val dist = Math.sqrt(dx * dx + dy * dy)
+                if (dist <= maxR || dist == 0.0) (xPct, yPct)
+                else {
+                    val k = maxR / dist
+                    ((dcx + dx * k) / moonW * 100.0, (dcy + dy * k) / moonH * 100.0)
+                }
+            }
             // Each sprite's height is sized in ABSOLUTE PIXELS via a CSS variable
             // (--moon-h) that the moon <img> writes on load/resize (see onload
             // handler below). We deliberately do NOT use height: N% here: on mobile
@@ -1254,8 +1291,11 @@ object Overlays {
             // (huge) pixel size — the "enormous on mobile" bug. calc(var(--moon-h)
             // * fraction) is a definite length on every engine and cannot collapse.
             // Fallback 60vh only applies if the var is somehow unset.
-            val unitFigures = parsed.zip(positions)./({ case ((src, display, hp, onMapH), (xPct, yPct)) =>
-                val frac = spriteHFor(onMapH) / 100.0    // fraction of the moon height
+            val unitFigures = parsed.zip(positions)./({ case ((src, display, hp, onMapH), (rawXPct, rawYPct)) =>
+                val spriteHPct = spriteHFor(onMapH)
+                val frac = spriteHPct / 100.0            // fraction of the moon height
+                // Keep the whole sprite inside the disc (see clampToDisc above).
+                val (xPct, yPct) = clampToDisc(rawXPct, rawYPct, spriteHPct)
                 val hpOverlay = hp match {
                     case "killed" => s"""<img src="${imageSource("kill")}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;" />"""
                     case "pained" => s"""<img src="${imageSource("pain")}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;" />"""
