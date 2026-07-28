@@ -2531,7 +2531,8 @@ object CthulhuWarsSolo {
                     val bottom = (cr.bottom - bRect.top) * vpy
                     // Row3 @@@ 2026-07-26: library hint card top positioned just below ritual circle bottom,
                     // horizontally centered on ritual circle center, forming straight vertical stack down left side.
-                    // Increased gap to 30px for proper visual spacing per owner specification.
+                    // Gap is 5px (reduced from an earlier 30px) per owner feedback that the icons
+                    // were still way too high. Matches all five builds; do not "restore" 30px.
                     (cx, bottom + 5.0 * vpy)
                 } else {
                     // Fallback if the circle element is not present yet
