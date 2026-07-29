@@ -4175,16 +4175,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             CheckSpellbooksAction(MainAction(f))
 
         case MainAction(f) if f.active.not =>
+            // An out-of-Power faction takes no turn and gets NO prompt — it is
+            // auto-skipped. (DC/SL previously lingered here when they had Sin but
+            // no Power, showing a manual "Skip" prompt; a faction with 0 Power is
+            // inactive regardless of Sin, so advance immediately with no Ask.)
             implicit val asking = Asking(f)
-
-            if (f.name.contains("Firstborn"))
-                println(s"[FB-TRACE] round=$round SKIP offered: power=${f.power} hibernating=${f.hibernating} active=${f.active} acted=${f.acted}")
-
             game.reveals(f)
-
-            + NextPlayerAction(f).as("Skip")
-
-            asking
+            Force(NextPlayerAction(f))
 
         case MainAction(f) if f.acted =>
             implicit val asking = Asking(f)
