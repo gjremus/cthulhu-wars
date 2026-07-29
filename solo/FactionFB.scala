@@ -1127,7 +1127,7 @@ object FBExpansion extends Expansion {
             } else {
                 // Sort by region name, then by unit cost descending
                 // Mind Parasite: parasitized cultists cannot be Writhe-eliminated
-                val units = self.units.%(u => u.region.onMap && u.uclass != Crater && u.uclass != MindParasiteCultist && !game.fbWritheUsedUnits.has(u.ref))
+                val units = self.units.%(u => (u.region.onMap || u.region == BB.moon) && u.uclass != Crater && u.uclass != MindParasiteCultist && !game.fbWritheUsedUnits.has(u.ref))
                     .sortBy(u => (u.region.toString, -u.uclass.cost))
                 if (units.none)
                     EndAction(self)

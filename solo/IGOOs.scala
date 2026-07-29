@@ -1408,7 +1408,7 @@ object IGOOsExpansion extends Expansion {
                 // [2026-05-23] Doom that Came to Sarnath: only ON-MAP units are eligible.
                 // Elimination moves a unit out-of-play into the pool, so pool / slumber /
                 // sorcery / deep units (region.onMap == false) cannot be targeted.
-                val units = self.units.%(u => u.region.onMap && (u.uclass.utype == Monster || u.uclass.utype == Cultist))
+                val units = self.units.%(u => (u.region.onMap || u.region == BB.moon) && (u.uclass.utype == Monster || u.uclass.utype == Cultist))
                 val regionSorted = units.sortBy(u => u.region.name)
                 Ask(target).each(regionSorted)(u => DoomSarnathEliminateUnit(target, self, u.ref, then))
             } else {
