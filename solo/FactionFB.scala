@@ -1060,7 +1060,7 @@ object FBExpansion extends Expansion {
             } else {
                 // Sort by region name, then by unit cost descending
                 // Mind Parasite: parasitized cultists cannot be Writhe-eliminated
-                val units = self.units.%(u => u.region.onMap && u.uclass != Crater && u.uclass != MindParasiteCultist && !game.fbWritheUsedUnits.has(u.ref))
+                val units = self.units.%(u => (u.region.onMap || u.region == BB.moon) && u.uclass != Crater && u.uclass != MindParasiteCultist && !game.fbWritheUsedUnits.has(u.ref))
                     .sortBy(u => (u.region.toString, -u.uclass.cost))
                 if (units.none)
                     EndAction(self)
@@ -1100,7 +1100,7 @@ object FBExpansion extends Expansion {
                 EndAction(self)
             else {
                 // Sort by region name, then by unit cost descending
-                val units = self.units.%(u => u.region.onMap && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref))
+                val units = self.units.%(u => (u.region.onMap || u.region == BB.moon) && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref))
                     .sortBy(u => (u.region.toString, -u.uclass.cost))
                 if (units.none)
                     EndAction(self)
@@ -1123,7 +1123,7 @@ object FBExpansion extends Expansion {
                 Force(FBWritheMoveAllAction(self, newChosen))
             } else {
                 // Sort by region name, then by unit cost descending
-                val units = self.units.%(u => u.region.onMap && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref) && !newChosen.has(u.ref))
+                val units = self.units.%(u => (u.region.onMap || u.region == BB.moon) && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref) && !newChosen.has(u.ref))
                     .sortBy(u => (u.region.toString, -u.uclass.cost))
                 if (units.none) {
                     // No more units to choose, move with what we have

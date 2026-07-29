@@ -363,8 +363,11 @@ object FBEExpansion extends Expansion {
     // Monster on the map. Ghasts cannot appear (barred at setup, §1.6).
     def controlledMonsters(r : Region)(implicit game : Game) : $[UnitFigure] =
         FBE.at(r).%(u => u.uclass.utype == Monster)
+    // "In play" for FBE ability purposes includes the Moon (off-map FactionRegion):
+    // Overlord of Death, Succor, Byagoona awaken etc. target/eliminate units, which
+    // is allowed on the Moon. onMap alone excludes the Moon, so add BB.moon.
     def controlledMonstersAnywhere(implicit game : Game) : $[UnitFigure] =
-        FBE.units.%(u => u.region.onMap && u.uclass.utype == Monster)
+        FBE.units.%(u => (u.region.onMap || u.region == BB.moon) && u.uclass.utype == Monster)
 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) = action @@ {
 
@@ -430,8 +433,9 @@ object FBEExpansion extends Expansion {
 
             game.hires(f)
 
-            // Succor — offer once per Doom phase if acquired and FBE has any unit.
-            if (f.can(Succor) && f.units.%(_.region.onMap).any && !f.oncePerAction.has(Succor))
+            // Succor — offer once per Doom phase if acquired and FBE has any unit
+            // (Moon units count — Succor eliminates units, allowed on the Moon).
+            if (f.can(Succor) && f.units.%(u => u.region.onMap || u.region == BB.moon).any && !f.oncePerAction.has(Succor))
                 + SuccorMainAction(f)
 
             // USER-2026-07-22: Overlord of Death discount usable in the Doom Phase to
@@ -496,7 +500,8 @@ object FBEExpansion extends Expansion {
                 + ByagoonaAwakenMainAction(f)
 
             // Necromantic Spores requirement — Eliminate Two Fungal Thralls (§3.12.2).
-            if (f.needs(NecromanticSporesReq) && f.onMap(FungalThrall).num >= 2)
+            // Thralls on the Moon count (eliminating units on the Moon is allowed).
+            if (f.needs(NecromanticSporesReq) && f.units.%(u => u.uclass == FungalThrall && (u.region.onMap || u.region == BB.moon)).num >= 2)
                 + EliminateTwoFungalThrallsMainAction(f)
 
             game.neutralSpellbooks(f)
@@ -678,9 +683,9 @@ object FBEExpansion extends Expansion {
         // each from any area to any adjacent area (independent, not a carry).
         case MovedAction(self : FBE.type, u, from, to)
             if game.unit(u).uclass == Byagoona && self.can(AnimatedRush) && game.fbeCardDice.nonEmpty
-               && self.units.%(_.region.onMap).%(_.uclass != Byagoona).any =>
+               && self.units.%(u => u.region.onMap || u.region == BB.moon).%(_.uclass != Byagoona).any =>
             implicit val asking = Asking(self)
-            val maxK = math.min(game.fbeCardDice.num, self.units.%(_.region.onMap).%(_.uclass != Byagoona).num / 2)
+            val maxK = math.min(game.fbeCardDice.num, self.units.%(u => u.region.onMap || u.region == BB.moon).%(_.uclass != Byagoona).num / 2)
             (1 to maxK).foreach(k => + AnimatedRushMainAction(self, from, to, k))
             + AnimatedRushSkipAction(self)
             asking
@@ -721,7 +726,7 @@ object FBEExpansion extends Expansion {
             if (movesLeft <= 0)
                 Force(MoveContinueAction(self, true))
             else {
-                val eligible = self.units.%(_.region.onMap).%(_.uclass != Byagoona).%(u => !moved.has(u.ref)).%(u => game.board.connected(u.region).%(d => self.affords(0)(d)).any)
+                val eligible = self.units.%(u => u.region.onMap || u.region == BB.moon).%(_.uclass != Byagoona).%(u => !moved.has(u.ref)).%(u => (if (u.region == BB.moon) areas else game.board.connected(u.region)).%(d => self.affords(0)(d)).any)
                 if (eligible.none) {
                     // No units can move — auto-cancel: refund dice and undo moves.
                     game.fbeCardDice = game.fbeCardDice ++ discardedDice
@@ -747,7 +752,11 @@ object FBEExpansion extends Expansion {
         case AnimatedRushDestPickAction(self, unitRef, movesLeft, moved, discardedDice, originalPositions, rushSource, rushDest) =>
             implicit val asking = Asking(self)
             val u = game.unit(unitRef)
-            game.board.connected(u.region).%(dest => self.affords(0)(dest)).foreach { dest =>
+            // A unit on the Moon may move OFF to any Area (the Moon is adjacent to
+            // all regions), mirroring normal movement. Nothing moves TO the Moon via
+            // Animated Rush (board.connected never yields BB.moon).
+            val rushDests = if (u.region == BB.moon) areas else game.board.connected(u.region)
+            rushDests.%(dest => self.affords(0)(dest)).foreach { dest =>
                 + AnimatedRushMoveAction(self, unitRef, dest, movesLeft, moved, discardedDice, originalPositions, rushSource, rushDest)
                     .as(dest + self.iced(dest))
             }
@@ -780,7 +789,7 @@ object FBEExpansion extends Expansion {
             self.log("Animated Rush".styled(FBE) + ": cancelled — dice refunded")
             // Re-present the Animated Rush prompt (choose dice or skip).
             implicit val asking = Asking(self)
-            val maxK = math.min(game.fbeCardDice.num, self.units.%(_.region.onMap).%(_.uclass != Byagoona).num / 2)
+            val maxK = math.min(game.fbeCardDice.num, self.units.%(u => u.region.onMap || u.region == BB.moon).%(_.uclass != Byagoona).num / 2)
             (1 to maxK).foreach(k => + AnimatedRushMainAction(self, rushSource, rushDest, k))
             + AnimatedRushSkipAction(self)
             asking
@@ -805,7 +814,8 @@ object FBEExpansion extends Expansion {
 
         // ── SUCCOR (§1.10 SB5 / §3.10.5) ─────────────────────────────────────
         case SuccorMainAction(self) =>
-            Force(SuccorPickAction(self, $, self.units.%(_.region.onMap)./(_.ref)))
+            // Succor eliminates your own units (to gain Doom) — Moon units are eligible.
+            Force(SuccorPickAction(self, $, self.units.%(u => u.region.onMap || u.region == BB.moon)./(_.ref)))
 
         case SuccorSkipAction(self) =>
             UnknownContinue
@@ -929,7 +939,7 @@ object FBEExpansion extends Expansion {
 
         // ── NECROMANTIC SPORES REQUIREMENT (§3.12.2) ─────────────────────────
         case EliminateTwoFungalThrallsMainAction(self) =>
-            Force(EliminateTwoFungalThrallsPickAction(self, $, self.onMap(FungalThrall)./(_.ref)))
+            Force(EliminateTwoFungalThrallsPickAction(self, $, self.units.%(u => u.uclass == FungalThrall && (u.region.onMap || u.region == BB.moon))./(_.ref)))
 
         case EliminateTwoFungalThrallsPickAction(self, picked, remaining) =>
             implicit val asking = Asking(self)

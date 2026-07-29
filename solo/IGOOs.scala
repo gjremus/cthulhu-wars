@@ -1461,10 +1461,11 @@ object IGOOsExpansion extends Expansion {
 
         case DoomSarnathChooseFactionAction(self, option, target, then) =>
             if (option == 1) {
-                // [2026-05-23] Doom that Came to Sarnath: only ON-MAP units are eligible.
+                // [2026-05-23] Doom that Came to Sarnath: only IN-PLAY units are eligible.
                 // Elimination moves a unit out-of-play into the pool, so pool / slumber /
-                // sorcery / deep units (region.onMap == false) cannot be targeted.
-                val units = self.units.%(u => u.region.onMap && (u.uclass.utype == Monster || u.uclass.utype == Cultist))
+                // sorcery / deep units cannot be targeted. The Moon IS in play (off-map
+                // FactionRegion) — eliminating a unit on the Moon is allowed — so include it.
+                val units = self.units.%(u => (u.region.onMap || u.region == BB.moon) && (u.uclass.utype == Monster || u.uclass.utype == Cultist))
                 val regionSorted = units.sortBy(u => u.region.name)
                 Ask(target).each(regionSorted)(u => DoomSarnathEliminateUnit(target, self, u.ref, then))
             } else {

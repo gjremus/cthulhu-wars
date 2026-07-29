@@ -182,7 +182,9 @@ object TSExpansion extends Expansion {
         // directly, bypassing `Battle.eliminate` — they add to `exempted` but
         // NOT to `eliminated`. Real kills go through `Battle.eliminate` which
         // adds to BOTH lists. Filtering on `eliminated` distinguishes them.
-        if (u.faction != TS && u.region.onMap && game.battle.any &&
+        // A kill in a battle ON THE MOON must also tick the counter — the Moon is
+        // an off-map FactionRegion (region.onMap is false there), so include it.
+        if (u.faction != TS && (u.region.onMap || u.region == BB.moon) && game.battle.any &&
             game.battle.get.eliminated.contains(u)) {
             game.deathsHead += 1
             if (game.factions.has(TS))
