@@ -735,8 +735,9 @@ object Overlays {
                 <div class=p>${ref(Ferox)} ${cost("(Ongoing):")} While ${Ithaqua.name} is in play, your Cultists cannot be captured by enemy Monsters or Terrors. They are still vulnerable to enemy Great Old Ones.</div>
                 <div class=p>Spellbook: ${reference(WW, ArcticWind)}</div>"""
             ),
-        ))
+        ), setup = true)
 
+        case $("WW", "Setup") => requirement("After everyone except Opener of the Way has set up: 8 Power, 6 Acolytes, and a Controlled Gate in one of the Areas marked with the Windwalker Glyph.")
         case $("WW", FirstPlayer.text) => requirement("You are the First Player.")
         case $("WW", OppositeGate.text) => requirement("A Gate exists in the Area marked with the Windwalker Glyph and in which you did not start.")
         case $("WW", AnytimeGainElderSigns.text) => requirement("Take this spellbook at any time. Gain <span class=es>1 Elder Sign</span> for each enemy player with 6 Spellbooks on their Faction Card, to a maximum of <span class=es>3 Elder Signs</span>.")
@@ -753,6 +754,7 @@ object Overlays {
 
 
         case $("OW") => owFactionOverlay(false, false)
+        case $("OW", "Setup") => requirement("After all other players have set up: 8 Power, 6 Acolytes and a Controlled Gate in the empty Area of your choice.")
         case $("OW", cheapMutants : Boolean, yogCurseDie : Boolean) => owFactionOverlay(cheapMutants, yogCurseDie)
 
         case $("OW", EightGates.text) => requirement("There are 8 Gates on the Map.")
@@ -787,6 +789,7 @@ object Overlays {
 
 
         case $("AN") => anFactionOverlay(false)
+        case $("AN", "Setup") => requirement("8 Power, 6 Acolytes, and a Controlled Gate in any Area containing no game symbol. Set up after all factions except Tcho-Tcho, Windwalker, and Opener. You may place the Gate in an Area with one of Yellow Sign's three Spellbook Glyphs, but not in another faction's Start Area.")
         case $("AN", altSB : Boolean) => anFactionOverlay(altSB)
 
         case $("AN", CathedralAA.text) => requirement(s"A Cathedral is in an Area marked with this Glyph: <img src=${imageSource("sign-aa")} class=inline-glyph />")
@@ -808,6 +811,7 @@ object Overlays {
         case $("AN", Crusade.name) => spellbook(Crusade.name, "Ongoing", "Declaring Battle against a player with equal or more Power than you costs 0 (zero) Power.")
 
             case $("DS") => dsFactionOverlay(false)
+            case $("DS", "Setup") => requirement("Start with 4 Power and no units on the map. Your Start Area is the first spot in which you place an Acolyte. All your spellbooks get flipped face-down when activated — each Doom Phase, flip them all face-up again.")
             case $("DS", altSB : Boolean) => dsFactionOverlay(altSB)
 
             case $("DS", OneLarvaEach.text) => requirement("You have one of each Larva type in play.")
@@ -1247,6 +1251,171 @@ object Overlays {
         // Encoding: unitList is a `;`-separated list of `assetId|displayName`
         // entries, packed in CthulhuWarsSolo.scala (see moonSpriteAssetId helper).
         case $("BB", "Moon", count : Int, unitList : String) =>
+            bbMoonOverlay(count, unitList)
+
+        case $("BB", "Moon") =>
+            val moonSrc = imageSource("bb-moon-high-res")
+            s"""<table style="background: transparent; width: 100%; height: 100%; border-collapse: collapse;">
+              <tbody>
+                <tr>
+                  <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
+                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
+                      <img src="$moonSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>"""
+
+        // The Burrowers Beneath (TB): Mantle overlay — shows units on the Mantle.
+        // Mirrors the BB Moon overlay pattern.
+        case $("TB", "Mantle", count : Int, unitList : String, adjAreas : String) =>
+            val mantleSrc = imageSource("tb-mantle")
+            val rawEntries = if (unitList.toString.trim.nonEmpty)
+                unitList.toString.split(";").toList
+            else List.empty
+            val parsed = rawEntries./(entry => {
+                val parts = entry.split("\\|", 3)
+                val assetId = if (parts.length > 0) parts(0).trim else ""
+                val display = if (parts.length > 1) parts(1).trim else assetId
+                val onMapH  = if (parts.length > 2)
+                    scala.util.Try(parts(2).trim.toDouble).getOrElse(60.0)
+                else 60.0
+                val src     = if (assetId.nonEmpty)
+                    hrf.web.getElem(assetId).as[dom.html.Image]./(_.src).|("")
+                else ""
+                (assetId, src, display, onMapH)
+            }).filter { case (_, src, _, _) => src.nonEmpty }
+            val spriteScale = 10.0 / 70.0
+            def spriteHFor(onMapH : Double) : Double = (onMapH * spriteScale).min(12.0)
+            val gateEntries = parsed.filter(_._1 == "gate")
+            val unitEntries = parsed.filter(_._1 != "gate")
+            val gateControlled = gateEntries.exists(_._3.contains("controlled"))
+            val gateControllerEntries = if (gateEntries.nonEmpty && gateControlled) unitEntries.filter(e => e._3.contains("Cadavolyte") || e._3.contains("Acolyte")) else $[(String, String, String, Double)]()
+            val abandonedCultistEntries = $[(String, String, String, Double)]()
+            val otherUnits = if (gateEntries.nonEmpty && gateControlled) unitEntries.filter(e => !e._3.contains("Cadavolyte") && !e._3.contains("Acolyte")) else unitEntries
+            val gateFigure = gateEntries.headOption./({ case (_, src, display, onMapH) =>
+                val spriteH = spriteHFor(onMapH)
+                f"""<img src="$src"
+                         title="$display"
+                         style="position: absolute; left: 50.00%%; top: 50.00%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
+            }).|("")
+            val controllerFigure = gateControllerEntries.headOption./({ case (_, src, display, onMapH) =>
+                val spriteH = spriteHFor(onMapH)
+                f"""<img src="$src"
+                         title="$display"
+                         style="position: absolute; left: 50.00%%; top: 45.00%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95)); z-index: 1;" />"""
+            }).|("")
+            val abandonedCultistFigures = abandonedCultistEntries./({ case (_, src, display, onMapH) =>
+                val spriteH = spriteHFor(onMapH)
+                f"""<img src="$src"
+                         title="$display"
+                         style="position: absolute; left: 25.00%%; top: 50.00%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
+            }).mkString("")
+            val remainingControllers = if (gateControllerEntries.nonEmpty) gateControllerEntries.drop(1) else $[( String, String, String, Double)]()
+            val allOther = (remainingControllers ++ otherUnits).toList
+            val n = allOther.length
+            val positions : List[(Double, Double)] = if (n == 0) Nil else {
+                val step = 360.0 / n
+                (0 until n).toList./(i => {
+                    val angle = (i * step - 90.0) * math.Pi / 180.0
+                    val radius = if (n <= 3) 25.0 else 30.0
+                    (50.0 + radius * math.cos(angle), 50.0 + radius * math.sin(angle))
+                })
+            }
+            val otherFigures = allOther.zip(positions)./({ case ((_, src, display, onMapH), (xPct, yPct)) =>
+                val spriteH = spriteHFor(onMapH)
+                f"""<img src="$src"
+                         title="$display"
+                         style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
+            }).mkString("")
+            val figureLayer = if (count > 0)
+                s"""<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;">$gateFigure$controllerFigure$abandonedCultistFigures$otherFigures</div>"""
+            else ""
+            val emptyCaption = if (count == 0)
+                s"""<div style="position: absolute; bottom: 6%; left: 0; right: 0; text-align: center; color: white; text-shadow: 0 0 4px black, 0 0 4px black; font-size: 0.35em;">The Mantle is empty.</div>"""
+            else ""
+            val adjCaption = if (adjAreas.toString.trim.nonEmpty)
+                s"""<div style="position: absolute; top: 4%; left: 0; right: 0; text-align: center; color: white; text-shadow: 0 0 4px black, 0 0 4px black; font-size: 0.275em;">to: ${adjAreas.toString.trim}</div>"""
+            else ""
+            s"""<table style="background: transparent; width: 100%; height: 100%; border-collapse: collapse;">
+              <tbody>
+                <tr>
+                  <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
+                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
+                      <img src="$mantleSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
+                      $figureLayer
+                      $emptyCaption
+                      $adjCaption
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>"""
+
+        case $("TB", "Mantle") =>
+            val mantleSrc = imageSource("tb-mantle")
+            s"""<table style="background: transparent; width: 100%; height: 100%; border-collapse: collapse;">
+              <tbody>
+                <tr>
+                  <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
+                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
+                      <img src="$mantleSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>"""
+
+        // Tombstalker (TS): Cursed Tomes overlay for TS's own card — shows all 11 tomes (white=remaining, grey=given away)
+        case $("cursed-tomes", fStyle) if fStyle.toString == "ts" =>
+            val givenAway = TSCursedTomesOverlay.tomesOnCard
+            val allTomes = TSCursedTomesOverlay.factionTomes
+            // Show all 11 tomes in ascending order — white if still on card, grey if given away
+            val onCardRows = (1 to 11)./ { n =>
+                val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
+                val opacity = if (n <= givenAway) "0.55" else "1"
+                s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$text</td></tr>"""
+            }.mkString("")
+            // Show tomes held by other factions
+            val factionRows = allTomes.toList.flatMap { case (fs, tomes) =>
+                tomes.sortBy(_._1)./ { case (n, faceDown) =>
+                    val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
+                    val opacity = if (faceDown) "0.55" else "1"
+                    s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);"><span class="$fs">[$fs]</span> $text</td></tr>"""
+                }
+            }.mkString("")
+            val anyNonTsHolder = allTomes.exists { case (fs, t) => fs != "ts" && t.nonEmpty }
+            val footer = if (anyNonTsHolder) TSCursedTomesOverlay.tomeFactionPowerBlock else ""
+            s"""<table class="spellbook-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">Cursed Tomes</td></tr>$onCardRows$factionRows$footer</tbody></table>"""
+
+        // Tombstalker (TS): Cursed Tomes overlay for other factions — shows tomes held (white=face-up, grey=face-down)
+        case $("cursed-tomes", fStyle) =>
+            val tomes = TSCursedTomesOverlay.factionTomes.getOrElse(fStyle.toString, Nil)
+            if (tomes.isEmpty) ""
+            else {
+                val rows = tomes.sortBy(_._1)./ { case (n, faceDown) =>
+                    val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
+                    val opacity = if (faceDown) "0.55" else "1"
+                    s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$text</td></tr>"""
+                }.mkString("")
+                s"""<table class="spellbook-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">Cursed Tomes</td></tr>$rows${TSCursedTomesOverlay.tomeFactionPowerBlock}</tbody></table>"""
+            }
+
+        case $("RoA") =>
+            roaOverlay()
+
+        case s if s.headOption.exists(h => h == "XSS" || h == "TB") => xssTbOverlay(s)
+
+
+        case _ =>
+            // println("onExternalClick " + s.mkString(" | "))
+            ""
+    }).but("")
+
+
+
+    def bbMoonOverlay(count : Int, unitList : String) : String = {
             val moonSrc = imageSource("bb-moon-high-res")
             val rawEntries = if (unitList.toString.trim.nonEmpty)
                 unitList.toString.split(";").toList
@@ -1448,167 +1617,7 @@ object Overlays {
                 </tr>
               </tbody>
             </table>"""
-
-        case $("BB", "Moon") =>
-            val moonSrc = imageSource("bb-moon-high-res")
-            s"""<table style="background: transparent; width: 100%; height: 100%; border-collapse: collapse;">
-              <tbody>
-                <tr>
-                  <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
-                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
-                      <img src="$moonSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>"""
-
-        // The Burrowers Beneath (TB): Mantle overlay — shows units on the Mantle.
-        // Mirrors the BB Moon overlay pattern.
-        case $("TB", "Mantle", count : Int, unitList : String, adjAreas : String) =>
-            val mantleSrc = imageSource("tb-mantle")
-            val rawEntries = if (unitList.toString.trim.nonEmpty)
-                unitList.toString.split(";").toList
-            else List.empty
-            val parsed = rawEntries./(entry => {
-                val parts = entry.split("\\|", 3)
-                val assetId = if (parts.length > 0) parts(0).trim else ""
-                val display = if (parts.length > 1) parts(1).trim else assetId
-                val onMapH  = if (parts.length > 2)
-                    scala.util.Try(parts(2).trim.toDouble).getOrElse(60.0)
-                else 60.0
-                val src     = if (assetId.nonEmpty)
-                    hrf.web.getElem(assetId).as[dom.html.Image]./(_.src).|("")
-                else ""
-                (assetId, src, display, onMapH)
-            }).filter { case (_, src, _, _) => src.nonEmpty }
-            val spriteScale = 10.0 / 70.0
-            def spriteHFor(onMapH : Double) : Double = (onMapH * spriteScale).min(12.0)
-            val gateEntries = parsed.filter(_._1 == "gate")
-            val unitEntries = parsed.filter(_._1 != "gate")
-            val gateControlled = gateEntries.exists(_._3.contains("controlled"))
-            val gateControllerEntries = if (gateEntries.nonEmpty && gateControlled) unitEntries.filter(e => e._3.contains("Cadavolyte") || e._3.contains("Acolyte")) else $[(String, String, String, Double)]()
-            val abandonedCultistEntries = $[(String, String, String, Double)]()
-            val otherUnits = if (gateEntries.nonEmpty && gateControlled) unitEntries.filter(e => !e._3.contains("Cadavolyte") && !e._3.contains("Acolyte")) else unitEntries
-            val gateFigure = gateEntries.headOption./({ case (_, src, display, onMapH) =>
-                val spriteH = spriteHFor(onMapH)
-                f"""<img src="$src"
-                         title="$display"
-                         style="position: absolute; left: 50.00%%; top: 50.00%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
-            }).|("")
-            val controllerFigure = gateControllerEntries.headOption./({ case (_, src, display, onMapH) =>
-                val spriteH = spriteHFor(onMapH)
-                f"""<img src="$src"
-                         title="$display"
-                         style="position: absolute; left: 50.00%%; top: 45.00%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95)); z-index: 1;" />"""
-            }).|("")
-            val abandonedCultistFigures = abandonedCultistEntries./({ case (_, src, display, onMapH) =>
-                val spriteH = spriteHFor(onMapH)
-                f"""<img src="$src"
-                         title="$display"
-                         style="position: absolute; left: 25.00%%; top: 50.00%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
-            }).mkString("")
-            val remainingControllers = if (gateControllerEntries.nonEmpty) gateControllerEntries.drop(1) else $[( String, String, String, Double)]()
-            val allOther = (remainingControllers ++ otherUnits).toList
-            val n = allOther.length
-            val positions : List[(Double, Double)] = if (n == 0) Nil else {
-                val step = 360.0 / n
-                (0 until n).toList./(i => {
-                    val angle = (i * step - 90.0) * math.Pi / 180.0
-                    val radius = if (n <= 3) 25.0 else 30.0
-                    (50.0 + radius * math.cos(angle), 50.0 + radius * math.sin(angle))
-                })
-            }
-            val otherFigures = allOther.zip(positions)./({ case ((_, src, display, onMapH), (xPct, yPct)) =>
-                val spriteH = spriteHFor(onMapH)
-                f"""<img src="$src"
-                         title="$display"
-                         style="position: absolute; left: $xPct%2.2f%%; top: $yPct%2.2f%%; transform: translate(-50%%, -50%%); height: $spriteH%2.1f%%; width: auto; pointer-events: none; filter: drop-shadow(0 0 0.4em rgba(0,0,0,0.95));" />"""
-            }).mkString("")
-            val figureLayer = if (count > 0)
-                s"""<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden;">$gateFigure$controllerFigure$abandonedCultistFigures$otherFigures</div>"""
-            else ""
-            val emptyCaption = if (count == 0)
-                s"""<div style="position: absolute; bottom: 6%; left: 0; right: 0; text-align: center; color: white; text-shadow: 0 0 4px black, 0 0 4px black; font-size: 0.35em;">The Mantle is empty.</div>"""
-            else ""
-            val adjCaption = if (adjAreas.toString.trim.nonEmpty)
-                s"""<div style="position: absolute; top: 4%; left: 0; right: 0; text-align: center; color: white; text-shadow: 0 0 4px black, 0 0 4px black; font-size: 0.275em;">to: ${adjAreas.toString.trim}</div>"""
-            else ""
-            s"""<table style="background: transparent; width: 100%; height: 100%; border-collapse: collapse;">
-              <tbody>
-                <tr>
-                  <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
-                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
-                      <img src="$mantleSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
-                      $figureLayer
-                      $emptyCaption
-                      $adjCaption
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>"""
-
-        case $("TB", "Mantle") =>
-            val mantleSrc = imageSource("tb-mantle")
-            s"""<table style="background: transparent; width: 100%; height: 100%; border-collapse: collapse;">
-              <tbody>
-                <tr>
-                  <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
-                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
-                      <img src="$mantleSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>"""
-
-        // Tombstalker (TS): Cursed Tomes overlay for TS's own card — shows all 11 tomes (white=remaining, grey=given away)
-        case $("cursed-tomes", fStyle) if fStyle.toString == "ts" =>
-            val givenAway = TSCursedTomesOverlay.tomesOnCard
-            val allTomes = TSCursedTomesOverlay.factionTomes
-            // Show all 11 tomes in ascending order — white if still on card, grey if given away
-            val onCardRows = (1 to 11)./ { n =>
-                val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
-                val opacity = if (n <= givenAway) "0.55" else "1"
-                s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$text</td></tr>"""
-            }.mkString("")
-            // Show tomes held by other factions
-            val factionRows = allTomes.toList.flatMap { case (fs, tomes) =>
-                tomes.sortBy(_._1)./ { case (n, faceDown) =>
-                    val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
-                    val opacity = if (faceDown) "0.55" else "1"
-                    s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);"><span class="$fs">[$fs]</span> $text</td></tr>"""
-                }
-            }.mkString("")
-            val anyNonTsHolder = allTomes.exists { case (fs, t) => fs != "ts" && t.nonEmpty }
-            val footer = if (anyNonTsHolder) TSCursedTomesOverlay.tomeFactionPowerBlock else ""
-            s"""<table class="spellbook-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">Cursed Tomes</td></tr>$onCardRows$factionRows$footer</tbody></table>"""
-
-        // Tombstalker (TS): Cursed Tomes overlay for other factions — shows tomes held (white=face-up, grey=face-down)
-        case $("cursed-tomes", fStyle) =>
-            val tomes = TSCursedTomesOverlay.factionTomes.getOrElse(fStyle.toString, Nil)
-            if (tomes.isEmpty) ""
-            else {
-                val rows = tomes.sortBy(_._1)./ { case (n, faceDown) =>
-                    val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
-                    val opacity = if (faceDown) "0.55" else "1"
-                    s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$text</td></tr>"""
-                }.mkString("")
-                s"""<table class="spellbook-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">Cursed Tomes</td></tr>$rows${TSCursedTomesOverlay.tomeFactionPowerBlock}</tbody></table>"""
-            }
-
-        case $("RoA") =>
-            roaOverlay()
-
-        case s if s.headOption.exists(h => h == "XSS" || h == "TB") => xssTbOverlay(s)
-
-
-        case _ =>
-            // println("onExternalClick " + s.mkString(" | "))
-            ""
-    }).but("")
-
+    }
 
     def roaOverlay() : String = {
             val pos = RitualTrackOverlay.positions
@@ -2161,7 +2170,7 @@ object Overlays {
                 <div class=p>Spellbooks: ${cathedralSBs}</div>
                 <div class=p>${cost("Special:")} If all 4 Cathedrals are in play, you may Awaken an Independent Great Old One without your own Great Old One (when Awakening Cthugha this way, just pay 6 Power).</div>"""
             )
-        ))
+        ), setup = true)
     }
 
     def slFactionOverlay(easierSBR : Boolean, energyNexusPreBattle : Boolean) = {
@@ -2223,7 +2232,7 @@ object Overlays {
                 <div class=p>${combat} First roll the Azathoth die, then roll that many combat dice.</div>
                 <div class=p>${ref(CosmicRuler)} ${cost("(Post-Battle):")} When any Avatar is choosen to recieve a Kill or Elimination, instead you can Eliminate another Avatar in its stead, from anywhere on the map.</div>
             """),
-        ))
+        ), setup = true)
     }
 
     def bbFactionOverlay(altSB : Boolean) = {
@@ -2409,7 +2418,7 @@ object Overlays {
                 <div class=p>${combat} Equal to twice the number of enemy-Controlled Faction Great Old Ones in play.</div>
                 <div class=p>${ref(KeyAndGate)} ${cost("(Ongoing):")} Yog-Sothoth counts as a Gate for every purpose, except for The Beyond One ability. Yog-Sothoth is not Controlled by any Cultist, and can exist in the same Area as another Gate.</div>"""
             ),
-        ))
+        ), setup = true)
     }
 
     def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "", setup : Boolean = false) = {
