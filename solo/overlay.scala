@@ -1057,7 +1057,7 @@ object Overlays {
         // Tcho-Tcho (TT): faction info card
         case $("TT") => faction(TT, "info:tt-background", Sycophancy, "Ongoing",
             "When an enemy player does a Ritual of Annihilation, either you gain 1 Doom, or he gains 1 fewer Doom, his choice.",
-            $(Idolatry, Martyrdom, TabletsOfTheGods, DarkRituals, Fulmination, SurpriseSB, Doomsday, Inerrant, OtherworldAlliances), $(
+            $(), $(
             (Acolyte,       6, "1", "0",  s"""<div class=p>Spellbook: ${reference(TT, Soulless)}</div>"""),
             (HighPriest,    3, "3", "0",  s"""<div class=p><span class=ability-color>Unspeakable Oath</span> ${cost("(Ongoing):")} At the end of any player's Action (even if it is not your turn), Sacrifice your High Priest (return him to your Pool) and gain 2 Power. This may also be done during the Gather Power and Doom phase.</div><div class=p>Spellbooks: ${reference(TT, Martyrdom)}, ${reference(TT, Hierophants)}, ${reference(TT, TabletsOfTheGods)}</div>"""),
             (ProtoShoggoth, 6, "2", "1",  s"""<div class=p>Spellbook: ${reference(TT, TerrorSB)}</div>"""),
@@ -1068,7 +1068,8 @@ object Overlays {
                 <div class=p>${cost("3)")} Eliminate the High Priest, then place Ubbo-Sathla at your Controlled Gate.</div>
                 <div class=p>${combat} Equals the Growth counter value on the Doom track.</div>
                 <div class=p><span class=ability-color>Hell's Banquet</span> ${cost("(Doom Phase):")} Once Ubbo-Sathla has been Awakened, each Doom Phase (whether or not Ubbo-Sathla is still in play), roll 1d6 and increase the Growth counter by the die roll.</div>""")
-        ), "Faction Card Text reflects Tsang Tribe spellbooks regardless of which tribe was chosen, similar to real world faction card.", setup = true)
+        ), "Faction Card Text reflects Tsang Tribe spellbooks regardless of which tribe was chosen, similar to real world faction card.", setup = true,
+            sbLine = s"""Spellbooks: <span class=cost-color>Tsang:</span> ${reference(TT, Idolatry)}, ${reference(TT, Martyrdom)}, ${reference(TT, TabletsOfTheGods)} &nbsp; <span class=cost-color>Leng:</span> ${reference(TT, DarkRituals)}, ${reference(TT, Fulmination)}, ${reference(TT, SurpriseSB)} &nbsp; <span class=cost-color>Sarkomand:</span> ${reference(TT, Doomsday)}, ${reference(TT, Inerrant)}, ${reference(TT, OtherworldAlliances)}""")
 
         // Tcho-Tcho (TT): spellbook requirement info card overlays
         case $("TT", "Setup") => requirement("After all players set up except Opener and Windwalker: 8 Power, 6 Acolytes & a Controlled Gate in an empty Area containing a faction Glyph. Set Ubbo-Sathla's Growth counter to 0 on the Doom Track. In games with the High Priest expansion, one Acolyte is replaced with a High Priest.")
@@ -1270,6 +1271,72 @@ object Overlays {
         // The Burrowers Beneath (TB): Mantle overlay — shows units on the Mantle.
         // Mirrors the BB Moon overlay pattern.
         case $("TB", "Mantle", count : Int, unitList : String, adjAreas : String) =>
+            tbMantleOverlay(count, unitList, adjAreas)
+
+        case $("TB", "Mantle") =>
+            val mantleSrc = imageSource("tb-mantle")
+            s"""<table style="background: transparent; width: 100%; height: 100%; border-collapse: collapse;">
+              <tbody>
+                <tr>
+                  <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
+                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
+                      <img src="$mantleSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>"""
+
+        // Tombstalker (TS): Cursed Tomes overlay for TS's own card — shows all 11 tomes (white=remaining, grey=given away)
+        case $("cursed-tomes", fStyle) if fStyle.toString == "ts" =>
+            val givenAway = TSCursedTomesOverlay.tomesOnCard
+            val allTomes = TSCursedTomesOverlay.factionTomes
+            // Show all 11 tomes in ascending order — white if still on card, grey if given away
+            val onCardRows = (1 to 11)./ { n =>
+                val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
+                val opacity = if (n <= givenAway) "0.55" else "1"
+                s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$text</td></tr>"""
+            }.mkString("")
+            // Show tomes held by other factions
+            val factionRows = allTomes.toList.flatMap { case (fs, tomes) =>
+                tomes.sortBy(_._1)./ { case (n, faceDown) =>
+                    val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
+                    val opacity = if (faceDown) "0.55" else "1"
+                    s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);"><span class="$fs">[$fs]</span> $text</td></tr>"""
+                }
+            }.mkString("")
+            val anyNonTsHolder = allTomes.exists { case (fs, t) => fs != "ts" && t.nonEmpty }
+            val footer = if (anyNonTsHolder) TSCursedTomesOverlay.tomeFactionPowerBlock else ""
+            s"""<table class="spellbook-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">Cursed Tomes</td></tr>$onCardRows$factionRows$footer</tbody></table>"""
+
+        // Tombstalker (TS): Cursed Tomes overlay for other factions — shows tomes held (white=face-up, grey=face-down)
+        case $("cursed-tomes", fStyle) =>
+            val tomes = TSCursedTomesOverlay.factionTomes.getOrElse(fStyle.toString, Nil)
+            if (tomes.isEmpty) ""
+            else {
+                val rows = tomes.sortBy(_._1)./ { case (n, faceDown) =>
+                    val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
+                    val opacity = if (faceDown) "0.55" else "1"
+                    s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$text</td></tr>"""
+                }.mkString("")
+                s"""<table class="spellbook-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">Cursed Tomes</td></tr>$rows${TSCursedTomesOverlay.tomeFactionPowerBlock}</tbody></table>"""
+            }
+
+        case $("RoA") =>
+            roaOverlay()
+
+        case s if s.headOption.exists(h => h == "XSS" || h == "TB") => xssTbOverlay(s)
+
+
+        case _ =>
+            // println("onExternalClick " + s.mkString(" | "))
+            ""
+    }).but("")
+
+
+
+
+    def tbMantleOverlay(count : Int, unitList : String, adjAreas : String) : String = {
             val mantleSrc = imageSource("tb-mantle")
             val rawEntries = if (unitList.toString.trim.nonEmpty)
                 unitList.toString.split(";").toList
@@ -1352,68 +1419,7 @@ object Overlays {
                 </tr>
               </tbody>
             </table>"""
-
-        case $("TB", "Mantle") =>
-            val mantleSrc = imageSource("tb-mantle")
-            s"""<table style="background: transparent; width: 100%; height: 100%; border-collapse: collapse;">
-              <tbody>
-                <tr>
-                  <td style="text-align: center; vertical-align: middle; padding: 0; background: transparent;">
-                    <div style="position: relative; display: inline-block; max-width: 100%; max-height: 100%;">
-                      <img src="$mantleSrc" style="display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; background: transparent;" />
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>"""
-
-        // Tombstalker (TS): Cursed Tomes overlay for TS's own card — shows all 11 tomes (white=remaining, grey=given away)
-        case $("cursed-tomes", fStyle) if fStyle.toString == "ts" =>
-            val givenAway = TSCursedTomesOverlay.tomesOnCard
-            val allTomes = TSCursedTomesOverlay.factionTomes
-            // Show all 11 tomes in ascending order — white if still on card, grey if given away
-            val onCardRows = (1 to 11)./ { n =>
-                val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
-                val opacity = if (n <= givenAway) "0.55" else "1"
-                s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$text</td></tr>"""
-            }.mkString("")
-            // Show tomes held by other factions
-            val factionRows = allTomes.toList.flatMap { case (fs, tomes) =>
-                tomes.sortBy(_._1)./ { case (n, faceDown) =>
-                    val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
-                    val opacity = if (faceDown) "0.55" else "1"
-                    s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);"><span class="$fs">[$fs]</span> $text</td></tr>"""
-                }
-            }.mkString("")
-            val anyNonTsHolder = allTomes.exists { case (fs, t) => fs != "ts" && t.nonEmpty }
-            val footer = if (anyNonTsHolder) TSCursedTomesOverlay.tomeFactionPowerBlock else ""
-            s"""<table class="spellbook-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">Cursed Tomes</td></tr>$onCardRows$factionRows$footer</tbody></table>"""
-
-        // Tombstalker (TS): Cursed Tomes overlay for other factions — shows tomes held (white=face-up, grey=face-down)
-        case $("cursed-tomes", fStyle) =>
-            val tomes = TSCursedTomesOverlay.factionTomes.getOrElse(fStyle.toString, Nil)
-            if (tomes.isEmpty) ""
-            else {
-                val rows = tomes.sortBy(_._1)./ { case (n, faceDown) =>
-                    val text = "Vol. " + tomeNumToRoman(n) + " \u2014 " + TSCursedTomesOverlay.tomeTexts.getOrElse(n, "")
-                    val opacity = if (faceDown) "0.55" else "1"
-                    s"""<tr><td style="color:#c8c8c8;opacity:$opacity;padding:3px 12px;font-size:90%;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">$text</td></tr>"""
-                }.mkString("")
-                s"""<table class="spellbook-table"><tbody><tr><td style="color:white;padding:4px 12px;font-weight:bold;border-bottom:1px solid grey;text-shadow:1px 1px 2px rgba(0,0,0,0.85);">Cursed Tomes</td></tr>$rows${TSCursedTomesOverlay.tomeFactionPowerBlock}</tbody></table>"""
-            }
-
-        case $("RoA") =>
-            roaOverlay()
-
-        case s if s.headOption.exists(h => h == "XSS" || h == "TB") => xssTbOverlay(s)
-
-
-        case _ =>
-            // println("onExternalClick " + s.mkString(" | "))
-            ""
-    }).but("")
-
-
+    }
 
     def bbMoonOverlay(count : Int, unitList : String) : String = {
             val moonSrc = imageSource("bb-moon-high-res")
@@ -2421,7 +2427,7 @@ object Overlays {
         ), setup = true)
     }
 
-    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "", setup : Boolean = false) = {
+    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "", setup : Boolean = false, sbLine : String = "") = {
         val backgroundUrl = if (background.startsWith("data:")) background else imageSource(background)
         s"""
         <table class="faction-table" style="background-image:url(${backgroundUrl})">
@@ -2466,7 +2472,8 @@ object Overlays {
                         if (setup) s"""<span class="ability-color pointer" onclick="onExternalClick('${f.short}', 'Setup')">Setup</span>&nbsp;&nbsp;&nbsp;"""
                         else ""
                     val sbPart =
-                        if (miscSpellbooks.any)
+                        if (sbLine.nonEmpty) sbLine
+                        else if (miscSpellbooks.any)
                             "Spellbooks: " + miscSpellbooks./{ sb => s"""${reference(f, sb)}""" }.join(", ")
                         else ""
                     if (setupLink.nonEmpty || sbPart.nonEmpty) { s"""
