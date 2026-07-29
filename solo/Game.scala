@@ -3995,7 +3995,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             asking.ask.useIf(_.actions.exists(_.isInfo.not))(_.add(NeedOk).add(OutOfTurnRefresh(PreMainAction(f))).add(SacrificeHighPriestAllowedAction).group(" ")).skip(MainAction(f))
 
-        case PreMainAction(f) if f.active =>
+        case PreMainAction(f) if f.active && f.power > 0 =>
             PreActionPromptsAction(f, f.enemies)
 
         case PreActionPromptsAction(e, l) =>
@@ -4175,13 +4175,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             CheckSpellbooksAction(MainAction(f))
 
         case MainAction(f) if f.active.not =>
-            // An out-of-Power faction takes no turn and gets NO prompt — it is
-            // auto-skipped. (DC/SL previously lingered here when they had Sin but
-            // no Power, showing a manual "Skip" prompt; a faction with 0 Power is
-            // inactive regardless of Sin, so advance immediately with no Ask.)
             implicit val asking = Asking(f)
+
             game.reveals(f)
-            Force(NextPlayerAction(f))
+
+            + NextPlayerAction(f).as("Skip")
+
+            asking
 
         case MainAction(f) if f.acted =>
             implicit val asking = Asking(f)

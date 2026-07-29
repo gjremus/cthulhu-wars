@@ -1,6 +1,6 @@
 name := "Cthulhu Wars Solo HRF"
 
-version := "Homebrew v 2.29"
+version := "Homebrew v 2.30"
 
 scalaVersion := "2.13.16"
 
