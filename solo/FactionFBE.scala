@@ -686,6 +686,24 @@ object FBEExpansion extends Expansion {
             asking
 
         case AnimatedRushMainAction(self, source, dest, n) =>
+            // REPLAY COMPATIBILITY (mirrors Distributed Death, Battle.scala
+            // fbeDistributedDeathSaveWithManualDice): the manual die-pick actions
+            // (ManualDiePick/Choose/UndoLast) are Soft and are NEVER recorded in the
+            // game log, so on replay there is no pick action to resume — the
+            // discard-continuation below never runs and the dice would be REFUNDED on
+            // every refresh ("dice expenditure recanted", reported in game 'Disaster
+            // for Lunacy'). On replay, auto-discard the lowest n dice deterministically
+            // (the pre-e4f1866 behaviour) so the spend PERSISTS. Only present the
+            // interactive picker during genuine live play.
+            if (game.nextReplayActionHint.any) {
+                val discard = math.min(n, game.fbeCardDice.num)
+                val discarded = game.fbeCardDice.sortBy(x => x).take(discard)
+                game.fbeCardDice = game.fbeCardDice.sortBy(x => x).drop(discard)
+                self.log("Animated Rush".styled(FBE) + ": discarded", discard, (discard == 1).?("die").|("dice"),
+                    "— moving", 2 * n, "Units")
+                Force(AnimatedRushUnitPickAction(self, 2 * n, $, discarded, $, source, dest))
+            }
+            else
             // Manual die selection: player chooses which dice to discard
             Force(ManualDiePickAction(self, AnimatedRushContext, n, $, selectedDice => {
                 val discarded = selectedDice
