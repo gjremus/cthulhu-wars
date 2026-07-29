@@ -95,7 +95,10 @@ case class ZingayaAction(self : YS, r : Region, f : Faction) extends BaseFaction
 
 object YSExpansion extends Expansion {
     override def eliminate(u : UnitFigure)(implicit game : Game) {
-        if (u.uclass.utype == Cultist && u.faction.has(Passion) && u.region.glyph.onMap && !MindParasite.isParasitized(u))
+        // The Moon is an off-map FactionRegion so region.glyph.onMap is false there;
+        // a cultist killed on the Moon must still trigger Passion (it works in every
+        // other non-Moon land Area). Include BB.moon explicitly.
+        if (u.uclass.utype == Cultist && u.faction.has(Passion) && (u.region.glyph.onMap || u.region == BB.moon) && !MindParasite.isParasitized(u))
             u.faction.oncePerAction :+= Passion
     }
 
