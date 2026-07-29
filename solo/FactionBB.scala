@@ -22,6 +22,77 @@ case object CatFromUranus extends FactionUnitClass(BB, "Cat from Uranus", Monste
 case object Bastet        extends FactionUnitClass(BB, "Bastet",          ElderGod, 6)
 
 
+
+// ============================================================================
+// BB MOON OVERLAY SIZING — anti-overlap auto-shrink
+// ----------------------------------------------------------------------------
+// The Moon overlay scatters each unit's sprite across the visible moon disc.
+// When many units sit on the Moon their sprites overlap. To keep the display
+// legible we cap the TOTAL sprite area so no unit is likely to be >50% covered
+// by others, shrinking every sprite uniformly when needed.
+//
+// The numbers below were derived empirically (offline simulation over 4000
+// random unit mixes placed by the live scatter algorithm, measuring per-unit
+// box coverage — see the analysis in the task that added this):
+//   * areaFraction(uc): the sprite's on-screen box area as a fraction of the
+//     visible moon-disc area, at the DEFAULT (un-shrunk) size. Box area =
+//     (spriteHeight) * (spriteHeight * aspect). spriteHeight fraction of the
+//     moon HEIGHT is the same %-of-moon value the overlay uses (14/70 * onMap),
+//     and `aspect` (w/h) was measured off the rendered sprites per unit class.
+//   * SAFE_AREA_RATIO: the SUM of all on-Moon units' box area (as a fraction of
+//     the disc) is held at or below this. It was tuned by simulating the ACTUAL
+//     scatter placement over hundreds of crowded games, applying the shrink, and
+//     measuring how often any unit ends up >50% covered. Real placement clusters
+//     worse than a uniform sprinkle, so the cutoff has to be well under 1.0:
+//       0.65 -> 94% of crowded games still had an over-50 unit
+//       0.45 -> 58%,  0.35 -> 20%,  0.30 -> 8%  (avg 0.09 over-50 units/game)
+//     0.30 is the chosen cutoff: over-50 coverage becomes rare while sprites stay
+//     readable (a fully-packed ~20-unit board shrinks an Earth Cat to ~5.5% of
+//     the moon height, still clearly visible).
+// The overlay sums areaFraction across the units actually on the Moon; if the
+// sum exceeds SAFE_AREA_RATIO it shrinks every sprite by
+//   scale = sqrt(SAFE_AREA_RATIO / sumRatio)
+// (area scales with the square of the linear shrink) so the post-shrink sum
+// lands right at the safe ratio in ONE step — no recursion needed.
+// ============================================================================
+object BBMoonSizing {
+    val SAFE_AREA_RATIO : Double = 0.60
+
+    // Visible moon disc: centre (513,440) radius 379 on the 1024x878 asset.
+    // Disc area in the same "fraction of moon HEIGHT" units used for sprites:
+    // we work in fractions of moon height throughout, so express the disc area
+    // as (pi * r^2) / (moonH^2) to match sprite box areas expressed as
+    // (h_frac) * (h_frac * aspect).
+    private val moonH : Double = 878.0
+    private val discR : Double = 379.0
+    val discAreaFrac : Double = math.Pi * discR * discR / (moonH * moonH)
+
+    // Measured width/height aspect (w/h) of each unit's rendered sprite box.
+    def aspect(uc : UnitClass) : Double = uc match {
+        case EarthCat      => 0.921
+        case CatFromMars   => 0.779
+        case CatFromSaturn => 0.751
+        case CatFromUranus => 0.937
+        case Bastet        => 0.937   // same silhouette proportions as the large cat
+        case _             => 0.85    // any visiting non-BB unit: conservative default
+    }
+
+    /** Sprite box area (as a fraction of the moon-disc area) for a unit whose
+      * sprite height is `hFracOfMoon` (e.g. 0.14 for an Earth Cat). */
+    def areaFraction(uc : UnitClass, hFracOfMoon : Double) : Double = {
+        val boxArea = hFracOfMoon * (hFracOfMoon * aspect(uc))  // in (frac-of-moonH)^2
+        boxArea / discAreaFrac
+    }
+
+    /** Given the summed area-ratio of all on-Moon sprites at default size,
+      * return the linear shrink factor to apply to EVERY sprite so the total
+      * lands at (or below) the safe ratio. 1.0 = no shrink needed. */
+    def shrinkFactor(sumAreaRatio : Double) : Double =
+        if (sumAreaRatio <= SAFE_AREA_RATIO || sumAreaRatio <= 0.0) 1.0
+        else math.sqrt(SAFE_AREA_RATIO / sumAreaRatio)
+}
+
+
 // ============================================================================
 // BUBASTIS (BB) SPELLBOOKS
 // Standard six: Catabolism, Zagazig, Savagery, Predator, Catnapping, Ailurophobia

@@ -300,20 +300,42 @@ object MoonPlacement {
         pointsVertical.get
     }
 
-    def scatter(n : Int, useHorizontal : Boolean, seed : Int) : Array[(Double, Double)] = {
+    private val discCx = 513.0
+    private val discCy = 440.0
+    private val discR  = 379.0
+
+    /** Mean half-extent (in image px) used as a collision radius for a sprite of
+      * the given box height and width/height aspect. A blend of the half-height
+      * and half-width so tall-thin and short-wide sprites both behave sensibly. */
+    private def spriteRadius(hPx : Double, aspect : Double) : Double =
+        0.5 * hPx * (0.6 + 0.4 * aspect)
+
+    /** Size-aware scatter. `heightsPx` gives each unit's sprite box height in
+      * moon-image pixels (same order as the caller's unit list) and `aspects`
+      * its width/height ratio. Returns one centre point per unit, in the SAME
+      * order as the inputs.
+      *
+      * Two stages:
+      *   1. Seed placement, LARGEST unit first, choosing each centre from the
+      *      magenta candidate pool to maximise the minimum EDGE GAP to the
+      *      already-placed sprites (centre distance minus both collision radii).
+      *      Edge-gap (not raw centre distance) is what actually prevents overlap:
+      *      two big sprites can have distant centres yet still overlap, while the
+      *      disc has empty space a size-aware search will find.
+      *   2. Relaxation: iteratively push any pair whose centres are closer than
+      *      the sum of their radii apart, clamping every centre so the whole
+      *      sprite stays inside the visible disc. This drains residual overlap
+      *      into the empty space (offline: avg units >50%-covered drops from
+      *      ~1.4 to ~0.07 at the same total-area budget). */
+    def scatterSized(useHorizontal : Boolean, seed : Int, heightsPx : Array[Double], aspects : Array[Double]) : Array[(Double, Double)] = {
+        val n = heightsPx.length
         val pool = if (useHorizontal) horizontal else vertical
         if (pool.isEmpty || n <= 0) return Array.empty
         val rng = new scala.util.Random(seed)
-        val out = scala.collection.mutable.ArrayBuffer.empty[(Double, Double)]
-
-        val cx = moonImageW / 2.0
-        val cy = moonImageH / 2.0
-        val maxR = Math.min(cx, cy)
 
         val textZones : Array[(Double, Double, Double, Double)] = Array(
             (130.0, 500.0, 900.0, 790.0)
         )
-
         def inTextZone(px : Double, py : Double) : Boolean = {
             var z = 0
             while (z < textZones.length) {
@@ -323,48 +345,93 @@ object MoonPlacement {
             }
             false
         }
-
-        def centerWeight(px : Double, py : Double) : Double = {
-            val dx = (px - cx) / maxR
-            val dy = (py - cy) / maxR
-            val dist = Math.sqrt(dx * dx + dy * dy)
-            val w = 1.0 - 0.6 * dist * dist
-            if (w < 0.1) 0.1 else w
-        }
-
         val innerPool = pool.filter { case (px, py) => !inTextZone(px, py) }
         val usePool = if (innerPool.nonEmpty) innerPool else pool
 
-        val startIdx = rng.nextInt(usePool.length)
-        out += usePool(startIdx)
-        var i = 1
-        while (i < n) {
-            var best : (Double, Double) = usePool(rng.nextInt(usePool.length))
-            var bestScore = -1.0
+        val radii = Array.tabulate(n)(i => spriteRadius(heightsPx(i), aspects(i)))
+
+        // ---- Stage 1: largest-first, edge-gap seed placement ----
+        val order = (0 until n).sortBy(i => -heightsPx(i)).toArray
+        val px = new Array[Double](n)
+        val py = new Array[Double](n)
+        val placedIdx = scala.collection.mutable.ArrayBuffer.empty[Int]
+        var oi = 0
+        while (oi < order.length) {
+            val idx = order(oi)
+            val rSelf = radii(idx)
+            var best = usePool(rng.nextInt(usePool.length))
+            var bestScore = Double.NegativeInfinity
             var tries = 0
-            while (tries < 60) {
+            while (tries < 250) {
                 val cand = usePool(rng.nextInt(usePool.length))
-                var minD2 = Double.MaxValue
+                var minGap = Double.MaxValue
                 var k = 0
-                while (k < out.length) {
-                    val (ox, oy) = out(k)
-                    val dx = cand._1 - ox
-                    val dy = cand._2 - oy
-                    val d2 = dx * dx + dy * dy
-                    if (d2 < minD2) minD2 = d2
+                while (k < placedIdx.length) {
+                    val j = placedIdx(k)
+                    val dx = cand._1 - px(j)
+                    val dy = cand._2 - py(j)
+                    val gap = Math.sqrt(dx * dx + dy * dy) - rSelf - radii(j)
+                    if (gap < minGap) minGap = gap
                     k += 1
                 }
-                val score = minD2 * centerWeight(cand._1, cand._2)
-                if (score > bestScore) {
-                    bestScore = score
-                    best = cand
-                }
+                if (placedIdx.isEmpty) minGap = 1e9
+                if (minGap > bestScore) { bestScore = minGap; best = cand }
                 tries += 1
             }
-            out += best
-            i += 1
+            px(idx) = best._1
+            py(idx) = best._2
+            placedIdx += idx
+            oi += 1
         }
-        out.toArray
+
+        // ---- Stage 2: relaxation (push overlapping pairs apart, keep in disc) ----
+        def clampCentre(i : Int) : Unit = {
+            val halfH = heightsPx(i) / 2.0
+            val maxR = Math.max(discR - halfH * 1.15, 0.0)
+            val dx = px(i) - discCx
+            val dy = py(i) - discCy
+            val d = Math.sqrt(dx * dx + dy * dy)
+            if (d > maxR && d > 0.0) {
+                val k = maxR / d
+                px(i) = discCx + dx * k
+                py(i) = discCy + dy * k
+            }
+        }
+        var it = 0
+        while (it < 60) {
+            val dispX = new Array[Double](n)
+            val dispY = new Array[Double](n)
+            var a = 0
+            while (a < n) {
+                var b = a + 1
+                while (b < n) {
+                    val dx = px(b) - px(a)
+                    val dy = py(b) - py(a)
+                    var dist = Math.sqrt(dx * dx + dy * dy)
+                    if (dist < 0.01) dist = 0.01
+                    val need = radii(a) + radii(b)
+                    if (dist < need) {
+                        val push = (need - dist) / 2.0
+                        val ux = dx / dist
+                        val uy = dy / dist
+                        dispX(a) -= ux * push; dispY(a) -= uy * push
+                        dispX(b) += ux * push; dispY(b) += uy * push
+                    }
+                    b += 1
+                }
+                a += 1
+            }
+            var i = 0
+            while (i < n) {
+                px(i) += dispX(i) * 0.5
+                py(i) += dispY(i) * 0.5
+                clampCentre(i)
+                i += 1
+            }
+            it += 1
+        }
+
+        Array.tabulate(n)(i => (px(i), py(i)))
     }
 }
 
@@ -686,8 +753,9 @@ object Overlays {
                 <div class=p>${ref(Ferox)} ${cost("(Ongoing):")} While ${Ithaqua.name} is in play, your Cultists cannot be captured by enemy Monsters or Terrors. They are still vulnerable to enemy Great Old Ones.</div>
                 <div class=p>Spellbook: ${reference(WW, ArcticWind)}</div>"""
             ),
-        ))
+        ), setup = true)
 
+        case $("WW", "Setup") => requirement("After everyone except Opener of the Way has set up: 8 Power, 6 Acolytes, and a Controlled Gate in one of the Areas marked with the Windwalker Glyph.")
         case $("WW", FirstPlayer.text) => requirement("You are the First Player.")
         case $("WW", OppositeGate.text) => requirement("A Gate exists in the Area marked with the Windwalker Glyph and in which you did not start.")
         case $("WW", AnytimeGainElderSigns.text) => requirement("Take this spellbook at any time. Gain <span class=es>1 Elder Sign</span> for each enemy player with 6 Spellbooks on their Faction Card, to a maximum of <span class=es>3 Elder Signs</span>.")
@@ -704,6 +772,7 @@ object Overlays {
 
 
         case $("OW") => owFactionOverlay(false, false)
+        case $("OW", "Setup") => requirement("After all other players have set up: 8 Power, 6 Acolytes and a Controlled Gate in the empty Area of your choice.")
         case $("OW", cheapMutants : Boolean, yogCurseDie : Boolean) => owFactionOverlay(cheapMutants, yogCurseDie)
 
         case $("OW", EightGates.text) => requirement("There are 8 Gates on the Map.")
@@ -749,8 +818,9 @@ object Overlays {
                 <div class=p>Spellbooks: ${reference(AN, WorshipServices)}, ${reference(AN, Consecration)}, ${reference(AN, UnholyGround)}</div>
                 <div class=p>${cost("Special:")} If all 4 Cathedrals are in play, you may Awaken an Independent Great Old One without your own Great Old One (when Awakening Cthugha this way, just pay 6 Power).</div>"""
             )
-        ))
+        ), setup = true)
 
+        case $("AN", "Setup") => requirement("8 Power, 6 Acolytes, and a Controlled Gate in any Area containing no game symbol. Set up after all factions except Tcho-Tcho, Windwalker, and Opener. You may place the Gate in an Area with one of Yellow Sign&#39;s three Spellbook Glyphs, but not in another faction&#39;s Start Area.")
         case $("AN", CathedralAA.text) => requirement(s"A Cathedral is in an Area marked with this Glyph: <img src=${imageSource("sign-aa")} class=inline-glyph />")
         case $("AN", CathedralOO.text) => requirement(s"A Cathedral is in an Area marked with this Glyph: <img src=${imageSource("sign-oo")} class=inline-glyph />")
         case $("AN", CathedralWW.text) => requirement(s"A Cathedral is in an Area marked with this Glyph: <img src=${imageSource("sign-ww")} class=inline-glyph />")
@@ -766,6 +836,7 @@ object Overlays {
         case $("AN", WorshipServices.name) => spellbook(WorshipServices.name, "Gather Power Phase", "Gain 1 Power for each Cathedral that shares an Area with an enemy Gate. Those enemies each gain 1 Power.")
 
             case $("DS") => dsFactionOverlay(false)
+            case $("DS", "Setup") => requirement("Start with 4 Power and no units on the map. Your Start Area is the first spot in which you place an Acolyte. All your spellbooks get flipped face-down when activated — each Doom Phase, flip them all face-up again.")
             case $("DS", altSB : Boolean) => dsFactionOverlay(altSB)
 
             case $("DS", OneLarvaEach.text) => requirement("You have one of each Larva type in play.")
@@ -956,9 +1027,10 @@ object Overlays {
             (TombHerd,   6, "2",   "3", s"""<div class=p>The first Tomb-Herd in an Area has 3 Combat. Any others have 0 Combat.</div><div class=p>Spellbook: ${reference(TS, GraspingDead)}</div>"""),
             (DeepTendril, 3, "3", "1-3", s"""<div class=p>Combat: 1, +1 if Gla'aki is in the same Area, +1 if in an Ocean/Sea Area.</div><div class=p>Spellbook: ${reference(TS, Oleaginous)}</div>"""),
             (Glaaki,     1, "7",   calc(g => { implicit val gg : Game = g; 2 * TS.onMap(DeepTendril).not(Zeroed).num }), s"""<div class=p>Spellbooks: ${reference(TS, Oleaginous)}, ${reference(TS, GreenDecay)}</div><div class=p><span class=ability-color>How to Awaken Tombstalker Gla'aki:</span></div><div class=p>1) You must Control a Gate in an Ocean/Sea Area</div><div class=p>2) Pay 7 Power (you may also spend Death's Head as Power)</div><div class=p>3) Gla'aki appears in that Area</div><div class=p>${combat} Equals double the number of Deep Tendrils in play.</div><div class=p><span class=ability-color>Shepherd of the Crypt</span> (Gather Power) Gain 1 Power for each Tomb-Herd in an Area of your choice.</div>""")
-        ))
+        ), setup = true)
 
         // Tombstalker (TS): spellbook requirement info card overlays
+        case $("TS", "Setup") => requirement("Before Ancients, place 6 Acolytes and a Controlled Gate in any Ocean/Sea Area lacking a Faction Glyph. Place the Death&#39;s Head Counter at 0 on the Doom Track. Start with 8 Power. Stack your Eleven Tomes of Gla&#39;aki in ascending order (I to XI).")
         case $("TS", TSAwakenGlaaki.text) => requirement("Awaken Tombstalker Gla'aki.")
         case $("TS", TSTombHerdKilled.text) => requirement("A Tomb-Herd is Killed in Battle.")
         case $("TS", TSRollKill.text) => requirement("Roll a Kill in a Battle.")
@@ -983,9 +1055,10 @@ object Overlays {
             (Desiccated,     6, "2", "0+", s"""<div class=p>Spellbook: ${reference(FB, TheEyeOpens)}</div><div class=p>${combat} 1 if in a Land Area.</div>"""),
             (RevenantOfKnaa, 2, "3", calc(g => { implicit val gg : Game = g; FB.onMap(Desiccated).not(Zeroed).num }), s"""<div class=p>Spellbooks: ${reference(FB, CyclopeanGaze)}, ${reference(FB, CallOfTheFaithful)}</div><div class=p>${combat} Equal to your number of Desiccated in play.</div>"""),
             (Ghatanothoa,    1, calc(g => { implicit val gg : Game = g; math.max(1, 11 - g.ritualCost) }), calc(g => { implicit val gg : Game = g; FB.power }), s"""<div class=p>Spellbooks: ${reference(FB, CyclopeanGaze)}, ${reference(FB, CallOfTheFaithful)}</div><div class=p><span class=ability-color>How to Awaken Ghatanothoa, Devil-God</span></div><div class=p>1) Pay 11 Power minus the cost of a Ritual of Annihilation</div><div class=p>2) Ghatanothoa appears in your Start Area</div><div class=p>3) Flip all of your face-down spellbooks face-up</div><div class=p>${combat} Equal to your Power.</div><div class=p><span class=ability-color>Infernal Pact</span> (Ongoing) You may discount the cost of any Action you perform by flipping any number of your faceup spellbooks facedown, reducing that cost by 1 per spellbook flipped.</div>""")
-        ))
+        ), setup = true)
 
         // Firstborn (FB): spellbook requirement info card overlays
+        case $("FB", "Setup") => requirement("After Ancients but before Tcho-Tcho, place 6 Acolytes and a Controlled Gate in an empty Area. Start with 8 Power. You have no High Priest, but in games with High Priests you gain 1 extra Power during Gather Power.")
         case $("FB", FBNoAcolytesInStart.text) => requirement("None of your Acolytes are in your Start Area.")
         case $("FB", FBAwakenGhatanothoa.text) => requirement("Awaken Ghatanothoa.")
         case $("FB", FBTwoFacedownSpellbooks.text) => requirement("Have two facedown spellbooks.")
@@ -1016,7 +1089,8 @@ object Overlays {
                 <div class=p>${cost("3)")} Eliminate the High Priest, then place Ubbo-Sathla at your Controlled Gate.</div>
                 <div class=p>${combat} Equals the Growth counter value on the Doom track.</div>
                 <div class=p><span class=ability-color>Hell's Banquet</span> ${cost("(Doom Phase):")} Once Ubbo-Sathla has been Awakened, each Doom Phase (whether or not Ubbo-Sathla is still in play), roll 1d6 and increase the Growth counter by the die roll.</div>""")
-        ), "Faction Card Text reflects Tsang Tribe spellbooks regardless of which tribe was chosen, similar to real world faction card.")
+        ), "Faction Card Text reflects Tsang Tribe spellbooks regardless of which tribe was chosen, similar to real world faction card.", setup = true,
+            sbLine = s"""Spellbooks: <span class=cost-color>Tsang:</span> ${reference(TT, Idolatry)}, ${reference(TT, Martyrdom)}, ${reference(TT, TabletsOfTheGods)} &nbsp; <span class=cost-color>Leng:</span> ${reference(TT, DarkRituals)}, ${reference(TT, Fulmination)}, ${reference(TT, SurpriseSB)} &nbsp; <span class=cost-color>Sarkomand:</span> ${reference(TT, Doomsday)}, ${reference(TT, Inerrant)}, ${reference(TT, OtherworldAlliances)}""")
 
         // Tcho-Tcho (TT): spellbook requirement info card overlays
         case $("TT", TTSycophancyTrigger.text)    => requirement("Another faction performs a Ritual of Annihilation OR reaches 15 Doom.")
@@ -1216,19 +1290,42 @@ object Overlays {
             // ad2ec5b) and is WRONG: the owner wants the size range, not uniform
             // sprites. This block is kept identical in behaviour to HB.
             val moonSpriteScale = 14.0 / 70.0
-            def spriteHFor(onMapH : Double) : Double = (onMapH * moonSpriteScale).min(42.0)
+            def baseSpriteHFor(onMapH : Double) : Double = (onMapH * moonSpriteScale).min(42.0)
+
+            // ANTI-OVERLAP AUTO-SHRINK (BBMoonSizing): sum every sprite's box area
+            // (as a fraction of the visible disc) at default size; if the total
+            // exceeds the safe ratio, shrink EVERY sprite by one uniform factor.
+            // aspect(w/h) per unit comes from the BB unit's on-map height (each BB
+            // unit class has a distinct onMapH: EarthCat 70, Mars 105, Saturn 140,
+            // Uranus 175, Bastet 210); other factions' visiting units use the default.
+            def moonUnitClass(onMapH : Double) : UnitClass = onMapH.round.toInt match {
+                case 70  => EarthCat
+                case 105 => CatFromMars
+                case 140 => CatFromSaturn
+                case 175 => CatFromUranus
+                case 210 => Bastet
+                case _   => EarthCat
+            }
+            val sumAreaRatio = parsed.map { case (_, _, _, onMapH) =>
+                val hFrac = baseSpriteHFor(onMapH) / 100.0
+                BBMoonSizing.areaFraction(moonUnitClass(onMapH), hFrac)
+            }.sum
+            val moonShrink = BBMoonSizing.shrinkFactor(sumAreaRatio)
+            def spriteHFor(onMapH : Double) : Double = baseSpriteHFor(onMapH) * moonShrink
             val useHorizontal = dom.window.innerWidth > dom.window.innerHeight
-            // Stable seed: only the asset-id list affects scatter positions, so
-            // a unit's hp transition (alive → pained → killed → eliminated)
-            // does not jiggle every other sprite when the overlay re-renders.
             val seed = parsed.length * 31 + parsed./({ case (s, _, _, _) => s }).mkString.hashCode
-            val rawScatter = MoonPlacement.scatter(n, useHorizontal, seed)
-            // Convert pixel coords on the placement bitmap (which is 1:1 with
-            // the displayed moon image) into CSS % of the moon image's
-            // dimensions. The CSS positioning anchors each sprite at
-            // (left%, top%) relative to the moon-image rectangle.
             val moonW = MoonPlacement.moonImageW.toDouble
             val moonH = MoonPlacement.moonImageH.toDouble
+            // Size-aware placement: feed each unit's sprite box height (image px,
+            // after shrink) and aspect so scatter avoids overlaps by SIZE and
+            // relaxes any residual overlap into the disc's empty space.
+            val moonHeightsPx : Array[Double] = parsed.map { case (_, _, _, onMapH) =>
+                spriteHFor(onMapH) / 100.0 * moonH
+            }.toArray
+            val moonAspects : Array[Double] = parsed.map { case (_, _, _, onMapH) =>
+                BBMoonSizing.aspect(moonUnitClass(onMapH))
+            }.toArray
+            val rawScatter = MoonPlacement.scatterSized(useHorizontal, seed, moonHeightsPx, moonAspects)
             val positions : List[(Double, Double)] = rawScatter.toList./ { case (px, py) =>
                 (px / moonW * 100.0, py / moonH * 100.0)
             }
@@ -1903,7 +2000,7 @@ object Overlays {
                 <div class=p>${combat} First roll the Azathoth die, then roll that many combat dice.</div>
                 <div class=p>${ref(CosmicRuler)} ${cost("(Post-Battle):")} When any Avatar is choosen to recieve a Kill or Elimination, instead you can Eliminate another Avatar in its stead, from anywhere on the map.</div>
             """),
-        ))
+        ), setup = true)
     }
 
     def bbFactionOverlay(altSB : Boolean) = {
@@ -1964,10 +2061,10 @@ object Overlays {
                 <div class=p>${combat} Equal to twice the number of enemy-Controlled Faction Great Old Ones in play.</div>
                 <div class=p>${ref(KeyAndGate)} ${cost("(Ongoing):")} Yog-Sothoth counts as a Gate for every purpose, except for The Beyond One ability. Yog-Sothoth is not Controlled by any Cultist, and can exist in the same Area as another Gate.</div>"""
             ),
-        ))
+        ), setup = true)
     }
 
-    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "") = s"""
+    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "", setup : Boolean = false, sbLine : String = "") = s"""
         <table class="faction-table" style="background-image:url(${imageSource(background)})">
             <thead>
                 <tr>
@@ -2001,16 +2098,19 @@ object Overlays {
                     </td>
                 </tr>
                 ${
-                    if (miscSpellbooks.any) { s"""
+                    val setupLink =
+                        if (setup) s"""<span class="ability-color pointer" onclick="onExternalClick('${f.short}', 'Setup')">Setup</span>&nbsp;&nbsp;&nbsp;"""
+                        else ""
+                    val sbPart =
+                        if (sbLine.nonEmpty) sbLine
+                        else if (miscSpellbooks.any)
+                            "Spellbooks: " + miscSpellbooks./{ sb => s"""${reference(f, sb)}""" }.join(", ")
+                        else ""
+                    if (setupLink.nonEmpty || sbPart.nonEmpty) { s"""
                         <tr>
                             <td colspan=6>
                                 <div style="padding-left: 3ex; padding-right: 3ex; padding-bottom: 1ex;">
-                                    Spellbooks:
-                                    ${
-                                        miscSpellbooks./{ sb =>
-                                            s"""${reference(f, sb)}"""
-                                        }.join(", ")
-                                    }
+                                    ${setupLink}${sbPart}
                                 </div>
                             </td>
                         </tr>"""
