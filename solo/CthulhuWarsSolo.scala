@@ -3650,6 +3650,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             case CatFromSaturn => "bb-cat-from-saturn"
                             case CatFromUranus => "bb-cat-from-uranus"
                             case Bastet        => "bb-bastet"
+                            // Faceless Blight (FBE): no unit art yet — the map uses
+                            // placeholder sprites (dc-acolyte / gc-high-priest). The Moon
+                            // must reuse the SAME placeholders, otherwise the auto-generated
+                            // "fbe-acolyte"/"fbe-high-priest" ids resolve to nothing and the
+                            // units render invisibly (1x1) — i.e. don't show up on the Moon.
+                            case Acolyte if f == FBE    => "dc-acolyte"
+                            case HighPriest if f == FBE => "gc-high-priest"
                             case Acolyte       => f.short.toLowerCase + "-acolyte"
                             case HighPriest    => f.short.toLowerCase + "-high-priest"
                             case Ghoul         => "bg-ghoul"
@@ -3689,6 +3696,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             case Desiccated    => "fb-desiccated"
                             case RevenantOfKnaa=> "fb-revenant"
                             case Ghatanothoa   => "fb-ghatanothoa"
+                            // Faceless Blight (FBE) monster + GOO: placeholder art matching
+                            // the map (n-dimensional-shambler / ys-king-in-yellow). Without
+                            // these the Moon emits non-existent "fbe-*" ids and the figures
+                            // vanish. Swap to fbe-fungal-thrall/fbe-byagoona when art lands.
+                            case FungalThrall  => "n-dimensional-shambler"
+                            case Byagoona      => "ys-king-in-yellow"
                             case ProtoShoggoth => "tt-proto-shoggoth"
                             case UbboSathla    => "tt-ubbo-sathla"
                             case Ghast              => "n-ghast"
