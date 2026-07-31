@@ -4177,18 +4177,19 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (cost + t == 0)
                 u.add(MovedForFree)
 
-            // Catnapping refund: if a non-BB unit moves OFF the Moon and its owner paid Power,
-            // BB gains that same amount of Power.
-            if (factions.has(BB) && BB.can(Catnapping) && self != BB && o == BB.moon && cost > 0) {
-                BB.power += cost
-                BB.log(Catnapping.styled(BB) + ": gained", cost.power, "from", self.full, "moving off", BB.moon)
-            }
-
             // Track Ghato paid moves for anti-ping-pong
             if (self == FB && u.uclass == Ghatanothoa && cost > 0)
                 fbGhatoLastMoveOrigin = Some(o)
 
             self.log("moved", u, "from", o, "to", r)
+
+            // Catnapping refund: if a non-BB unit moves OFF the Moon and its owner paid
+            // Power, BB gains that same amount of Power. Logged AFTER the move so the
+            // credit follows the movement in the game log.
+            if (factions.has(BB) && BB.can(Catnapping) && self != BB && o == BB.moon && cost > 0) {
+                BB.power += cost
+                BB.log(Catnapping.styled(BB) + ": gained", cost.power, "from", self.full, "moving off", BB.moon)
+            }
 
             logElderThingMovementBlocks(u, r)
 
