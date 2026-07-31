@@ -152,10 +152,10 @@ object YSExpansion extends Expansion {
 
             if (f.can(HWINTBN) && f.used(ScreamingDead).not && f.has(Hastur)) {
                 val o = f.goo(Hastur).region
-                // Moon counts as a normal region: Hastur may move to the Moon to
-                // target an enemy cultist there (e.g. an Earth Cat).
-                val candidates = areas ++ game.factions.has(BB).??($(BB.moon))
-                candidates.%(f.affords(1)).but(o).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
+                // HWINTBN is a MOVE — it may NOT send Hastur TO the Moon (only BB may
+                // move a unit to the Moon). `areas` excludes the Moon, which is correct
+                // both when Hastur is on the Moon (moves OFF to any area) and on the map.
+                areas.%(f.affords(1)).but(o).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
                     + HWINTBNMainAction(f, o, l)
                 }
             }

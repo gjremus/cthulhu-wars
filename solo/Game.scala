@@ -2678,8 +2678,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // Round 8 Bug 40: also check facedown state for IGOO spellbooks
         if (f.has(GodOfForgetfulness) && !f.oncePerGame.has(GodOfForgetfulness) && f.has(Byatis) && f.allInPlay.%(_.uclass == Byatis).any) {
-            $(f.goo(Byatis).region).nex.%(f.affords(1)).foreach { br =>
-                board.connected(br).%(r => factionlike.but(f).exists(_.at(r).cultists.any)).some.foreach { l =>
+            // God of Forgetfulness pulls enemy cultists FROM an adjacent Area INTO
+            // Byatis's Area. The Moon is adjacent to all regions, so it is a valid
+            // SOURCE (pull cultists off the Moon) when BB is in the game — but Byatis
+            // on the Moon may NOT pull cultists ONTO the Moon, so skip when br is Moon.
+            $(f.goo(Byatis).region).nex.%(f.affords(1)).%(_ != BB.moon).foreach { br =>
+                (board.connected(br) ++ game.factions.has(BB).??($(BB.moon))).%(r => factionlike.but(f).exists(_.at(r).cultists.any)).some.foreach { l =>
                     + GodOfForgetfulnessMainAction(f, br, l)
                 }
             }

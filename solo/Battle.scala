@@ -515,7 +515,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s.can(Abduct) && s.forces(Nightgaunt).any && s.opponent.forces.vulnerable.any)
             options :+= AbductPreBattleAction(s)
 
-        if (s.can(SeekAndDestroy) && s.all(HuntingHorror).%(_.region != arena).any)
+        // Seek and Destroy moves Hunting Horrors INTO the battle. Blocked when the
+        // battle is on the Moon (moving a unit TO the Moon is forbidden); Horrors
+        // already on the Moon fight normally without being "moved" in.
+        if (s.can(SeekAndDestroy) && arena != BB.moon && s.all(HuntingHorror).%(_.region != arena).any)
             options :+= SeekAndDestroyPreBattleAction(s)
 
         if (s.can(Invisibility) && s.forces(FlyingPolyp).not(Invised).any)
@@ -936,7 +939,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         log(BB.full, "Laughingstock".styled("nt"), "blocked: Bubastis-owned", AlbinoPenguins.styled(BB), "may not be sent to a battle on", BB.moon)
                     }
                     else {
-                        val penguinsElsewhere = owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region != arena)
+                        // Penguins may join a Moon battle only if ALREADY on the Moon
+                        // (moving a unit TO the Moon is forbidden). So when the arena is
+                        // the Moon, do not offer penguins from other regions to move in;
+                        // penguins already on the Moon are handled by the in-arena block below.
+                        val penguinsElsewhere = (arena == BB.moon).?($).|(owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region != arena))
                         if (penguinsElsewhere.any) {
                             return Ask(owner)
                                 .each(penguinsElsewhere)(u => LaughingstockMoveAction(owner, u.ref))
