@@ -260,10 +260,12 @@ object XSSExpansion extends Expansion {
         val landGates = f.gates.%(_.glyph != Ocean).num
         f.satisfyIf(LandGatesReq, LandGatesReq.text, landGates >= 3 || glyphGates >= 3)
 
-        // SBR 5 -- Monster Mass (§3.12.5): sum of Costs of XSS Monsters on map >= 10.
-        val monsterCostSum = f.onMap(AmphibianCrawler).num * 1 +
-                             f.onMap(Twister).num * 2 +
-                             f.onMap(EyeOfTheStorm).num * 3
+        // SBR 5 -- Monster Mass (§3.12.5): sum of Costs of XSS Monsters in play >= 10.
+        // Monsters on the Moon are in play and count (onMap alone excludes the Moon).
+        def xssInPlay(uc : UnitClass) = f.units.%(u => u.uclass == uc && (u.region.onMap || u.region == BB.moon)).num
+        val monsterCostSum = xssInPlay(AmphibianCrawler) * 1 +
+                             xssInPlay(Twister) * 2 +
+                             xssInPlay(EyeOfTheStorm) * 3
         f.satisfyIf(MonsterMassReq, MonsterMassReq.text, monsterCostSum >= 10)
     }
 

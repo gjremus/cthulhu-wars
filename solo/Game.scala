@@ -1443,6 +1443,24 @@ case class CommandsInfoAction(self : Faction, plan : Plan) extends BaseFactionAc
 class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], val logging : Boolean, val providedOptions : $[GameOption]) extends Expansion {
     private implicit val game : Game = this
 
+    // ── Catnapping / Lunacy: BB gains enemy Power spent to move a unit OFF the Moon ──
+    // The generic MoveAction handler already credits BB when a plain paid Move leaves
+    // the Moon (o == BB.moon && cost > 0). Special-movement powers (Hastur "Heard His
+    // Name", Screaming Dead, Arctic Wind, Undulate, Burrow, Omnipotence, Idolatry, BG
+    // Avatar, …) mutate `.region` directly and bypass that hook, so each must call this
+    // helper explicitly with the Power the mover spent, once per unit leaving the Moon.
+    //   * powerSpent should be the full Power the enemy paid for THIS unit's move,
+    //     ignoring any per-power discount (e.g. Burrow credits the pre-discount cost).
+    //   * Only call for powers that could validly be used on the Moon — the Moon counts
+    //     as a LAND area, so water-only powers (Submerge) never reach here.
+    //   * Never credit BB for its own moves, or for free moves (powerSpent <= 0).
+    def creditCatnappingOffMoon(mover : Faction, origin : Region, powerSpent : Int, via : Spellbook) : Unit = {
+        if (factions.has(BB) && BB.can(Catnapping) && mover != BB && origin == BB.moon && powerSpent > 0) {
+            BB.power += powerSpent
+            BB.log(Catnapping.styled(BB) + ": gained", powerSpent.power, "from", mover.full, "using", via.styled(mover), "to move off", BB.moon)
+        }
+    }
+
     val options = providedOptions ++ $(PlayerCount(setup.num))
 
     var expansions : $[Expansion] =
@@ -1696,6 +1714,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // their common source region so a single aggregated proselytize fires at end.
     var dcPilgrimageSrc : Region = null
     var dcPilgrimageMovedAcolytes : Int = 0
+    // Catnapping guard: DS Omnipotence pays a flat 1 Power for the WHOLE activation
+    // but can move several Avatars off the Moon via separate handlers. Credit BB only
+    // once per activation (the Power actually spent). Reset when Omnipotence is paid.
+    var dsOmnipotenceMoonCredited : Boolean = false
+    // Catnapping guard: DC Pilgrimage pays a flat 1 Power for the whole activation but
+    // can move several units off the Moon (all from the Prophet's area). Credit BB once.
+    var dcPilgrimageMoonCredited : Boolean = false
     // Pending reserved-Acolyte placements after SB acquisition (queue of SBs).
     var dcPendingAcolytePlacements : $[Spellbook] = $
 
@@ -4642,7 +4667,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 u.add(MovedForFree)
 
             // Catnapping refund: if a non-BB unit moves OFF the Moon and its owner paid Power,
-            // BB gains that same amount of Power.
+            // BB gains that same amount of Power. (Special-movement powers that bypass
+            // MoveAction credit BB via game.creditCatnappingOffMoon instead.)
             if (factions.has(BB) && BB.can(Catnapping) && self != BB && o == BB.moon && cost > 0) {
                 BB.power += cost
                 BB.log(Catnapping.styled(BB) + ": gained", cost.power, "from", self.full, "moving off", BB.moon)

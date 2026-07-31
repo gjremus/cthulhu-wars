@@ -1069,25 +1069,26 @@ object DCExpansion extends Expansion {
                 EndAction(self)
             } else {
                 val e = remaining.first
-                val adj = game.board.connected(area)
-                println(s"[LURE-ELIG] area=${area} adj=${adj./(_.toString).mkString(",")} faction=${e}")
-                println(s"[LURE-ELIG] ${e} ALL cultists: ${e.units.%(_.uclass.utype == Cultist)./(u => s"${u.ref}@${u.region}(onMap=${u.region.glyph.onMap})").mkString(", ")}")
+                // The Moon is "adjacent to all regions", so a cultist on the Moon
+                // is adjacent to Y'Golonac and may be Lured OFF the Moon into his
+                // Area (moving FROM the Moon is allowed). The Moon is not in
+                // board.connected, so add it explicitly when BB is in the game.
+                val adj = game.board.connected(area) ++ (game.factions.has(BB) && area != BB.moon).??($(BB.moon))
                 val eligible = adj./~{ r =>
                     val enemiesOfDC = game.factions.but(self)
                     val hasEnemyGOO        = enemiesOfDC.exists(o => o.at(r).%(_.uclass.isGOO).any || (AN.can(HolyGround) && o.at(r, Cathedral).any))
                     val hasEnemyTerror     = enemiesOfDC.exists(o => o.at(r).%(_.uclass.utype == Terror).any)
                     val hasEnemyBuilding   = enemiesOfDC.exists(o => o.at(r).%(_.uclass.utype == Building).any)
-                    val isMoon = r == BB.moon
-                    if (hasEnemyGOO || hasEnemyTerror || hasEnemyBuilding || isMoon) $()
+                    if (hasEnemyGOO || hasEnemyTerror || hasEnemyBuilding) $()
                     else e.at(r).%(_.uclass.utype == Cultist)
-                }.%(c => c.region.glyph.onMap)
+                }.%(c => c.region.glyph.inPlay)
                 println(s"[LURE-ELIG] eligible after filter: ${eligible./(u => s"${u.ref}@${u.region}").mkString(", ")}")
                 if (eligible.num == 0) {
                     Force(DCLureFactionPickAction(self, area, remaining.dropStarting))
                 } else if (eligible.num == 1) {
                     val c = eligible.first
                     val from = c.region
-                    if (!from.glyph.onMap) {
+                    if (!from.glyph.inPlay) {
                         Force(DCLureFactionPickAction(self, area, remaining.dropStarting))
                     } else {
                         c.region = area
@@ -1133,7 +1134,7 @@ object DCExpansion extends Expansion {
             val c = game.unit(cultistRef)
             val from = c.region
             println(s"[LURE-TRACE] cultist=${cultistRef} region=${from} glyph=${from.glyph} onMap=${from.glyph.onMap} inPlay=${from.glyph.inPlay}")
-            if (!from.glyph.onMap) {
+            if (!from.glyph.inPlay) {
                 println(s"[LURE-TRACE] SKIPPING (not on map): ${cultistRef} in ${from}")
                 Force(DCLureFactionPickAction(DC, area, remaining))
             } else {
@@ -1156,7 +1157,9 @@ object DCExpansion extends Expansion {
         case DCPilgrimageProphetAction(self, prophet) =>
             implicit val asking = Asking(self)
             val p = game.unit(prophet)
-            val dests = game.board.connected(p.region)
+            // From-Moon: a Prophet on the Moon has no board connections, so offer
+            // all on-map areas (units may move OFF the Moon, never TO it).
+            val dests = if (p.region == BB.moon) areas else game.board.connected(p.region)
             dests.foreach { d =>
                 + DCPilgrimageDestAction(self, prophet, d)
             }
@@ -1177,6 +1180,8 @@ object DCExpansion extends Expansion {
             // Reset aggregated Proselytize tracking for this Pilgrimage batch.
             game.dcPilgrimageSrc = src
             game.dcPilgrimageMovedAcolytes = 0
+            // Catnapping: reset once-per-activation Moon credit for this Pilgrimage.
+            game.dcPilgrimageMoonCredited = false
             Force(DCPilgrimageUnitContinueAction(self, prophet, dest, others))
 
         case DCPilgrimageUnitContinueAction(self, prophet, dest, remaining) =>
@@ -1204,6 +1209,12 @@ object DCExpansion extends Expansion {
             u.region = dest
             u.onGate = false
             self.log(Pilgrimage.styled(DC) + ": moved", u.uclass.styled(DC), "from", src, "to", dest)
+            // Catnapping: Pilgrimage paid a flat 1 Power for the whole activation.
+            // Credit BB once if any of DC's own units leave the Moon.
+            if (src == BB.moon && !game.dcPilgrimageMoonCredited) {
+                game.dcPilgrimageMoonCredited = true
+                game.creditCatnappingOffMoon(self, src, 1, Pilgrimage)
+            }
             // Track moved Acolytes for aggregated Proselytize (no per-unit trigger).
             if (u.uclass == Acolyte && self == DC)
                 game.dcPilgrimageMovedAcolytes += 1

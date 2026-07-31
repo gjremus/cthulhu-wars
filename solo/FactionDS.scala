@@ -658,6 +658,7 @@ object DSExpansion extends Expansion {
         case OmnipotenceMainAction(self) =>
             self.power -= 1
             self.oncePerTurn :+= Omnipotence
+            game.dsOmnipotenceMoonCredited = false
             self.log("activated", Omnipotence.styled(self))
             val avatars = self.allInPlay.%(u => u.uclass == AvatarThesis || u.uclass == AvatarAntithesis || u.uclass == AvatarSynthesis)
             Force(OmnipotenceSelectAction(self, $, avatars./(_.ref)))
@@ -696,6 +697,12 @@ object DSExpansion extends Expansion {
                 // HB Fix 112 (2026-07-09): clear stale onGate when forcibly moved
                 u.onGate = false
                 self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
+                // Catnapping: Omnipotence paid a flat 1 Power for the whole activation.
+                // Credit BB once if ANY Avatar leaves the Moon.
+                if (from == BB.moon && !game.dsOmnipotenceMoonCredited) {
+                    game.dsOmnipotenceMoonCredited = true
+                    game.creditCatnappingOffMoon(self, from, 1, Omnipotence)
+                }
             }
             self.oncePerTurn :+= Omnipotence
             EndAction(self)
@@ -708,6 +715,11 @@ object DSExpansion extends Expansion {
                 // HB Fix 112 (2026-07-09): clear stale onGate when forcibly moved
                 u.onGate = false
                 self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
+                // Catnapping: once-per-activation credit if any Avatar leaves the Moon.
+                if (from == BB.moon && !game.dsOmnipotenceMoonCredited) {
+                    game.dsOmnipotenceMoonCredited = true
+                    game.creditCatnappingOffMoon(self, from, 1, Omnipotence)
+                }
             }
             self.oncePerTurn :+= Omnipotence
             EndAction(self)
@@ -734,6 +746,11 @@ object DSExpansion extends Expansion {
             // HB Fix 112 (2026-07-09): clear stale onGate when forcibly moved
             u.onGate = false
             self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
+            // Catnapping: once-per-activation credit if any Avatar leaves the Moon.
+            if (from == BB.moon && !game.dsOmnipotenceMoonCredited) {
+                game.dsOmnipotenceMoonCredited = true
+                game.creditCatnappingOffMoon(self, from, 1, Omnipotence)
+            }
             if (remaining.any)
                 Force(OmnipotenceMoveSeparatelyAction(self, remaining))
             else {

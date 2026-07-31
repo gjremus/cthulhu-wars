@@ -391,8 +391,10 @@ object TSExpansion extends Expansion {
             if (f.can(ElevenRevelations) && game.tsTomesOnCard < 11 && f.enemies.any && f.power >= 1)
                 + TSElevenRevelationsMainAction(f)
 
-            // GRASPING DEAD: battle with only Tomb-Herds
-            if (f.can(GraspingDead) && f.onMap(TombHerd).any && {
+            // GRASPING DEAD: battle with only Tomb-Herds. The offer-gate counts
+            // Tomb-Herds in play INCLUDING the Moon (onMap excludes the off-map
+            // Moon), matching the area-scan below which already includes BB.moon.
+            if (f.can(GraspingDead) && f.units.%(u => u.uclass == TombHerd && (u.region.onMap || u.region == BB.moon)).any && {
                 val allAreas = areas ++ game.factions.has(BB).??($(BB.moon))
                 allAreas.%(r => f.at(r, TombHerd).any && f.enemies.exists(_.at(r).any)).any
             } && (f.power >= 1 || game.deathsHead >= 2))

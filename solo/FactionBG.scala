@@ -279,6 +279,12 @@ object BGExpansion extends Expansion {
             val sn = self.goo(ShubNiggurath)
             sn.region = r
             log(sn, "avatared to", r)
+            // Catnapping: if Shub-Niggurath itself avatars OFF the Moon, BG spent 1
+            // Power to move its own unit away → credit BB. (The reciprocal case —
+            // avataring TO the Moon, displacing a unit off it — is credited in
+            // AvatarReplacementAction, and only when the displaced unit is BG's own:
+            // another faction's displaced unit moves "for free" and is not captured.)
+            game.creditCatnappingOffMoon(self, o, 1, Avatar)
 
             val l = e.at(r).vulnerable.preferablyNotOnGate
 
@@ -292,6 +298,12 @@ object BGExpansion extends Expansion {
             u.region = o
             game.fbSuppressCGForPlacement = false
             u.onGate = false
+            // Catnapping: Avatar TO the Moon (r == Moon) displaces a unit off it. BG
+            // spent 1 Power for the Avatar, so credit BB ONLY when the displaced unit
+            // is BG's own (self == f == BG). Another faction's unit is shoved off "for
+            // free" (BG did not pay to move THAT faction's unit) → no credit.
+            if (self == f)
+                game.creditCatnappingOffMoon(f, r, 1, Avatar)
             EndAction(f)
 
         // GHROTH
@@ -316,12 +328,12 @@ object BGExpansion extends Expansion {
             else {
                 f.log("used", Ghroth, "and rolled", ("[" + x.styled("power") + "]"))
 
-                val n = f.enemies./~(_.cultistsForEnemyTargeting.onMap).num
+                val n = f.enemies./~(_.cultistsForEnemyTargeting).num
                 if (n <= x) {
                     if (n < x)
                         log("Not enough Cultists among other factions")
 
-                    f.enemies./~(_.cultistsForEnemyTargeting.onMap).foreach { c =>
+                    f.enemies./~(_.cultistsForEnemyTargeting).foreach { c =>
                         log(c, "was eliminated in", c.region)
                         game.eliminate(c)
                     }
@@ -334,9 +346,9 @@ object BGExpansion extends Expansion {
             }
 
         case GhrothAction(f, x) =>
-            f.enemies.%(_.cultistsForEnemyTargeting.onMap.none).foreach(f => f.log("had no Cultists"))
+            f.enemies.%(_.cultistsForEnemyTargeting.none).foreach(f => f.log("had no Cultists"))
 
-            val forum = f.enemies.%(_.cultistsForEnemyTargeting.onMap.any)
+            val forum = f.enemies.%(_.cultistsForEnemyTargeting.any)
             Force(GhrothContinueAction(f, x, Nil, forum, forum.num * 3))
 
         case GhrothContinueAction(f, x, xoffers, xforum, xtime) =>
@@ -350,12 +362,12 @@ object BGExpansion extends Expansion {
                 Force(GhrothEliminateAction(f, offers./~(o => o.n.times(o.f))))
             }
             else
-            if (time < 0 || xforum./(_.cultistsForEnemyTargeting.onMap.num).sum < x) {
+            if (time < 0 || xforum./(_.cultistsForEnemyTargeting.num).sum < x) {
                 f.log("eliminated", x, "Cultist" + (x > 1).??("s"))
 
-                val affected = f.enemies.%(_.cultistsForEnemyTargeting.onMap.any)
+                val affected = f.enemies.%(_.cultistsForEnemyTargeting.any)
                 val split = 1.to(x)./~(n => affected.combinations(n))
-                val valid = split.%(_./(_.cultistsForEnemyTargeting.onMap.num).sum >= x)
+                val valid = split.%(_./(_.cultistsForEnemyTargeting.num).sum >= x)
 
                 Ask(f).each(valid)(l => GhrothSplitAction(f, x, l))
             }
@@ -374,9 +386,9 @@ object BGExpansion extends Expansion {
 
                 offers = offers.%(_.f != next)
                 val offered = offers./(_.n).sum
-                val maxp = min(next.cultistsForEnemyTargeting.onMap.num, x)
+                val maxp = min(next.cultistsForEnemyTargeting.num, x)
                 val sweet = max(0, x - offered)
-                val maxother = forum.but(next)./(_.cultistsForEnemyTargeting.onMap.num).sum
+                val maxother = forum.but(next)./(_.cultistsForEnemyTargeting.num).sum
                 val minp = max(1, x - maxother)
 
                 Ask(next).each(-1 +: 0 +: minp.to(maxp).$)(n => GhrothAskAction(f, x, offers, forum, time - (random() * 1.0).round.toInt, next, n))
@@ -400,7 +412,7 @@ object BGExpansion extends Expansion {
 
         case GhrothSplitAction(self, x, ff) =>
             val split = ff./~(f => (x - ff.num).times(f)).combinations(x - ff.num)./(_ ++ ff)./(l => ff./~(f => l.count(f).times(f)))
-            val valid = split.%(s => ff.%(f => f.cultistsForEnemyTargeting.onMap.num < s.%(_ == f).num).none)
+            val valid = split.%(s => ff.%(f => f.cultistsForEnemyTargeting.num < s.%(_ == f).num).none)
             Ask(self).each(valid)(l => GhrothSplitNumAction(self, x, ff, l))
 
         case GhrothSplitNumAction(self, x, ff, l) =>
