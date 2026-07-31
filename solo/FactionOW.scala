@@ -292,12 +292,12 @@ object OWExpansion extends Expansion {
             // it already, so we no-op. Yog-Sothoth IS a gate (not on a gate)
             // and can't be the `uc` here.
             self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
-            // Catnapping: Beyond One spent 1 Power to move OW's own cost-3+ unit off `o`.
-            // Credit BB when that unit leaves the Moon. (The gate leg is a non-unit and
-            // irrelevant to Catnapping; credit once for the single Power spent.)
-            game.creditCatnappingOffMoon(self, o, 1, BeyondOne)
             val gateType = if (game.factions.has(DS) && DS.chaosGateRegions.has(r)) "Chaos Gate" else "gate"
             self.log("moved", gateType, "with", uc.styled(self), "from", o, "to", r)
+            // Catnapping: Beyond One spent 1 Power to move OW's own cost-3+ unit off `o`.
+            // Credit BB when that unit leaves the Moon (logged AFTER the move). The gate
+            // leg is a non-unit and irrelevant to Catnapping; credit once.
+            game.creditCatnappingOffMoon(self, o, 1, BeyondOne)
             EndAction(self)
 
         // DREAD CURSE
