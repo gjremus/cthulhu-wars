@@ -344,17 +344,27 @@ object MoonPlacement {
         val textZones : Array[(Double, Double, Double, Double)] = Array(
             (130.0, 500.0, 900.0, 790.0)
         )
-        def inTextZone(px : Double, py : Double) : Boolean = {
+        // A candidate position (px,py) is the sprite's CENTRE. A sprite of height h
+        // occupies roughly [py - h/2, py + h/2] vertically. A unit "intrudes" the text
+        // zone if that vertical span overlaps the zone — checking the full sprite, not
+        // just the centre, so a large unit whose base sits below the text but whose
+        // bulk rises into the text is correctly rejected.
+        def spriteIntrudesTextZone(px : Double, py : Double, h : Double) : Boolean = {
+            val top = py - h / 2.0
+            val bot = py + h / 2.0
             var z = 0
             while (z < textZones.length) {
                 val (x1, y1, x2, y2) = textZones(z)
-                if (px >= x1 && px <= x2 && py >= y1 && py <= y2) return true
+                if (px >= x1 && px <= x2 && bot >= y1 && top <= y2) return true
                 z += 1
             }
             false
         }
-        val innerPool = pool.filter { case (px, py) => !inTextZone(px, py) }
-        val usePool = if (innerPool.nonEmpty) innerPool else pool
+        // Cultist-height threshold in image px: EarthCat (BB's cultist-equivalent) has
+        // onMapH 70, and sprite heights here are onMapH/100 * moonImageH. Only units at
+        // or below this height may sit in the text region; taller units are kept out so
+        // their bulk cannot cover the rules text. Small margin for rounding/shrink.
+        val cultistHeightPx = 70.0 / 100.0 * MoonPlacement.moonImageH * 1.05
 
         val radii = Array.tabulate(n)(i => spriteRadius(heightsPx(i), aspects(i)))
 
@@ -367,11 +377,20 @@ object MoonPlacement {
         while (oi < order.length) {
             val idx = order(oi)
             val rSelf = radii(idx)
-            var best = usePool(rng.nextInt(usePool.length))
+            // Per-unit pool: units taller than a cultist may NOT sit where their sprite
+            // would intrude the text zone; cultist-height-and-smaller units may.
+            val hSelf = heightsPx(idx)
+            val unitPool =
+                if (hSelf <= cultistHeightPx) pool
+                else {
+                    val filtered = pool.filter { case (cx, cy) => !spriteIntrudesTextZone(cx, cy, hSelf) }
+                    if (filtered.nonEmpty) filtered else pool
+                }
+            var best = unitPool(rng.nextInt(unitPool.length))
             var bestScore = Double.NegativeInfinity
             var tries = 0
             while (tries < 250) {
-                val cand = usePool(rng.nextInt(usePool.length))
+                val cand = unitPool(rng.nextInt(unitPool.length))
                 var minGap = Double.MaxValue
                 var k = 0
                 while (k < placedIdx.length) {

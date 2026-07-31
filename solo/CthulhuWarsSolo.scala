@@ -3044,7 +3044,11 @@ object CthulhuWarsSolo {
                 bitmap.canvas.style.position = "absolute"
                 bitmap.canvas.style.top = "0"
                 bitmap.canvas.style.left = "0"
-                bitmap.canvas.style.zIndex = "1"
+                // Faction-card unit sprites (captured / submerged / on-card units) must
+                // render ON TOP of the Spellbook / SBR text rows, not behind them. The
+                // canvas is mostly transparent (only sprites are drawn), so layering it
+                // above the text div (z-index 2) hides nothing but the covered sprites.
+                bitmap.canvas.style.zIndex = "3"
                 bitmap.canvas.style.width = "" + b.node.clientWidth + "px"
                 bitmap.canvas.style.height = "" + b.node.clientHeight + "px"
 
