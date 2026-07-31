@@ -490,8 +490,9 @@ object Overlays {
                 <div class=p>${ref(Ferox)} ${cost("(Ongoing):")} While ${Ithaqua.name} is in play, your Cultists cannot be captured by enemy Monsters or Terrors. They are still vulnerable to enemy Great Old Ones.</div>
                 <div class=p>Spellbook: ${reference(WW, ArcticWind)}</div>"""
             ),
-        ))
+        ), setup = true)
 
+        case $("WW", "Setup") => requirement("After everyone except Opener of the Way has set up: 8 Power, 6 Acolytes, and a Controlled Gate in one of the Areas marked with the Windwalker Glyph.")
         case $("WW", FirstPlayer.text) => requirement("You are the First Player.")
         case $("WW", OppositeGate.text) => requirement("A Gate exists in the Area marked with the Windwalker Glyph and in which you did not start.")
         case $("WW", AnytimeGainElderSigns.text) => requirement("Take this spellbook at any time. Gain <span class=es>1 Elder Sign</span> for each enemy player with 6 Spellbooks on their Faction Card, to a maximum of <span class=es>3 Elder Signs</span>.")
@@ -508,6 +509,7 @@ object Overlays {
 
 
         case $("OW") => owFactionOverlay(false, false)
+        case $("OW", "Setup") => requirement("After all other players have set up: 8 Power, 6 Acolytes and a Controlled Gate in the empty Area of your choice.")
         case $("OW", cheapMutants : Boolean, yogCurseDie : Boolean) => owFactionOverlay(cheapMutants, yogCurseDie)
 
         case $("OW", EightGates.text) => requirement("There are 8 Gates on the Map.")
@@ -553,8 +555,9 @@ object Overlays {
                 <div class=p>Spellbooks: ${reference(AN, WorshipServices)}, ${reference(AN, Consecration)}, ${reference(AN, UnholyGround)}</div>
                 <div class=p>${cost("Special:")} If all 4 Cathedrals are in play, you may Awaken an Independent Great Old One without your own Great Old One (when Awakening Cthugha this way, just pay 6 Power).</div>"""
             )
-        ))
+        ), setup = true)
 
+        case $("AN", "Setup") => requirement("8 Power, 6 Acolytes, and a Controlled Gate in any Area containing no game symbol. Set up after all factions except Tcho-Tcho, Windwalker, and Opener. You may place the Gate in an Area with one of Yellow Sign&#39;s three Spellbook Glyphs, but not in another faction&#39;s Start Area.")
         case $("AN", CathedralAA.text) => requirement(s"A Cathedral is in an Area marked with this Glyph: <img src=${imageSource("sign-aa")} class=inline-glyph />")
         case $("AN", CathedralOO.text) => requirement(s"A Cathedral is in an Area marked with this Glyph: <img src=${imageSource("sign-oo")} class=inline-glyph />")
         case $("AN", CathedralWW.text) => requirement(s"A Cathedral is in an Area marked with this Glyph: <img src=${imageSource("sign-ww")} class=inline-glyph />")
@@ -570,6 +573,7 @@ object Overlays {
         case $("AN", WorshipServices.name) => spellbook(WorshipServices.name, "Gather Power Phase", "Gain 1 Power for each Cathedral that shares an Area with an enemy Gate. Those enemies each gain 1 Power.")
 
             case $("DS") => dsFactionOverlay(false)
+            case $("DS", "Setup") => requirement("Start with 4 Power and no units on the map. Your Start Area is the first spot in which you place an Acolyte. All your spellbooks get flipped face-down when activated — each Doom Phase, flip them all face-up again.")
             case $("DS", altSB : Boolean) => dsFactionOverlay(altSB)
 
             case $("DS", OneLarvaEach.text) => requirement("You have one of each Larva type in play.")
@@ -760,9 +764,10 @@ object Overlays {
             (TombHerd,   6, "2",   "3", s"""<div class=p>The first Tomb-Herd in an Area has 3 Combat. Any others have 0 Combat.</div><div class=p>Spellbook: ${reference(TS, GraspingDead)}</div>"""),
             (DeepTendril, 3, "3", "1-3", s"""<div class=p>Combat: 1, +1 if Gla'aki is in the same Area, +1 if in an Ocean/Sea Area.</div><div class=p>Spellbook: ${reference(TS, Oleaginous)}</div>"""),
             (Glaaki,     1, "7",   calc(g => { implicit val gg : Game = g; 2 * TS.onMap(DeepTendril).not(Zeroed).num }), s"""<div class=p>Spellbooks: ${reference(TS, Oleaginous)}, ${reference(TS, GreenDecay)}</div><div class=p><span class=ability-color>How to Awaken Tombstalker Gla'aki:</span></div><div class=p>1) You must Control a Gate in an Ocean/Sea Area</div><div class=p>2) Pay 7 Power (you may also spend Death's Head as Power)</div><div class=p>3) Gla'aki appears in that Area</div><div class=p>${combat} Equals double the number of Deep Tendrils in play.</div><div class=p><span class=ability-color>Shepherd of the Crypt</span> (Gather Power) Gain 1 Power for each Tomb-Herd in an Area of your choice.</div>""")
-        ))
+        ), setup = true)
 
         // Tombstalker (TS): spellbook requirement info card overlays
+        case $("TS", "Setup") => requirement("Before Ancients, place 6 Acolytes and a Controlled Gate in any Ocean/Sea Area lacking a Faction Glyph. Place the Death&#39;s Head Counter at 0 on the Doom Track. Start with 8 Power. Stack your Eleven Tomes of Gla&#39;aki in ascending order (I to XI).")
         case $("TS", TSAwakenGlaaki.text) => requirement("Awaken Tombstalker Gla'aki.")
         case $("TS", TSTombHerdKilled.text) => requirement("A Tomb-Herd is Killed in Battle.")
         case $("TS", TSRollKill.text) => requirement("Roll a Kill in a Battle.")
@@ -787,9 +792,10 @@ object Overlays {
             (Desiccated,     6, "2", "0+", s"""<div class=p>Spellbook: ${reference(FB, TheEyeOpens)}</div><div class=p>${combat} 1 if in a Land Area.</div>"""),
             (RevenantOfKnaa, 2, "3", calc(g => { implicit val gg : Game = g; FB.onMap(Desiccated).not(Zeroed).num }), s"""<div class=p>Spellbooks: ${reference(FB, CyclopeanGaze)}, ${reference(FB, CallOfTheFaithful)}</div><div class=p>${combat} Equal to your number of Desiccated in play.</div>"""),
             (Ghatanothoa,    1, calc(g => { implicit val gg : Game = g; math.max(1, 11 - g.ritualCost) }), calc(g => { implicit val gg : Game = g; FB.power }), s"""<div class=p>Spellbooks: ${reference(FB, CyclopeanGaze)}, ${reference(FB, CallOfTheFaithful)}</div><div class=p><span class=ability-color>How to Awaken Ghatanothoa, Devil-God</span></div><div class=p>1) Pay 11 Power minus the cost of a Ritual of Annihilation</div><div class=p>2) Ghatanothoa appears in your Start Area</div><div class=p>3) Flip all of your face-down spellbooks face-up</div><div class=p>${combat} Equal to your Power.</div><div class=p><span class=ability-color>Infernal Pact</span> (Ongoing) You may discount the cost of any Action you perform by flipping any number of your faceup spellbooks facedown, reducing that cost by 1 per spellbook flipped.</div>""")
-        ))
+        ), setup = true)
 
         // Firstborn (FB): spellbook requirement info card overlays
+        case $("FB", "Setup") => requirement("After Ancients but before Tcho-Tcho, place 6 Acolytes and a Controlled Gate in an empty Area. Start with 8 Power. You have no High Priest, but in games with High Priests you gain 1 extra Power during Gather Power.")
         case $("FB", FBNoAcolytesInStart.text) => requirement("None of your Acolytes are in your Start Area.")
         case $("FB", FBAwakenGhatanothoa.text) => requirement("Awaken Ghatanothoa.")
         case $("FB", FBTwoFacedownSpellbooks.text) => requirement("Have two facedown spellbooks.")
@@ -820,9 +826,11 @@ object Overlays {
                 <div class=p>${cost("3)")} Eliminate the High Priest, then place Ubbo-Sathla at your Controlled Gate.</div>
                 <div class=p>${combat} Equals the Growth counter value on the Doom track.</div>
                 <div class=p><span class=ability-color>Hell's Banquet</span> ${cost("(Doom Phase):")} Once Ubbo-Sathla has been Awakened, each Doom Phase (whether or not Ubbo-Sathla is still in play), roll 1d6 and increase the Growth counter by the die roll.</div>""")
-        ), s"""<div style="font-weight:bold;margin-bottom:0.5ex;">Tsang Spellbooks:</div><div style="margin-bottom:1ex;">${reference(TT, Idolatry)}, ${reference(TT, Martyrdom)}, ${reference(TT, TabletsOfTheGods)}</div><div style="font-weight:bold;margin-bottom:0.5ex;">Leng Spellbooks:</div><div style="margin-bottom:1ex;">${reference(TT, DarkRituals)}, ${reference(TT, Fulmination)}, ${reference(TT, SurpriseSB)}</div><div style="font-weight:bold;margin-bottom:0.5ex;">Sarkomand Spellbooks:</div><div>${reference(TT, Doomsday)}, ${reference(TT, Inerrant)}, ${reference(TT, OtherworldAlliances)}</div>""")
+        ), setup = true,
+            sbLine = s"""Spellbooks: <span class=cost-color>Tsang:</span> ${reference(TT, Idolatry)}, ${reference(TT, Martyrdom)}, ${reference(TT, TabletsOfTheGods)} &nbsp; <span class=cost-color>Leng:</span> ${reference(TT, DarkRituals)}, ${reference(TT, Fulmination)}, ${reference(TT, SurpriseSB)} &nbsp; <span class=cost-color>Sarkomand:</span> ${reference(TT, Doomsday)}, ${reference(TT, Inerrant)}, ${reference(TT, OtherworldAlliances)}""")
 
         // Tcho-Tcho (TT): spellbook requirement info card overlays
+        case $("TT", "Setup") => requirement("After all players set up except Opener and Windwalker: 8 Power, 6 Acolytes &amp; a Controlled Gate in an empty Area containing a faction Glyph. Set Ubbo-Sathla&#39;s Growth counter to 0 on the Doom Track. In games with the High Priest expansion, one Acolyte is replaced with a High Priest.")
         case $("TT", TTSycophancyTrigger.text)    => requirement("Another faction performs a Ritual of Annihilation OR reaches 15 Doom.")
         case $("TT", TTEarnElderSign.text)         => requirement("Earn an Elder Sign.")
         case $("TT", TTThreeElderSigns.text)       => requirement("Own 3 or more Elder Signs.")
@@ -1428,7 +1436,7 @@ object Overlays {
                 <div class=p>${combat} First roll the Azathoth die, then roll that many combat dice.</div>
                 <div class=p>${ref(CosmicRuler)} ${cost("(Post-Battle):")} When any Avatar is choosen to recieve a Kill or Elimination, instead you can Eliminate another Avatar in its stead, from anywhere on the map.</div>
             """),
-        ))
+        ), setup = true)
     }
 
     def owFactionOverlay(cheapMutants : Boolean, yogCurseDie : Boolean) = {
@@ -1455,10 +1463,10 @@ object Overlays {
                 <div class=p>${combat} Equal to twice the number of enemy-Controlled Faction Great Old Ones in play.</div>
                 <div class=p>${ref(KeyAndGate)} ${cost("(Ongoing):")} Yog-Sothoth counts as a Gate for every purpose, except for The Beyond One ability. Yog-Sothoth is not Controlled by any Cultist, and can exist in the same Area as another Gate.</div>"""
             ),
-        ))
+        ), setup = true)
     }
 
-    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "") = s"""
+    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "", setup : Boolean = false, sbLine : String = "") = s"""
         <table class="faction-table" style="background-image:url(${imageSource(background)})">
             <thead>
                 <tr>
@@ -1492,16 +1500,19 @@ object Overlays {
                     </td>
                 </tr>
                 ${
-                    if (miscSpellbooks.any) { s"""
+                    val setupLink =
+                        if (setup) s"""<span class="ability-color pointer" onclick="onExternalClick('${f.short}', 'Setup')">Setup</span>&nbsp;&nbsp;&nbsp;"""
+                        else ""
+                    val sbPart =
+                        if (sbLine.nonEmpty) sbLine
+                        else if (miscSpellbooks.any)
+                            "Spellbooks: " + miscSpellbooks./{ sb => s"""${reference(f, sb)}""" }.join(", ")
+                        else ""
+                    if (setupLink.nonEmpty || sbPart.nonEmpty) { s"""
                         <tr>
                             <td colspan=6>
                                 <div style="padding-left: 3ex; padding-right: 3ex; padding-bottom: 1ex;">
-                                    Spellbooks:
-                                    ${
-                                        miscSpellbooks./{ sb =>
-                                            s"""${reference(f, sb)}"""
-                                        }.join(", ")
-                                    }
+                                    ${setupLink}${sbPart}
                                 </div>
                             </td>
                         </tr>"""
