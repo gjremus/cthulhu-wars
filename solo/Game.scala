@@ -1347,6 +1347,23 @@ case class CommandsInfoAction(self : Faction, plan : Plan) extends BaseFactionAc
 class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], val logging : Boolean, val providedOptions : $[GameOption]) extends Expansion {
     private implicit val game : Game = this
 
+    // ── Catnapping / Lunacy: BB gains enemy Power spent to move a unit OFF the Moon ──
+    // The generic MoveAction handler already credits BB when a plain paid Move leaves
+    // the Moon (o == BB.moon && cost > 0). Special-movement powers (Hastur "Heard His
+    // Name", Screaming Dead, Shriek, BG Avatar, DS Omnipotence, OW Beyond One, …) mutate
+    // `.region` directly and bypass that hook, so each must call this helper explicitly
+    // with the Power the mover spent, once per unit leaving the Moon.
+    //   * Only credit for the paying faction's OWN unit leaving the Moon (per the Avatar
+    //     ruling: another faction's displaced unit moves "for free" → no credit).
+    //   * Only for powers validly usable on the Moon (Moon = LAND, so water-only powers
+    //     like Submerge never reach here). Never credit BB's own moves or free moves.
+    def creditCatnappingOffMoon(mover : Faction, origin : Region, powerSpent : Int, via : Spellbook) : Unit = {
+        if (factions.has(BB) && BB.can(Catnapping) && mover != BB && origin == BB.moon && powerSpent > 0) {
+            BB.power += powerSpent
+            BB.log(Catnapping.styled(BB) + ": gained", powerSpent.power, "from", mover.full, "using", via.styled(mover), "to move off", BB.moon)
+        }
+    }
+
     val options = providedOptions ++ $(PlayerCount(setup.num))
 
     var expansions : $[Expansion] =
@@ -1677,6 +1694,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     //   if (factions.has(FB)) game.fbCyclopeanGazeActionRegions :+= r
     // Anti-ping-pong: track Ghato's last paid-move origin within this AP
     var fbGhatoLastMoveOrigin : |[Region] = None
+    // Catnapping guard: DS Omnipotence pays a flat 1 Power for the WHOLE activation but
+    // can move several Avatars off the Moon. Credit BB only once per activation.
+    var dsOmnipotenceMoonCredited : Boolean = false
     var fbCyclopeanGazeActionRegions : $[Region] = $
     // Two-pass CG: FBExpansion.AfterAction computes sources and stores here;
     // Game.scala.AfterAction fires CG AFTER triggers()/SBRs resolve.

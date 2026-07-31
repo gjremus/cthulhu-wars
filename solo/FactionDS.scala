@@ -671,6 +671,7 @@ object DSExpansion extends Expansion {
         case OmnipotenceMainAction(self) =>
             self.power -= 1
             self.oncePerTurn :+= Omnipotence
+            game.dsOmnipotenceMoonCredited = false
             self.log("activated", Omnipotence.styled(self))
             val avatars = self.allInPlay.%(u => u.uclass == AvatarThesis || u.uclass == AvatarAntithesis || u.uclass == AvatarSynthesis)
             Force(OmnipotenceSelectAction(self, $, avatars./(_.ref)))
@@ -707,6 +708,11 @@ object DSExpansion extends Expansion {
                 val from = u.region
                 u.region = r
                 self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
+                // Catnapping: flat 1 Power per activation; credit BB once if any Avatar leaves the Moon.
+                if (from == BB.moon && !game.dsOmnipotenceMoonCredited) {
+                    game.dsOmnipotenceMoonCredited = true
+                    game.creditCatnappingOffMoon(self, from, 1, Omnipotence)
+                }
             }
             self.oncePerTurn :+= Omnipotence
             EndAction(self)
@@ -717,6 +723,11 @@ object DSExpansion extends Expansion {
                 val from = u.region
                 u.region = r
                 self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
+                // Catnapping: flat 1 Power per activation; credit BB once if any Avatar leaves the Moon.
+                if (from == BB.moon && !game.dsOmnipotenceMoonCredited) {
+                    game.dsOmnipotenceMoonCredited = true
+                    game.creditCatnappingOffMoon(self, from, 1, Omnipotence)
+                }
             }
             self.oncePerTurn :+= Omnipotence
             EndAction(self)
@@ -741,6 +752,11 @@ object DSExpansion extends Expansion {
             val from = u.region
             u.region = r
             self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
+            // Catnapping: flat 1 Power per activation; credit BB once if any Avatar leaves the Moon.
+            if (from == BB.moon && !game.dsOmnipotenceMoonCredited) {
+                game.dsOmnipotenceMoonCredited = true
+                game.creditCatnappingOffMoon(self, from, 1, Omnipotence)
+            }
             if (remaining.any)
                 Force(OmnipotenceMoveSeparatelyAction(self, remaining))
             else {

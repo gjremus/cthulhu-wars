@@ -285,6 +285,8 @@ object YSExpansion extends Expansion {
             self.payTax(r)
             self.at(o, Hastur).first.region = r
             self.oncePerRound :+= HWINTBN
+            // Catnapping: HWINTBN moved Hastur off the Moon for 1 Power → credit BB.
+            game.creditCatnappingOffMoon(self, o, 1, HWINTBN)
 
             log(Hastur, "heard his name in", r)
 
@@ -297,6 +299,8 @@ object YSExpansion extends Expansion {
         case ScreamingDeadAction(self, o, r) =>
             self.power -= 1
             self.payTax(r)
+            // Catnapping: Screaming Dead spent 1 Power to move the group off `o`.
+            game.creditCatnappingOffMoon(self, o, 1, ScreamingDead)
             Force(ScreamingDeadFollowAction(self, o, r, KingInYellow))
 
         case ScreamingDeadFollowAction(self, o, r, uc) =>
@@ -332,6 +336,8 @@ object YSExpansion extends Expansion {
                 self.power -= 1
                 self.payTax(r)
                 self.oncePerAction :+= Shriek
+                // Catnapping: Shriek spent 1 Power to move a Byakhee off `o`.
+                game.creditCatnappingOffMoon(self, o, 1, Shriek)
             }
             u.region = r
             log(u, "flew to", r, "from", o)

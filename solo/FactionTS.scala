@@ -401,7 +401,7 @@ object TSExpansion extends Expansion {
                 + TSElevenRevelationsMainAction(f)
 
             // GRASPING DEAD: battle with only Tomb-Herds
-            if (f.can(GraspingDead) && f.onMap(TombHerd).any && {
+            if (f.can(GraspingDead) && f.units.%(u => u.uclass == TombHerd && (u.region.onMap || u.region == BB.moon)).any && {
                 val allAreas = areas ++ game.factions.has(BB).??($(BB.moon))
                 allAreas.%(r => f.at(r, TombHerd).any && f.enemies.exists(_.at(r).any)).any
             } && (f.power >= 1 || game.deathsHead >= 2))

@@ -291,6 +291,9 @@ object OWExpansion extends Expansion {
                 }
             }
             self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
+            // Catnapping: Beyond One spent 1 Power to move OW's own cost-3+ unit off `o`.
+            // Credit BB when that unit leaves the Moon (the gate leg is a non-unit).
+            game.creditCatnappingOffMoon(self, o, 1, BeyondOne)
             if (isChaosGate)
                 self.log("moved", "Chaos Gate".styled("ds"), "with", uc.styled(self), "from", o, "to", r)
             else
