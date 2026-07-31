@@ -335,7 +335,7 @@ object MoonPlacement {
       *      sprite stays inside the visible disc. This drains residual overlap
       *      into the empty space (offline: avg units >50%-covered drops from
       *      ~1.4 to ~0.07 at the same total-area budget). */
-    def scatterSized(useHorizontal : Boolean, seed : Int, heightsPx : Array[Double], aspects : Array[Double]) : Array[(Double, Double)] = {
+    def scatterSized(useHorizontal : Boolean, seed : Int, heightsPx : Array[Double], aspects : Array[Double], cultistHeightPx : Double) : Array[(Double, Double)] = {
         val n = heightsPx.length
         val pool = if (useHorizontal) horizontal else vertical
         if (pool.isEmpty || n <= 0) return Array.empty
@@ -360,11 +360,11 @@ object MoonPlacement {
             }
             false
         }
-        // Cultist-height threshold in image px: EarthCat (BB's cultist-equivalent) has
-        // onMapH 70, and sprite heights here are onMapH/100 * moonImageH. Only units at
-        // or below this height may sit in the text region; taller units are kept out so
-        // their bulk cannot cover the rules text. Small margin for rounding/shrink.
-        val cultistHeightPx = 70.0 / 100.0 * MoonPlacement.moonImageH * 1.05
+        // cultistHeightPx is passed in from the caller, computed with the SAME sprite
+        // scaling as heightsPx (spriteHFor(EarthCat onMapH 70) / 100 * moonImageH), so
+        // the comparison below is apples-to-apples. Only units at or below cultist
+        // height may sit in the text region; taller units are kept out so their bulk
+        // cannot cover the rules text.
 
         val radii = Array.tabulate(n)(i => spriteRadius(heightsPx(i), aspects(i)))
 
@@ -1547,7 +1547,11 @@ object Overlays {
             val moonAspects : Array[Double] = parsed.map { case (_, _, _, onMapH) =>
                 BBMoonSizing.aspect(moonUnitClass(onMapH))
             }.toArray
-            val rawScatter = MoonPlacement.scatterSized(useHorizontal, seed, moonHeightsPx, moonAspects)
+            // Cultist-height threshold, scaled EXACTLY like moonHeightsPx above, so the
+            // scatter can let cultist-sized units sit in the text region while keeping
+            // taller units out. EarthCat is BB's cultist-equivalent (onMapH 70).
+            val cultistHeightPx = spriteHFor(70.0) / 100.0 * moonH
+            val rawScatter = MoonPlacement.scatterSized(useHorizontal, seed, moonHeightsPx, moonAspects, cultistHeightPx)
             // Convert pixel coords on the placement bitmap (1:1 with the
             // displayed moon image) into CSS % of the moon image's dimensions.
             val positions : List[(Double, Double)] = rawScatter.toList./ { case (px, py) =>
