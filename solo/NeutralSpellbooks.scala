@@ -81,10 +81,17 @@ object NeutralSpellbooksExpansion extends Expansion {
 
         // UNDIMENSIONED
         case UndimensionedMainAction(self) =>
-            UndimensionedContinueAction(self, self.units.onMap./(_.region).distinct, false)
+            // Moon counts as a normal region: it's a valid Undimensioned destination
+            // when the faction has a unit there (Moon is adjacent to all regions).
+            val mapDestinations = self.units.onMap./(_.region).distinct
+            val moonDestination = (game.factions.has(BB) && self.units.%(_.region == BB.moon).any).??($(BB.moon))
+            UndimensionedContinueAction(self, mapDestinations ++ moonDestination, false)
 
         case UndimensionedContinueAction(self, destinations, moved) =>
-            val units = self.units.nex.onMap.not(Moved).%(u => destinations.but(u.region).%(self.affords(self.units.onMap.tag(Moved).none.??(2))).any).sortA
+            // Include Moon-resident units in the rearrange pool when the Moon is a
+            // destination, so a Moon unit can be moved back to a Map area.
+            val pool = if (destinations.has(BB.moon)) self.units.nex.%(_.region.inPlay).not(Moved) else self.units.nex.onMap.not(Moved)
+            val units = pool.%(u => destinations.but(u.region).%(self.affords(self.units.onMap.tag(Moved).none.??(2))).any).sortA
             if (units.none)
                 Then(UndimensionedDoneAction(self))
             else

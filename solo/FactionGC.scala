@@ -148,7 +148,9 @@ object GCExpansion extends Expansion {
                 + SubmergeMainAction(f, f.goo(Cthulhu).region)
 
             if (f.at(GC.deep).any)
-                areas.%(f.affords(0)).some.foreach { l =>
+                // Moon counts as a normal region: GC may unsubmerge (surface a unit)
+                // onto the Moon (unit placement onto the Moon is allowed).
+                (areas.%(f.affords(0)) ++ (game.factions.has(BB) && f.affords(0)(BB.moon)).??($(BB.moon))).some.foreach { l =>
                     + UnsubmergeMainAction(f, l)
                 }
 

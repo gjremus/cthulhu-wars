@@ -185,12 +185,15 @@ object BGExpansion extends Expansion {
 
             game.independents(f)
 
-            if (f.has(Avatar) && f.onMap(ShubNiggurath).any && ElderThingMindControl.suppresses(f.goo(ShubNiggurath)))
+            if (f.has(Avatar) && f.all(ShubNiggurath).any && ElderThingMindControl.suppresses(f.goo(ShubNiggurath)))
                 + GroupAction("Avatar".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
-            else if (f.has(Avatar) && f.onMap(ShubNiggurath).any) {
+            else if (f.has(Avatar) && f.all(ShubNiggurath).any) {
                 val r = f.goo(ShubNiggurath).region
                 val t = f.taxIn(r)
-                areas.but(r).%(f.affords(1 + t)).%(r => factionlike.exists(_.at(r).vulnerable.any)).some.foreach { l =>
+                // Moon counts as a normal region: Shub-Niggurath may Avatar from the
+                // Moon (all, not onMap) and to the Moon (append BB.moon when BB is in).
+                val moonDestinations = factions.has(BB).??($(BB.moon))
+                (areas ++ moonDestinations).distinct.but(r).%(f.affords(1 + t)).%(r => factionlike.exists(_.at(r).vulnerable.any)).some.foreach { l =>
                     + AvatarMainAction(f, r, l)
                 }
             }

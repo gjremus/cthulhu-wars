@@ -267,7 +267,7 @@ object NeutralMonstersExpansion extends Expansion {
                 lc.quantity.times(lc.unit).foreach { u =>
                     self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
                 }
-                Ask(self).each(areas)(r => LoyaltyCardSummonAction(self, lc.unit, r))
+                Ask(self).each(areas ++ game.factions.has(BB).??($(BB.moon)))(r => LoyaltyCardSummonAction(self, lc.unit, r))
             } else if (lc.unit == HoundOfTindalos) {
                 // Hound of Tindalos: place at ANY Gate (not just owner's Controlled Gate)
                 lc.quantity.times(lc.unit).foreach { u =>
@@ -425,7 +425,7 @@ object NeutralMonstersExpansion extends Expansion {
             Force(ShamblerDeployMainAction(f, then))
 
         case ShamblerDeployMainAction(f, then) =>
-            Ask(f).each(areas.nex)(r => ShamblerDeployAction(f, r, then)).cancel
+            Ask(f).each(areas.nex ++ game.factions.has(BB).??($(BB.moon)))(r => ShamblerDeployAction(f, r, then)).cancel
 
         case ShamblerDeployAction(f, r, then) =>
             if (f.at(ShamblerHold(f), DimensionalShamblerUnit).none)
@@ -436,7 +436,7 @@ object NeutralMonstersExpansion extends Expansion {
             log(DimensionalShamblerUnit.styled(f), "deployed to", r)
 
             if (f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
-                Ask(f).each(areas.nex)(r => ShamblerDeployAction(f, r, then)).add(then.as("Done".styled("power")))
+                Ask(f).each(areas.nex ++ game.factions.has(BB).??($(BB.moon)))(r => ShamblerDeployAction(f, r, then)).add(then.as("Done".styled("power")))
             else {
                 game.triggers()
                 then
