@@ -213,13 +213,13 @@ object SLExpansion extends Expansion {
 
             game.independents(f)
 
-            if (f.can(AncientSorcery) && f.onMap(SerpentMan).nex.any && f.borrowed.num < factions.num - 1)
+            if (f.can(AncientSorcery) && f.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex.any && f.borrowed.num < factions.num - 1)
                 + AncientSorceryMainAction(f)
 
             // 2026-06-06 Fix 75 (Fix 2): single DC bundle button under Ancient
             // Sorcery — costs 2 Serpentmen, PERMANENTLY copies both DC unique
             // powers (Tenebrosum + Depravity) for the rest of the game.
-            if (game.setup.has(DC) && f.can(AncientSorcery) && f.onMap(SerpentMan).nex.num >= 2 && !game.slDCBundleTaken)
+            if (game.setup.has(DC) && f.can(AncientSorcery) && f.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex.num >= 2 && !game.slDCBundleTaken)
                 + AncientSorceryDCBundleMainAction(f)
 
             // 2026-06-06 Fix 75 (Fix 1 via SL): if SL has Tenebrosum via the
@@ -295,7 +295,10 @@ object SLExpansion extends Expansion {
             Ask(self).each(ucs)(uc => DeathFromBelowSelectMonsterAction(self, uc)).cancelIf(ucs.num > 1)
 
         case DeathFromBelowSelectMonsterAction(self, uc) =>
-            Ask(self).each(areas.%(r => self.at(r).any).some.|(areas))(r => DeathFromBelowAction(self, r, uc)).cancel
+            // Moon counts as just another region for Death from Below — a Monster
+            // may be placed on the Moon (unit placement onto the Moon is allowed).
+            val dfbAll = areas ++ game.factions.has(BB).??($(BB.moon))
+            Ask(self).each(dfbAll.%(r => self.at(r).any).some.|(dfbAll))(r => DeathFromBelowAction(self, r, uc)).cancel
 
         case DeathFromBelowAction(self, r, uc) =>
             self.place(uc, r)
@@ -398,14 +401,16 @@ object SLExpansion extends Expansion {
             Ask(self).each(self.enemies./~(_.abilities.headOption).diff(self.borrowed).diff(game.slPermanentBorrowed))(a => AncientSorceryAction(self, a)).cancel
 
         case AncientSorceryAction(self, a) =>
-            Ask(self).each(self.onMap(SerpentMan).nex)(u => AncientSorceryUnitAction(self, a, u.region, u.uclass)).cancel
+            // Moon counts as just another region for Ancient Sorcery — a Serpentman
+            // on the Moon may be used to access a spellbook.
+            Ask(self).each(self.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex)(u => AncientSorceryUnitAction(self, a, u.region, u.uclass)).cancel
 
         // 2026-06-06 Fix 75 (Fix 3): when SL copies a DC unique via standard
         // Ancient Sorcery, TWO Serpentmen are required. After the first pick,
         // chain to a second pick before paying / borrowing.
         case AncientSorceryUnitAction(self, a, r, uc) if isDCAbility(a) =>
             // First Serpentman picked; ask for a second from a different region/unit.
-            val remaining = self.onMap(SerpentMan).nex.%(u => !(u.region == r && self.at(r, SerpentMan).num == 1))
+            val remaining = self.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex.%(u => !(u.region == r && self.at(r, SerpentMan).num == 1))
             Ask(self).each(remaining)(u => AncientSorceryDCSecondUnitAction(self, a, r, u.region, u.uclass)).cancel
 
         case AncientSorceryDCSecondUnitAction(self, a, r1, r2, uc) =>
@@ -432,10 +437,10 @@ object SLExpansion extends Expansion {
             asking
 
         case AncientSorceryDCBundleConfirmAction(self) =>
-            Ask(self).each(self.onMap(SerpentMan).nex)(u => AncientSorceryDCBundleFirstUnitAction(self, u.region, u.uclass)).cancel
+            Ask(self).each(self.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex)(u => AncientSorceryDCBundleFirstUnitAction(self, u.region, u.uclass)).cancel
 
         case AncientSorceryDCBundleFirstUnitAction(self, r, uc) =>
-            val remaining = self.onMap(SerpentMan).nex.%(u => !(u.region == r && self.at(r, SerpentMan).num == 1))
+            val remaining = self.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex.%(u => !(u.region == r && self.at(r, SerpentMan).num == 1))
             Ask(self).each(remaining)(u => AncientSorceryDCBundleSecondUnitAction(self, r, u.region, u.uclass)).cancel
 
         case AncientSorceryDCBundleSecondUnitAction(self, r1, r2, uc) =>
@@ -453,7 +458,7 @@ object SLExpansion extends Expansion {
             EndAction(self)
 
         case AncientSorceryDoomAction(self) =>
-            Ask(self).each(areas)(r => AncientSorceryPlaceAction(self, r, SerpentMan)).cancel
+            Ask(self).each(areas ++ game.factions.has(BB).??($(BB.moon)))(r => AncientSorceryPlaceAction(self, r, SerpentMan)).cancel
 
         case AncientSorceryPlaceAction(self, r, uc) =>
             self.at(SL.sorcery).one(uc).region = r
