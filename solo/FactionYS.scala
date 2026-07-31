@@ -152,14 +152,22 @@ object YSExpansion extends Expansion {
 
             if (f.can(HWINTBN) && f.used(ScreamingDead).not && f.has(Hastur)) {
                 val o = f.goo(Hastur).region
-                areas.%(f.affords(1)).but(o).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
+                // Moon counts as a normal region: Hastur may move to the Moon to
+                // target an enemy cultist there (e.g. an Earth Cat).
+                val candidates = areas ++ game.factions.has(BB).??($(BB.moon))
+                candidates.%(f.affords(1)).but(o).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
                     + HWINTBNMainAction(f, o, l)
                 }
             }
 
             if (f.can(ScreamingDead) && f.used(HWINTBN).not && f.has(KingInYellow)) {
                 val o = f.goo(KingInYellow).region
-                game.board.connected(o).%(f.affords(1)).some.foreach { l =>
+                // If KIY was Catnapped to the Moon, Screaming Dead may move him FROM
+                // the Moon to any affordable area (the Moon is adjacent to all regions);
+                // board.connected(Moon) is empty, so use all areas in that case.
+                val dests = if (o == BB.moon) areas.%(f.affords(1))
+                            else game.board.connected(o).%(f.affords(1))
+                dests.some.foreach { l =>
                     + ScreamingDeadMainAction(f, o, l)
                 }
             }
