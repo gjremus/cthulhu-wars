@@ -786,10 +786,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Moon battle therefore expands destinations to every map area where the
         // opponent has no unit (the Moon has no ordinary connectedForRetreat set).
         val moonRetreatDests = (arena == BB.moon).??(areas.%(r => s.opponent.at(r).none))
-        val mantleDest = arena.is[MantleHold].?? {
-            val base = game.tbMantleAreas
-            val tentacleAreas = (s == TB && TB.has(Subterrane)).??(TB.onMap(Tentacle)./(_.region).distinct)
-            (base ++ tentacleAreas).distinct
+        // Subterrane / Mantle pain-retreat edges (TB units only). Bidirectional: from
+        // the Mantle out to burrow & tentacle areas, AND from a burrow/tentacle area
+        // back to the Mantle. Previously only the Mantle-out direction was offered, so
+        // a TB unit pained in a tentacle area could not retreat to the Mantle even
+        // though Subterrane makes that area adjacent to the Mantle.
+        // Gated on TB being the one choosing its own units' retreat: when an enemy
+        // controls the retreat via Crawling Chaos Madness the Mantle is withheld
+        // unless TB consents (handled separately), and neutral units never reach it.
+        val mantleDest : $[Region] = (s == TB && retreater(s) == TB && game.tbMantleInPlay).?? {
+            val tentacleAreas = TB.has(Subterrane).??(TB.onMap(Tentacle)./(_.region).distinct)
+            if (arena == TB.mantle) (game.tbMantleAreas ++ tentacleAreas).distinct
+            else if (game.tbMantleAreas.has(arena) || tentacleAreas.has(arena)) $(TB.mantle)
+            else $
         }
         val standardDest = (arena.connectedForRetreat ++ mantleDest).%(r => s.opponent.at(r).none)
 
