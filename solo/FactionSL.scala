@@ -196,7 +196,7 @@ object SLExpansion extends Expansion {
 
             game.independents(f)
 
-            if (f.can(AncientSorcery) && f.onMap(SerpentMan).nex.any && f.borrowed.num < factions.num - 1)
+            if (f.can(AncientSorcery) && f.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex.any && f.borrowed.num < factions.num - 1)
                 + AncientSorceryMainAction(f)
 
             // Round 8 bug fix (Bug 38): Writhe borrowed via Ancient Sorcery. Offered here
@@ -256,7 +256,10 @@ object SLExpansion extends Expansion {
             Ask(self).each(ucs)(uc => DeathFromBelowSelectMonsterAction(self, uc)).cancelIf(ucs.num > 1)
 
         case DeathFromBelowSelectMonsterAction(self, uc) =>
-            Ask(self).each(areas.%(r => self.at(r).any).some.|(areas))(r => DeathFromBelowAction(self, r, uc)).cancel
+            // Moon counts as just another region for Death from Below — a Monster
+            // may be placed on the Moon (unit placement onto the Moon is allowed).
+            val dfbAll = areas ++ game.factions.has(BB).??($(BB.moon))
+            Ask(self).each(dfbAll.%(r => self.at(r).any).some.|(dfbAll))(r => DeathFromBelowAction(self, r, uc)).cancel
 
         case DeathFromBelowAction(self, r, uc) =>
             self.place(uc, r)
@@ -357,7 +360,9 @@ object SLExpansion extends Expansion {
             Ask(self).each(self.enemies./~(_.abilities.headOption).diff(self.borrowed))(a => AncientSorceryAction(self, a)).cancel
 
         case AncientSorceryAction(self, a) =>
-            Ask(self).each(self.onMap(SerpentMan).nex)(u => AncientSorceryUnitAction(self, a, u.region, u.uclass)).cancel
+            // Moon counts as just another region for Ancient Sorcery — a Serpentman
+            // on the Moon may be used to access a spellbook.
+            Ask(self).each(self.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex)(u => AncientSorceryUnitAction(self, a, u.region, u.uclass)).cancel
 
         case AncientSorceryUnitAction(self, a, r, uc) =>
             self.power -= 1
@@ -367,7 +372,7 @@ object SLExpansion extends Expansion {
             EndAction(self)
 
         case AncientSorceryDoomAction(self) =>
-            Ask(self).each(areas)(r => AncientSorceryPlaceAction(self, r, SerpentMan)).cancel
+            Ask(self).each(areas ++ game.factions.has(BB).??($(BB.moon)))(r => AncientSorceryPlaceAction(self, r, SerpentMan)).cancel
 
         case AncientSorceryPlaceAction(self, r, uc) =>
             self.at(SL.sorcery).one(uc).region = r
