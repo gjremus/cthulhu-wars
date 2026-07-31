@@ -3086,7 +3086,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Round 8 Bug 40: also check facedown state for IGOO spellbooks
                 val brood = f.enemies.%(e => e.has(TheBrood) && !e.oncePerGame.has(TheBrood))
                 val yogDoomSuppressed = f.unitGate.exists(u => ElderThingMindControl.suppresses(u))
-                val gates = f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region)) ++ (if (f == BB) $(BB.moon) else $)
+                // BB.moon is ONE controlled gate for BB — it is already in f.gates
+                // (added in FactionBB), so do NOT append it again here or it would
+                // be counted twice (2 doom instead of 1). Dedupe defensively.
+                val gates = (f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region))).distinct
                 val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
 
                 f.doom += valid.num
