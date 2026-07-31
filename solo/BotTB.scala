@@ -110,6 +110,13 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case TBAutotomyAction(f, _, _, _) =>
                     true                                         |=> 500  -> "autotomy commit"
 
+                // Subterrane consent under enemy Madness: deny by default so the
+                // enemy cannot gain the Mantle as an extra place to strand TB units.
+                case TBSubterranePainUseAction(f) =>
+                    true                                         |=> -200 -> "allow subterrane for enemy retreat"
+                case TBSubterranePainSkipAction(f) =>
+                    true                                         |=> 200  -> "deny subterrane for enemy retreat"
+
                 // Ensnare
                 case TBEnsnareMainAction(f) =>
                     true                                         |=> 600  -> "ensnare enemy"

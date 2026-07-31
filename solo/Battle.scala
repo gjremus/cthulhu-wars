@@ -331,6 +331,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     var zagazigSkipped : Boolean = false
     var tbAutotomyOffered : Boolean = false
     var tbAutotomyUsed : Boolean = false
+    // Crawling Chaos Madness controlling TB's pain-retreats: TB is asked once per
+    // battle whether the enemy may use Subterrane (Mantle/tentacle adjacency) when
+    // choosing where TB's pained units retreat. Offered guards the one-time prompt;
+    // Consent records TB's answer (default false = enemy limited to normal adjacency).
+    var tbSubterranePainOffered : Boolean = false
+    var tbSubterranePainConsent : Boolean = false
 
     // Faceless Blight (FBE): once-per-battle guard so the Distributed Death offer
     // (Post-Kill-assignment, §3.14.3) is not re-presented when AllKillsAssignedPhase
@@ -771,6 +777,21 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (refugees.none)
             return proceed()
 
+        // Crawling Chaos Madness: when an enemy controls the retreat of TB's own
+        // pained units, TB decides whether the enemy may use Subterrane (the Mantle /
+        // tentacle adjacency) as a retreat destination. Ask once per battle, and only
+        // when the Mantle would actually be a candidate here (this area touches the
+        // Mantle or is a tentacle area). If TB declines, the enemy is limited to the
+        // normal adjacent areas.
+        if (s == TB && retreater(s) != TB && game.tbMantleInPlay && TB.has(Subterrane) && !tbSubterranePainOffered) {
+            val tentacleAreas = TB.onMap(Tentacle)./(_.region).distinct
+            val mantleRelevant = arena == TB.mantle || game.tbMantleAreas.has(arena) || tentacleAreas.has(arena)
+            if (mantleRelevant) {
+                tbSubterranePainOffered = true
+                return Ask(TB).add(TBSubterranePainUseAction(TB)).add(TBSubterranePainSkipAction(TB))
+            }
+        }
+
         if (s.can(Oleaginous)) {
             val oleagPained = refugees.%(u => u.uclass == Glaaki || u.uclass == DeepTendril)
             if (oleagPained.any) {
@@ -793,8 +814,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // though Subterrane makes that area adjacent to the Mantle.
         // Gated on TB being the one choosing its own units' retreat: when an enemy
         // controls the retreat via Crawling Chaos Madness the Mantle is withheld
-        // unless TB consents (handled separately), and neutral units never reach it.
-        val mantleDest : $[Region] = (s == TB && retreater(s) == TB && game.tbMantleInPlay).?? {
+        // unless TB consented above (tbSubterranePainConsent), and neutral units never reach it.
+        val mantleAllowed = retreater(s) == TB || tbSubterranePainConsent
+        val mantleDest : $[Region] = (s == TB && mantleAllowed && game.tbMantleInPlay).?? {
             val tentacleAreas = TB.has(Subterrane).??(TB.onMap(Tentacle)./(_.region).distinct)
             if (arena == TB.mantle) (game.tbMantleAreas ++ tentacleAreas).distinct
             else if (game.tbMantleAreas.has(arena) || tentacleAreas.has(arena)) $(TB.mantle)
@@ -3036,6 +3058,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case TBAutotomySkipAction(self) =>
+            proceed()
+
+        case TBSubterranePainUseAction(self) =>
+            // FactionTB set tbSubterranePainConsent; re-run the retreat with the
+            // Mantle now available as a destination for the enemy to choose.
+            proceed()
+
+        case TBSubterranePainSkipAction(self) =>
             proceed()
 
         case TBAutotomyAction(self, _, _, _) =>

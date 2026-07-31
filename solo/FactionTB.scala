@@ -234,6 +234,16 @@ case class TBAutotomySkipAction(self : Faction)
     extends OptionFactionAction("Skip " + Autotomy.styled(TB)) with PostBattleQuestion with Soft {
     override def question(implicit game : Game) = Autotomy.styled(TB)
 }
+// Crawling Chaos Madness: TB consent for the enemy to use Subterrane (Mantle /
+// tentacle adjacency) when the enemy chooses where TB's pained units retreat.
+case class TBSubterranePainUseAction(self : Faction)
+    extends OptionFactionAction("Allow " + Subterrane.styled(TB) + " for retreats") with Soft {
+    override def question(implicit game : Game) = Subterrane.styled(TB) + ": allow the enemy to retreat your pained Units via the Mantle?"
+}
+case class TBSubterranePainSkipAction(self : Faction)
+    extends OptionFactionAction("Deny " + Subterrane.styled(TB) + " — adjacent areas only") with Soft {
+    override def question(implicit game : Game) = Subterrane.styled(TB) + ": allow the enemy to retreat your pained Units via the Mantle?"
+}
 case class TBAutotomyPickSegmentAction(self : Faction, segments : $[UnitRef])
     extends ForcedAction with PowerNeutral {
     override def question(implicit game : Game) = Autotomy.styled(TB) + ": apply Kill to which Segment?"
@@ -730,6 +740,16 @@ object TBExpansion extends Expansion {
 
         case TBAutotomySkipAction(self) =>
             self.log(Autotomy.styled(TB) + ": declined")
+            UnknownContinue
+
+        case TBSubterranePainUseAction(self) =>
+            game.battle.foreach(_.tbSubterranePainConsent = true)
+            self.log(Subterrane.styled(TB) + ": allowed for enemy-controlled retreats")
+            UnknownContinue
+
+        case TBSubterranePainSkipAction(self) =>
+            game.battle.foreach(_.tbSubterranePainConsent = false)
+            self.log(Subterrane.styled(TB) + ": denied — enemy retreats limited to adjacent areas")
             UnknownContinue
 
         case TBAutotomyPickSegmentAction(self, segments) =>
