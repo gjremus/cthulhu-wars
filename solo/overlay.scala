@@ -348,7 +348,7 @@ object MoonPlacement {
         // sprite touches this band, so nothing lands on the text or in the scraps
         // between text lines.
         val textZones : Array[(Double, Double, Double, Double)] = Array(
-            (0.0, 500.0, 1024.0, 820.0)
+            (0.0, 560.0, 1024.0, 820.0)
         )
         // A candidate position (px,py) is the sprite's CENTRE; a sprite of height h
         // occupies [py - h/2, py + h/2] vertically. Reject the position if the sprite's
