@@ -335,20 +335,24 @@ object MoonPlacement {
       *      sprite stays inside the visible disc. This drains residual overlap
       *      into the empty space (offline: avg units >50%-covered drops from
       *      ~1.4 to ~0.07 at the same total-area budget). */
-    def scatterSized(useHorizontal : Boolean, seed : Int, heightsPx : Array[Double], aspects : Array[Double], cultistHeightPx : Double) : Array[(Double, Double)] = {
+    def scatterSized(useHorizontal : Boolean, seed : Int, heightsPx : Array[Double], aspects : Array[Double]) : Array[(Double, Double)] = {
         val n = heightsPx.length
         val pool = if (useHorizontal) horizontal else vertical
         if (pool.isEmpty || n <= 0) return Array.empty
         val rng = new scala.util.Random(seed)
 
+        // The rules text occupies the lower part of the disc. Block the ENTIRE text
+        // band for ALL units (no size exception): the band runs from where the text
+        // starts (y=500) down past the bottom of the visible disc (centre 440 + radius
+        // 379 = 819), full width. No unit — large or small — may be placed where its
+        // sprite touches this band, so nothing lands on the text or in the scraps
+        // between text lines.
         val textZones : Array[(Double, Double, Double, Double)] = Array(
-            (130.0, 500.0, 900.0, 790.0)
+            (0.0, 500.0, 1024.0, 820.0)
         )
-        // A candidate position (px,py) is the sprite's CENTRE. A sprite of height h
-        // occupies roughly [py - h/2, py + h/2] vertically. A unit "intrudes" the text
-        // zone if that vertical span overlaps the zone — checking the full sprite, not
-        // just the centre, so a large unit whose base sits below the text but whose
-        // bulk rises into the text is correctly rejected.
+        // A candidate position (px,py) is the sprite's CENTRE; a sprite of height h
+        // occupies [py - h/2, py + h/2] vertically. Reject the position if the sprite's
+        // vertical span overlaps the text band (full-sprite check, not just centre).
         def spriteIntrudesTextZone(px : Double, py : Double, h : Double) : Boolean = {
             val top = py - h / 2.0
             val bot = py + h / 2.0
@@ -360,11 +364,6 @@ object MoonPlacement {
             }
             false
         }
-        // cultistHeightPx is passed in from the caller, computed with the SAME sprite
-        // scaling as heightsPx (spriteHFor(EarthCat onMapH 70) / 100 * moonImageH), so
-        // the comparison below is apples-to-apples. Only units at or below cultist
-        // height may sit in the text region; taller units are kept out so their bulk
-        // cannot cover the rules text.
 
         val radii = Array.tabulate(n)(i => spriteRadius(heightsPx(i), aspects(i)))
 
@@ -377,15 +376,10 @@ object MoonPlacement {
         while (oi < order.length) {
             val idx = order(oi)
             val rSelf = radii(idx)
-            // Per-unit pool: units taller than a cultist may NOT sit where their sprite
-            // would intrude the text zone; cultist-height-and-smaller units may.
+            // No unit — of any size — may sit where its sprite touches the text band.
             val hSelf = heightsPx(idx)
-            val unitPool =
-                if (hSelf <= cultistHeightPx) pool
-                else {
-                    val filtered = pool.filter { case (cx, cy) => !spriteIntrudesTextZone(cx, cy, hSelf) }
-                    if (filtered.nonEmpty) filtered else pool
-                }
+            val filtered = pool.filter { case (cx, cy) => !spriteIntrudesTextZone(cx, cy, hSelf) }
+            val unitPool = if (filtered.nonEmpty) filtered else pool
             var best = unitPool(rng.nextInt(unitPool.length))
             var bestScore = Double.NegativeInfinity
             var tries = 0
@@ -1547,11 +1541,7 @@ object Overlays {
             val moonAspects : Array[Double] = parsed.map { case (_, _, _, onMapH) =>
                 BBMoonSizing.aspect(moonUnitClass(onMapH))
             }.toArray
-            // Cultist-height threshold, scaled EXACTLY like moonHeightsPx above, so the
-            // scatter can let cultist-sized units sit in the text region while keeping
-            // taller units out. EarthCat is BB's cultist-equivalent (onMapH 70).
-            val cultistHeightPx = spriteHFor(70.0) / 100.0 * moonH
-            val rawScatter = MoonPlacement.scatterSized(useHorizontal, seed, moonHeightsPx, moonAspects, cultistHeightPx)
+            val rawScatter = MoonPlacement.scatterSized(useHorizontal, seed, moonHeightsPx, moonAspects)
             // Convert pixel coords on the placement bitmap (1:1 with the
             // displayed moon image) into CSS % of the moon image's dimensions.
             val positions : List[(Double, Double)] = rawScatter.toList./ { case (px, py) =>
