@@ -2405,7 +2405,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val parasitized : $[UnitFigure] = if (f.loyaltyCards.has(InsectsFromShaggaiCard))
             factions.but(f)./~(e => e.units.nex.onMap.not(Moved).%(u => MindParasite.controller(u).has(f)))
         else $
-        val moonUnits = (f == BB).??(f.at(BB.moon).not(Moved).%(_.canMove))
+        // Any faction may move a unit OFF the Moon (only BB may move a unit TO it).
+        val moonUnits = factions.has(BB).??(f.at(BB.moon).not(Moved).%(_.canMove))
         if ((f.units.nex.onMap.not(Moved).%(_.canMove).any || moonUnits.any || parasitized.any) && f.power > 0)
             + MoveMainAction(f)
     }
@@ -3422,7 +3423,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Round 8 Bug 40: also check facedown state for IGOO spellbooks
                 val brood = f.enemies.%(e => e.has(TheBrood) && !e.oncePerGame.has(TheBrood))
                 val yogDoomSuppressed = f.unitGate.exists(u => ElderThingMindControl.suppresses(u))
-                val gates = f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region)) ++ (if (f == BB) $(BB.moon) else $)
+                // BB.moon is ONE controlled gate for BB — it is already in f.gates
+                // (added in FactionBB), so do NOT append it again here or it would
+                // be counted twice (2 doom instead of 1). Dedupe defensively.
+                val gates = (f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region))).distinct
                 val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
 
                 f.doom += valid.num
@@ -4512,7 +4516,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (outOfFunds)
                 Then(MoveDoneAction(self))
             else {
-                val moonUnits = (self == BB).??(self.at(BB.moon).not(Moved).%(_.canMove))
+                // Any faction may move a unit OFF the Moon (only BB may move TO it).
+                val moonUnits = factions.has(BB).??(self.at(BB.moon).not(Moved).%(_.canMove))
                 val ownUnits = (self.units.nex.onMap.not(Moved).%(_.canMove) ++ moonUnits).sortA
                 // Mind Parasite: include parasitized enemy acolytes that this faction controls
                 val parasitized : $[UnitFigure] = if (self.loyaltyCards.has(InsectsFromShaggaiCard))
@@ -4544,14 +4549,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (u.uclass == Shantak)
                 destinations = areas.but(from)
 
-            // BB: units moving FROM the Moon can reach any map area;
-            // BB units on a map area can move TO the Moon.
-            if (self == BB) {
-                if (from == BB.moon)
-                    destinations = areas
-                else
-                    destinations = destinations :+ BB.moon
-            }
+            // Any faction may move a unit FROM the Moon to any map area (the Moon is
+            // adjacent to all regions). Only BB may move a unit TO the Moon.
+            if (from == BB.moon)
+                destinations = areas
+            else if (self == BB)
+                destinations = destinations :+ BB.moon
 
             // TB: Mantle adjacency — all factions may enter/leave via the
             // nominated adjacent areas (tbMantleAreas). TB also gets tentacle
