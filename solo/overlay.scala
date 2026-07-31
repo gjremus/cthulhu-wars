@@ -334,7 +334,7 @@ object MoonPlacement {
         val rng = new scala.util.Random(seed)
 
         val textZones : Array[(Double, Double, Double, Double)] = Array(
-            (0.0, 500.0, 1024.0, 820.0)
+            (0.0, 560.0, 1024.0, 820.0)
         )
         // A candidate position (px,py) is the sprite's CENTRE. A sprite of height h
         // occupies roughly [py - h/2, py + h/2] vertically. A unit "intrudes" the text
