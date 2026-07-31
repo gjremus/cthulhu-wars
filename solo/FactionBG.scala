@@ -282,12 +282,9 @@ object BGExpansion extends Expansion {
             val sn = self.goo(ShubNiggurath)
             sn.region = r
             log(sn, "avatared to", r)
-            // Catnapping: if Shub-Niggurath itself avatars OFF the Moon, BG spent 1
-            // Power to move its own unit away → credit BB. (The reciprocal case —
-            // avataring TO the Moon, displacing a unit off it — is credited in
-            // AvatarReplacementAction, and only when the displaced unit is BG's own:
-            // another faction's displaced unit moves "for free" and is not captured.)
-            game.creditCatnappingOffMoon(self, o, 1, Avatar)
+            // Rules clarification: Avatar NEVER delivers Catnapping Power to BB when
+            // used on or from the Moon — so no credit here (avataring off the Moon)
+            // nor in AvatarReplacementAction (avataring onto the Moon).
 
             val l = e.at(r).vulnerable.preferablyNotOnGate
 
@@ -301,12 +298,8 @@ object BGExpansion extends Expansion {
             u.region = o
             game.fbSuppressCGForPlacement = false
             u.onGate = false
-            // Catnapping: Avatar TO the Moon (r == Moon) displaces a unit off it. BG
-            // spent 1 Power for the Avatar, so credit BB ONLY when the displaced unit
-            // is BG's own (self == f == BG). Another faction's unit is shoved off "for
-            // free" (BG did not pay to move THAT faction's unit) → no credit.
-            if (self == f)
-                game.creditCatnappingOffMoon(f, r, 1, Avatar)
+            // Rules clarification: Avatar NEVER delivers Catnapping Power to BB when
+            // used on or from the Moon — no credit for the displaced unit either.
             EndAction(f)
 
         // GHROTH
