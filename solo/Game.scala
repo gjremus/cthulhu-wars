@@ -2848,8 +2848,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (f.upgrades.has(CeremonyOfAnnihilation) && !f.oncePerGame.has(CeremonyOfAnnihilation) && f.acted.not)
             + CeremonyOfAnnihilationChoiceAction(f)
 
-        // Bubastis Requires Attention: Bastet ritual — optional doom-phase action
-        if (f == BB && f.acted.not) {
+        // Bubastis Requires Attention: Bastet ritual — optional doom-phase action.
+        // It IS a Ritual of Annihilation, so it is only offered when BB can afford
+        // the standard ritual cost.
+        if (f == BB && f.acted.not && f.power >= f.can(Herald).?(5).|(ritualCost)) {
             val bastetUnits = f.allInPlay.%(_.uclass == Bastet).%(u => u.region.onMap || u.region == BB.moon)
             bastetUnits.foreach { bastet =>
                 val r = bastet.region
@@ -3897,15 +3899,36 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             EndAction(self)
 
         case RequiresAttentionTargetAction(self, r) =>
+            // Requires Attention IS a form of Ritual of Annihilation (like Dragon
+            // Descending): charge the standard ritual cost, advance the ROA track,
+            // and record it in ritual history — while keeping RA's special payload
+            // (flat +4 doom and the enemy-gate/GOO ES bonus). Herald discount honoured,
+            // matching the standard ritual and the BB build's Requires Attention.
+            val cost       = self.can(Herald).?(5).|(ritualCost)
             val enemyGate  = factions.but(self).exists(_.gates.has(r))
             val enemyGOO   = factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any || (AN.can(HolyGround) && e.at(r, Cathedral).any))
             val esBonus    = enemyGate.??(1) + enemyGOO.??(2)
-            self.doom += 4
-            self.log(RequiresAttention.styled(BB) + ": ritual in", r, "— gained", 4.doom)
+
+            self.power -= cost
+            self.doom  += 4
+
+            log(CthulhuWarsSolo.DottedLine)
+            self.log("performed Ritual of Annihilation with", RequiresAttention.styled(BB), "in", r, "— gained", 4.doom)
             if (esBonus > 0)
                 self.log(RequiresAttention.styled(BB) + ":", esBonus.es, "bonus (" + enemyGate.??("enemy gate") + (enemyGate && enemyGOO).??(", ") + enemyGOO.??("enemy GOO") + ")")
             self.takeES(esBonus)
+
             self.acted = true
+
+            // Advance the Ritual of Annihilation track and record the ritual, exactly
+            // as the standard RitualAction resolution does.
+            ritualHistory :+= self
+            ritualHistoryCeremony :+= false
+            triggers()
+            if (ritualTrack(ritualMarker) != 999)
+                ritualMarker += 1
+            showROAT()
+
             CheckSpellbooksAction(DoomAction(self))
 
         // MAIN

@@ -249,7 +249,7 @@ case class PredatorEnemyEliminateAction(self : Faction, picker : Faction, u : Un
 case class RequiresAttentionMainAction(self : Faction)
     extends OptionFactionAction(RequiresAttention.styled(BB)) with MainQuestion with Soft
 case class RequiresAttentionTargetAction(self : Faction, r : Region)
-    extends BaseFactionAction(RequiresAttention.styled(BB) + ": resolve in", r)
+    extends BaseFactionAction(implicit g => "Ritual with " + RequiresAttention.styled(BB) + " for " + self.can(Herald).?(5).|(g.ritualCost).power, implicit g => r.toString)
 case class RequiresAttentionSkipAction(self : Faction)
     extends OptionFactionAction(("Skip " + RequiresAttention.name).styled(BB)) with MainQuestion
 
