@@ -407,6 +407,17 @@ object MoonPlacement {
                 px(i) = discCx + dx * k
                 py(i) = discCy + dy * k
             }
+            // Also keep the sprite OUT of the text band: relaxation can push a unit
+            // down onto the text, so if its sprite bottom would enter the band, lift
+            // its centre up so the whole sprite sits above the band's top edge.
+            var z = 0
+            while (z < textZones.length) {
+                val (x1, y1, x2, y2) = textZones(z)
+                if (px(i) >= x1 && px(i) <= x2 && (py(i) + halfH) >= y1 && (py(i) - halfH) <= y2) {
+                    py(i) = y1 - halfH - 1.0
+                }
+                z += 1
+            }
         }
         var it = 0
         while (it < 60) {
