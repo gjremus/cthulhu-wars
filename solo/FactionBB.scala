@@ -247,7 +247,7 @@ case class PredatorEnemyEliminateAction(self : Faction, picker : Faction, u : Un
 
 // ── REQUIRES ATTENTION RITUAL (Task 3.4.3) ───────────────────────────────────
 case class RequiresAttentionMainAction(self : Faction)
-    extends OptionFactionAction(RequiresAttention.styled(BB)) with MainQuestion with Soft
+    extends OptionFactionAction(implicit g => "Ritual with " + RequiresAttention.styled(BB) + " for " + self.can(Herald).?(5).|(g.ritualCost).power) with MainQuestion with Soft
 case class RequiresAttentionTargetAction(self : Faction, r : Region)
     extends BaseFactionAction(implicit g => "Ritual with " + RequiresAttention.styled(BB) + " for " + self.can(Herald).?(5).|(g.ritualCost).power, implicit g => r.toString)
 case class RequiresAttentionSkipAction(self : Faction)
