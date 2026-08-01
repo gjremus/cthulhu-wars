@@ -331,6 +331,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     var zagazigSkipped : Boolean = false
     var tbAutotomyOffered : Boolean = false
     var tbAutotomyUsed : Boolean = false
+    // Autotomy grants 1 Elder Sign per Segment in the pool. The count must be taken
+    // AFTER all Kills are assigned this battle (a Segment killed by normal kill
+    // assignment also lands in the pool), so the grant is deferred to TBAutotomyPhase.
+    var tbAutotomyESGranted : Boolean = false
     // Crawling Chaos Madness controlling TB's pain-retreats: TB is asked once per
     // battle whether the enemy may use Subterrane (Mantle/tentacle adjacency) when
     // choosing where TB's pained units retreat. Offered guards the one-time prompt;
@@ -1677,6 +1681,18 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(TBAutotomyPhase)
 
             case TBAutotomyPhase =>
+                // Post-kill: now that every Kill has been assigned this battle, grant
+                // Autotomy's Elder Signs — 1 per Segment in the pool. Counting here (not
+                // at the moment of transfer) ensures a Segment killed by normal kill
+                // assignment is included. Guarded so it fires at most once per battle.
+                if (tbAutotomyUsed && !tbAutotomyESGranted) {
+                    tbAutotomyESGranted = true
+                    val segmentsInPool = TB.pool(ShuddeMellSegment).num
+                    if (segmentsInPool > 0) {
+                        TB.takeES(segmentsInPool)
+                        log(Autotomy.styled(TB) + ": gained", segmentsInPool.es, "for", segmentsInPool, "Segment".s(segmentsInPool), "in pool")
+                    }
+                }
                 // Post-kill: if Autotomy was used, retreat all surviving TB units
                 if (tbAutotomyUsed) {
                     val toRetreat = TB.at(arena)

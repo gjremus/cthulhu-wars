@@ -206,15 +206,8 @@ case class TBStalkUseAction(self : Faction, movedRegions : $[Region], mover : Fa
     extends OptionFactionAction("Use " + Stalk.styled(TB)) with Soft {
     override def question(implicit game : Game) = Stalk.styled(TB) + ": relocate a Cultist?"
 }
-// NOTE: intentionally NOT `Soft` (mirrors FB Cyclopean Gaze's recorded Use/Skip,
-// FactionFB.scala:265). Stalk is an out-of-turn interrupt fired after another
-// faction's Move; its terminal branches call EndAction(mover). The relocation
-// (TBStalkAction) is recorded, but if Skip were Soft the skip's EndAction(mover)
-// would never be written to the log — so on an async reload the dropped soft
-// prompt left the mover's turn un-ended and the mover got a SECOND action
-// (cwo game oxacpscnvdalkupp). Recording the skip makes EndAction(mover) persist.
 case class TBStalkSkipAction(self : Faction, mover : Faction)
-    extends OptionFactionAction("Skip " + Stalk.styled(TB)) {
+    extends OptionFactionAction("Skip " + Stalk.styled(TB)) with Soft {
     override def question(implicit game : Game) = Stalk.styled(TB)
 }
 case class TBStalkPickCultistAction(self : Faction, movedRegions : $[Region], mover : Faction)
@@ -240,16 +233,6 @@ case class TBAutotomyUseAction(self : Faction)
 case class TBAutotomySkipAction(self : Faction)
     extends OptionFactionAction("Skip " + Autotomy.styled(TB)) with PostBattleQuestion with Soft {
     override def question(implicit game : Game) = Autotomy.styled(TB)
-}
-// Crawling Chaos Madness: TB consent for the enemy to use Subterrane (Mantle /
-// tentacle adjacency) when the enemy chooses where TB's pained units retreat.
-case class TBSubterranePainUseAction(self : Faction)
-    extends OptionFactionAction("Allow " + Subterrane.styled(TB) + " for retreats") with Soft {
-    override def question(implicit game : Game) = Subterrane.styled(TB) + ": allow the enemy to retreat your pained Units via the Mantle?"
-}
-case class TBSubterranePainSkipAction(self : Faction)
-    extends OptionFactionAction("Deny " + Subterrane.styled(TB) + " — adjacent areas only") with Soft {
-    override def question(implicit game : Game) = Subterrane.styled(TB) + ": allow the enemy to retreat your pained Units via the Mantle?"
 }
 case class TBAutotomyPickSegmentAction(self : Faction, segments : $[UnitRef])
     extends ForcedAction with PowerNeutral {
@@ -302,7 +285,7 @@ case class TBPsychicShriekRetreatAction(self : Faction, enemy : Faction, count :
     override def question(implicit game : Game) = PsychicShriek.styled(TB) + ": " + enemy.full + " retreat " + count + " units"
 }
 case class TBPsychicShriekRetreatUnitAction(self : Faction, enemy : Faction, u : UnitRef, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
-    extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": retreat " + count + " unit".s(count) + " — select unit", implicit g => g.unit(u).uclass.styled(enemy) + " in " + g.unit(u).region + g.unit(u).onGate.??(" (on Gate)"))
+    extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": retreat " + count + " unit".s(count) + " — select unit", implicit g => g.unit(u).uclass.styled(enemy) + " in " + g.unit(u).region)
 case class TBPsychicShriekRetreatDestAction(self : Faction, enemy : Faction, u : UnitRef, dest : Region, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
     extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": retreat " + g.unit(u).uclass.styled(enemy) + " to", implicit g => dest.elem)
 case class TBPsychicShriekRetreatPickAction(self : Faction, enemy : Faction, u : UnitRef, dest : Region, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
@@ -545,10 +528,12 @@ object TBExpansion extends Expansion {
 
             // Thousand Writhing Maws: 2-Power double recruit/summon (§1.5.1 / §3.6.3)
             // Offered FIRST in the action menu (creator request 2026-06-19).
-            // Eligible types come from the pool, so loyalty-card Neutrals count
-            // (see tbMawsEligibleTypes).
-            if (f.power >= 2 && tbMawsEligibleTypes(f).any)
-                + TBWrithingMawsMainAction(f)
+            // Units eligible: any unit type with cost <= 2 and at least 2 in pool.
+            if (f.power >= 2) {
+                val eligibleTypes = f.allUnits.distinct.%(uc => uc.cost > 0 && uc.cost <= 2 && uc.utype != GOO && f.pool(uc).num >= 2)
+                if (eligibleTypes.any)
+                    + TBWrithingMawsMainAction(f)
+            }
 
             game.moves(f)
             game.captures(f)
@@ -629,7 +614,7 @@ object TBExpansion extends Expansion {
         // ====================================================================
         case TBWrithingMawsMainAction(self) =>
             implicit val asking = Asking(self)
-            tbMawsEligibleTypes(self).foreach { uc =>
+            self.allUnits.distinct.%(uc => uc.cost > 0 && uc.cost <= 2 && uc.utype != GOO && self.pool(uc).num >= 2).foreach { uc =>
                 + TBWrithingMawsTypeAction(self, uc)
             }
             + CancelAction
@@ -691,9 +676,6 @@ object TBExpansion extends Expansion {
             if (game.tbShuddeMellEverAwakened && game.tbMantleInPlay && self.pool(ShuddeMellSegment).any) {
                 self.place(ShuddeMellSegment, TB.mantle)
                 self.log(Behemoth.styled(TB) + ": Power reached 0 — placed", ShuddeMellSegment.styled(TB), "on", TB.mantle)
-                // Latch this 0-crossing so the generic watcher does not place a
-                // second Segment for the same drop to 0.
-                game.tbBehemothZeroLatched = true
             }
             Force(then)
 
@@ -704,26 +686,10 @@ object TBExpansion extends Expansion {
         // Cultist to a Moved Unit's Area.")
         // ====================================================================
         case TBStalkMainAction(self, movedRegions, mover) =>
-            // REPLAY COMPATIBILITY (mirrors FB Cyclopean Gaze, FactionFB.scala:1762-1764):
-            // this prompt is fired via Force from the recorded MoveDoneAction(mover), but
-            // the "relocate a Cultist?" decision itself is an out-of-turn interrupt. The
-            // relocation (TBStalkAction) and — as of the paired fix above — the skip
-            // (TBStalkSkipAction) are RECORDED, so a fresh decision now persists. But logs
-            // written before the skip was recorded (incl. the reported async-reload fault
-            // in cwo game oxacpscnvdalkupp) have MoveDoneAction followed directly by the
-            // NEXT turn's action, with no recorded Stalk decision: on reload the dropped
-            // soft prompt left EndAction(mover) un-fired, so the mover (e.g. AA) got a
-            // SECOND action. Guard: if replaying and the next recorded action is neither a
-            // Stalk relocation nor a Stalk skip, the mover was skipped historically — end
-            // their action deterministically so play passes to the next faction.
-            if (game.nextReplayActionHint.exists(h => !(h.startsWith("TBStalkAction") || h.startsWith("TBStalkSkip"))))
-                EndAction(mover)
-            else {
-                implicit val asking = Asking(self)
-                + TBStalkUseAction(self, movedRegions, mover)
-                + TBStalkSkipAction(self, mover)
-                asking
-            }
+            implicit val asking = Asking(self)
+            + TBStalkUseAction(self, movedRegions, mover)
+            + TBStalkSkipAction(self, mover)
+            asking
 
         case TBStalkUseAction(self, movedRegions, mover) =>
             Force(TBStalkPickCultistAction(self, movedRegions, mover))
@@ -765,16 +731,6 @@ object TBExpansion extends Expansion {
             self.log(Autotomy.styled(TB) + ": declined")
             UnknownContinue
 
-        case TBSubterranePainUseAction(self) =>
-            game.battle.foreach(_.tbSubterranePainConsent = true)
-            self.log(Subterrane.styled(TB) + ": allowed for enemy-controlled retreats")
-            UnknownContinue
-
-        case TBSubterranePainSkipAction(self) =>
-            game.battle.foreach(_.tbSubterranePainConsent = false)
-            self.log(Subterrane.styled(TB) + ": denied — enemy retreats limited to adjacent areas")
-            UnknownContinue
-
         case TBAutotomyPickSegmentAction(self, segments) =>
             val arena = game.battle.map(_.arena).|(TB.mantle)
             Ask(self).each(segments)(ur =>
@@ -796,10 +752,12 @@ object TBExpansion extends Expansion {
 
             self.log(Autotomy.styled(TB) + ": Kill transferred to", ShuddeMellSegment.styled(TB), "in", segRegion)
 
-            // Elder Signs are NOT granted here. The pool count must include any Segment
-            // killed by the remaining kill assignment that runs after this transfer, so
-            // the "1 Elder Sign per Segment in pool" grant is deferred to TBAutotomyPhase
-            // (after all Kills are assigned this battle).
+            // Gain 1 Elder Sign per Segment in pool (at the moment of transfer)
+            val segmentsInPool = self.pool(ShuddeMellSegment).num
+            if (segmentsInPool > 0) {
+                self.takeES(segmentsInPool)
+                self.log(Autotomy.styled(TB) + ": gained", segmentsInPool.es, "for", segmentsInPool, "Segment".s(segmentsInPool), "in pool")
+            }
 
             // VENGEANCE FIX: When YS uses Vengeance, kills may have already been assigned to TB units
             // (e.g., Head). Autotomy transfers that kill to the Segment, so we must "undo" any kill
@@ -1170,11 +1128,6 @@ object TBExpansion extends Expansion {
             // Gain 2 Power first (per the Spellbook Requirement)
             self.power += 2
             self.log(RemoveGatePlaceChthonianReq.text.styled(TB) + ": gained", 2.power)
-            // TB was benched when it ran out of power; the 2 Power just gained is
-            // spendable, so put TB back in the turn order (same as a High Priest
-            // sacrifice). TB has no Hibernate, but guard anyway for consistency.
-            if (self.hibernating.not)
-                self.active = true
             Force(TBRemoveGatePlaceChthonianPickGateAction(self, then))
 
         case TBRemoveGatePlaceChthonianPickGateAction(self, then) =>
@@ -1270,67 +1223,15 @@ object TBExpansion extends Expansion {
         case _ => UnknownContinue
     }
 
-    // -- HELPER: Thousand Writhing Maws eligible unit types (§1.5.1 / §3.6.3) --
-    // The creator's revised wording is "up to 2-Cost", and the eligible list is
-    // "every up-to-2-cost type the faction can currently access from its POOL,
-    // INCLUDING a Neutral Unit it holds the loyalty card of".
-    //
-    // This reads the faction's actual pool contents rather than its printed
-    // roster: Neutral Units bought with a loyalty card are added to the faction's
-    // units at reserve when the card is taken, so they are in the pool but were
-    // never on the roster. Reading the roster meant they could never be offered.
-    // Same source the standard Summon menu uses (Game.scala summons).
-    //
-    // canBeRecruited / canBeSummoned decide whether a type is legally placeable
-    // by this route at all, which is also what keeps the four special-placement
-    // Neutrals out on their own terms: the Moonbeast and the Dimensional Shambler
-    // set canBeSummoned false (they enter play only by their own card routes), and
-    // the Servitor (handed to another faction) and the Insects/Hound (their own
-    // placement rules) are 1-cost/4-cost or likewise gated, so nothing here has to
-    // invent a placement rule the cards don't give.
-    def tbMawsEligibleTypes(f : Faction)(implicit game : Game) : $[UnitClass] =
-        f.pool.sortP./(_.uclass).distinct.%(uc =>
-            uc.cost > 0 && uc.cost <= 2 && uc.utype != GOO &&
-            (if (uc.utype == Cultist) uc.canBeRecruited(f) else uc.canBeSummoned(f)) &&
-            f.pool(uc).num >= 2
-        )
-
     // -- HELPER: Behemoth Segment-on-zero-Power (§3.4.3) ----------------------
     // Called after every TB Power debit. If Power == 0 and Head has ever been
     // awakened and Mantle is in play and pool has Segments, dispatch recorded action.
     def tbCheckBehemoth(then : ForcedAction)(implicit game : Game) : Continue = {
         val f = TB
-        if (tbBehemothReady && game.tbBehemothZeroLatched.not)
+        if (f.power == 0 && game.tbShuddeMellEverAwakened && game.tbMantleInPlay && f.pool(ShuddeMellSegment).any)
             Force(TBBehemothSegmentAction(f, then))
         else
             Force(then)
-    }
-
-    // Behemoth precondition: Power at 0, Head has ever been awakened, Mantle in
-    // play, and at least one Segment left in the pool (§3.4.3).
-    def tbBehemothReady(implicit game : Game) : Boolean =
-        TB.power == 0 && game.tbShuddeMellEverAwakened && game.tbMantleInPlay && TB.pool(ShuddeMellSegment).any
-
-    // -- HELPER: generic Behemoth 0-crossing watcher (§3.4.3) ------------------
-    // The guide's wording is "WHENEVER your Power reaches 0" — not "whenever you
-    // use a Burrowers ability that costs Power". TB's Power can reach 0 through
-    // any spend, including generic ones (declaring a battle, Move, Summon,
-    // Recruit, Awaken of another GOO) that the per-handler tbCheckBehemoth calls
-    // never see. Game.scala calls this from AfterAction so every route is covered.
-    //
-    // A latch makes this an EDGE trigger: one Segment per crossing of 0, not one
-    // per action taken while already sitting at 0. It clears the moment TB has
-    // Power again, so the next drop to 0 in the same Action Phase fires again.
-    def tbBehemothWatch()(implicit game : Game) : Unit = {
-        if (TB.power > 0) {
-            game.tbBehemothZeroLatched = false
-            return
-        }
-        if (tbBehemothReady && game.tbBehemothZeroLatched.not) {
-            TB.place(ShuddeMellSegment, TB.mantle)
-            TB.log(Behemoth.styled(TB) + ": Power reached 0 — placed", ShuddeMellSegment.styled(TB), "on", TB.mantle)
-            game.tbBehemothZeroLatched = true
-        }
     }
 
     // -- HELPER: Mantle adjacency edges (§2.3 / §3.2.2) -----------------------
