@@ -646,6 +646,27 @@ object FBEExpansion extends Expansion {
             }
 
         case ShapestealingTargetAction(self, enemyMonster) =>
+            // REPLAY COMPATIBILITY (mirrors Animated Rush above and Distributed Death in
+            // Battle.scala fbeDistributedDeathSaveWithManualDice): the manual die-pick
+            // actions (ManualDiePick/Choose/UndoLast) are Soft, AND the follow-on
+            // ShapestealingResolveAction is produced inside that Soft continuation and
+            // Force'd — so recording is decided by the Soft top-level action and NONE of
+            // this chain is written to the game log. On replay there is therefore no
+            // pick/resolve action to resume: the steal SILENTLY VANISHES on every refresh
+            // (reported repeatedly in game 'Disaster for Lunacy'). The pre-manual code was
+            // deterministic (took the LOWEST card die inline from the recorded target
+            // action) and persisted correctly; the manual-selection refactor removed that
+            // determinism without adding a replay guard. Restore it: on replay, use the
+            // LOWEST card die (the creator-confirmed default, Q2 resolution) and resolve,
+            // so a successful steal PERSISTS. Only present the picker during live play.
+            if (game.nextReplayActionHint.any) {
+                val sorted = game.fbeCardDice.sortBy(x => x)
+                val dieValue = sorted.headOption.getOrElse(0)
+                game.fbeCardDice = sorted.drop(1)
+                self.log(Shapestealing.styled(FBE) + ": using card die (value", dieValue.toString + ")")
+                Force(ShapestealingResolveAction(self, enemyMonster, dieValue))
+            }
+            else
             // Manual die selection: player chooses which die to use for Shapestealing.
             // The die was already rolled when placed on the Faction Card; we use that
             // value and discard the die (§1.10 SB3: "the value compared to the enemy
