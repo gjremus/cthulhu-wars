@@ -3024,6 +3024,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case ShapestealingTargetAction(self, _) =>
             proceed()
 
+        case ShapestealingRollAction(self, _, _) =>
+            proceed()
+
         case ShapestealingResolveAction(self, enemyMonster, _) =>
             // Shapestealing grants temporary battle-scoped control (FBE rolls combat dice
             // for the stolen unit and assigns its hits). The unit stays owned by its

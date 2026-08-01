@@ -160,6 +160,11 @@ case class ShapestealingSkipAction(self : Faction)
     extends OptionFactionAction(("Skip " + Shapestealing.name).styled(FBE)) with PreBattleQuestion
 case class ShapestealingTargetAction(self : Faction, enemyMonster : UnitRef)
     extends BaseFactionAction(Shapestealing.styled(FBE) + ": roll on", implicit g => g.unit(enemyMonster).uclass.styled(g.unit(enemyMonster).faction) + " (Cost " + g.unit(enemyMonster).uclass.cost + ")")
+// Records the specific card die the PLAYER chose to discard (its pip value) so the
+// choice PERSISTS through a page refresh — the manual pick itself is Soft/unrecorded,
+// but this hard action bakes the chosen die into the game log for replay.
+case class ShapestealingRollAction(self : Faction, enemyMonster : UnitRef, discardedDie : Int)
+    extends ForcedAction
 case class ShapestealingResolveAction(self : Faction, enemyMonster : UnitRef, roll : Int)
     extends ForcedAction
 
@@ -632,10 +637,12 @@ object FBEExpansion extends Expansion {
             UnknownContinue
 
         // ── SHAPESTEALING (§1.10 SB3 / §3.10.3) ──────────────────────────────
-        // FBE picks an enemy Monster, discards the LOWEST card die (weakest first,
-        // per Q2 resolution), then ROLLS a fresh d6. The fresh roll's pip value
-        // (1-6) is compared to the Monster's Cost. Card text: "roll a die from
-        // your Faction Card." Battle.scala's matching cases resume the battle.
+        // FBE picks an enemy Monster, then the PLAYER chooses WHICH card die to
+        // discard (creator: "remember which die the player chose to discard and not
+        // make it up on your own"), then ROLLS a fresh d6 whose pip (1-6) is compared
+        // to the Monster's Cost. Both the chosen die and the reroll result must
+        // survive a page refresh: the chosen die is baked into the recorded
+        // ShapestealingRollAction and the reroll into the recorded RollD6/ResolveAction.
         case ShapestealingPreBattleAction(self) =>
             game.battle match {
                 case Some(b) =>
@@ -646,20 +653,38 @@ object FBEExpansion extends Expansion {
             }
 
         case ShapestealingTargetAction(self, enemyMonster) =>
-            // Discard the LOWEST card die (weakest first, protects Byagoona's strong
-            // combat dice per the Q2 resolution), then ROLL A FRESH d6 and compare that
-            // roll to the Monster's Cost. Card text: "roll a die from your Faction Card"
-            // — the creator has repeatedly confirmed the compared value is a FRESH reroll,
-            // NOT the discarded die's stored pip. (The manual-die-pick activation of
-            // 2026-07-23 broke this by comparing the picked die's stored value directly;
-            // this restores the reroll.) RollD6 records its own result, so the steal
-            // both persists across a page refresh and replays deterministically — there
-            // is no Soft manual-pick chain, which is what silently dropped the steal on
-            // reload in game 'Disaster for Lunacy'.
-            val sorted = game.fbeCardDice.sortBy(x => x)
-            val discarded = sorted.headOption.getOrElse(0)
-            game.fbeCardDice = sorted.drop(1)
-            self.log(Shapestealing.styled(FBE) + ": discarded lowest card die (value", discarded.toString + ")")
+            // OLD-FORMAT REPLAY COMPATIBILITY: games recorded before this change
+            // discarded the LOWEST die HERE and had no separate roll action (the next
+            // recorded action was ShapestealingResolveAction). Detect that by peeking
+            // at the next recorded action; if it is NOT a ShapestealingRollAction,
+            // reproduce the legacy discard-lowest + roll so those games replay
+            // identically. New games record a ShapestealingRollAction that carries the
+            // player's chosen die.
+            if (game.nextReplayActionHint.any && !game.nextReplayActionHint.exists(_.contains("ShapestealingRollAction"))) {
+                val sorted = game.fbeCardDice.sortBy(x => x)
+                val discarded = sorted.headOption.getOrElse(0)
+                game.fbeCardDice = sorted.drop(1)
+                self.log(Shapestealing.styled(FBE) + ": discarded lowest card die (value", discarded.toString + ")")
+                RollD6(_ => Shapestealing.styled(FBE) + ": roll for Shapestealing",
+                    roll => ShapestealingResolveAction(self, enemyMonster, roll))
+            }
+            else
+            // Live play (and new-format replay): the player manually chooses which die
+            // to discard. On replay the resulting menu is ignored and the recorded
+            // ShapestealingRollAction (carrying the chosen die) is applied instead.
+            Force(ManualDiePickAction(self, ShapestealingContext, 1, $, selectedDice =>
+                ShapestealingRollAction(self, enemyMonster, selectedDice.headOption.getOrElse(0))))
+
+        case ShapestealingRollAction(self, enemyMonster, discardedDie) =>
+            // Discard the SPECIFIC die the player chose (persisted across reload). Fall
+            // back to the lowest die only if the recorded value is missing/absent (e.g.
+            // an interrupted pick) so the card count still decrements correctly.
+            val toDiscard =
+                if (discardedDie > 0 && game.fbeCardDice.contains(discardedDie)) discardedDie
+                else game.fbeCardDice.sortBy(x => x).headOption.getOrElse(0)
+            if (game.fbeCardDice.contains(toDiscard))
+                game.fbeCardDice = game.fbeCardDice.diff($(toDiscard))
+            self.log(Shapestealing.styled(FBE) + ": discarded chosen card die (value", toDiscard.toString + ")")
             RollD6(_ => Shapestealing.styled(FBE) + ": roll for Shapestealing",
                 roll => ShapestealingResolveAction(self, enemyMonster, roll))
 
