@@ -206,8 +206,15 @@ case class TBStalkUseAction(self : Faction, movedRegions : $[Region], mover : Fa
     extends OptionFactionAction("Use " + Stalk.styled(TB)) with Soft {
     override def question(implicit game : Game) = Stalk.styled(TB) + ": relocate a Cultist?"
 }
+// NOTE: intentionally NOT `Soft` (mirrors FB Cyclopean Gaze's recorded Use/Skip,
+// FactionFB.scala:265). Stalk is an out-of-turn interrupt fired after another
+// faction's Move; its terminal branches call EndAction(mover). The relocation
+// (TBStalkAction) is recorded, but if Skip were Soft the skip's EndAction(mover)
+// would never be written to the log — so on an async reload the dropped soft
+// prompt left the mover's turn un-ended and the mover got a SECOND action
+// (cwo game oxacpscnvdalkupp). Recording the skip makes EndAction(mover) persist.
 case class TBStalkSkipAction(self : Faction, mover : Faction)
-    extends OptionFactionAction("Skip " + Stalk.styled(TB)) with Soft {
+    extends OptionFactionAction("Skip " + Stalk.styled(TB)) {
     override def question(implicit game : Game) = Stalk.styled(TB)
 }
 case class TBStalkPickCultistAction(self : Faction, movedRegions : $[Region], mover : Faction)
@@ -697,10 +704,26 @@ object TBExpansion extends Expansion {
         // Cultist to a Moved Unit's Area.")
         // ====================================================================
         case TBStalkMainAction(self, movedRegions, mover) =>
-            implicit val asking = Asking(self)
-            + TBStalkUseAction(self, movedRegions, mover)
-            + TBStalkSkipAction(self, mover)
-            asking
+            // REPLAY COMPATIBILITY (mirrors FB Cyclopean Gaze, FactionFB.scala:1762-1764):
+            // this prompt is fired via Force from the recorded MoveDoneAction(mover), but
+            // the "relocate a Cultist?" decision itself is an out-of-turn interrupt. The
+            // relocation (TBStalkAction) and — as of the paired fix above — the skip
+            // (TBStalkSkipAction) are RECORDED, so a fresh decision now persists. But logs
+            // written before the skip was recorded (incl. the reported async-reload fault
+            // in cwo game oxacpscnvdalkupp) have MoveDoneAction followed directly by the
+            // NEXT turn's action, with no recorded Stalk decision: on reload the dropped
+            // soft prompt left EndAction(mover) un-fired, so the mover (e.g. AA) got a
+            // SECOND action. Guard: if replaying and the next recorded action is neither a
+            // Stalk relocation nor a Stalk skip, the mover was skipped historically — end
+            // their action deterministically so play passes to the next faction.
+            if (game.nextReplayActionHint.exists(h => !(h.startsWith("TBStalkAction") || h.startsWith("TBStalkSkip"))))
+                EndAction(mover)
+            else {
+                implicit val asking = Asking(self)
+                + TBStalkUseAction(self, movedRegions, mover)
+                + TBStalkSkipAction(self, mover)
+                asking
+            }
 
         case TBStalkUseAction(self, movedRegions, mover) =>
             Force(TBStalkPickCultistAction(self, movedRegions, mover))
