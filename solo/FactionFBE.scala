@@ -646,37 +646,22 @@ object FBEExpansion extends Expansion {
             }
 
         case ShapestealingTargetAction(self, enemyMonster) =>
-            // REPLAY COMPATIBILITY (mirrors Animated Rush above and Distributed Death in
-            // Battle.scala fbeDistributedDeathSaveWithManualDice): the manual die-pick
-            // actions (ManualDiePick/Choose/UndoLast) are Soft, AND the follow-on
-            // ShapestealingResolveAction is produced inside that Soft continuation and
-            // Force'd — so recording is decided by the Soft top-level action and NONE of
-            // this chain is written to the game log. On replay there is therefore no
-            // pick/resolve action to resume: the steal SILENTLY VANISHES on every refresh
-            // (reported repeatedly in game 'Disaster for Lunacy'). The pre-manual code was
-            // deterministic (took the LOWEST card die inline from the recorded target
-            // action) and persisted correctly; the manual-selection refactor removed that
-            // determinism without adding a replay guard. Restore it: on replay, use the
-            // LOWEST card die (the creator-confirmed default, Q2 resolution) and resolve,
-            // so a successful steal PERSISTS. Only present the picker during live play.
-            if (game.nextReplayActionHint.any) {
-                val sorted = game.fbeCardDice.sortBy(x => x)
-                val dieValue = sorted.headOption.getOrElse(0)
-                game.fbeCardDice = sorted.drop(1)
-                self.log(Shapestealing.styled(FBE) + ": using card die (value", dieValue.toString + ")")
-                Force(ShapestealingResolveAction(self, enemyMonster, dieValue))
-            }
-            else
-            // Manual die selection: player chooses which die to use for Shapestealing.
-            // The die was already rolled when placed on the Faction Card; we use that
-            // value and discard the die (§1.10 SB3: "the value compared to the enemy
-            // Monster's Cost is the literal pip value (1-6) printed on the rolled card die").
-            Force(ManualDiePickAction(self, ShapestealingContext, 1, $, selectedDice => {
-                val dieValue = selectedDice.head
-                game.fbeCardDice = game.fbeCardDice.diff(selectedDice)
-                self.log(Shapestealing.styled(FBE) + ": using card die (value", dieValue.toString + ")")
-                ShapestealingResolveAction(self, enemyMonster, dieValue)
-            }))
+            // Discard the LOWEST card die (weakest first, protects Byagoona's strong
+            // combat dice per the Q2 resolution), then ROLL A FRESH d6 and compare that
+            // roll to the Monster's Cost. Card text: "roll a die from your Faction Card"
+            // — the creator has repeatedly confirmed the compared value is a FRESH reroll,
+            // NOT the discarded die's stored pip. (The manual-die-pick activation of
+            // 2026-07-23 broke this by comparing the picked die's stored value directly;
+            // this restores the reroll.) RollD6 records its own result, so the steal
+            // both persists across a page refresh and replays deterministically — there
+            // is no Soft manual-pick chain, which is what silently dropped the steal on
+            // reload in game 'Disaster for Lunacy'.
+            val sorted = game.fbeCardDice.sortBy(x => x)
+            val discarded = sorted.headOption.getOrElse(0)
+            game.fbeCardDice = sorted.drop(1)
+            self.log(Shapestealing.styled(FBE) + ": discarded lowest card die (value", discarded.toString + ")")
+            RollD6(_ => Shapestealing.styled(FBE) + ": roll for Shapestealing",
+                roll => ShapestealingResolveAction(self, enemyMonster, roll))
 
         case ShapestealingResolveAction(self, enemyMonster, roll) =>
             val mon = game.unit(enemyMonster)
@@ -687,11 +672,11 @@ object FBEExpansion extends Expansion {
                 // for combat dice and hit assignment during this battle.
                 // On battle-end, this tracking is cleared and control reverts automatically.
                 game.fbeShapestolen :+= enemyMonster
-                self.log(Shapestealing.styled(FBE) + ": die value", roll.toString + " vs Cost",
+                self.log(Shapestealing.styled(FBE) + ": rolled", roll.toString + " vs Cost",
                     cost.toString + " —", mon.uclass.styled(mon.faction), "fights for", FBE.full, "this Combat")
             }
             else
-                self.log(Shapestealing.styled(FBE) + ": die value", roll.toString + " vs Cost",
+                self.log(Shapestealing.styled(FBE) + ": rolled", roll.toString + " vs Cost",
                     cost.toString + " — failed")
             UnknownContinue   // Battle.scala ShapestealingResolveAction case resumes via proceed()
 
