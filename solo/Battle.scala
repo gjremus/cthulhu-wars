@@ -1954,7 +1954,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // spawn 1 Fungal Thrall per enemy Killed. FBEExpansion resolves it.
                 if (factions.has(FBE) && FBE.can(NecromanticSpores) && sides.has(FBE) && !FBE.oncePerAction.has(NecromanticSpores)) {
                     val enemy = if (attacker == FBE) defender else attacker
-                    val enemyKilled = eliminated.%(_.faction == enemy).num
+                    // A Shapestolen enemy Monster fought FOR FBE this Battle, so if it died it
+                    // was NOT an "enemy Killed" — exclude it from the Fungal-Thrall spawn count
+                    // (fbeShapestolen still holds these refs here; it is cleared at battle-end,
+                    // below the revert loop). Per creator: stolen units must not inflate the count.
+                    val enemyKilled = eliminated.%(u => u.faction == enemy && !game.fbeShapestolen.contains(u.ref)).num
                     val fbeMonstersHere = FBE.at(arena).%(_.uclass.utype == Monster).any
                     if (enemyKilled > 0 && fbeMonstersHere) {
                         FBE.oncePerAction :+= NecromanticSpores
