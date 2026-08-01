@@ -302,7 +302,7 @@ case class TBPsychicShriekRetreatAction(self : Faction, enemy : Faction, count :
     override def question(implicit game : Game) = PsychicShriek.styled(TB) + ": " + enemy.full + " retreat " + count + " units"
 }
 case class TBPsychicShriekRetreatUnitAction(self : Faction, enemy : Faction, u : UnitRef, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
-    extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": retreat " + count + " unit".s(count) + " — select unit", implicit g => g.unit(u).uclass.styled(enemy) + " in " + g.unit(u).region)
+    extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": retreat " + count + " unit".s(count) + " — select unit", implicit g => g.unit(u).uclass.styled(enemy) + " in " + g.unit(u).region + g.unit(u).onGate.??(" (on Gate)"))
 case class TBPsychicShriekRetreatDestAction(self : Faction, enemy : Faction, u : UnitRef, dest : Region, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
     extends BaseFactionAction(implicit g => PsychicShriek.styled(TB) + ": retreat " + g.unit(u).uclass.styled(enemy) + " to", implicit g => dest.elem)
 case class TBPsychicShriekRetreatPickAction(self : Faction, enemy : Faction, u : UnitRef, dest : Region, count : Int, priorAreas : $[Region], retreated : $[UnitRef], remaining : $[UnitRef])
