@@ -3928,6 +3928,25 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                         perform(UpdateAction)
                                     }
+                                    else if (actions.num > 0) {
+                                        // Rollback detection (2026-08-02): the forward read is empty on a
+                                        // normal wait (nothing new). But an admin rollback SHORTENS the log,
+                                        // and the forward read is ALSO empty then — stranding the client on a
+                                        // stale prompt forever. Discriminate by reading the client's OWN last
+                                        // action position: if even that no longer exists on the server, the
+                                        // log was rolled back below us — reload to resync to the true state.
+                                        getF(server + "read/" + hash + "/" + (actions.num + 2)) { own =>
+                                            if (backgroundCheckThread.has(token)) {
+                                                if (own.splt("\n").but("").none) {
+                                                    dom.console.log("[rollback-resync] server log is shorter than local (actions.num=" + actions.num + ") — reloading")
+                                                    backgroundCheckThread = None
+                                                    dom.window.location.reload()
+                                                }
+                                                else
+                                                    executeBackgroundCheck(token)
+                                            }
+                                        }
+                                    }
                                     else {
                                         executeBackgroundCheck(token)
                                     }
