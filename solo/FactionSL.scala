@@ -188,7 +188,11 @@ object SLExpansion extends Expansion {
 
             game.captures(f)
 
-            if (f.can(CaptureMonster) && areas.nex.%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).goos.none && e.at(r).monsters.%(_.uclass != EarthCat).any))).any)
+            // Capture Monster must be offered wherever base cultist-capture (game.captures) is:
+            // that region set includes the moon (BB.moon) and the TB mantle, not just the earthly
+            // board regions. Using bare areas.nex here excluded the moon, so Tsathoggua could never
+            // be offered Capture Monster while on the moon. Mirror the base-capture region set.
+            if (f.can(CaptureMonster) && (areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ game.tbMantleInPlay.??($(TB.mantle))).%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).goos.none && e.at(r).monsters.%(_.uclass != EarthCat).any))).any)
                 + CaptureMonsterMainAction(f)
 
             game.recruits(f)
