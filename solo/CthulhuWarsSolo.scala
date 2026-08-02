@@ -258,6 +258,40 @@ object CthulhuWarsSolo {
         val redirect = false
         val localReplay = false
 
+        // ── Auto-reload on new deploy (2026-08-02) ───────────────────
+        // Every open browser keeps running whatever main.js it first loaded, so a
+        // deploy doesn't reach players who already have the game open (desktop +
+        // mobile, all seats). Fix: read the version this page loaded (the
+        // <script id=script> ?v= tag), then every 10s re-fetch THIS PAGE'S OWN URL
+        // (cache-busted) and read the live ?v= from its script tag. Re-fetching the
+        // current URL works for every build regardless of served path. If the live
+        // version differs from the loaded one, hard-reload onto the new code.
+        {
+            def versionFromHtml(s : String) : String =
+                if (s.contains("main.js?v=")) {
+                    val after = s.substring(s.indexOf("main.js?v=") + 10)
+                    after.takeWhile(c => c != '"' && c != '\'' && c != '&' && c != '>' && c != ' ')
+                } else ""
+            val loadedVersion : String = Option(getElem("script"))
+                ./~(e => Option(e.getAttribute("src")))
+                ./(src => if (src.contains("?v=")) src.substring(src.indexOf("?v=") + 3) else "")
+                .|("")
+            def checkVersion() : Unit = {
+                val base = dom.window.location.href.splt("?")(0).splt("#")(0)
+                getF(base + "?_=" + System.currentTimeMillis()) { html =>
+                    val liveVersion = versionFromHtml(html)
+                    if (loadedVersion != "" && liveVersion != "" && liveVersion != loadedVersion) {
+                        dom.console.log("[auto-reload] loaded=" + loadedVersion + " live=" + liveVersion + " — reloading")
+                        dom.window.location.reload()
+                    }
+                    else
+                        setTimeout(10000) { checkVersion() }
+                }
+            }
+            if (loadedVersion != "")
+                setTimeout(10000) { checkVersion() }
+        }
+
         val logDiv = getElem("log")
 
         def log(s : String, onClick : () => Unit = () => {}) = {
