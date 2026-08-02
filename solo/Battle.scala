@@ -530,8 +530,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s == TT && s.can(TerrorSB) && !s.tag(TTReduceEnemyCombat) && !s.tag(TTBoostOwnCombat) && s.forces(ProtoShoggoth).any)
             options :+= TTTerrorPreBattleAction(TT)
 
-        // Bubastis (BB): Zagazig — no pre-battle prompt; the choice happens post-roll
-        // at ChannelPowerPhase when the actual roll values are visible (see below).
+        // Bubastis (BB): Zagazig — pre-battle Use/Skip choice (task 3.10.2 / 3.14.2).
+        // User directive 2026-08-02: Zagazig is a PRE-BATTLE power. The Use/Skip decision
+        // must be made BEFORE dice are rolled (reverts the 2026-07-17 post-roll prompt).
+        // The actual Kills<->Pains swap is still applied post-roll, once rolls exist
+        // (see ChannelPowerPhase below). Old post-roll-era games replay via that block.
+        if (s == BB && s.can(Zagazig) && !s.tag(Zagazig) && !s.tag(ZagazigSkipped) && s.forces.%(_.uclass == CatFromMars).any) {
+            options :+= ZagazigUseAction(s)
+            options :+= ZagazigSkipAction(s)
+        }
 
         // Bubastis (BB): Savagery — pre-battle pay 1 Power for +4 strength per CatFromSaturn (task 3.10.3/3.14.3)
         if (s == BB && s.can(Savagery) && !s.tag(Savagery) && s.forces.%(_.uclass == CatFromSaturn).any && s.power >= 1) {
@@ -1049,8 +1056,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Bubastis (BB): Zagazig — swap Kills<->Pains for BOTH sides FIRST in the post-roll
                 // resolution chain, BEFORE Leng Spider Bloodthirst and BEFORE Demand Sacrifice's
                 // Kills->Pains conversion (rulebook FAQ #3 and FAQ #17).
-                // User directive 2026-07-17: Zagazig is now optional — prompt BB player to choose
-                // after rolls are visible, showing the actual roll counts that will be swapped.
+                // Since 2026-08-02 the Use/Skip choice is made PRE-battle, so for new games
+                // BB already carries the Zagazig/ZagazigSkipped tag here and this block is a
+                // no-op. It is retained ONLY for replay of older games that recorded the
+                // choice post-roll (2026-07-17..2026-08-02) or auto-applied it (pre-2026-07-01).
                 if (sides.has(BB) && BB.can(Zagazig) && !BB.tag(Zagazig) && !BB.tag(ZagazigSkipped) && BB.forces.%(_.uclass == CatFromMars).any) {
                     val replayBlocksZagazig = game.nextReplayActionHint.exists(h => !h.contains("Zagazig"))
                     if (replayBlocksZagazig) {
