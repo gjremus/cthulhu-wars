@@ -630,7 +630,10 @@ object DCExpansion extends Expansion {
             game.reveals(f)
             game.endTurn(f)(f.battled.any || game.nexed.any)
 
-            + NeedOk
+            // DC zero-power fix (HB, 2026-08-02): removed a stray `+ NeedOk` that no
+            // other faction's active MainAction has. It forced an "Ok" button DC got
+            // stranded on at zero power. End with `asking` exactly like every other
+            // faction (BG/AN/CC/DS/GC/SL/WW/OW/YS/FBE/TB/XSS all do this).
             asking
 
         // ── Tenebrosum: Soft prompt — opens "are you sure" confirm ───────────
