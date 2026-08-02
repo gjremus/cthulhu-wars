@@ -515,6 +515,7 @@ object DCExpansion extends Expansion {
             // when inactive) and record a log line so the pass is visible in the
             // player log. Previously the `+ NeedOk` forced a needless prompt at zero
             // power, and the silent Skip left no log entry.
+            println(s"[DCINACT] power=${f.power} logpos=${game.ritualMarker} menu=[${asking.ask.actions./(a => a.unwrap.getClass.getSimpleName + (if (a.isInfo) ":info" else "")).mkString(", ")}] nonInfo=${asking.ask.actions.%!(_.isInfo).num}")
             if (asking.ask.actions.%!(_.isInfo).any) {
                 + NextPlayerAction(f).as("Skip")
                 + NeedOk
@@ -571,7 +572,6 @@ object DCExpansion extends Expansion {
             asking
 
         case MainAction(f : DC.type) =>
-            println(s"[DCZ] ACTIVE(573) power=${f.power} active=${f.active} acted=${f.acted} battled=${f.battled.any} nexed=${game.nexed.any}")
             // HB Fix 109.E (2026-06-11): stale guard cleanup (same as post-acted).
             if (game.dcTenebrosumGuard) {
                 game.dcTenebrosumGuard = false
@@ -635,7 +635,6 @@ object DCExpansion extends Expansion {
             // other faction's active MainAction has. It forced an "Ok" button DC got
             // stranded on at zero power. End with `asking` exactly like every other
             // faction (BG/AN/CC/DS/GC/SL/WW/OW/YS/FBE/TB/XSS all do this).
-            println(s"[DCZ] ACTIVE(573) menu=[${asking.ask.actions./(a => a.unwrap.getClass.getSimpleName + (if (a.isInfo) ":info" else "")).mkString(", ")}] nonInfo=${asking.ask.actions.%!(_.isInfo).num}")
             asking
 
         // ── Tenebrosum: Soft prompt — opens "are you sure" confirm ───────────
