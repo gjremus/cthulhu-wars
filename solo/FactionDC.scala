@@ -502,27 +502,22 @@ object DCExpansion extends Expansion {
 
         // ── MAIN ACTION ─────────────────────────────────────────────────────
         case MainAction(f : DC.type) if f.active.not =>
+            // DC inactive turn (HB, 2026-08-03): match EVERY other faction's generic
+            // inactive handler — only reveals (Elder Signs) + reserved-Acolyte delivery
+            // may prompt; then Skip. Previously this uniquely called game.controls(f),
+            // which offered DC a FREE gate-control action even when out of power and
+            // done for the round, stranding it on a prompt no other faction gets.
+            // Gate control is still available on DC's OWN turn (the active handler).
             implicit val asking = Asking(f)
-            game.controls(f)
             if (dcCanDeliverFactionCardAcolyte(f))
                 + DCPlaceReservedAcolyteMainAction(f)
             game.reveals(f)
-            // DC zero-power turn fix (HB, 2026-07-23): if DC has a genuine optional
-            // action available at this inactive turn (reserved-Acolyte delivery,
-            // gate control, or Elder Sign reveal), keep the manual prompt so the
-            // player can choose. Otherwise DC has nothing to do with zero power —
-            // auto-skip WITHOUT forcing an Ok prompt (matching how FBE/SL auto-skip
-            // when inactive) and record a log line so the pass is visible in the
-            // player log. Previously the `+ NeedOk` forced a needless prompt at zero
-            // power, and the silent Skip left no log entry.
-            println(s"[DCINACT] power=${f.power} logpos=${game.ritualMarker} menu=[${asking.ask.actions./(a => a.unwrap.getClass.getSimpleName + (if (a.isInfo) ":info" else "")).mkString(", ")}] nonInfo=${asking.ask.actions.%!(_.isInfo).num}")
             if (asking.ask.actions.%!(_.isInfo).any) {
                 + NextPlayerAction(f).as("Skip")
                 + NeedOk
                 asking
             }
             else {
-                f.log("skipped its turn (no power)")
                 + NextPlayerAction(f).as("Skip")
                 asking
             }
