@@ -1416,6 +1416,14 @@ object CthulhuWarsSolo {
                     .useIf(tags.has(Mummified))(_.copy(rotation = 90.0))
 
                 def icon = {
+                    // Guard: some units have no sprite prototype (proto == null, e.g. the
+                    // AN Cathedral building, which is drawn on the map via a separate token
+                    // render). Such units can still be assigned kills, so they may appear
+                    // here as Killed/Pained. With no rectangle to anchor to, there is nothing
+                    // to overlay a kill/pain marker on — skip it rather than dereferencing a
+                    // null rect (which froze a game on load during a Cthugha battle).
+                    if (scaledProto == null) None
+                    else {
                     val hs = (30 * board.unitScale).toInt
                     val is = (60 * board.unitScale).toInt
                     if (health == Killed)
@@ -1425,6 +1433,7 @@ object CthulhuWarsSolo {
                         |(DrawRect("pain", None, x - hs + 1 + rect.cx, (rect.y + y) / 2 + rect.cy - hs, is, is))
                     else
                         None
+                    }
                 }
             }
 
