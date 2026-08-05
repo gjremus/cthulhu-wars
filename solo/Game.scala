@@ -2154,12 +2154,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // (source/bubastis.txt line 108) + FAQ #19 ("Bubastis' Moon Gate is inherent
                 // and always present"). Skip the abandon-on-no-onGate-unit check for BB.moon.
                 // TB Mantle Gate: normal gate — can be lost if no onGate unit is present.
-                // TB SBR4 Gate: retains control without onGate unit UNLESS another faction
-                // has a gate-controlling unit present (normal CW gate seizure rules apply).
+                // TB SBR4 Gate: follows normal gate-control rules. It is only controlled
+                // while TB has a gate-controlling Cultist (Cadavolyte) on it. Once that
+                // controller is captured/killed/moved and only Tentacles remain (which
+                // cannot control Gates), the Gate becomes uncontrolled — same as any other
+                // faction. (The previous SBR4 exemption wrongly kept such Gates controlled,
+                // over-counting TB's Gather Power; owner-reported 2026-08-04.)
                 val bbMoonExempt = f == BB && r == BB.moon
-                val tbSBR4Exempt = f == TB && tbSBR4Gates.has(r) &&
-                    factions.but(f).%(e => e.at(r).%(_.canControlGate).any).none
-                if (!bbMoonExempt && !tbSBR4Exempt && f.at(r).%(_.onGate).none) {
+                if (!bbMoonExempt && f.at(r).%(_.onGate).none) {
                     f.gates :-= r
                     f.log("lost control of the gate in", r)
                 }
