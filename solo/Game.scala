@@ -832,6 +832,7 @@ case object TBStalkThreatToGate extends TBStalkPlan("...enemy moves to a Gated A
 case object TBStalkThreatToGOO extends TBStalkPlan("...enemy moves to GOO's Area") with TBStalkThreat
 case object TBStalkThreatOfCapture extends TBStalkPlan("...threat of capture to a Cultist") with TBStalkThreat
 case object TBStalkThreatNoTBUnit extends TBStalkPlan("...no TB Unit in the Area moved to") with TBStalkThreat
+case object TBStalkThreatTBMoves extends TBStalkPlan("...TB moves a Unit") with TBStalkThreat
 
 sealed abstract class TBRemoveGatePlan(val label : String) extends Plan {
     val group = "Remove Gate, Place Chthonian".styled(TB)
@@ -4634,9 +4635,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     if (f.commands.has(TBStalkThreatToGOO))
                         reasons = reasons || tbStalkDests.exists(r => f.all(GOO).exists(_.region == r))
                     if (f.commands.has(TBStalkThreatOfCapture))
-                        reasons = reasons || tbStalkDests.exists(r => f.at(r).%(_.uclass.utype == Cultist).any && self != f)
+                        // Only count Cultists that can actually be Captured. Tentacles are
+                        // Cultist-type but Thousand Writhing Maws makes them uncapturable, so
+                        // an enemy Monster/GOO moving next to a lone Tentacle is no capture
+                        // threat and must not trigger this condition.
+                        reasons = reasons || tbStalkDests.exists(r => f.at(r).%(u => u.uclass.utype == Cultist && u.uclass.canBeCaptured(u)).any && self != f)
                     if (f.commands.has(TBStalkThreatNoTBUnit))
                         reasons = reasons || tbStalkDests.exists(r => f.at(r).none)
+                    if (f.commands.has(TBStalkThreatTBMoves))
+                        // "...TB moves a Unit": prompt when TB itself is the faction that just
+                        // moved (self == TB), so TB can chain a Stalk relocation off its own Move.
+                        reasons = reasons || (self == f)
                     reasons
                 }
                 if (shouldPrompt)
@@ -5255,13 +5264,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             // Safety: init TB Stalk plans for games saved before they existed
             if (f == TB && f.plans.of[TBStalkPlan].none) {
-                f.plans ++= $(TBStalkPrompt, TBStalkSkipAll, TBStalkThreatToGate, TBStalkThreatToGOO, TBStalkThreatOfCapture, TBStalkThreatNoTBUnit)
+                f.plans ++= $(TBStalkPrompt, TBStalkSkipAll, TBStalkThreatToGate, TBStalkThreatToGOO, TBStalkThreatOfCapture, TBStalkThreatNoTBUnit, TBStalkThreatTBMoves)
                 f.commands :+= TBStalkPrompt
             }
 
             // Safety: add TBStalkThreatNoTBUnit to existing games (2026-07-24)
             if (f == TB && f.plans.of[TBStalkPlan].any && !f.plans.has(TBStalkThreatNoTBUnit)) {
                 f.plans :+= TBStalkThreatNoTBUnit
+            }
+
+            // Safety: add TBStalkThreatTBMoves to existing games (2026-08-05)
+            if (f == TB && f.plans.of[TBStalkPlan].any && !f.plans.has(TBStalkThreatTBMoves)) {
+                f.plans :+= TBStalkThreatTBMoves
             }
 
             val visiblePlans = f.plans

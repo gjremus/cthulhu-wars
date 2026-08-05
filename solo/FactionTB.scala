@@ -426,7 +426,9 @@ object TBExpansion extends Expansion {
                 TBStalkSkipAll,
                 TBStalkThreatToGate,
                 TBStalkThreatToGOO,
-                TBStalkThreatOfCapture
+                TBStalkThreatOfCapture,
+                TBStalkThreatNoTBUnit,
+                TBStalkThreatTBMoves
             )
 
             if (options.has(QuickGame)) {
