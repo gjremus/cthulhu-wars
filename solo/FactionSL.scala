@@ -192,7 +192,7 @@ object SLExpansion extends Expansion {
             // that region set includes the moon (BB.moon) and the TB mantle, not just the earthly
             // board regions. Using bare areas.nex here excluded the moon, so Tsathoggua could never
             // be offered Capture Monster while on the moon. Mirror the base-capture region set.
-            if (f.can(CaptureMonster) && (areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ game.tbMantleInPlay.??($(TB.mantle))).%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).goos.none && e.at(r).monsters.%(_.uclass != EarthCat).any))).any)
+            if (f.can(CaptureMonster) && (areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ game.tbMantleInPlay.??($(TB.mantle))).%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).monsters.any))).any)
                 + CaptureMonsterMainAction(f)
 
             game.recruits(f)
@@ -375,13 +375,12 @@ object SLExpansion extends Expansion {
         // CAPTURE MONSTER
         case CaptureMonsterMainAction(self) =>
             val r = self.goo(Tsathoggua).region
-            Ask(self).each(factionlike.but(self).%(_.at(r).use(l => l.monsters.%(_.uclass != EarthCat).any && l.goos.none)))(e => CaptureMonsterAction(self, r, e)).cancel
+            Ask(self).each(factionlike.but(self).%(_.at(r).use(l => l.monsters.any)))(e => CaptureMonsterAction(self, r, e)).cancel
 
         case CaptureMonsterAction(self, r, f) =>
             self.power -= 1
 
-            // Earth Cats (BB) cannot be captured (task 3.6.2)
-            Ask(f).each(f.at(r).monsters.%(_.uclass != EarthCat).sortBy(_.uclass.cost))(u => CaptureMonsterUnitAction(self, r, u.faction, u.uclass))
+            Ask(f).each(f.at(r).monsters.sortBy(_.uclass.cost))(u => CaptureMonsterUnitAction(self, r, u.faction, u.uclass))
 
         case CaptureMonsterUnitAction(self, r, f, uc) =>
             val m = f.at(r).one(uc)
@@ -413,9 +412,22 @@ object SLExpansion extends Expansion {
         // Ancient Sorcery, TWO Serpentmen are required. After the first pick,
         // chain to a second pick before paying / borrowing.
         case AncientSorceryUnitAction(self, a, r, uc) if isDCAbility(a) =>
-            // First Serpentman picked; ask for a second from a different region/unit.
+            // Copying a DC unique via standard Ancient Sorcery normally costs TWO
+            // Serpentmen (Fix 75): after the first pick, chain to a second pick.
+            // BUT if no second Serpentman is available, asking for one produces an
+            // EMPTY menu and strands the player on a committed action (the "SL cast
+            // Tenebrosum, no options appear" freeze). In that case fall back to a
+            // normal single-Serpentman borrow so the action always resolves.
             val remaining = self.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex.%(u => !(u.region == r && self.at(r, SerpentMan).num == 1))
-            Ask(self).each(remaining)(u => AncientSorceryDCSecondUnitAction(self, a, r, u.region, u.uclass)).cancel
+            if (remaining.none) {
+                self.power -= 1
+                self.at(r).one(uc).region = SL.sorcery
+                self.borrowed :+= a
+                self.log("sent", uc, "from", r, "to access", a)
+                EndAction(self)
+            }
+            else
+                Ask(self).each(remaining)(u => AncientSorceryDCSecondUnitAction(self, a, r, u.region, u.uclass)).cancel
 
         case AncientSorceryDCSecondUnitAction(self, a, r1, r2, uc) =>
             self.power -= 1
