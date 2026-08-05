@@ -1635,18 +1635,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     if (s.tag(UnholyGround)) {
                         s.remove(UnholyGround)
 
-                        if (game.cathedrals.has(arena)) {
-                            // Replay-compat guard (mirrors MNU + TS Shepherd guard in Game.scala).
-                            // Games recorded before this offer armed here have no
-                            // UnholyGroundAction/BattleDoneAction as their next recorded
-                            // action; issuing the Ask on reload would desync the replay
-                            // (dropped prompt on mid-battle reload). Only present the offer
-                            // when replay isn't feeding a different next action. Live play
-                            // (hint == None) is unaffected.
-                            val replayBlocksUG = game.nextReplayActionHint.exists(h => !h.startsWith("UnholyGroundAction") && !h.startsWith("BattleDoneAction"))
-                            if (!replayBlocksUG)
-                                return Ask(s).each(game.cathedrals)(r => UnholyGroundAction(s, s.opponent, r).as(r)("Remove a cathedral with", UnholyGround)).skip(BattleDoneAction(s))
-                        }
+                        // Original HRF rule: offer when the loser still has a GOO in
+                        // the cathedral region. NOTE (2026-08-05): a previous "replay
+                        // -compat" guard (replayBlocksUG) was added here that only armed
+                        // the offer when the NEXT recorded action was already an
+                        // UnholyGroundAction/BattleDoneAction. That guard was itself the
+                        // bug: because the offer had never fired in any recorded game,
+                        // every replay saw a different next action and suppressed the
+                        // prompt forever — Unholy Ground could never appear. Removed it
+                        // and restored the plain original condition (matches base HRF).
+                        if (s.opponent.forces.goos.any && game.cathedrals.has(arena))
+                            return Ask(s).each(game.cathedrals)(r => UnholyGroundAction(s, s.opponent, r).as(r)("Remove a cathedral with", UnholyGround)).skip(BattleDoneAction(s))
                     }
                 }
 
