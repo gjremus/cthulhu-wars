@@ -3587,7 +3587,19 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 ritualMarker += 1
             showROAT()
             self.satisfy(PerformRitual, "Perform Ritual of Annihilation")
-            CheckSpellbooksAction(DoomAction(self))
+
+            // Requires Attention IS a Ritual of Annihilation, so — exactly like the standard
+            // RoA handler above — offer BB the choice to remove one of its own face-down
+            // Tombstalker Cursed Tomes from the game. TS never holds its own tomes, so the
+            // guard mirrors the standard path. Both remove/skip continue to the doom phase.
+            val faceDownTomes = if (self == TS) Nil else cursedTomesOwned.get(self).|(Nil).filter { case (_, fd) => fd }
+            if (faceDownTomes.any) {
+                implicit val asking = Asking(self)
+                faceDownTomes.foreach { case (n, _) => + TSRemoveTomeAction(self, n) }
+                + TSSkipRemoveTomeAction(self)
+                asking
+            } else
+                CheckSpellbooksAction(DoomAction(self))
 
         // MAIN
         case PreMainAction(f) if factions.exists(f => f.unfulfilled.num + f.spellbooks.num < f.library.num) =>
