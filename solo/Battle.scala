@@ -1348,8 +1348,18 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     if (s.tag(UnholyGround)) {
                         s.remove(UnholyGround)
 
-                        if (game.cathedrals.has(arena))
-                            return Ask(s).each(game.cathedrals)(r => UnholyGroundAction(s, s.opponent, r).as(r)("Remove a cathedral with", UnholyGround)).skip(BattleDoneAction(s))
+                        if (game.cathedrals.has(arena)) {
+                            // Replay-compat guard (mirrors TS Shepherd guard in Game.scala).
+                            // Games recorded before this offer armed here have no
+                            // UnholyGroundAction/BattleDoneAction as their next recorded
+                            // action; issuing the Ask on reload would desync the replay
+                            // (dropped prompt on mid-battle reload). Only present the offer
+                            // when replay isn't feeding a different next action. Live play
+                            // (hint == None) is unaffected.
+                            val replayBlocksUG = game.nextReplayActionHint.exists(h => !h.startsWith("UnholyGroundAction") && !h.startsWith("BattleDoneAction"))
+                            if (!replayBlocksUG)
+                                return Ask(s).each(game.cathedrals)(r => UnholyGroundAction(s, s.opponent, r).as(r)("Remove a cathedral with", UnholyGround)).skip(BattleDoneAction(s))
+                        }
                     }
                 }
 
