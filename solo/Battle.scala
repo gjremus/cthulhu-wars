@@ -635,7 +635,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         else if (s.has(Harbinger) && !s.has(Harbinger) && game.moonbeastOnSpellbook.values.exists(t => t._1 == s && t._2 == Harbinger))
             log(s, Harbinger.styled(s), "blocked by", "Moonbeast".styled("nt"))
 
-        if (s.can(Emissary) && side.forces(Nyarlathotep).any && s.opponent.forces.goos.none)
+        if (s.can(Emissary) && side.forces(Nyarlathotep).any && s.opponent.forces.%(u => u.uclass.utype == GOO || (u.uclass == Cathedral && AN.can(HolyGround))).none)
             s.add(Emissary)
         else if (s.has(Emissary) && !s.can(Emissary) && side.forces(Nyarlathotep).any && game.moonbeastOnSpellbook.values.exists(t => t._1 == s && t._2 == Emissary))
             log(s, Emissary.styled(s), "blocked by", "Moonbeast".styled("nt"))
