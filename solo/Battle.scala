@@ -862,8 +862,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         else
         if (refugees.num == 1 || s.forces.tag(Retreated).any) {
             val u = refugees.first
-            // For non-Twisters, restrict to standard destinations only
-            val validDest = if (u.uclass == Twister) destinations else (standardDest ++ moonDest).distinct
+            // For non-Twisters, restrict to standard destinations only — but the
+            // Moon-is-adjacent-to-all pain-retreat set (moonRetreatDests) is safe for
+            // EVERY unit type, so it must be included here too. Omitting it eliminated
+            // a lone pained unit in a Moon battle with a false "Nowhere to retreat".
+            val validDest = if (u.uclass == Twister) destinations else (standardDest ++ moonDest ++ moonRetreatDests).distinct
             if (validDest.none)
                 Ask(s).each($(u))(u2 => EliminateNoWayAction(s, u2).as(u2)("Nowhere to retreat, a pained unit is eliminated"))
             else
@@ -877,7 +880,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Mixed Twisters + others with Whirlwind active — "Retreat all" only
             // offered to standard destinations (safe for all units). "Retreat separately"
             // gets the full destination list so Twisters can individually pick Sea Areas.
-            val safeForAll = (standardDest ++ moonDest).distinct
+            val safeForAll = (standardDest ++ moonDest ++ moonRetreatDests).distinct
             Ask(chooser).each(safeForAll)(d => RetreatAllAction(chooser, s, d)).add(RetreatSeparatelyAction(chooser, s, destinations))
         }
     }
@@ -1632,8 +1635,18 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     if (s.tag(UnholyGround)) {
                         s.remove(UnholyGround)
 
-                        if (game.cathedrals.has(arena))
-                            return Ask(s).each(game.cathedrals)(r => UnholyGroundAction(s, s.opponent, r).as(r)("Remove a cathedral with", UnholyGround)).skip(BattleDoneAction(s))
+                        if (game.cathedrals.has(arena)) {
+                            // Replay-compat guard (mirrors MNU + TS Shepherd guard in Game.scala).
+                            // Games recorded before this offer armed here have no
+                            // UnholyGroundAction/BattleDoneAction as their next recorded
+                            // action; issuing the Ask on reload would desync the replay
+                            // (dropped prompt on mid-battle reload). Only present the offer
+                            // when replay isn't feeding a different next action. Live play
+                            // (hint == None) is unaffected.
+                            val replayBlocksUG = game.nextReplayActionHint.exists(h => !h.startsWith("UnholyGroundAction") && !h.startsWith("BattleDoneAction"))
+                            if (!replayBlocksUG)
+                                return Ask(s).each(game.cathedrals)(r => UnholyGroundAction(s, s.opponent, r).as(r)("Remove a cathedral with", UnholyGround)).skip(BattleDoneAction(s))
+                        }
                     }
                 }
 
