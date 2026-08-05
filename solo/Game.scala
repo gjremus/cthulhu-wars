@@ -3940,7 +3940,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 ritualMarker += 1
             showROAT()
 
-            CheckSpellbooksAction(DoomAction(self))
+            // Requires Attention IS a Ritual of Annihilation, so — exactly like the standard
+            // RoA handler above — offer BB the choice to remove one of its own face-down
+            // Tombstalker Cursed Tomes from the game. TS never holds its own tomes, so the
+            // guard mirrors the standard path. Both remove/skip continue to the doom phase.
+            val faceDownTomes = if (self == TS) Nil else cursedTomesOwned.get(self).|(Nil).filter { case (_, fd) => fd }
+            if (faceDownTomes.any) {
+                implicit val asking = Asking(self)
+                faceDownTomes.foreach { case (n, _) => + TSRemoveTomeAction(self, n) }
+                + TSSkipRemoveTomeAction(self)
+                asking
+            } else
+                CheckSpellbooksAction(DoomAction(self))
 
         // MAIN
         case PreMainAction(f) if factions.exists(f => f.unfulfilled.num + f.spellbooks.num < f.library.num) =>
@@ -4215,6 +4226,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             MainAction(f)
 
         case PreMainAction(f) =>
+            // Safety net (2026-08-05): the Retreated UnitState is a WITHIN-BATTLE
+            // marker (prevents retreating the same unit twice in one battle) and is
+            // normally cleared at BattleEnd. But a unit that retreated OUT of the
+            // arena in a prior battle was showing up still tagged "(retreated)" in a
+            // later turn's Move menu (see 'Disaster for Lunacy'). Clearing any lingering
+            // Retreated tags at the start of every faction's turn guarantees the marker
+            // never survives into a subsequent action, regardless of which battle-end
+            // path ran. No gameplay effect — Retreated is only a display/one-retreat
+            // guard, never consulted outside an active battle.
+            factions.foreach(_.units.foreach(_.remove(Retreated)))
             MainGatesAction(f)
 
         case MainGatesAction(f) =>
