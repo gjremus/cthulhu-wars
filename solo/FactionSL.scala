@@ -164,9 +164,13 @@ object SLExpansion extends Expansion {
         case MainAction(f : SL) =>
             implicit val asking = Asking(f)
 
-            if (f.has(Lethargy) && f.onMap(Tsathoggua).any && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
+            // Lethargy ("if Tsathoggua is in play, do nothing") must be offered when
+            // Tsathoggua is on the Moon (BB.moon): MoonGlyph is inPlay but NOT onMap, so a
+            // bare f.onMap(Tsathoggua) excluded the Moon and blocked Lethargy there. Add the
+            // Moon explicitly, mirroring the base capture/Capture-Monster moon handling below.
+            if (f.has(Lethargy) && (f.onMap(Tsathoggua).any || f.at(BB.moon, Tsathoggua).any) && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
                 + GroupAction("Lethargy".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
-            else if (f.has(Lethargy) && f.onMap(Tsathoggua).any && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && !ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
+            else if (f.has(Lethargy) && (f.onMap(Tsathoggua).any || f.at(BB.moon, Tsathoggua).any) && game.nexed.none && f.enemies.%(e => e.power > 0 && !e.hibernating).any && !ElderThingMindControl.suppresses(f.goo(Tsathoggua)))
                 if (game.options.has(IceAgeAffectsLethargy).not || f.affords(0)(f.goo(Tsathoggua).region))
                     + LethargyMainAction(f)
 
