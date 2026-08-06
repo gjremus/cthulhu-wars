@@ -95,27 +95,21 @@ case class CaptureMonsterAction(self : SL, r : Region, f : Faction) extends Base
 case class CaptureMonsterUnitAction(f : SL, r : Region, self : Faction, uc : UnitClass) extends BaseFactionAction("" + CaptureMonster + " in " + r, uc.styled(self))
 
 case class AncientSorceryMainAction(self : SL) extends OptionFactionAction(AncientSorcery) with MainQuestion with Soft
-case class AncientSorceryAction(self : SL, a : Spellbook) extends BaseFactionAction(AncientSorcery, a) with Soft
+case class AncientSorceryAction(self : SL, a : Spellbook) extends BaseFactionAction(AncientSorcery, implicit g => "" + a + ((a == Tenebrosum || a == Depravity).??(" — Serpentman is not returned"))) with Soft
 case class AncientSorceryUnitAction(self : SL, a : Spellbook, r : Region, uc : UnitClass) extends BaseFactionAction("Access " + a + " with", uc.styled(self) + " from " + r)
-// 2026-06-06 Fix 75 (Fix 3): when SL copies a DC unique via standard Ancient
-// Sorcery (one at a time), TWO Serpentmen are required for that copy instead
-// of one. Second-pick action steps SL through choosing the second Serpentman.
+// REPLAY-COMPAT ONLY (do not remove): the SL/DC Ancient Sorcery flow was reworked
+// on 2026-08-05 (single Serpentman per DC power, sent permanently to DC's card).
+// The old flow used a two-Serpentman "second pick" and a "DC bundle". New games
+// never emit these actions, but games recorded BEFORE the rework (e.g. "Shift
+// against Lunacy") have them in their logs, so the classes + handlers MUST remain
+// parseable/replayable or those games crash with "unknown class ...".
 case class AncientSorceryDCSecondUnitAction(self : SL, a : Spellbook, r1 : Region, r : Region, uc : UnitClass) extends BaseFactionAction("Access " + a + " with second", uc.styled(self) + " from " + r)
+case class AncientSorceryDCBundleMainAction(self : SL) extends OptionFactionAction(Tenebrosum.styled(DC) + " + " + Depravity.styled(DC) + " (Requires two serpentmen - PERMANENT FOR THIS GAME)") with MainQuestion with Soft
+case class AncientSorceryDCBundleConfirmAction(self : SL) extends BaseFactionAction("Ancient Sorcery: " + Tenebrosum.styled(DC) + " + " + Depravity.styled(DC), "Confirm".styled("power")) with Soft
+case class AncientSorceryDCBundleFirstUnitAction(self : SL, r : Region, uc : UnitClass) extends BaseFactionAction("Send first to " + DC.short.styled(DC) + " card from", r) with Soft
+case class AncientSorceryDCBundleSecondUnitAction(self : SL, r1 : Region, r : Region, uc : UnitClass) extends BaseFactionAction("Send second to " + DC.short.styled(DC) + " card from", r)
 case class AncientSorceryDoomAction(self : SL) extends OptionFactionAction(AncientSorcery) with DoomQuestion with Soft
 case class AncientSorceryPlaceAction(self : SL, r : Region, uc : UnitClass) extends BaseFactionAction("Place " + uc + " in", r)
-
-// 2026-06-06 Fix 75 (Fix 2): SL Ancient Sorcery DC-bundle. Single button copies
-// BOTH Tenebrosum + Depravity permanently for the rest of the game. Costs two
-// Serpent Men placed onto DC's faction card (they skip the doom-phase return).
-case class AncientSorceryDCBundleMainAction(self : SL)
-    extends OptionFactionAction(Tenebrosum.styled(DC) + " + " + Depravity.styled(DC) + " (Requires two serpentmen - PERMANENT FOR THIS GAME)")
-    with MainQuestion with Soft
-case class AncientSorceryDCBundleConfirmAction(self : SL)
-    extends BaseFactionAction("Ancient Sorcery: " + Tenebrosum.styled(DC) + " + " + Depravity.styled(DC), "Confirm".styled("power")) with Soft
-case class AncientSorceryDCBundleFirstUnitAction(self : SL, r : Region, uc : UnitClass)
-    extends BaseFactionAction("Send first to " + DC.short.styled(DC) + " card from", r) with Soft
-case class AncientSorceryDCBundleSecondUnitAction(self : SL, r1 : Region, r : Region, uc : UnitClass)
-    extends BaseFactionAction("Send second to " + DC.short.styled(DC) + " card from", r)
 
 case class CursedSlumberSaveMainAction(self : SL) extends OptionFactionAction(CursedSlumber) with MainQuestion with Soft
 case class CursedSlumberSaveAction(self : SL, r : Region) extends BaseFactionAction("Move gate to " + CursedSlumber + " from", r)
@@ -192,7 +186,7 @@ object SLExpansion extends Expansion {
             // that region set includes the moon (BB.moon) and the TB mantle, not just the earthly
             // board regions. Using bare areas.nex here excluded the moon, so Tsathoggua could never
             // be offered Capture Monster while on the moon. Mirror the base-capture region set.
-            if (f.can(CaptureMonster) && (areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ game.tbMantleInPlay.??($(TB.mantle))).%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).monsters.any))).any)
+            if (f.can(CaptureMonster) && (areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ game.tbMantleInPlay.??($(TB.mantle))).%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).monsters.any && e.goos.%(_.region == r).none))).any)
                 + CaptureMonsterMainAction(f)
 
             game.recruits(f)
@@ -219,12 +213,6 @@ object SLExpansion extends Expansion {
 
             if (f.can(AncientSorcery) && f.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex.any && f.borrowed.num < factions.num - 1)
                 + AncientSorceryMainAction(f)
-
-            // 2026-06-06 Fix 75 (Fix 2): single DC bundle button under Ancient
-            // Sorcery — costs 2 Serpentmen, PERMANENTLY copies both DC unique
-            // powers (Tenebrosum + Depravity) for the rest of the game.
-            if (game.setup.has(DC) && f.can(AncientSorcery) && f.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex.num >= 2 && !game.slDCBundleTaken)
-                + AncientSorceryDCBundleMainAction(f)
 
             // 2026-06-06 Fix 75 (Fix 1 via SL): if SL has Tenebrosum via the
             // permanent DC bundle, offer "Repeat <action>" using SL's Sin pool.
@@ -375,7 +363,11 @@ object SLExpansion extends Expansion {
         // CAPTURE MONSTER
         case CaptureMonsterMainAction(self) =>
             val r = self.goo(Tsathoggua).region
-            Ask(self).each(factionlike.but(self).%(_.at(r).use(l => l.monsters.any)))(e => CaptureMonsterAction(self, r, e)).cancel
+            // Bastet (and any enemy GOO) blocks SL Capture Monster in her region, mirroring how a
+            // GOO blocks normal cultist captures. Note: unlike normal captures, Tsathoggua's own
+            // presence does NOT override this protection (Capture Monster is not a canCapture path).
+            // Faction-level .goos includes ElderGod/Bastet and Holy-Ground cathedrals.
+            Ask(self).each(factionlike.but(self).%(e => e.at(r).monsters.any && e.goos.%(_.region == r).none))(e => CaptureMonsterAction(self, r, e)).cancel
 
         case CaptureMonsterAction(self, r, f) =>
             self.power -= 1
@@ -399,36 +391,50 @@ object SLExpansion extends Expansion {
 
         // ANCIENT SORCERY
         case AncientSorceryMainAction(self) =>
-            // 2026-06-06 Fix 75 (Fix 2): exclude DC uniques already taken via the
-            // permanent bundle so they aren't offered twice in the standard menu.
-            Ask(self).each(self.enemies./~(_.abilities.headOption).diff(self.borrowed).diff(game.slPermanentBorrowed))(a => AncientSorceryAction(self, a)).cancel
+            // DC (Defiler's Court) is unique: it has TWO unique powers (Depravity +
+            // Tenebrosum), and Serpentmen used to copy a DC power are NEVER returned
+            // (they stay permanently on DC's faction card, and SL never regains them
+            // or gets Power from them). Every OTHER faction has a single ability that
+            // is borrowed for the Action Phase and the Serpentman returns in the Doom
+            // Phase. So: for DC, offer BOTH of its not-yet-copied uniques, each with
+            // an appended "Serpentman is not returned" note; once one is copied, only
+            // the other remains offered (on a later, separate Ancient Sorcery action).
+            // For every other enemy, offer its single head ability as before.
+            val dcAbilities = game.setup.has(DC).??(DC.abilities.diff(game.slPermanentBorrowed))
+            val otherAbilities = self.enemies.but(DC)./~(_.abilities.headOption).diff(self.borrowed).diff(game.slPermanentBorrowed)
+            Ask(self).each(otherAbilities ++ dcAbilities)(a => AncientSorceryAction(self, a)).cancel
 
         case AncientSorceryAction(self, a) =>
             // Moon counts as just another region for Ancient Sorcery — a Serpentman
             // on the Moon may be used to access a spellbook.
             Ask(self).each(self.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex)(u => AncientSorceryUnitAction(self, a, u.region, u.uclass)).cancel
 
-        // 2026-06-06 Fix 75 (Fix 3): when SL copies a DC unique via standard
-        // Ancient Sorcery, TWO Serpentmen are required. After the first pick,
-        // chain to a second pick before paying / borrowing.
+        // DC uniques: ONE Serpentman, sent PERMANENTLY to DC's faction card (never
+        // returned), and the power is copied permanently (slPermanentBorrowed) rather
+        // than for the single Action Phase. Only ever ONE Serpentman per action — the
+        // second DC power is copied on a separate, later Ancient Sorcery action.
+        //
+        // REPLAY-COMPAT: games recorded under the OLD two-Serpentman flow have an
+        // AncientSorceryDCSecondUnitAction as the NEXT recorded action after this one.
+        // If we see that, take the OLD path (chain to a second pick) so the recorded
+        // action still applies and the replay stays in sync. Live play (no such next
+        // recorded action) uses the new single-Serpentman permanent-copy path.
         case AncientSorceryUnitAction(self, a, r, uc) if isDCAbility(a) =>
-            // Copying a DC unique via standard Ancient Sorcery normally costs TWO
-            // Serpentmen (Fix 75): after the first pick, chain to a second pick.
-            // BUT if no second Serpentman is available, asking for one produces an
-            // EMPTY menu and strands the player on a committed action (the "SL cast
-            // Tenebrosum, no options appear" freeze). In that case fall back to a
-            // normal single-Serpentman borrow so the action always resolves.
-            val remaining = self.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex.%(u => !(u.region == r && self.at(r, SerpentMan).num == 1))
-            if (remaining.none) {
+            val replayWantsSecond = game.nextReplayActionHint.exists(_.startsWith("AncientSorceryDCSecondUnitAction"))
+            if (replayWantsSecond) {
+                val remaining = self.units.%(u => u.uclass == SerpentMan && (u.region.onMap || u.region == BB.moon)).nex.%(u => !(u.region == r && self.at(r, SerpentMan).num == 1))
+                Ask(self).each(remaining)(u => AncientSorceryDCSecondUnitAction(self, a, r, u.region, u.uclass)).cancel
+            }
+            else {
                 self.power -= 1
-                self.at(r).one(uc).region = SL.sorcery
-                self.borrowed :+= a
-                self.log("sent", uc, "from", r, "to access", a)
+                self.at(r).one(uc).region = DC.reserve
+                game.slPermanentBorrowed :+= a
+                self.log("Ancient Sorcery: permanently copied", a.styled(DC), "(", SerpentMan, "from", r, "sent to", DC.short.styled(DC), "card, not returned )")
                 EndAction(self)
             }
-            else
-                Ask(self).each(remaining)(u => AncientSorceryDCSecondUnitAction(self, a, r, u.region, u.uclass)).cancel
 
+        // REPLAY-COMPAT (old two-Serpentman DC copy): second pick sends BOTH Serpentmen
+        // to SL.sorcery and borrows the ability for the AP (the pre-rework behaviour).
         case AncientSorceryDCSecondUnitAction(self, a, r1, r2, uc) =>
             self.power -= 1
             self.at(r1).one(SerpentMan).region = SL.sorcery
@@ -444,8 +450,7 @@ object SLExpansion extends Expansion {
             self.log("sent", uc, "from", r, "to access", a)
             EndAction(self)
 
-        // 2026-06-06 Fix 75 (Fix 2): DC bundle — permanent copy of both DC
-        // uniques in a single Ancient Sorcery cast for two Serpentmen.
+        // REPLAY-COMPAT (old DC bundle — copied both uniques in one 2-Serpentman cast).
         case AncientSorceryDCBundleMainAction(self) =>
             implicit val asking = Asking(self)
             + AncientSorceryDCBundleConfirmAction(self)
@@ -460,9 +465,6 @@ object SLExpansion extends Expansion {
             Ask(self).each(remaining)(u => AncientSorceryDCBundleSecondUnitAction(self, r, u.region, u.uclass)).cancel
 
         case AncientSorceryDCBundleSecondUnitAction(self, r1, r2, uc) =>
-            // Pay 1 Power (standard AS cost), send both Serpentmen permanently
-            // to DC's faction card (DC.reserve sentinel — they SKIP the doom
-            // return because the doom return loop iterates over SL.sorcery only).
             self.power -= 1
             self.at(r1).one(SerpentMan).region = DC.reserve
             self.at(r2).one(SerpentMan).region = DC.reserve
