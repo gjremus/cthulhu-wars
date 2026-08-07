@@ -715,7 +715,8 @@ object DSExpansion extends Expansion {
                 }
             }
             self.oncePerTurn :+= Omnipotence
-            EndAction(self)
+            // Chronophage: Omnipotence moved own Avatars → offer free Hound teleport.
+            CronophageAfterMoveAction(self, EndAction(self))
 
         case OmnipotenceJoinAction(self, selected, r) =>
             selected.foreach { ref =>
@@ -730,12 +731,14 @@ object DSExpansion extends Expansion {
                 }
             }
             self.oncePerTurn :+= Omnipotence
-            EndAction(self)
+            // Chronophage: Omnipotence moved own Avatars → offer free Hound teleport.
+            CronophageAfterMoveAction(self, EndAction(self))
 
         case OmnipotenceMoveSeparatelyAction(self, selected) =>
             if (selected.none) {
                 self.oncePerTurn :+= Omnipotence
-                EndAction(self)
+                // Chronophage: Omnipotence completed (no more Avatars) → offer free Hound teleport.
+                CronophageAfterMoveAction(self, EndAction(self))
             } else {
                 val ref = selected.head
                 val dsUnits = self.allInPlay./(_.region).distinct.%(r => self.at(r).any)
@@ -761,7 +764,8 @@ object DSExpansion extends Expansion {
                 Force(OmnipotenceMoveSeparatelyAction(self, remaining))
             else {
                 self.oncePerTurn :+= Omnipotence
-                EndAction(self)
+                // Chronophage: Omnipotence moved last Avatar → offer free Hound teleport.
+                CronophageAfterMoveAction(self, EndAction(self))
             }
 
         case OmnipotenceCancelAction(self) =>

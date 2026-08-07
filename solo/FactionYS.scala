@@ -281,7 +281,8 @@ object YSExpansion extends Expansion {
             // (logged AFTER the move so the credit follows the movement in the log).
             game.creditCatnappingOffMoon(self, o, 1, HWINTBN)
 
-            AfterAction(self)
+            // Chronophage: HWINTBN moved Hastur (own unit) → offer free Hound teleport (A8).
+            CronophageAfterMoveAction(self, AfterAction(self))
 
         // SCREAMING DEAD
         case ScreamingDeadMainAction(self, o, l) =>
@@ -308,7 +309,8 @@ object YSExpansion extends Expansion {
         case ScreamingDeadDoneAction(self) =>
             self.oncePerRound :+= ScreamingDead
 
-            AfterAction(self)
+            // Chronophage: Screaming Dead moved own units (KIY + Undead) → offer teleport (A7).
+            CronophageAfterMoveAction(self, AfterAction(self))
 
         // SHRIEK
         case ShriekMainAction(self, l) =>
@@ -317,7 +319,9 @@ object YSExpansion extends Expansion {
         case ShriekAction(self, r) =>
             val b = self.all(Byakhee)./(_.region).but(r)
             if (b.none)
-                EndAction(self)
+                // Chronophage: if at least one Byakhee actually moved this action, offer
+                // the Hound teleport before ending (A6). oncePerAction marks a paid move.
+                self.oncePerAction.has(Shriek).?(CronophageAfterMoveAction(self, EndAction(self)) : Continue).|(EndAction(self))
             else
                 Ask(self)
                     .each(b)(o => ShriekFromAction(self, o, r))
@@ -340,7 +344,8 @@ object YSExpansion extends Expansion {
             Force(ShriekAction(self, r))
 
         case ShriekDoneAction(self) =>
-            EndAction(self)
+            // Chronophage: Shriek moved own Byakhee → offer free Hound teleport (A6).
+            CronophageAfterMoveAction(self, EndAction(self))
 
         // ZINGAYA
         case ZingayaMainAction(self, l) =>

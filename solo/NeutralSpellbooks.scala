@@ -68,15 +68,12 @@ object NeutralSpellbooksExpansion extends Expansion {
 
             self.ignorePerInstant :+= sb
 
-            // Moonbeast: if a moonbeast was blocking this spellbook, return it to map
-            val moonbeastEntries = game.moonbeastOnSpellbook.filter { case (_, (target, blockedSB)) => target == self && blockedSB == sb }.toList
-            if (moonbeastEntries.any) {
-                moonbeastEntries.foreach { case (mbRef, _) =>
-                    self.oncePerGame = self.oncePerGame.but(sb)
-                    game.moonbeastOnSpellbook -= mbRef
-                }
-                MoonbeastDoomReturnAction(self, moonbeastEntries, EndAction(self))
-            } else
+            // Moonbeast: if a moonbeast was blocking this discarded spellbook, return it to map.
+            // The unified loop clears the once-per-game lock and unregisters each beast itself.
+            val moonbeastRefs = game.moonbeastOnSpellbook.filter { case (_, (target, blockedSB)) => target == self && blockedSB == sb }.keys.toList
+            if (moonbeastRefs.any)
+                MoonbeastReturnLoopAction(moonbeastRefs, EndAction(self))
+            else
                 EndAction(self)
 
         // UNDIMENSIONED

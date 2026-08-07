@@ -382,7 +382,8 @@ object LibraryExpansion extends Expansion {
             game.fbSuppressCGForPlacement = false
             u.onGate = false
             target.log(u.uclass.styled(target), "moved to", oubliette, "(" + "Custodian".styled("lb") + ")")
-            Force(CustodianResolveAgonyAction(self, r, remaining))
+            // Chronophage: Custodian force-moved target's unit → offer target a free Hound teleport.
+            Force(CronophageAfterMoveAction(target, CustodianResolveAgonyAction(self, r, remaining)))
 
         // ── LIBRARIAN ACTIVATION ──
         case SpendOnLibrarianAction(self) =>

@@ -3448,8 +3448,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val returnable = moonbeastOnSpellbook.filter { case (ref, _) => !moonbeastPlacedThisDoom.contains(ref) }
                 moonbeastPlacedThisDoom = Set()
                 if (returnable.any) {
-                    val entries = returnable.toList
-                    return Force(MoonbeastDoomReturnAction(factions.first, entries, postMoonbeast))
+                    val refs = returnable.keys.toList
+                    return Force(MoonbeastReturnLoopAction(refs, postMoonbeast))
                 }
 
                 Force(postMoonbeast)
@@ -4219,6 +4219,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case MovedAction(self, u, o, r) =>
             MoveContinueAction(self, true)
+
+        // Base-game fallback for the shared Chronophage offer: when the Hound (a neutral
+        // monster) is not in the game, this just continues to the caller's continuation.
+        // NeutralMonstersExpansion overrides this with the real teleport offer when present.
+        case CronophageAfterMoveAction(self, then) =>
+            Force(then)
 
         // ATTACK
         case AttackMainAction(f, l, effect) =>

@@ -299,7 +299,8 @@ object OWExpansion extends Expansion {
             // Credit BB when that unit leaves the Moon (logged AFTER the move); the gate
             // leg is a non-unit and irrelevant to Catnapping.
             game.creditCatnappingOffMoon(self, o, 1, BeyondOne)
-            EndAction(self)
+            // Chronophage: Beyond One moved own cost-3+ unit (with its gate) → offer teleport (A11).
+            CronophageAfterMoveAction(self, EndAction(self))
 
         // DREAD CURSE
         case DreadCurseMainAction(self, n, l) =>
