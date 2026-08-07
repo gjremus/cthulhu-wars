@@ -190,7 +190,7 @@ object SLExpansion extends Expansion {
             // that region set includes the moon (BB.moon) and the TB mantle, not just the earthly
             // board regions. Using bare areas.nex here excluded the moon, so Tsathoggua could never
             // be offered Capture Monster while on the moon. Mirror the base-capture region set.
-            if (f.can(CaptureMonster) && (areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ game.tbMantleInPlay.??($(TB.mantle))).%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).monsters.any && e.goos.%(_.region == r).none))).any)
+            if (f.can(CaptureMonster) && (areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ game.tbMantleInPlay.??($(TB.mantle))).%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).goos.none && e.at(r).monsters.%(_.uclass != EarthCat).any))).any)
                 + CaptureMonsterMainAction(f)
 
             game.recruits(f)
@@ -367,16 +367,13 @@ object SLExpansion extends Expansion {
         // CAPTURE MONSTER
         case CaptureMonsterMainAction(self) =>
             val r = self.goo(Tsathoggua).region
-            // Bastet (and any enemy GOO) blocks SL Capture Monster in her region, mirroring how a
-            // GOO blocks normal cultist captures. Note: unlike normal captures, Tsathoggua's own
-            // presence does NOT override this protection (Capture Monster is not a canCapture path).
-            // Faction-level .goos includes ElderGod/Bastet and Holy-Ground cathedrals.
-            Ask(self).each(factionlike.but(self).%(e => e.at(r).monsters.any && e.goos.%(_.region == r).none))(e => CaptureMonsterAction(self, r, e)).cancel
+            Ask(self).each(factionlike.but(self).%(_.at(r).use(l => l.monsters.%(_.uclass != EarthCat).any && l.goos.none)))(e => CaptureMonsterAction(self, r, e)).cancel
 
         case CaptureMonsterAction(self, r, f) =>
             self.power -= 1
 
-            Ask(f).each(f.at(r).monsters.sortBy(_.uclass.cost))(u => CaptureMonsterUnitAction(self, r, u.faction, u.uclass))
+            // Earth Cats (BB) cannot be captured (task 3.6.2)
+            Ask(f).each(f.at(r).monsters.%(_.uclass != EarthCat).sortBy(_.uclass.cost))(u => CaptureMonsterUnitAction(self, r, u.faction, u.uclass))
 
         case CaptureMonsterUnitAction(self, r, f, uc) =>
             val m = f.at(r).one(uc)
