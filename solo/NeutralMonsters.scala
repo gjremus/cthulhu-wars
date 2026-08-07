@@ -516,8 +516,12 @@ object NeutralMonstersExpansion extends Expansion {
                 target.oncePerGame = target.oncePerGame.but(sb)
                 game.moonbeastOnSpellbook -= mbRef
                 val loop = MoonbeastReturnLoopAction(live.tail, then)
-                if (owner.allGates.onMap.any)
-                    Ask(owner).each(owner.allGates.onMap)(r => MoonbeastReturnPlaceAction(owner, mbRef, r, loop))
+                // Rules: a Moonbeast returns to ANY controlled gate on the board — any
+                // faction's occupied (non-abandoned) gate, not just its owner's. Abandoned
+                // gates are excluded automatically (they sit in no faction's .gates).
+                val controlledGates = game.factions./~(_.allGates).onMap.distinct
+                if (controlledGates.any)
+                    Ask(owner).each(controlledGates)(r => MoonbeastReturnPlaceAction(owner, mbRef, r, loop))
                 else if (owner.allInPlay.%(_.region.onMap).any)
                     Ask(owner).each(owner.allInPlay.%(_.region.onMap)./(_.region).distinct)(r => MoonbeastReturnPlaceAction(owner, mbRef, r, loop))
                 else
