@@ -77,7 +77,11 @@ object HoundOfTindalosGates {
         val yogGates = game.factions./~(_.unitGate)./(_.region).%{ r =>
             !game.factions./~(_.allInPlay).%(_.uclass == ElderThing).exists(et => et.region == r)
         }
-        realGates ++ yogGates.%(!realGates.has(_))
+        // The Moon is a controlled Gate area (BB's) — a Hound may teleport to/from
+        // it like any other Gate. onMap=false keeps it out of game.gates, so add it
+        // explicitly when BB is in play (mirrors survivalRegions below).
+        val bbMoon = game.factions.has(BB).??($(BB.moon))
+        (realGates ++ yogGates.%(!realGates.has(_)) ++ bbMoon).distinct
     }
     // Survival check includes BB.moon when BB is in the game — a Hound dragged
     // to the Moon by Catnapping must not be eliminated by Angles of Time.
@@ -165,7 +169,16 @@ case class ServitorAssignFactionAction(self : Faction, target : Faction) extends
 case class ServitorPlaceAction(self : Faction, target : Faction, r : Region) extends BaseFactionAction(implicit g => target.full + " places " + ServitorUnit.styled(target) + " in", implicit g => r + target.iced(r))
 
 case class ShantakCarryCultistAction(self : Faction, o : Region, ur : UnitRef, r : Region) extends ForcedAction
-case class CronophageTeleportAction(self : Faction, houndRef : UnitRef, dest : Region) extends ForcedAction
+// Chronophage teleport: `then` is the calling power's own continuation (the move
+// phase's MoveContinueAction for ordinary moves, or the power's terminus otherwise).
+case class CronophageTeleportAction(self : Faction, houndRef : UnitRef, dest : Region, then : ForcedAction) extends ForcedAction
+// Chronophage entry point for powers that relocate units WITHOUT routing through the
+// normal Move Action terminus (which already fires the Hound via MovedAction). Offers
+// the owning faction a free Hound teleport, then continues to `then` (the calling
+// power's own continuation). `self` is the OWNER of the moved unit — for own-unit
+// powers that is the acting faction; for forced-move powers it is the unit's owner.
+// A base-game fallback (Game.scala) returns `then` when no neutral monsters are in play.
+case class CronophageAfterMoveAction(self : Faction, then : ForcedAction) extends ForcedAction
 
 // Brown Jenkin Familiar: forced gate choice for respawn (not an Action, not optional)
 case class BrownJenkinFamiliarCheckAction(self : Faction, then : ForcedAction) extends ForcedAction
@@ -178,9 +191,17 @@ case class MoonbeastInitialPlaceAction(self : Faction, target : Faction, sb : Sp
     override def question(implicit game : Game) = self.full + " — " + "Moonbeast".styled("nt") + " — place on Spellbook"
 }
 // Moonbeast: premature return — victim spends 1 Doom (available any time, like Elder Signs)
-case class MoonbeastPrematureReturnAction(self : Faction) extends BaseFactionAction("Moonbeast".styled("nt"), "Remove " + "Moonbeast".styled("nt") + " from Spellbook " + "(" + 1.doom + ")") with Soft
-case class MoonbeastReturnChooseGateAction(self : Faction, mbRef : UnitRef, r : Region, then : Action) extends BaseFactionAction(implicit g => "Moonbeast".styled("nt") + " return", implicit g => "Place at " + r) with Soft
-case class MoonbeastDoomReturnAction(self : Faction, remaining : $[(UnitRef, (Faction, Spellbook))], then : Action) extends ForcedAction
+// RECORDED (not Soft): the victim's click must persist to the server so every client — and a
+// refresh — sees it. A Soft entry only mutated the clicker's local state, so the beast owner was
+// never prompted and a refresh popped the beast back onto the Spellbook.
+case class MoonbeastPrematureReturnAction(self : Faction) extends BaseFactionAction("Moonbeast".styled("nt"), "Remove " + "Moonbeast".styled("nt") + " from Spellbook " + "(" + 1.doom + ")")
+// Unified Moonbeast return flow — used by premature return, the Doom Phase, and Recriminations.
+// Both actions are RECORDED (not Soft) so the beast owner's placement choice persists and survives
+// a refresh. The loop carries only a flat list of UnitRefs (fully serializable — no nested tuples);
+// target / spellbook / owner are re-derived from live state each step, and the once-per-game
+// Spellbook lock is cleared as each beast is removed.
+case class MoonbeastReturnLoopAction(refs : $[UnitRef], then : Action) extends ForcedAction
+case class MoonbeastReturnPlaceAction(self : Faction, mbRef : UnitRef, r : Region, then : Action) extends BaseFactionAction(implicit g => "Moonbeast".styled("nt") + " return", implicit g => "Place at " + r)
 case class MoonbeastChooseFactionAction(self : Faction, target : Faction) extends BaseFactionAction(implicit g => "Moonbeast".styled("nt") + " — choose enemy", target.full) {
     override def question(implicit game : Game) = self.full + " — " + "Moonbeast".styled("nt") + " — choose enemy Faction"
 }
@@ -273,8 +294,11 @@ object NeutralMonstersExpansion extends Expansion {
                 lc.quantity.times(lc.unit).foreach { u =>
                     self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
                 }
-                if (game.gates.any)
-                    Ask(self).each(game.gates)(r => LoyaltyCardSummonAction(self, lc.unit, r))
+                // Place at ANY Gate area, including the Moon (a controlled Gate) — use
+                // the same Gate-area predicate the Cronophage teleport uses.
+                val houndGates = HoundOfTindalosGates.regions
+                if (houndGates.any)
+                    Ask(self).each(houndGates)(r => LoyaltyCardSummonAction(self, lc.unit, r))
                 else {
                     self.log("had nowhere to place", lc.unit.styled(self))
                     CheckSpellbooksAction(DoomAction(self))
@@ -283,8 +307,8 @@ object NeutralMonstersExpansion extends Expansion {
                 lc.quantity.times(lc.unit).foreach { u =>
                     self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
                 }
-                if (self.allGates.onMap.any)
-                    Ask(self).each(self.allGates.onMap)(r => LoyaltyCardSummonAction(self, lc.unit, r))
+                if (self.neutralPlacementGates.any)
+                    Ask(self).each(self.neutralPlacementGates)(r => LoyaltyCardSummonAction(self, lc.unit, r))
                 else {
                     self.log("had nowhere to place", lc.unit.styled(self))
                     CheckSpellbooksAction(DoomAction(self))
@@ -307,7 +331,7 @@ object NeutralMonstersExpansion extends Expansion {
             }
 
             if (uc == Ghast && self.pool(Ghast).any)
-                Ask(self).each(self.allGates.onMap)(r => LoyaltyCardSummonAction(self, uc, r))
+                Ask(self).each(self.neutralPlacementGates)(r => LoyaltyCardSummonAction(self, uc, r))
             else
                 CheckSpellbooksAction(DoomAction(self))
 
@@ -328,8 +352,8 @@ object NeutralMonstersExpansion extends Expansion {
         // Case 1: unlimited action on owner's turn (offered in action menu via bjFamiliar())
         // Case 2: post-battle forced respawn (BrownJenkinFamiliarCheckAction)
         case BrownJenkinFamiliarCheckAction(self, then) =>
-            if (self.loyaltyCards.has(BrownJenkinCard) && self.allInPlay.%(_.uclass == BrownJenkin).none && self.pool(BrownJenkin).any && self.power >= 2 && self.allGates.onMap.any) {
-                Ask(self).each(self.allGates.onMap)(r => BrownJenkinFamiliarPlaceAction(self, r, then))
+            if (self.loyaltyCards.has(BrownJenkinCard) && self.allInPlay.%(_.uclass == BrownJenkin).none && self.pool(BrownJenkin).any && self.power >= 2 && self.neutralPlacementGates.any) {
+                Ask(self).each(self.neutralPlacementGates)(r => BrownJenkinFamiliarPlaceAction(self, r, then))
             } else {
                 Force(then)
             }
@@ -351,17 +375,29 @@ object NeutralMonstersExpansion extends Expansion {
         // Hound must be in a Gate area to teleport; can go to any other Gate area (no ownership required)
         // Exclude Shantak (has own MovedAction handler below) to avoid blocking carry-cultist
         case MovedAction(self, u, o, r) if u.uclass != HoundOfTindalos && u.uclass != Shantak && self.loyaltyCards.has(HoundOfTindalosCard) && self.allInPlay.%(_.uclass == HoundOfTindalos).any =>
-            val hound = self.allInPlay.%(_.uclass == HoundOfTindalos).head
-            if (HoundOfTindalosGates.has(hound.region)) {
-                val gates = HoundOfTindalosGates.regions.%(g => g != hound.region)
-                if (gates.any)
-                    Ask(self)
-                        .each(gates)(g => CronophageTeleportAction(self, hound.ref, g).as("Teleport to", g)("Cronophage".styled("nt") + " — teleport " + HoundOfTindalos.styled(self)))
-                        .skip(MoveContinueAction(self, true))
-                else
-                    UnknownContinue
+            // Ordinary Move Action terminus. Delegate to the shared offer, continuing
+            // to the move phase (MoveContinueAction) as before.
+            Force(CronophageAfterMoveAction(self, MoveContinueAction(self, true)))
+
+        // Shared Chronophage offer for powers that relocate units directly. Offers the
+        // owning faction a free Hound teleport (Gate→Gate) then continues to `then`.
+        // No-op (returns `then`) unless `self` owns the Hound card and a Hound is in a
+        // Gate area with at least one other Gate to jump to.
+        case CronophageAfterMoveAction(self, then) =>
+            if (self.loyaltyCards.has(HoundOfTindalosCard) && self.allInPlay.%(_.uclass == HoundOfTindalos).any) {
+                val hound = self.allInPlay.%(_.uclass == HoundOfTindalos).head
+                if (HoundOfTindalosGates.has(hound.region)) {
+                    val gates = HoundOfTindalosGates.regions.%(g => g != hound.region)
+                    if (gates.any)
+                        Ask(self)
+                            .each(gates)(g => CronophageTeleportAction(self, hound.ref, g, then).as("Teleport to", g)("Cronophage".styled("nt") + " — teleport " + HoundOfTindalos.styled(self)))
+                            .skip(then)
+                    else
+                        Force(then)
+                } else
+                    Force(then)
             } else
-                UnknownContinue
+                Force(then)
 
         // SHANTAK
         case MovedAction(self, u, o, r) if u.uclass == Shantak =>
@@ -465,46 +501,54 @@ object NeutralMonstersExpansion extends Expansion {
             }
             Ask(self).each(available)(sb => MoonbeastChooseSpellbookAction(self, target, sb)).cancel
 
-        // Moonbeast: premature return — victim spends 1 Doom
+        // Moonbeast: premature return — victim spends 1 Doom.
+        // RECORDED entry (see the case-class note): spend the Doom and unlock the blocked
+        // Spellbooks here, then hand off to a recorded placement loop. This action carries only
+        // `self`, so it serializes cleanly; the placement loop re-derives its work from
+        // game.moonbeastOnSpellbook on every step, so nothing tuple-shaped is ever persisted.
         case MoonbeastPrematureReturnAction(self) =>
             self.doom -= 1
-            val entries = game.moonbeastOnSpellbook.filter(_._2._1 == self).toList
-            entries.foreach { case (mbRef, (target, sb)) =>
-                target.oncePerGame = target.oncePerGame.but(sb)
-            }
-            game.moonbeastOnSpellbook = game.moonbeastOnSpellbook.filter(_._2._1 != self)
             self.log("spent", 1.doom, "to remove Moonbeasts from Spellbooks")
-            // Use the same batch return flow as Doom Phase, then return to interrupted action
-            MoonbeastDoomReturnAction(self, entries, OutOfTurnReturn)
+            // Return every beast this faction had blocking a Spellbook, then resume the
+            // interrupted (out-of-turn) view for the clicking faction.
+            val refs = game.moonbeastOnSpellbook.filter(_._2._1 == self).keys.toList
+            MoonbeastReturnLoopAction(refs, OutOfTurnReturn)
 
-        case MoonbeastReturnChooseGateAction(self, mbRef, r, then) =>
+        // Unified return loop. Takes the head UnitRef, re-derives its target/spellbook/owner from
+        // live state, clears the once-per-game lock, unregisters the beast, and asks its OWNER
+        // where to place it. Everything persisted is simple (a UnitRef list + the placement pick),
+        // so the whole flow survives a refresh and reaches the owner on every client.
+        case MoonbeastReturnLoopAction(refs, then) =>
+            // Drop any refs that are no longer blocking (defensive — e.g. already returned).
+            val live = refs.%(game.moonbeastOnSpellbook.contains)
+            if (live.none) {
+                Force(then)
+            } else {
+                val mbRef = live.head
+                val (target, sb) = game.moonbeastOnSpellbook(mbRef)
+                val owner = game.unit(mbRef).faction
+                target.oncePerGame = target.oncePerGame.but(sb)
+                game.moonbeastOnSpellbook -= mbRef
+                val loop = MoonbeastReturnLoopAction(live.tail, then)
+                // Rules: a Moonbeast returns to ANY controlled gate on the board — any
+                // faction's occupied (non-abandoned) gate, not just its owner's. Abandoned
+                // gates are excluded automatically (they sit in no faction's .gates). The
+                // Moon is a controlled gate too, but only BB may place units there (Moon
+                // Guard), so it's offered only when this beast's owner is BB.
+                val controlledGates = (game.factions./~(_.allGates).onMap ++ (owner == BB).??($(BB.moon))).distinct
+                if (controlledGates.any)
+                    Ask(owner).each(controlledGates)(r => MoonbeastReturnPlaceAction(owner, mbRef, r, loop))
+                else if (owner.allInPlay.%(_.region.onMap).any)
+                    Ask(owner).each(owner.allInPlay.%(_.region.onMap)./(_.region).distinct)(r => MoonbeastReturnPlaceAction(owner, mbRef, r, loop))
+                else
+                    Ask(owner).each(areas.nex)(r => MoonbeastReturnPlaceAction(owner, mbRef, r, loop))
+            }
+
+        case MoonbeastReturnPlaceAction(self, mbRef, r, then) =>
             val mb = game.unit(mbRef)
             mb.region = r
             self.log(MoonbeastUnit.styled(self), "placed at", r)
             Force(then)
-
-        // Moonbeast: Doom Phase batch return with gate choices
-        case MoonbeastDoomReturnAction(self, remaining, then) =>
-            if (remaining.none) {
-                Force(then)
-            } else {
-                val (mbRef, (target, sb)) = remaining.head
-                val mb = game.unit(mbRef)
-                val owner = mb.faction
-                target.oncePerGame = target.oncePerGame.but(sb)
-                game.moonbeastOnSpellbook -= mbRef
-                if (owner.allGates.onMap.any) {
-                    // Has controlled gates — place at a gate
-                    Ask(owner).each(owner.allGates.onMap)(r => MoonbeastReturnChooseGateAction(owner, mbRef, r, MoonbeastDoomReturnAction(self, remaining.tail, then)))
-                } else if (owner.allInPlay.%(_.region.onMap).any) {
-                    // No gates but has units on map — place in a region with units
-                    val unitRegions = owner.allInPlay.%(_.region.onMap)./(_.region).distinct
-                    Ask(owner).each(unitRegions)(r => MoonbeastReturnChooseGateAction(owner, mbRef, r, MoonbeastDoomReturnAction(self, remaining.tail, then)))
-                } else {
-                    // No gates and no units on map — place in any region
-                    Ask(owner).each(areas.nex)(r => MoonbeastReturnChooseGateAction(owner, mbRef, r, MoonbeastDoomReturnAction(self, remaining.tail, then)))
-                }
-            }
 
         // Moonbeast: initial placement on acquisition (no Power cost)
         case MoonbeastInitialPlaceAction(self, target, sb) =>
@@ -526,13 +570,13 @@ object NeutralMonstersExpansion extends Expansion {
             self.log("Summoned", MoonbeastUnit.styled(self), "onto", sb.styled(target), "of", target.full, "(blocked)")
             EndAction(self)
 
-        case CronophageTeleportAction(self, houndRef, dest) =>
+        case CronophageTeleportAction(self, houndRef, dest, then) =>
             val hound = game.unit(houndRef)
             val from = hound.region
             hound.region = dest
             hound.onGate = false
             self.log("Cronophage".styled("nt") + ":", HoundOfTindalos.styled(self), "teleported from", from, "to", dest)
-            MoveContinueAction(self, true)
+            Force(then)
 
         // SERVITOR OF THE OUTER GODS: assign loyalty card + units to chosen faction
         case ServitorAssignFactionAction(self, target) =>
