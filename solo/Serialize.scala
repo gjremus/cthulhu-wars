@@ -186,6 +186,12 @@ class Serialize(val game : Game) {
         case EApply("ForcedCultistMoveOrderAction", ps) => ForcedCultistMoveOrderAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Faction], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[$[(Faction, $[UnitRef])]], parseExpr(ps(4)).asInstanceOf[Boolean], parseExpr(ps(5)).asInstanceOf[Action])
         case EApply("FBWritheRollResultAction", ps) if ps.num == 3 => FBWritheRollResultAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[$[BattleRoll]])
         case EApply("FBWritheRollResultAction", ps) if ps.num == 4 => FBWritheRollResultAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[$[BattleRoll]], parseExpr(ps(3)).asInstanceOf[Boolean])
+        // [LEGACY REPLAY] Pre-#81 games (e.g. MNU game 454 "Existence and Colour") recorded a
+        // 3-param CronophageTeleportAction(self, houndRef, dest) whose handler ended with
+        // MoveContinueAction(self, true). #81 made it 4-param (…, then) and the handler does
+        // Force(then). Map the old 3-param form to the new one with then = MoveContinueAction(self, true),
+        // which reproduces the original post-teleport behavior exactly.
+        case EApply("CronophageTeleportAction", ps) if ps.num == 3 => CronophageTeleportAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], MoveContinueAction(parseExpr(ps(0)).asInstanceOf[Faction], true))
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 
