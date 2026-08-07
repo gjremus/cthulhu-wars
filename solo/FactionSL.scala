@@ -175,7 +175,7 @@ object SLExpansion extends Expansion {
 
             game.captures(f)
 
-            if (f.can(CaptureMonster) && areas.nex.%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).monsters.any && e.goos.%(_.region == r).none))).any)
+            if (f.can(CaptureMonster) && areas.nex.%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).goos.none && e.at(r).monsters.%(_.uclass != EarthCat).any))).any)
                 + CaptureMonsterMainAction(f)
 
             game.recruits(f)
@@ -336,16 +336,13 @@ object SLExpansion extends Expansion {
         // CAPTURE MONSTER
         case CaptureMonsterMainAction(self) =>
             val r = self.goo(Tsathoggua).region
-            // Bastet (and any enemy GOO) blocks SL Capture Monster in her region, mirroring how a
-            // GOO blocks normal cultist captures. Note: unlike normal captures, Tsathoggua's own
-            // presence does NOT override this protection (Capture Monster is not a canCapture path).
-            Ask(self).each(factionlike.but(self).%(e => e.at(r).monsters.any && e.goos.%(_.region == r).none))(e => CaptureMonsterAction(self, r, e)).cancel
+            Ask(self).each(factionlike.but(self).%(_.at(r).use(l => l.monsters.%(_.uclass != EarthCat).any && l.goos.none)))(e => CaptureMonsterAction(self, r, e)).cancel
 
         case CaptureMonsterAction(self, r, f) =>
             self.power -= 1
 
             // Earth Cats (BB) cannot be captured (task 3.6.2)
-            Ask(f).each(f.at(r).monsters.sortBy(_.uclass.cost))(u => CaptureMonsterUnitAction(self, r, u.faction, u.uclass))
+            Ask(f).each(f.at(r).monsters.%(_.uclass != EarthCat).sortBy(_.uclass.cost))(u => CaptureMonsterUnitAction(self, r, u.faction, u.uclass))
 
         case CaptureMonsterUnitAction(self, r, f, uc) =>
             val m = f.at(r).one(uc)
