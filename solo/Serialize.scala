@@ -183,6 +183,11 @@ class Serialize(val game : Game) {
         case EApply("TsunamiProcessAction", ps) => ForcedCultistMoveProcessAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[$[(Faction, $[UnitRef])]], parseExpr(ps(3)).asInstanceOf[Boolean], parseExpr(ps(4)).asInstanceOf[Action])
         case EApply("ForcedCultistMoveAction", ps) => ForcedCultistMoveAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[$[UnitRef]], parseExpr(ps(4)).asInstanceOf[Action])
         case EApply("ForcedCultistMoveProcessAction", ps) => ForcedCultistMoveProcessAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[$[(Faction, $[UnitRef])]], parseExpr(ps(3)).asInstanceOf[Boolean], parseExpr(ps(4)).asInstanceOf[Action])
+        // [LEGACY REPLAY] Pre-#81 games recorded a 3-param CronophageTeleportAction(self, houndRef,
+        // dest) whose handler ended with MoveContinueAction(self, true). #81 made it 4-param (…, then)
+        // with the handler doing Force(then). Map the old 3-param form to the new one with
+        // then = MoveContinueAction(self, true), reproducing the original post-teleport behavior exactly.
+        case EApply("CronophageTeleportAction", ps) if ps.num == 3 => CronophageTeleportAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], MoveContinueAction(parseExpr(ps(0)).asInstanceOf[Faction], true))
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 
