@@ -373,7 +373,9 @@ object LibraryExpansion extends Expansion {
             u.region = oubliette
             u.onGate = false
             target.log(u.uclass.styled(target), "moved to", oubliette, "(" + "Custodian".styled("lb") + ")")
-            Force(CustodianResolveAgonyAction(self, r, remaining))
+            // Chronophage: the moved unit belongs to `target` (not the activator `self`), so
+            // offer `target` its free Hound teleport. No-op unless `target` owns the Hound card.
+            Force(CronophageAfterMoveAction(target, CustodianResolveAgonyAction(self, r, remaining)))
 
         // ── LIBRARIAN ACTIVATION ──
         case SpendOnLibrarianAction(self) =>

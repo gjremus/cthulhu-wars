@@ -208,6 +208,12 @@ case class InvisibilityAction(self : Faction, ur : UnitRef, tr : UnitRef) extend
 case class SeekAndDestroyPreBattleAction(self : Faction) extends OptionFactionAction(SeekAndDestroy) with PreBattleQuestion with Soft
 case class SeekAndDestroyAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction("Bring with " + SeekAndDestroy, uc.styled(self) + " from " + r)
 
+// Chronophage battle-join: when a pre-battle movement power moves a unit INTO the
+// arena, the owning faction's Hound of Tindalos may teleport into the same battle
+// (Gate→Gate), joining forces exactly like a Hunting Horror flown in by Seek &
+// Destroy. Only legal when the arena is a Gate area (Chronophage is Gate-to-Gate).
+case class HoundJoinBattleAction(self : Faction) extends OptionFactionAction("Cronophage".styled("nt") + " — teleport " + HoundOfTindalos.styled(self) + " into the battle") with PreBattleQuestion with Soft
+
 case class HarbingerPowerAction(self : Faction, ur : UnitRef, n : Int) extends ForcedAction
 case class HarbingerESAction(self : Faction, ur : UnitRef, e : Int) extends ForcedAction
 case class HarbingerAction(self : Faction, ur : UnitRef) extends ForcedAction
@@ -319,6 +325,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // in the same battle — Azathoth gets exactly ONE battle result per battle (even if BG
     // Necrophagy brings a ghoul). Mirrors the Bubastis build's guard.
     var azathothReceivedKill : Boolean = false
+
+    // Chronophage: factions that fired a pre-battle MOVE power this battle (Seek &
+    // Destroy, Howl, etc.) — armed so the Hound-join offer appears once for them.
+    var houndPreBattleMoveArmed : $[Faction] = $
+    var houndJoinedThisBattle : $[Faction] = $
+    // Post-battle Chronophage: powers that move a unit MID-battle (e.g. Necrophagy) arm this;
+    // the BattleEnd terminus offers each such faction its free Hound teleport before ending.
+    var houndPostBattleMoveArmed : $[Faction] = $
 
     def exempt(u : UnitFigure) {
         exempted :+= u
@@ -494,6 +508,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s.can(DemandSacrifice) && s.tag(DemandSacrifice).not && s.opponent.tag(KillsArePains).not)
             if (game.options.has(DemandTsathoggua).?(s.forces(Tsathoggua).any).|(s.has(Tsathoggua)))
                 options :+= DemandSacrificePreBattleAction(s)
+
+        // Chronophage (Hound of Tindalos): if self fired a pre-battle MOVE power this
+        // battle (Seek & Destroy or Howl), offer to teleport its Hound into the battle —
+        // Gate→Gate, so only when the arena is a Gate area and the Hound is currently in a
+        // (different) Gate area. Offered at most once per battle.
+        if (houndPreBattleMoveArmed.has(s) && !houndJoinedThisBattle.has(s) &&
+            s.loyaltyCards.has(HoundOfTindalosCard) &&
+            HoundOfTindalosGates.has(arena) &&
+            s.allInPlay.%(u => u.uclass == HoundOfTindalos && u.region != arena && HoundOfTindalosGates.has(u.region)).any)
+            options :+= HoundJoinBattleAction(s)
 
         // Energy Nexus pre-battle variant: handled after all other pre-battle powers (see PreBattleDoneAction)
 
@@ -1658,10 +1682,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                if (game.queue.starting.?(_.effect.has(FromBelow)))
-                    ProceedBattlesAction
-                else
-                    AfterAction(attacker)
+                val battleTerminus : ForcedAction =
+                    if (game.queue.starting.?(_.effect.has(FromBelow)))
+                        ProceedBattlesAction
+                    else
+                        AfterAction(attacker)
+
+                // Post-battle Chronophage: a mid-battle move (e.g. Necrophagy) armed this.
+                // The battle is now fully resolved (game.battle = None above), so fire the
+                // ordinary Gate→Gate Hound teleport offer for each armed owner, chaining the
+                // battle terminus after it. (The battle object with these vars is discarded.)
+                houndPostBattleMoveArmed.distinct.foldRight(battleTerminus)((f, then) => CronophageAfterMoveAction(f, then))
 
         }
     }
@@ -1999,6 +2030,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val u = game.unit(ur)
             retreat(u, r)
             log(u, "retreated to", r, "with", Oleaginous, "(Pain became Retreat)")
+            // Chronophage: this Pain-became-Retreat moved TS's own Gla'aki/Deep Tendril mid-
+            // battle. Per owner direction, fire the Hound offer AFTER the battle fully resolves.
+            houndPostBattleMoveArmed = (houndPostBattleMoveArmed :+ self).distinct
             proceed()
 
         case EliminateNoWayAction(self, u) =>
@@ -2099,6 +2133,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             u.region = arena
             self.forces :+= u
             log(u, "flew from", r)
+            // Chronophage: a pre-battle move happened → arm the Hound-join offer for self.
+            houndPreBattleMoveArmed = (houndPreBattleMoveArmed :+ self).distinct
+            proceed()
+
+        // Chronophage: teleport the owner's Hound into this battle (Gate→Gate). Mirrors
+        // Seek & Destroy's join: set region, add to that side's forces, resume. `self` is
+        // the side of the battle that owns the Hound card.
+        case HoundJoinBattleAction(self) =>
+            self.allInPlay.%(u => u.uclass == HoundOfTindalos && u.region != arena && HoundOfTindalosGates.has(u.region)).headOption.foreach { hound =>
+                val from = hound.region
+                hound.region = arena
+                hound.onGate = false
+                self.forces :+= hound
+                log(hound, "Cronophage".styled("nt") + ": teleported from", from, "into the battle")
+            }
+            houndJoinedThisBattle = (houndJoinedThisBattle :+ self).distinct
+            // Strength is (re)computed at PreRoll from forces, mirroring Seek & Destroy.
             proceed()
 
         // YIG SNAKEBITE — enemy assigns extra kill
@@ -2205,6 +2256,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             game.fbSuppressCGForPlacement = false
             u.onGate = false
             log(u, "was howled to", r)
+            // Chronophage: Howl forced `self` (the enemy) to move its own unit pre-battle, so
+            // arm the Hound-join offer for that faction. `self` is a battle side (the Howler's
+            // opponent). No-op unless it owns the Hound card with a Hound in a Gate area.
+            houndPreBattleMoveArmed = (houndPreBattleMoveArmed :+ self).distinct
             proceed()
 
         // HARBINGER
@@ -2236,6 +2291,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             exempt(u)
             sides.foreach(_.rolls :+= Pain)
             log(u, "came from", "" + r + ",", "causing additonal", Pain, "to both sides")
+
+            // Chronophage: Necrophagy moved a Ghoul into the arena. Per owner direction the
+            // Hound trigger fires AFTER the battle fully resolves (not mid-battle) — arm it
+            // here; BattleEnd fires the ordinary Gate→Gate teleport offer for self.
+            houndPostBattleMoveArmed = (houndPostBattleMoveArmed :+ self).distinct
 
             proceed()
 

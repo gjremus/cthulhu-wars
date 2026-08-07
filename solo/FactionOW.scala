@@ -291,7 +291,8 @@ object OWExpansion extends Expansion {
                 self.log("moved", "Chaos Gate".styled("ds"), "with", uc.styled(self), "from", o, "to", r)
             else
                 self.log("moved gate with", uc.styled(self), "from", o, "to", r)
-            EndAction(self)
+            // Chronophage: Beyond One moved own cost-3+ unit (with its gate) → offer teleport (A11).
+            CronophageAfterMoveAction(self, EndAction(self))
 
         // DREAD CURSE
         case DreadCurseMainAction(self, n, l) =>

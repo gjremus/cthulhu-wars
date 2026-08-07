@@ -1086,12 +1086,18 @@ object IGOOsExpansion extends Expansion {
                     }
                     val powerName = if (oceanDest) "Tsunami" else "The Agony Sting"
                     faction.log(cultists.num, "cultist".s(cultists.num), "forcibly moved by", powerName.styled("nt"), "to", adj.head)
-                    ForcedCultistMoveProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
+                    val next = ForcedCultistMoveProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
+                    // Chronophage: this forced move relocated the ENEMY faction's own cultists,
+                    // so offer THAT faction (`faction`) its free Hound teleport. No-op unless it
+                    // owns the Hound card. Chains before continuing to the next faction.
+                    Force(CronophageAfterMoveAction(faction, next))
                 } else {
                     val u = cultists.head
                     val rest = cultists.tail
                     val nextRemaining = if (rest.any) (faction, rest) +: remaining.tail else remaining.tail
-                    Ask(faction).each(adj)(dest => ForcedCultistMoveAction(faction, u, dest, rest, ForcedCultistMoveProcessAction(self, sourceRegion, nextRemaining, oceanDest, then)))
+                    // Chronophage: after this forced unit move, offer the moved faction its
+                    // free Hound teleport (no-op unless it owns the card) before continuing.
+                    Ask(faction).each(adj)(dest => ForcedCultistMoveAction(faction, u, dest, rest, CronophageAfterMoveAction(faction, ForcedCultistMoveProcessAction(self, sourceRegion, nextRemaining, oceanDest, then))))
                 }
             }
 
