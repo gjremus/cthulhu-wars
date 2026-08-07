@@ -1485,7 +1485,7 @@ case class Bot3(faction : Faction) {
                         sb.isInstanceOf[BattleSpellbook] |=> 400 -> "initial block battle SB"
                         true |=> 200 -> "initial moonbeast block"
 
-                    case MoonbeastReturnChooseGateAction(_, _, r, _) =>
+                    case MoonbeastReturnPlaceAction(_, _, r, _) =>
                         // Return MB to own gate if possible
                         self.gates.has(r) |=> 500 -> "return moonbeast to own gate"
                         true |=> 200 -> "return moonbeast"
@@ -1775,7 +1775,7 @@ case class Bot3(faction : Faction) {
                         true |=> 200 -> "cthugha: match combat"
 
                     // ── Cronophage teleport (Hound battle-time) ─────────────
-                    case CronophageTeleportAction(_, _, dest) =>
+                    case CronophageTeleportAction(_, _, dest, _) =>
                         // Teleport to a gate where Hound contributes most
                         val enemyGate = self.enemies.exists(_.gates.has(dest))
                         enemyGate |=> 800 -> "cronophage: teleport to enemy gate"
