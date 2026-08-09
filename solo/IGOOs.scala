@@ -1226,8 +1226,17 @@ object IGOOsExpansion extends Expansion {
             }
 
         case TheZygoteTargetAction(self, r, remaining) =>
-            self.place(Acolyte, r)
-            self.log("The Zygote".styled("nt") + ": placed", Acolyte.styled(self), "in", r, "(" + (remaining - 1) + " remaining)")
+            // Safety: The Zygote places Acolytes one at a time in a loop, and when only
+            // a single Area qualifies the loop places the next one automatically without
+            // saving that step to the game record. If the board has since changed (units
+            // died or moved during later turns), reloading the game could run one extra
+            // automatic placement and then try to place one more Acolyte than the Pool
+            // actually holds — which used to crash the whole game on load. Only place when
+            // an Acolyte is genuinely left in the Pool; otherwise just carry on.
+            if (self.pool(Acolyte).num > 0) {
+                self.place(Acolyte, r)
+                self.log("The Zygote".styled("nt") + ": placed", Acolyte.styled(self), "in", r, "(" + (remaining - 1) + " remaining)")
+            }
             Force(TheZygoteContinueAction(self))
 
         // ── YIG SPELLBOOK REQUIREMENT ──
