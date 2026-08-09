@@ -80,7 +80,7 @@ case object AtlachNachaCard extends IGOOLoyaltyCard(AtlachNachaIcon, AtlachNacha
 case object AtlachNachaIcon extends UnitClass("Atlach-Nacha Icon", Token, 0)
 case object AtlachNacha extends UnitClass("Atlach-Nacha", GOO, 6) with IGOO
 
-case object BokrugCard extends IGOOLoyaltyCard(BokrugIcon, Bokrug, power = 6, combat = 0)
+case object BokrugCard extends IGOOLoyaltyCard(BokrugIcon, Bokrug, power = 4, combat = 0)
 case object BokrugIcon extends UnitClass("Bokrug Icon", Token, 0)
 case object Bokrug extends UnitClass("Bokrug", GOO, 6) with IGOO
 
@@ -338,6 +338,10 @@ case class GhostsOfIbChooseAction(self : Faction, r : Region, then : Action) ext
     implicit g => "Ghosts of Ib".styled("nt") + " — place " + Bokrug.styled(self) + " in", r) {
     override def question(implicit game : Game) = self.full + " — " + "Ghosts of Ib".styled("nt") + " — choose Area"
 }
+// [owner 2026-08-09] Ghosts of Ib return is OPTIONAL — the owner may decline to
+// bring Bokrug back this Doom Phase. Recorded (plain ForcedAction, not Soft) so
+// undo/replay reproduces the "declined" branch; handler mutates no state.
+case class GhostsOfIbSkipAction(self : Faction, then : Action) extends ForcedAction
 
 // Doom that Came to Sarnath: fires after Ghosts of Ib
 case class DoomSarnathMainAction(self : Faction, then : Action) extends ForcedAction
@@ -789,7 +793,7 @@ object IGOOsExpansion extends Expansion {
                 .%(igoo => igoo != CthughaCard)
                 .%(igoo => {
                     val cost = game.igooCost(self, igoo)
-                    areas.nex.%(self.canAwakenIGOO).%(r => game.dcTenebrosumGuard || self.affords(cost)(r)).any
+                    self.awakenIGOORegions.%(self.canAwakenIGOO).%(r => game.dcTenebrosumGuard || self.affords(cost)(r)).any
                 })
 
             val cthughaAvailable = game.loyaltyCards.has(CthughaCard) && {
@@ -803,21 +807,39 @@ object IGOOsExpansion extends Expansion {
             }
 
             val azathothAvailable = game.loyaltyCards.has(AzathothIGOOCard) && (game.dcTenebrosumGuard || self.power >= 8) &&
-                self.allGates.onMap.%(r => self.at(r).goos.any).any
+                self.allGates.onMapOrMoon.%(r => self.at(r).goos.any).any
 
             // Build name-keyed entries (Entry case class) and sort by name.
             // The action is what gets dispatched when the user picks an item.
             case class IGOOEntry(name : String, action : Action)
             val standardEntries : $[IGOOEntry] = standardAvailable./(igoo => {
                 val cost = game.igooCost(self, igoo)
-                val gates = areas.nex.%(self.canAwakenIGOO).%(r => game.dcTenebrosumGuard || self.affords(cost)(r))
+                val gates = self.awakenIGOORegions.%(self.canAwakenIGOO).%(r => game.dcTenebrosumGuard || self.affords(cost)(r))
                 IGOOEntry(igoo.name, IndependentGOOMainAction(self, igoo, gates))
             })
             val cthughaEntry : $[IGOOEntry] =
                 cthughaAvailable.?($(IGOOEntry("Cthugha", CthughaAwakenMainAction(self)))).|($)
             val azathothEntry : $[IGOOEntry] =
                 azathothAvailable.?($(IGOOEntry("Azathoth", AzathothAwakenMainAction(self)))).|($)
-            val sorted = (standardEntries ++ cthughaEntry ++ azathothEntry).sortBy(_.name)
+
+            // [owner 2026-08-09] Bokrug's owner may RE-AWAKEN him for Power during
+            // the Action Phase after he has been killed. His card stays in the
+            // owner's hand (not the shared pool), so the standardAvailable list
+            // above never includes him — offer him explicitly here. The existing
+            // IndependentGOOAction handler already moves the pooled Bokrug figure.
+            val bokrugReawakenAvailable = self.loyaltyCards.has(BokrugCard) &&
+                self.allInPlay.%(_.uclass == Bokrug).none && {
+                    val cost = game.igooCost(self, BokrugCard)
+                    areas.nex.%(self.canAwakenIGOO).%(self.affords(cost)).any
+                }
+            val bokrugEntry : $[IGOOEntry] =
+                bokrugReawakenAvailable.?({
+                    val cost = game.igooCost(self, BokrugCard)
+                    val gates = areas.nex.%(self.canAwakenIGOO).%(self.affords(cost))
+                    $(IGOOEntry("Bokrug", IndependentGOOMainAction(self, BokrugCard, gates)))
+                }).|($)
+
+            val sorted = (standardEntries ++ cthughaEntry ++ azathothEntry ++ bokrugEntry).sortBy(_.name)
 
             if (sorted.none)
                 Force(MainAction(self))
@@ -940,7 +962,7 @@ object IGOOsExpansion extends Expansion {
                 log(self, "From Below".styled("nt"), "blocked by", "Elder Thing".styled("nt"))
                 MoveContinueAction(self, true)
             } else
-                self.all(Nyogtha).but(u).not(Moved).%(_.region.onMap).single./(n => MoveSelectAction(self, n, n.region, 0)).|(MoveContinueAction(self, true))
+                self.all(Nyogtha).but(u).not(Moved).%(_.region.onMapOrMoon).single./(n => MoveSelectAction(self, n, n.region, 0)).|(MoveContinueAction(self, true))
 
         case NightmareWebMainAction(self, regions) =>
             Ask(self).each(regions)(r => NightmareWebAction(self, r)).cancel
@@ -1073,20 +1095,33 @@ object IGOOsExpansion extends Expansion {
 
         case FatherDagonTsunamiTargetAction(self, r) =>
             self.power -= 1
-            // Each faction's cultists moved by their owner to adjacent ocean areas
-            val perFaction = factions./(f => (f, f.at(r).%(_.uclass.utype == Cultist)./(_.ref))).%{ case (_, units) => units.any }
+            // Tsunami affects ALL Cultists in the area, but attribution follows the
+            // cultist's TRUE (original) owner, not Mind Parasite control (task #110).
+            // A parasitized cultist's figure lives under the insect controller, so we
+            // scan every cultist physically in r and bucket it by original ownership,
+            // so the true owner (not the parasite controller) is the one that moves it.
+            val allCultists = game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist))
+            val perFaction = factions./(owner => (owner, allCultists.%(u => MindParasite.trueOwner(u) == owner)./(_.ref))).%{ case (_, units) => units.any }
             self.log("Tsunami".styled("nt") + ": all Cultists in", r, "must move to adjacent Ocean")
             ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = true, EndAction(self))
 
         // Mother Hydra: Agony Sting
         case MotherHydraAgonyStingMainAction(self) =>
-            val oceanAreas = areas.%(_.glyph == Ocean).%(r => self.enemies.exists(_.at(r).%(_.uclass.utype == Cultist).any))
+            // Eligible ocean areas are those holding at least one cultist whose TRUE
+            // (original) owner is an enemy — a cultist self originally owns but that an
+            // enemy has parasitized is still self's, so it does NOT make an area eligible.
+            val oceanAreas = areas.%(_.glyph == Ocean).%(r =>
+                game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist)).exists(u => self.enemies.has(MindParasite.trueOwner(u))))
             Ask(self).each(oceanAreas)(r => MotherHydraAgonyStingTargetAction(self, r)).cancel
 
         case MotherHydraAgonyStingTargetAction(self, r) =>
             self.power -= 1
-            // Each enemy's cultists moved by their owner to adjacent land areas (owner's cultists immune)
-            val perFaction = self.enemies./(f => (f, f.at(r).%(_.uclass.utype == Cultist)./(_.ref))).%{ case (_, units) => units.any }
+            // Only cultists whose TRUE (original) owner is an enemy of self are moved
+            // (task #110). Self's OWN cultists are immune even while parasitized by an
+            // enemy insect faction, since original ownership governs — and a cultist self
+            // has parasitized (originally an enemy's) IS affected, since it's still theirs.
+            val allCultists = game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist))
+            val perFaction = self.enemies./(owner => (owner, allCultists.%(u => MindParasite.trueOwner(u) == owner)./(_.ref))).%{ case (_, units) => units.any }
             self.log("The Agony Sting".styled("nt") + ": all enemy Cultists in", r, "must move to adjacent Land")
             ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = false, EndAction(self))
 
@@ -1116,15 +1151,18 @@ object IGOOsExpansion extends Expansion {
                     val powerName = if (oceanDest) "Tsunami" else "The Agony Sting"
                     faction.log(cultists.num, "cultist".s(cultists.num), "forcibly moved by", powerName.styled("nt"), "to", adj.head)
                     val next = ForcedCultistMoveProcessAction(self, sourceRegion, remaining.tail, oceanDest, then)
-                    if (dcAcolyteMoved)
-                        Force(DCProselytizeCheckAction(sourceRegion, adj.head, next))
-                    else
-                        next
+                    // Chronophage: this forced move relocated the ENEMY faction's own cultists,
+                    // so offer THAT faction (`faction`) its free Hound teleport. No-op unless it
+                    // owns the Hound card. Chains before continuing to the next faction.
+                    val cont = if (dcAcolyteMoved) DCProselytizeCheckAction(sourceRegion, adj.head, next) else next
+                    Force(CronophageAfterMoveAction(faction, cont))
                 } else {
                     val u = cultists.head
                     val rest = cultists.tail
                     val nextRemaining = if (rest.any) (faction, rest) +: remaining.tail else remaining.tail
-                    Ask(faction).each(adj)(dest => ForcedCultistMoveAction(faction, u, dest, rest, ForcedCultistMoveProcessAction(self, sourceRegion, nextRemaining, oceanDest, then)))
+                    // Chronophage: after this forced unit move, offer the moved faction its
+                    // free Hound teleport (no-op unless it owns the card) before continuing.
+                    Ask(faction).each(adj)(dest => ForcedCultistMoveAction(faction, u, dest, rest, CronophageAfterMoveAction(faction, ForcedCultistMoveProcessAction(self, sourceRegion, nextRemaining, oceanDest, then))))
                 }
             }
 
@@ -1316,7 +1354,7 @@ object IGOOsExpansion extends Expansion {
         // ── AZATHOTH IGOO: Custom Awakening ──
         case AzathothAwakenMainAction(self) =>
             // Choose which gate to place Azathoth at (must have own GOO at controlled gate)
-            val gooAtGate = self.allGates.onMap.%(r => self.at(r).goos.any)
+            val gooAtGate = self.allGates.onMapOrMoon.%(r => self.at(r).goos.any)
             Ask(self).each(gooAtGate)(r => AzathothAwakenCommitAction(self, 0, r).as("Awaken Azathoth at", r)).cancel
 
         case AzathothAwakenCommitAction(self, _, gateRegion) =>
@@ -1421,8 +1459,9 @@ object IGOOsExpansion extends Expansion {
                     // Bokrug NOT on map — check for valid regions (no enemy units)
                     val validRegions = areas.nex.%(r => owner.enemies.forall(_.at(r).%(_.uclass.utype != MapUnit).none))
                     if (validRegions.any) {
-                        log(Bokrug.styled(owner), "Ghosts of Ib".styled("nt") + ":", owner.full, "must place", Bokrug.styled(owner))
-                        Ask(owner).each(validRegions)(r => GhostsOfIbChooseAction(owner, r, then))
+                        log(Bokrug.styled(owner), "Ghosts of Ib".styled("nt") + ":", owner.full, "may return", Bokrug.styled(owner))
+                        // [owner 2026-08-09] return is optional — offer Skip alongside the areas
+                        Ask(owner).each(validRegions)(r => GhostsOfIbChooseAction(owner, r, then)).skip(GhostsOfIbSkipAction(owner, then))
                     } else {
                         Force(then)
                     }
@@ -1433,6 +1472,10 @@ object IGOOsExpansion extends Expansion {
             val bokrug = self.pool.one(Bokrug)
             bokrug.region = r
             self.log("Ghosts of Ib".styled("nt") + ": placed", Bokrug.styled(self), "in", r)
+            Force(then)
+
+        case GhostsOfIbSkipAction(self, then) =>
+            self.log("Ghosts of Ib".styled("nt") + ": declined to return", Bokrug.styled(self), "this Doom Phase")
             Force(then)
 
         // ── BOKRUG: Doom that Came to Sarnath (doom phase effect) ──
