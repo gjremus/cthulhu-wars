@@ -376,7 +376,8 @@ object OWExpansion extends Expansion {
             // flow going so the game does not crash. Live play always has the
             // target, so behavior is unchanged -- this only steps aside in the
             // exact spot that used to throw "head of empty list".
-            self.at(r, uc).%(_.health == Alive).sortP.headOption.foreach { u =>
+            self.at(r, uc).%(_.health == Alive).sortP.headOption
+                .orElse(self.at(r, uc).sortP.headOption).foreach { u =>
                 u.health = (s == Kill).?(Killed).|(Pained)
             }
             Ask(f).add(DreadCurseSplitAction(f, r, $, e, k, p))
@@ -389,7 +390,8 @@ object OWExpansion extends Expansion {
             // (rebuild-from-history mismatch). Retreat it if present; otherwise
             // skip the placement but continue the retreat chain so the game does
             // not crash. Live play always has the unit, so behavior is unchanged.
-            f.at(r, uc).%(_.health == Pained).sortP.headOption.foreach { u =>
+            f.at(r, uc).%(_.health == Pained).sortP.headOption
+                .orElse(f.at(r, uc).sortP.headOption).foreach { u =>
                 game.fbSuppressCGForPlacement = true
                 u.region = d
                 game.fbSuppressCGForPlacement = false
