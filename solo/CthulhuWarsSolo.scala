@@ -994,7 +994,7 @@ object CthulhuWarsSolo {
 
             case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0, splitTint : |[Processing] = None)
 
-            case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int) {
+            case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int, parasiteOrig : |[Faction] = None) {
                 val defaultProcessing = Processing(None, None, None)
 
                 val tint = faction @@ {
@@ -1084,13 +1084,14 @@ object CthulhuWarsSolo {
                         case _ => null
                     }
 
-                    // Mind Parasite: split color — left half original faction, right half insect owner
+                    // Mind Parasite: split color — left half THIS cultist's original
+                    // faction, right half insect owner. parasiteOrig is resolved per
+                    // individual figure at construction (see the factionlike loop);
+                    // must NOT fall back to a region-wide lookup, or two parasitized
+                    // cultists of different original factions in the same area would
+                    // both take the first one's color.
                     case MindParasiteCultist =>
-                        val origFac = if (region != null) {
-                            implicit val g : Game = displayGame
-                            factionToState(faction)(g).at(region).%(_.uclass == MindParasiteCultist).headOption./~(u => displayGame.mindParasiteOriginalFaction.get(u.ref))
-                        } else None
-                        val origTint = origFac./(of => DrawItem(null, of, Acolyte, Alive, $, 0, 0).tint).|(tint)
+                        val origTint = parasiteOrig./(of => DrawItem(null, of, Acolyte, Alive, $, 0, 0).tint).|(tint)
                         DrawRect("ts-acolyte", |(origTint), x - 17, y - 54, 39, 60, splitTint = |(tint))
 
                     case HighPriest => faction match {
@@ -1925,7 +1926,11 @@ object CthulhuWarsSolo {
                             // this the unit kept its original owner's color and the steal
                             // looked like it "vanished" (esp. after a page refresh).
                             val drawFaction = if (game.fbeShapestolen.contains(u.ref)) FBE else f
-                            all +:= DrawItem(r, drawFaction, u.uclass, u.health, tags, 0, 0)
+                            // Per-figure Mind Parasite original faction, so each
+                            // parasitized cultist splits with its OWN true color
+                            // (refreshed every render from the live mapping).
+                            val pOrig = if (u.uclass == MindParasiteCultist) game.mindParasiteOriginalFaction.get(u.ref) else None
+                            all +:= DrawItem(r, drawFaction, u.uclass, u.health, tags, 0, 0, pOrig)
                         }
                     }
 
@@ -2075,20 +2080,26 @@ object CthulhuWarsSolo {
                     if (game.setup.%(_.iceAge.?(_ == r)).any)
                         all +:= DrawItem(r, null, IceAgeToken, Alive, $, 0, 0)
 
+                    // When a figure keeps its spot between two frames we reuse last
+                    // frame's drawing so it doesn't jump around. But the split-colour
+                    // marker (parasiteOrig) is NOT part of the match key below, so a
+                    // reused figure would keep last frame's colour and never update
+                    // when a NEW faction gets mind-parasited. Always copy the fresh
+                    // parasiteOrig onto the reused figure so the split colour refreshes.
                     all.foreach { d =>
                         saved.find(o => d.region == o.region && d.faction == o.faction && d.unit == o.unit && d.tags == o.tags && d.health == o.health) match {
                             case Some(o) =>
-                                sticking +:= o
+                                sticking +:= o.copy(parasiteOrig = d.parasiteOrig)
                                 saved :-= o
                             case None =>
                                 saved.find(o => d.region == o.region && d.faction == o.faction && d.unit == o.unit && d.tags == o.tags) match {
                                     case Some(o) =>
-                                        sticking +:= o.copy(health = d.health)
+                                        sticking +:= o.copy(health = d.health, parasiteOrig = d.parasiteOrig)
                                         saved :-= o
                                     case None =>
                                         saved.find(o => d.region == o.region && d.faction == o.faction && d.unit == o.unit) match {
                                             case Some(o) =>
-                                                sticking +:= o.copy(tags = d.tags, health = d.health)
+                                                sticking +:= o.copy(tags = d.tags, health = d.health, parasiteOrig = d.parasiteOrig)
                                                 saved :-= o
                                             case None =>
                                                 free +:= d
@@ -3145,6 +3156,27 @@ object CthulhuWarsSolo {
                         if (e.borrowed.has(ab)) {
                             dd(DrawItem(null, e, SerpentMan, Alive, $, w - 46 + smx, 86).rect)
                             smx -= 20
+                        }
+                    }
+                }
+
+                // DC (Defiler's Court): SL copies DC's uniques permanently via Ancient
+                // Sorcery, sending a Serpentman to DC's card for each (they never return).
+                // Show a SINGLE SL Serpentman with a count badge ("2" when both copied)
+                // rather than stacking two sprites.
+                if (f == DC) {
+                    val dcSerpents = SL.at(DC.reserve, SerpentMan).num
+                    if (dcSerpents > 0) {
+                        dd(DrawItem(null, SL, SerpentMan, Alive, $, w - 46, 86).rect)
+                        if (dcSerpents > 1) {
+                            g.font = "bold 22px \"Bohemian Typewriter\", monospace"
+                            g.textAlign = "center"
+                            g.textBaseline = "middle"
+                            g.lineWidth = 4.0
+                            g.strokeStyle = "rgba(0,0,0,0.85)"
+                            g.strokeText(dcSerpents.toString, w - 46, 70)
+                            g.fillStyle = "white"
+                            g.fillText(dcSerpents.toString, w - 46, 70)
                         }
                     }
                 }
