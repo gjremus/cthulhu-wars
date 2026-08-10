@@ -1229,9 +1229,18 @@ object IGOOsExpansion extends Expansion {
             }
 
         case TheZygoteTargetAction(self, r, remaining) =>
-            self.place(Acolyte, r)
-            self.log("The Zygote".styled("nt") + ": placed", Acolyte.styled(self), "in", r, "(" + (remaining - 1) + " remaining)")
-            Force(TheZygoteContinueAction(self))
+            // Replay-safety: the recorded stream can hold more placements than the
+            // Pool now has (board changed after the fact). Place only when an Acolyte
+            // is genuinely left; otherwise end WITHOUT looping back into the continue
+            // step, which would re-log "all Acolytes placed" once per leftover step.
+            // Live play always matches, so behavior there is unchanged.
+            if (self.pool(Acolyte).num > 0) {
+                self.place(Acolyte, r)
+                self.log("The Zygote".styled("nt") + ": placed", Acolyte.styled(self), "in", r, "(" + (remaining - 1) + " remaining)")
+                Force(TheZygoteContinueAction(self))
+            } else {
+                EndAction(self)
+            }
 
         // ── YIG SPELLBOOK REQUIREMENT ──
         case YigRemoveGateMainAction(self) =>
