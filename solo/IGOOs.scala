@@ -1232,12 +1232,19 @@ object IGOOsExpansion extends Expansion {
             // died or moved during later turns), reloading the game could run one extra
             // automatic placement and then try to place one more Acolyte than the Pool
             // actually holds — which used to crash the whole game on load. Only place when
-            // an Acolyte is genuinely left in the Pool; otherwise just carry on.
+            // an Acolyte is genuinely left in the Pool.
             if (self.pool(Acolyte).num > 0) {
                 self.place(Acolyte, r)
                 self.log("The Zygote".styled("nt") + ": placed", Acolyte.styled(self), "in", r, "(" + (remaining - 1) + " remaining)")
+                Force(TheZygoteContinueAction(self))
+            } else {
+                // Replay divergence: the record holds more placements than the Pool now
+                // has. The sequence is already finished, so end WITHOUT looping back into
+                // the continue step — otherwise it re-logs "all Acolytes placed" once per
+                // leftover recorded step, spamming the log with duplicates. Live play never
+                // hits this branch (Pool always matches), so behavior there is unchanged.
+                EndAction(self)
             }
-            Force(TheZygoteContinueAction(self))
 
         // ── YIG SPELLBOOK REQUIREMENT ──
         case YigRemoveGateMainAction(self) =>
