@@ -302,6 +302,17 @@ class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int,
             game.fbHasCGActive &&
             FB.units.exists(u => u.region == r && (u.uclass == RevenantOfKnaa || u.uclass == Ghatanothoa)))
             game.fbCyclopeanGazeActionRegions :+= r
+        // Cyclopean Gaze must NOT fire on Pains (rulebook): a Pain-driven forced retreat
+        // is not a Move/placement into the gaze region. The forced-retreat callers set
+        // fbSuppressCGForPlacement, which already blocks the edge-case path above — but the
+        // AfterAction snapshot-DELTA path (FactionFB) compares before/after unit counts and
+        // would still see this arrival as +1 and fire CG. Keep the snapshot in lockstep with
+        // the suppressed arrival so the later delta nets zero. (E.g. Opener of the Way's
+        // Dread Curse of Azathoth pains an enemy unit into a Revenant/Ghatanothoa region.)
+        if (game.fbSuppressCGForPlacement && prev != r && faction != FB &&
+            uclass.utype != Building && game.fbHasCGActive &&
+            game.fbCyclopeanGazeSnapshot.contains((faction, r)))
+            game.fbCyclopeanGazeSnapshot += (faction, r) -> faction.at(r).%(_.uclass.utype != Building).num
     }
 
     override def toString = short
@@ -315,6 +326,13 @@ class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int,
     def styledName(implicit game : Game) : String = if (uclass == MindParasiteCultist) {
         MindParasite.styledUnit(this)
     } else uclass.name.styled(faction)
+
+    // Parasite-aware version of `full` for menu labels: a parasitized cultist
+    // renders its split (original/insect) color exactly as the game log does;
+    // any other unit falls through to the normal full rendering. Use this at
+    // direct g.unit(x).full label sites where a parasitized cultist can appear.
+    def styledFull(implicit game : Game) : String =
+        if (uclass == MindParasiteCultist) MindParasite.styledUnit(this) else full
 
     def tag(s : UnitState) = state.has(s)
     def add(s : UnitState) { state :+= s }
@@ -380,6 +398,14 @@ trait Faction { f =>
     def gooValue(u : UnitClass)(implicit game : Game) : Int = u.cost
     def awakenDesc(u : UnitClass) : |[String] = None
     def canAwakenIGOO(r : Region)(implicit game : Game) : Boolean = f.gates.has(r) && f.at(r, GOO, ElderGod).any
+    // Regions eligible for iGOO awakening. `areas` = board.regions, which EXCLUDES
+    // the Moon (MoonGlyph.onMap=false). The Moon is a BB-Controlled Gate "for all
+    // purposes" (Moon Tile rule), so BB must be able to awaken an iGOO there when a
+    // GOO/Elder God (e.g. Bastet — Elder Gods count as GOOs for all purposes except
+    // combat and ES) already sits on it. Append BB.moon for BB, same idiom as
+    // summonRegions, so the awaken scans see it.
+    def awakenIGOORegions(implicit game : Game) : $[Region] =
+        (areas.nex ++ (f == BB).??($(BB.moon))).distinct
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int
     def neutralStrength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) =
         units(Ghast).num * 0 +
@@ -467,6 +493,14 @@ object MindParasite {
     // Get the original faction of a parasitized unit
     def originalFaction(u : UnitFigure)(implicit game : Game) : |[Faction] =
         game.mindParasiteOriginalFaction.get(u.ref)
+
+    // TRUE owner of a cultist for ownership-based effects (Agony Sting, Tsunami):
+    // a parasitized cultist belongs to its ORIGINAL faction, not the insect
+    // controller its figure currently lives under. Any other unit is owned by
+    // its own faction. Mind Parasite control is limited (§ loyalty card) and must
+    // NOT redirect original-ownership effects (task #110).
+    def trueOwner(u : UnitFigure)(implicit game : Game) : Faction =
+        if (u.uclass == MindParasiteCultist) originalFaction(u).|(u.faction) else u.faction
 
     // Check if an Acolyte SHOULD be parasitized (off-gate, shares area with enemy Insect)
     def shouldParasitize(u : UnitFigure)(implicit game : Game) : |[Faction] = {
@@ -893,6 +927,10 @@ class Player(private val f : Faction)(implicit game : Game) {
     var commands : $[Plan] = $
 
     def allGates = gates ++ unitGate./(_.region).$
+    // Gate areas usable for placing/summoning this faction's units. The Moon is a
+    // controlled Gate "for all purposes" (Moon Tile rule) and lives in BB.gates, so
+    // .onMapOrMoon includes it by default — no per-faction special-casing needed.
+    def neutralPlacementGates(implicit game : Game) : $[Region] = allGates.onMapOrMoon.distinct
     def needs(rq : Requirement) = unfulfilled.contains(rq)
     // 2026-06-06 Fix 75 (Fix 2): slPermanentBorrowed lets SL retain DC unique
     // abilities (Tenebrosum + Depravity) PERMANENTLY when they were copied via
@@ -913,6 +951,9 @@ class Player(private val f : Faction)(implicit game : Game) {
     def pool = units.%(_.region == f.reserve)
     def onMap(uclass : UnitClass) = units.%(u => u.region.onMap && u.uclass == uclass)
     def onMap(utype : UnitType) = units.%(u => u.region.onMap && u.uclass.utype == utype)
+    // Power-targeting variants: physical map PLUS the Moon (see implicits.onMapOrMoon).
+    def onMapOrMoon(uclass : UnitClass) = units.%(u => u.region.onMapOrMoon && u.uclass == uclass)
+    def onMapOrMoon(utype : UnitType) = units.%(u => u.region.onMapOrMoon && u.uclass.utype == utype)
     def all(uclass : UnitClass) = units.%(u => u.region.inPlay && u.uclass == uclass)
     def all(utype : UnitType) = units.%(u => u.region.inPlay && u.uclass.utype == utype)
     def allInPlay = units.%(_.region.inPlay)
@@ -1049,7 +1090,7 @@ class Player(private val f : Faction)(implicit game : Game) {
             f.at(r, Monster).%(u => u.uclass.canCapture(u)).any
     }
 
-    def summonRegions : $[Region] = (f.allGates.onMap ++ f.can(TheyBreakThrough).??(f.enemies./~(_.allGates) ++ game.abandonedGates) ++ (f == BB).??($(BB.moon))).nex.distinct
+    def summonRegions : $[Region] = (f.allGates.onMapOrMoon ++ f.can(TheyBreakThrough).??(f.enemies./~(_.allGates) ++ game.abandonedGates)).nex.distinct
 
     def iced(r : Region) : IceAges = {
         if (game.anyIceAge.not)
@@ -2290,6 +2331,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def extraActions(f : Faction, outOfTurn : Boolean, highPriests : Boolean) : $[Action] = {
+        if (moonbeastOnSpellbook.values.exists(_._1 == f)) println(s"[MB-TRACE] extraActions f=$f doom=${f.doom} beastsOnSB=${moonbeastOnSpellbook.size} willOfferRemove=${f.doom >= 1} outOfTurn=$outOfTurn")
         (f.can(DragonAscending) && f.power < f.enemies./(_.power).max && (outOfTurn.not || options.has(AsyncActions))).$(DragonAscendingOutOfTurnAction(f.sure[OW])) ++
         f.es.exists(_.value > 0).$((outOfTurn && options.has(AsyncActions).not).?(InfoESOutOfTurnAction(f)).|(RevealESOutOfTurnAction(f))) ++
         // Moonbeast: premature return available any time (pay 1 Doom)
@@ -2421,7 +2463,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         }
         // Mind Parasite: separate capture action for parasitized cultists
         if (f.loyaltyCards.has(InsectsFromShaggaiCard) && f.power > 0) {
-            val mpTargets = f.units.%(_.uclass == MindParasiteCultist).%(_.region.onMap).%(u => !mindParasiteCaptureRejected.has(u.ref))
+            val mpTargets = f.units.%(_.uclass == MindParasiteCultist).%(_.region.onMapOrMoon).%(u => !mindParasiteCaptureRejected.has(u.ref))
             if (mpTargets.any)
                 + MindParasiteCaptureMainAction(f)
         }
@@ -2468,9 +2510,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def summons(f : Faction)(implicit w : AskWrapper) {
-        // Servitor of the Outer Gods: if faction has ServitorCard and servitors in pool,
-        // block all non-terror monster summons (not ServitorUnit itself)
-        // Blocking text shown inside summon sub-menu, not here in top-level menu
+        // Servitor of the Outer Gods (Adulation): "You may not Summon any Monsters
+        // except for Servitors if any Servitors remain in your Pool." While the block
+        // held, the top-level menu still OFFERED the monster-summon options (the block
+        // only fired in the sub-menu handler), so the player saw summonable monsters
+        // and reported the menu "was not blocked". Fix: suppress every Monster Summon
+        // Action offer here too — except the Servitor itself, so the pool can be cleared.
+        // (GOO awakens and ability-based placements like Filth are NOT Summon Actions and
+        //  are correctly left alone; the sub-menu handler at SummonMainAction stays as a
+        //  backstop.)
+        val servitorBlocking = f.loyaltyCards.has(ServitorCard) && f.pool(ServitorUnit).any
 
         val summonAreas = areas ++ ((f == BB || (f == OW && f.can(TheyBreakThrough))).??($(BB.moon))) ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))
 
@@ -2479,7 +2528,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // filter must be bypassed (downstream SummonAction already skips the Power
         // debit under the guard). This lets a Sin-paid Summon repeat offer a DIFFERENT
         // unit than the one just summoned, per owner spec (broadens Fix 106).
-        f.pool.monsterly.sortP./(_.uclass).distinct.%(_.canBeSummoned(f)).%(uc => f.all(uc).num < f.units./(_.uclass).count(uc)).foreach { uc =>
+        f.pool.monsterly.sortP./(_.uclass).distinct.%(_.canBeSummoned(f)).%(uc => f.all(uc).num < f.units./(_.uclass).count(uc)).%(uc => !servitorBlocking || uc == ServitorUnit).foreach { uc =>
             // HB Fix 117 (2026-06-15): under a Sin-paid Summon repeat, gate on
             // whether the caster has enough SIN for the picked unit's cost (Sin =
             // the unit's power cost) rather than bypassing the affordability check
@@ -2498,13 +2547,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
         }
 
-        if (f.loyaltyCards.has(DimensionalShamblerCard) && f.pool(DimensionalShamblerUnit).any && f.power >= f.summonCost(DimensionalShamblerUnit, f.reserve))
+        if (!servitorBlocking && f.loyaltyCards.has(DimensionalShamblerCard) && f.pool(DimensionalShamblerUnit).any && f.power >= f.summonCost(DimensionalShamblerUnit, f.reserve))
             + ShamblerSummonMainAction(f)
 
         // Moonbeast: custom summon onto enemy spellbook
         // Exclude moonbeasts already on spellbooks from available pool
         val availableMoonbeasts = f.pool(MoonbeastUnit).%(u => !game.moonbeastOnSpellbook.contains(u.ref))
-        if (f.loyaltyCards.has(MoonbeastCard) && availableMoonbeasts.any && f.power >= 2 && f.allGates.onMap.any) {
+        if (!servitorBlocking && f.loyaltyCards.has(MoonbeastCard) && availableMoonbeasts.any && f.power >= 2 && f.allGates.onMapOrMoon.any) {
             val hasTarget = f.enemies.exists(e => e.spellbooks.any || e.unfulfilled.any)
             if (hasTarget)
                 + MoonbeastSummonMainAction(f)
@@ -2516,7 +2565,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // Skip if pool already has the same unit class (normal summon already offered)
         val poolMonsterClasses = f.pool.monsterly./(_.uclass).distinct
         val velvetFanMonsters = f.units.%(u => u.region.is[VelvetFanHold] && u.uclass.utype == Monster)
-        velvetFanMonsters./(_.uclass).distinct.diff(poolMonsterClasses).foreach { uc =>
+        velvetFanMonsters./(_.uclass).distinct.diff(poolMonsterClasses).%(_ => !servitorBlocking).foreach { uc =>
             // HB Fix 113 (2026-06-13): Tenebrosum-repeat affords bypass (Sin-paid).
             // HB Fix 117 (2026-06-15): gate on SIN affordability under the guard.
             summonAreas.nex.%(r => (if (dcTenebrosumGuard) (if (f == SL) slSin else dcSin) >= f.summonCost(uc, r) else f.affords(f.summonCost(uc, r))(r))).%(f.canAccessGate).some.foreach { l =>
@@ -2575,7 +2624,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             .%(igoo => igoo != CthughaCard)
             .%(igoo => {
                 val cost = igooCost(f, igoo)
-                areas.nex.%(f.canAwakenIGOO).%(r => dcTenebrosumGuard || f.affords(cost)(r)).any
+                f.awakenIGOORegions.%(f.canAwakenIGOO).%(r => dcTenebrosumGuard || f.affords(cost)(r)).any
             })
 
         // Cthugha: replace any non-Cthugha GOO at one of f's gates (cost = 6 - replaced.cost)
@@ -2591,7 +2640,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // Azathoth: needs ≥8 power and an own GOO at a controlled gate to "replace"
         val azathothAvailable = loyaltyCards.has(AzathothIGOOCard) && f.power >= 8 &&
-            f.allGates.onMap.%(r => f.at(r).goos.any).any
+            f.allGates.onMapOrMoon.%(r => f.at(r).goos.any).any
 
         if (availableStandardIGOOs.any || cthughaAvailable || azathothAvailable)
             + AwakenIGOOMainAction(f)
@@ -2624,8 +2673,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // AwakenIGOOMainAction sub-menu (alphabetical, with the others).
 
         // Bokrug: re-awakening (owner keeps card, Bokrug in pool)
-        if (f.loyaltyCards.has(BokrugCard) && f.pool(Bokrug).any && f.power >= 6) {
-            areas.nex.%(f.canAwakenIGOO).%(f.affords(6)).some.foreach { gates =>
+        if (f.loyaltyCards.has(BokrugCard) && f.pool(Bokrug).any && f.power >= 4) {
+            f.awakenIGOORegions.%(f.canAwakenIGOO).%(f.affords(4)).some.foreach { gates =>
                 + IndependentGOOMainAction(f, BokrugCard, gates)
             }
         }
@@ -2706,7 +2755,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             .%(igoo => igoo != CthughaCard)
             .%(igoo => {
                 val cost = igooCost(f, igoo)
-                areas.nex.%(f.canAwakenIGOO).%(r => dcTenebrosumGuard || f.affords(cost)(r)).any
+                f.awakenIGOORegions.%(f.canAwakenIGOO).%(r => dcTenebrosumGuard || f.affords(cost)(r)).any
             })
         val cthughaAvailable = loyaltyCards.has(CthughaCard) && {
             val allGOOs = f.allInPlay.%(_.uclass.isGOO).%(u => u.uclass != Cthugha)
@@ -2717,12 +2766,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }).any
         }
         val azathothAvailable = loyaltyCards.has(AzathothIGOOCard) && (dcTenebrosumGuard || f.power >= 8) &&
-            f.allGates.onMap.%(r => f.at(r).goos.any).any
+            f.allGates.onMapOrMoon.%(r => f.at(r).goos.any).any
         if (availableStandardIGOOs.any || cthughaAvailable || azathothAvailable)
             + AwakenIGOOMainAction(f)
         // Bokrug re-awakening (owner keeps card, Bokrug in pool)
-        if (f.loyaltyCards.has(BokrugCard) && f.pool(Bokrug).any && (dcTenebrosumGuard || f.power >= 6)) {
-            areas.nex.%(f.canAwakenIGOO).%(r => dcTenebrosumGuard || f.affords(6)(r)).some.foreach { gates =>
+        if (f.loyaltyCards.has(BokrugCard) && f.pool(Bokrug).any && (dcTenebrosumGuard || f.power >= 4)) {
+            f.awakenIGOORegions.%(f.canAwakenIGOO).%(r => dcTenebrosumGuard || f.affords(4)(r)).some.foreach { gates =>
                 + IndependentGOOMainAction(f, BokrugCard, gates)
             }
         }
@@ -3366,7 +3415,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             TSExpansion.shepherdDoneThisGather = false
             factions.foreach { f =>
                 if (f.want(MaoCeremony)) {
-                    f.cultists.onMap.some.foreach { l =>
+                    f.cultists.onMapOrMoon.some.foreach { l =>
                         return Ask(f).each(l)(c => MaoCeremonyAction(f, c.region, c.uclass)).add(MaoCeremonyDoneAction(f))
                     }
                 }
@@ -3430,10 +3479,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Round 8 Bug 40: also check facedown state for IGOO spellbooks
                 val brood = f.enemies.%(e => e.has(TheBrood) && !e.oncePerGame.has(TheBrood))
                 val yogDoomSuppressed = f.unitGate.exists(u => ElderThingMindControl.suppresses(u))
-                // BB.moon is ONE controlled gate for BB — it is already in f.gates
-                // (added in FactionBB), so do NOT append it again here or it would
-                // be counted twice (2 doom instead of 1). Dedupe defensively.
-                val gates = (f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region))).distinct
+                // BB.moon is ONE controlled gate for BB and is already in f.gates
+                // (added in FactionBB), so it counts here exactly once — as a
+                // controlled gate, for both power and doom. Do NOT append it again.
+                // Yog-Sothoth (OW's unitGate) is an ADDITIONAL controlled gate and is
+                // appended additively so it always counts, even when Yog stands in a
+                // region OW already holds a physical gate in (matches upstream/HRF and
+                // the power calc's yogGateCount).
+                val gates = f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region))
                 val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
 
                 f.doom += valid.num
@@ -3610,6 +3663,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                 factions.foreach(f => f.satisfyIf(FirstDoomPhase, "The first Doom phase", turn == 2))
                 factions.foreach(f => f.satisfyIf(FiveSpellbooks, "Have five spellbooks", f.unfulfilled.num == 1))
+
+                // Moonbeast: return blocking moonbeasts from spellbooks to the map at the START
+                // of the Doom phase, before anyone's turn. Only for live play — replaying an
+                // existing game keeps its recorded end-of-doom return so old game logs stay valid.
+                // moonbeastPlacedThisDoom was just cleared above, so every blocked spellbook qualifies;
+                // moonbeasts placed during this same Doom phase are added afterward and so wait for next Doom.
+                if (!nextReplayActionHint.any && moonbeastOnSpellbook.any) {
+                    val refs = moonbeastOnSpellbook.keys.toList
+                    return Force(MoonbeastReturnLoopAction(refs, CheckSpellbooksAction(DoomPhaseAction)))
+                }
 
                 CheckSpellbooksAction(DoomPhaseAction) // Then(...)
             }
@@ -3810,8 +3873,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val returnable = moonbeastOnSpellbook.filter { case (ref, _) => !moonbeastPlacedThisDoom.contains(ref) }
                 moonbeastPlacedThisDoom = Set()
                 if (returnable.any) {
-                    val entries = returnable.toList
-                    return Force(MoonbeastDoomReturnAction(factions.first, entries, postMoonbeast))
+                    val refs = returnable.keys.toList
+                    return Force(MoonbeastReturnLoopAction(refs, postMoonbeast))
                 }
 
                 Force(postMoonbeast)
@@ -3861,7 +3924,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     f.takeES(tabletsBonus)
                     f.log(TabletsOfTheGods.styled(TT), ": gained", tabletsBonus.es, "bonus (HP at gates)")
                 }
-                f.all(HighPriest).onMap.foreach(eliminate)
+                f.all(HighPriest).onMapOrMoon.foreach(eliminate)
                 f.log(TabletsOfTheGods.styled(TT), ": eliminated all High Priests")
             }
 
@@ -4355,7 +4418,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 BBExpansion.postCGTriggers()
                 fbeActionInProgress = true
                 // Brown Jenkin Familiar: forced respawn for any faction with BJ in pool + 2 Power
-                val bjFaction = factions.find(f => f.loyaltyCards.has(BrownJenkinCard) && f.allInPlay.%(_.uclass == BrownJenkin).none && f.pool(BrownJenkin).any && f.power >= 2 && f.allGates.onMap.any)
+                val bjFaction = factions.find(f => f.loyaltyCards.has(BrownJenkinCard) && f.allInPlay.%(_.uclass == BrownJenkin).none && f.pool(BrownJenkin).any && f.power >= 2 && f.allGates.onMapOrMoon.any)
                 bjFaction match {
                     case Some(f) => BrownJenkinFamiliarCheckAction(f, CheckSpellbooksAction(PreMainAction(self)))
                     case None => CheckSpellbooksAction(PreMainAction(self))
@@ -4772,6 +4835,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case MovedAction(self, u, o, r) =>
             MoveContinueAction(self, true)
 
+        // Base-game fallback for the Chronophage entry point. NeutralMonstersExpansion
+        // handles this when neutral monsters/terrors are in play; when they are not,
+        // the action still reaches here (powers wrap their continuation unconditionally),
+        // so just continue to the caller's own continuation.
+        case CronophageAfterMoveAction(self, then) =>
+            Force(then)
+
         // ATTACK
         case AttackMainAction(f, l, effect) =>
             val ee = factionlike.but(f)
@@ -5003,7 +5073,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // Mind Parasite: separate capture flow — single menu with region-grouped targets
         case MindParasiteCaptureMainAction(self) =>
-            val mpTargets = self.units.%(_.uclass == MindParasiteCultist).%(_.region.onMap).%(u => !mindParasiteCaptureRejected.has(u.ref))
+            val mpTargets = self.units.%(_.uclass == MindParasiteCultist).%(_.region.onMapOrMoon).%(u => !mindParasiteCaptureRejected.has(u.ref))
             val variants = mpTargets./(_.region).distinct./~ { r =>
                 self.at(r).%(_.uclass == MindParasiteCultist).%(u => !mindParasiteCaptureRejected.has(u.ref))./(u =>
                     MindParasiteCaptureTargetAction(self, r, u.ref).as(u.ref.full)("Capture", for1PowerWithTax(r, self), "in", r, self.iced(r))
