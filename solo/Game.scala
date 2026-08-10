@@ -280,6 +280,17 @@ class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int,
             game.fbHasCGActive &&
             FB.units.exists(u => u.region == r && (u.uclass == RevenantOfKnaa || u.uclass == Ghatanothoa)))
             game.fbCyclopeanGazeActionRegions :+= r
+        // Cyclopean Gaze must NOT fire on Pains (rulebook): a Pain-driven forced retreat
+        // is not a Move/placement into the gaze region. The forced-retreat callers set
+        // fbSuppressCGForPlacement, which already blocks the edge-case path above — but the
+        // AfterAction snapshot-DELTA path (FactionFB) compares before/after unit counts and
+        // would still see this arrival as +1 and fire CG. Keep the snapshot in lockstep with
+        // the suppressed arrival so the later delta nets zero. (E.g. Opener of the Way's
+        // Dread Curse of Azathoth pains an enemy unit into a Revenant/Ghatanothoa region.)
+        if (game.fbSuppressCGForPlacement && prev != r && faction != FB &&
+            uclass.utype != Building && game.fbHasCGActive &&
+            game.fbCyclopeanGazeSnapshot.contains((faction, r)))
+            game.fbCyclopeanGazeSnapshot += (faction, r) -> faction.at(r).%(_.uclass.utype != Building).num
     }
 
     override def toString = short
@@ -293,6 +304,13 @@ class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int,
     def styledName(implicit game : Game) : String = if (uclass == MindParasiteCultist) {
         MindParasite.styledUnit(this)
     } else uclass.name.styled(faction)
+
+    // Parasite-aware version of `full` for menu labels: a parasitized cultist
+    // renders its split (original/insect) color exactly as the game log does;
+    // any other unit falls through to the normal full rendering. Use this at
+    // direct g.unit(x).full label sites where a parasitized cultist can appear.
+    def styledFull(implicit game : Game) : String =
+        if (uclass == MindParasiteCultist) MindParasite.styledUnit(this) else full
 
     def tag(s : UnitState) = state.has(s)
     def add(s : UnitState) { state :+= s }
@@ -357,6 +375,14 @@ trait Faction { f =>
     def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = None
     def awakenDesc(u : UnitClass) : |[String] = None
     def canAwakenIGOO(r : Region)(implicit game : Game) : Boolean = f.gates.has(r) && f.at(r, GOO, ElderGod).any
+    // Regions eligible for iGOO awakening. `areas` = board.regions, which EXCLUDES
+    // the Moon (MoonGlyph.onMap=false). The Moon is a BB-Controlled Gate "for all
+    // purposes" (Moon Tile rule), so BB must be able to awaken an iGOO there when a
+    // GOO/Elder God (e.g. Bastet — Elder Gods count as GOOs for all purposes except
+    // combat and ES) already sits on it. Append BB.moon for BB, same idiom as
+    // summonRegions, so the awaken scans see it.
+    def awakenIGOORegions(implicit game : Game) : $[Region] =
+        (areas.nex ++ (f == BB).??($(BB.moon))).distinct
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int
     def neutralStrength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) =
         units(Ghast).num * 0 +
@@ -444,6 +470,14 @@ object MindParasite {
     // Get the original faction of a parasitized unit
     def originalFaction(u : UnitFigure)(implicit game : Game) : |[Faction] =
         game.mindParasiteOriginalFaction.get(u.ref)
+
+    // TRUE owner of a cultist for ownership-based effects (Agony Sting, Tsunami):
+    // a parasitized cultist belongs to its ORIGINAL faction, not the insect
+    // controller its figure currently lives under. Any other unit is owned by
+    // its own faction. Mind Parasite control is limited (§ loyalty card) and must
+    // NOT redirect original-ownership effects (task #110).
+    def trueOwner(u : UnitFigure)(implicit game : Game) : Faction =
+        if (u.uclass == MindParasiteCultist) originalFaction(u).|(u.faction) else u.faction
 
     // Check if an Acolyte SHOULD be parasitized (off-gate, shares area with enemy Insect)
     // BB Fix 80, v2.4.30 — Mind Parasite affects Earth Cats. Earth Cats are BB's
@@ -2325,7 +2359,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             .%(igoo => igoo != CthughaCard)
             .%(igoo => {
                 val cost = igooCost(f, igoo)
-                areas.nex.%(f.canAwakenIGOO).%(f.affords(cost)).any
+                f.awakenIGOORegions.%(f.canAwakenIGOO).%(f.affords(cost)).any
             })
 
         // Cthugha: replace any non-Cthugha GOO at one of f's gates (cost = 6 - replaced.cost)
@@ -2374,8 +2408,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // AwakenIGOOMainAction sub-menu (alphabetical, with the others).
 
         // Bokrug: re-awakening (owner keeps card, Bokrug in pool)
-        if (f.loyaltyCards.has(BokrugCard) && f.pool(Bokrug).any && f.power >= 6) {
-            areas.nex.%(f.canAwakenIGOO).%(f.affords(6)).some.foreach { gates =>
+        if (f.loyaltyCards.has(BokrugCard) && f.pool(Bokrug).any && f.power >= 4) {
+            f.awakenIGOORegions.%(f.canAwakenIGOO).%(f.affords(4)).some.foreach { gates =>
                 + IndependentGOOMainAction(f, BokrugCard, gates)
             }
         }
@@ -3086,10 +3120,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Round 8 Bug 40: also check facedown state for IGOO spellbooks
                 val brood = f.enemies.%(e => e.has(TheBrood) && !e.oncePerGame.has(TheBrood))
                 val yogDoomSuppressed = f.unitGate.exists(u => ElderThingMindControl.suppresses(u))
-                // BB.moon is ONE controlled gate for BB — it is already in f.gates
-                // (added in FactionBB), so do NOT append it again here or it would
-                // be counted twice (2 doom instead of 1). Dedupe defensively.
-                val gates = (f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region))).distinct
+                // BB.moon is ONE controlled gate for BB and is already in f.gates
+                // (added in FactionBB), so it counts here exactly once — as a
+                // controlled gate, for both power and doom. Do NOT append it again.
+                // Yog-Sothoth (OW's unitGate) is an ADDITIONAL controlled gate and is
+                // appended additively so it always counts, even when Yog stands in a
+                // region OW already holds a physical gate in (matches upstream/HRF and
+                // the power calc's yogGateCount).
+                val gates = f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region))
                 val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
 
                 f.doom += valid.num
