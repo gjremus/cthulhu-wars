@@ -948,7 +948,7 @@ object CthulhuWarsSolo {
 
             case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0, splitTint : |[Processing] = None)
 
-            case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int) {
+            case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int, parasiteOrig : |[Faction] = None) {
                 val defaultProcessing = Processing(None, None, None)
 
                 val tint = faction @@ {
@@ -1012,13 +1012,14 @@ object CthulhuWarsSolo {
                         case _ => null
                     }
 
-                    // Mind Parasite: split color — left half original faction, right half insect owner
+                    // Mind Parasite: split color — left half THIS cultist's original
+                    // faction, right half insect owner. parasiteOrig is resolved per
+                    // individual figure at construction (see the factionlike loop);
+                    // must NOT fall back to a region-wide lookup, or two parasitized
+                    // cultists of different original factions in the same area would
+                    // both take the first one's color.
                     case MindParasiteCultist =>
-                        val origFac = if (region != null) {
-                            implicit val g : Game = displayGame
-                            factionToState(faction)(g).at(region).%(_.uclass == MindParasiteCultist).headOption./~(u => displayGame.mindParasiteOriginalFaction.get(u.ref))
-                        } else None
-                        val origTint = origFac./(of => DrawItem(null, of, Acolyte, Alive, $, 0, 0).tint).|(tint)
+                        val origTint = parasiteOrig./(of => DrawItem(null, of, Acolyte, Alive, $, 0, 0).tint).|(tint)
                         DrawRect("ts-acolyte", |(origTint), x - 17, y - 54, 39, 60, splitTint = |(tint))
 
                     case HighPriest => faction match {
@@ -1762,7 +1763,11 @@ object CthulhuWarsSolo {
                     factionlike.foreach { f =>
                         f.at(r).diff(keeper.$).foreach { u =>
                             val tags = u.state ++ game.mummifiedCultists.has(u.ref).$(Mummified)
-                            all +:= DrawItem(r, f, u.uclass, u.health, tags, 0, 0)
+                            // Per-figure Mind Parasite original faction, so each
+                            // parasitized cultist splits with its OWN true color
+                            // (refreshed every render from the live mapping).
+                            val pOrig = if (u.uclass == MindParasiteCultist) game.mindParasiteOriginalFaction.get(u.ref) else None
+                            all +:= DrawItem(r, f, u.uclass, u.health, tags, 0, 0, pOrig)
                         }
                     }
 
@@ -1902,20 +1907,26 @@ object CthulhuWarsSolo {
                     if (game.setup.%(_.iceAge.?(_ == r)).any)
                         all +:= DrawItem(r, null, IceAgeToken, Alive, $, 0, 0)
 
+                    // When a figure keeps its spot between two frames we reuse last
+                    // frame's drawing so it doesn't jump around. But the split-colour
+                    // marker (parasiteOrig) is NOT part of the match key below, so a
+                    // reused figure would keep last frame's colour and never update
+                    // when a NEW faction gets mind-parasited. Always copy the fresh
+                    // parasiteOrig onto the reused figure so the split colour refreshes.
                     all.foreach { d =>
                         saved.find(o => d.region == o.region && d.faction == o.faction && d.unit == o.unit && d.tags == o.tags && d.health == o.health) match {
                             case Some(o) =>
-                                sticking +:= o
+                                sticking +:= o.copy(parasiteOrig = d.parasiteOrig)
                                 saved :-= o
                             case None =>
                                 saved.find(o => d.region == o.region && d.faction == o.faction && d.unit == o.unit && d.tags == o.tags) match {
                                     case Some(o) =>
-                                        sticking +:= o.copy(health = d.health)
+                                        sticking +:= o.copy(health = d.health, parasiteOrig = d.parasiteOrig)
                                         saved :-= o
                                     case None =>
                                         saved.find(o => d.region == o.region && d.faction == o.faction && d.unit == o.unit) match {
                                             case Some(o) =>
-                                                sticking +:= o.copy(tags = d.tags, health = d.health)
+                                                sticking +:= o.copy(tags = d.tags, health = d.health, parasiteOrig = d.parasiteOrig)
                                                 saved :-= o
                                             case None =>
                                                 free +:= d
