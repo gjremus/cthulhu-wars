@@ -2198,7 +2198,7 @@ object CthulhuWarsSolo {
                             def generateCandidates(count : Int) = Array.tabulate(count)(n =>
                                 if (partitioned) findWeighted(px, py, r) else find(px, py)
                             ).sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }
-                                .map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y) }
+                                .map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y, d.parasiteOrig) }
 
                             def pickBest(candidates : Array[DrawItem]) : DrawItem = if (board.isLibraryMap && place.nonEmpty) {
                                 val withSpill = candidates.toSeq.map(c => (c, directionalSpill(c.rect)))
