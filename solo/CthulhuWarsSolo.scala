@@ -928,7 +928,7 @@ object CthulhuWarsSolo {
 
             case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0, splitTint : |[Processing] = None)
 
-            case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int) {
+            case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int, parasiteOrig : |[Faction] = None) {
                 val defaultProcessing = Processing(None, None, None)
 
                 val tint = faction @@ {
@@ -972,13 +972,23 @@ object CthulhuWarsSolo {
                         case _ => null
                     }
 
-                    // Mind Parasite: split color — left half original faction, right half insect owner
+                    // Mind Parasite: split color — left half THIS cultist's original
+                    // faction, right half insect owner. parasiteOrig is resolved per
+                    // individual figure at construction (see the factionlike loop);
+                    // must NOT fall back to a region-wide lookup, or two parasitized
+                    // cultists of different original factions in the same area would
+                    // both take the first one's color.
                     case MindParasiteCultist =>
-                        val origFac = if (region != null) {
-                            implicit val g : Game = displayGame
-                            factionToState(faction)(g).at(region).%(_.uclass == MindParasiteCultist).headOption./~(u => displayGame.mindParasiteOriginalFaction.get(u.ref))
-                        } else None
-                        val origTint = origFac./(of => DrawItem(null, of, Acolyte, Alive, $, 0, 0).tint).|(tint)
+                        // Split color on the MAP, matching the game-log text: left half is
+                        // THIS cultist's ORIGINAL faction color, right half is the insect
+                        // controller's color. Uses the reliable neutral cultist silhouette
+                        // (ts-acolyte) for both halves — only the tint differs. origFac is
+                        // resolved PER FIGURE from parasiteOrig (set at construction from the
+                        // live mind-parasite mapping), so two parasitized cultists of different
+                        // original factions in the same area each get their OWN left color and
+                        // it never "sticks" on the first one's faction.
+                        val origFac = parasiteOrig.|(faction)
+                        val origTint = DrawItem(null, origFac, Acolyte, Alive, $, 0, 0).tint
                         DrawRect("ts-acolyte", |(origTint), x - 17, y - 54, 39, 60, splitTint = |(tint))
 
                     case HighPriest => faction match {
@@ -1718,7 +1728,11 @@ object CthulhuWarsSolo {
                     factionlike.foreach { f =>
                         f.at(r).diff(keeper.$).foreach { u =>
                             val tags = u.state ++ game.mummifiedCultists.has(u.ref).$(Mummified)
-                            all +:= DrawItem(r, f, u.uclass, u.health, tags, 0, 0)
+                            // Per-figure Mind Parasite original faction, so each
+                            // parasitized cultist splits with its OWN true color
+                            // (refreshed every render from the live mapping).
+                            val pOrig = if (u.uclass == MindParasiteCultist) game.mindParasiteOriginalFaction.get(u.ref) else None
+                            all +:= DrawItem(r, f, u.uclass, u.health, tags, 0, 0, pOrig)
                         }
                     }
 
@@ -1859,19 +1873,25 @@ object CthulhuWarsSolo {
                         all +:= DrawItem(r, null, IceAgeToken, Alive, $, 0, 0)
 
                     all.foreach { d =>
+                        // When a figure is reused from last frame's cache (`saved`), the CACHED
+                        // object's fields are kept for position stability — but parasiteOrig is
+                        // NOT part of the match key, so a cultist newly Mind-Parasited (or whose
+                        // controller changed) would keep last frame's split color and never
+                        // update. Always copy the FRESH parasiteOrig from `d` onto any reused
+                        // object so the split-color left half tracks the live mapping every frame.
                         saved.find(o => d.region == o.region && d.faction == o.faction && d.unit == o.unit && d.tags == o.tags && d.health == o.health) match {
                             case Some(o) =>
-                                sticking +:= o
+                                sticking +:= o.copy(parasiteOrig = d.parasiteOrig)
                                 saved :-= o
                             case None =>
                                 saved.find(o => d.region == o.region && d.faction == o.faction && d.unit == o.unit && d.tags == o.tags) match {
                                     case Some(o) =>
-                                        sticking +:= o.copy(health = d.health)
+                                        sticking +:= o.copy(health = d.health, parasiteOrig = d.parasiteOrig)
                                         saved :-= o
                                     case None =>
                                         saved.find(o => d.region == o.region && d.faction == o.faction && d.unit == o.unit) match {
                                             case Some(o) =>
-                                                sticking +:= o.copy(tags = d.tags, health = d.health)
+                                                sticking +:= o.copy(tags = d.tags, health = d.health, parasiteOrig = d.parasiteOrig)
                                                 saved :-= o
                                             case None =>
                                                 free +:= d
@@ -2128,7 +2148,7 @@ object CthulhuWarsSolo {
                             def generateCandidates(count : Int) = Array.tabulate(count)(n =>
                                 if (partitioned) findWeighted(px, py, r) else find(px, py)
                             ).sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }
-                                .map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y) }
+                                .map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y, d.parasiteOrig) }
 
                             def pickBest(candidates : Array[DrawItem]) : DrawItem = if (board.isLibraryMap && place.nonEmpty) {
                                 val withSpill = candidates.toSeq.map(c => (c, directionalSpill(c.rect)))
@@ -2280,7 +2300,12 @@ object CthulhuWarsSolo {
 
                 draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0)).foreach { d =>
                     if (d.icon.any)
-                        g.drawImage(getAsset(d.icon.get.key), d.icon.get.x, d.icon.get.y)
+                        // Draw at the icon's SPECIFIED width/height (not the image's natural
+                        // 60x60). The kill/pain centering offset (hs = 30*unitScale) assumes the
+                        // icon is scaled to is = 60*unitScale; on the Library map unitScale=2, so
+                        // the 2-arg drawImage (natural size) left the skull 30px up-and-left of the
+                        // unit. Using the 4-arg form keeps it centered on every board scale.
+                        g.drawImage(getAsset(d.icon.get.key), d.icon.get.x, d.icon.get.y, d.icon.get.width, d.icon.get.height)
                 }
 
                 // Library: draw hint card, tome info, and white Custodian/Librarian silhouettes
