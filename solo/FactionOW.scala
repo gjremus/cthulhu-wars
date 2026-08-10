@@ -370,21 +370,33 @@ object OWExpansion extends Expansion {
             }
 
         case DreadCurseAssignAction(f, r, e, k, p, self, s, uc) =>
-            val u = self.at(r, uc).%(_.health == Alive).sortP.first
-            u.health = (s == Kill).?(Killed).|(Pained)
+            // Replay-safety: on reload the exact Alive target may no longer be
+            // standing (rebuild-from-history state mismatch). Apply the kill/pain
+            // if the unit is present; otherwise skip the mutation but keep the
+            // flow going so the game does not crash. Live play always has the
+            // target, so behavior is unchanged -- this only steps aside in the
+            // exact spot that used to throw "head of empty list".
+            self.at(r, uc).%(_.health == Alive).sortP.headOption.foreach { u =>
+                u.health = (s == Kill).?(Killed).|(Pained)
+            }
             Ask(f).add(DreadCurseSplitAction(f, r, $, e, k, p))
 
         case DreadCurseRetreatAction(self, r, e, f, uc) =>
             Ask(self).each(r.connectedForRetreat)(d => DreadCurseRetreatToAction(self, r, e, f, uc, d))
 
         case DreadCurseRetreatToAction(self, r, e, f, uc, d) =>
-            val u = f.at(r, uc).%(_.health == Pained).sortP.first
-            game.fbSuppressCGForPlacement = true
-            u.region = d
-            game.fbSuppressCGForPlacement = false
-            u.onGate = false
-            u.health = Alive
-            log(u, "was", "pained".styled("pain"), "to", d)
+            // Replay-safety: the Pained unit to retreat may be absent on reload
+            // (rebuild-from-history mismatch). Retreat it if present; otherwise
+            // skip the placement but continue the retreat chain so the game does
+            // not crash. Live play always has the unit, so behavior is unchanged.
+            f.at(r, uc).%(_.health == Pained).sortP.headOption.foreach { u =>
+                game.fbSuppressCGForPlacement = true
+                u.region = d
+                game.fbSuppressCGForPlacement = false
+                u.onGate = false
+                u.health = Alive
+                log(u, "was", "pained".styled("pain"), "to", d)
+            }
 
             var m = e./~(f => f.at(r).%(_.health == Pained))
 
