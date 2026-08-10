@@ -405,12 +405,14 @@ object OWExpansion extends Expansion {
 
         case DreadCurseAssignAction(f, r, e, k, p, self, s, uc) =>
             // Replay-safety: on reload the exact Alive target may no longer be
-            // standing (rebuild-from-history state mismatch). Apply the kill/pain
-            // if the unit is present; otherwise skip the mutation but keep the
-            // flow going so the game does not crash. Live play always has the
-            // target, so behavior is unchanged — this only steps aside in the
-            // exact spot that used to throw "head of empty list".
-            self.at(r, uc).%(_.health == Alive).sortP.headOption.foreach { u =>
+            // standing (rebuild-from-history state mismatch). Prefer the Alive
+            // unit as in live play; if none is Alive, FALL BACK to any matching
+            // unit of that class in the region so the recorded kill/pain still
+            // lands on a real figure and positions replay correctly. Only when
+            // no such unit exists at all do we skip — that is the exact spot that
+            // used to throw "head of empty list".
+            self.at(r, uc).%(_.health == Alive).sortP.headOption
+                .orElse(self.at(r, uc).sortP.headOption).foreach { u =>
                 u.health = (s == Kill).?(Killed).|(Pained)
             }
             Ask(f).add(DreadCurseSplitAction(f, r, $, e, k, p))
@@ -420,10 +422,15 @@ object OWExpansion extends Expansion {
 
         case DreadCurseRetreatToAction(self, r, e, f, uc, d) =>
             // Replay-safety: the Pained unit to retreat may be absent on reload
-            // (rebuild-from-history mismatch). Retreat it if present; otherwise
-            // skip the placement but continue the retreat chain so the game does
-            // not crash. Live play always has the unit, so behavior is unchanged.
-            f.at(r, uc).%(_.health == Pained).sortP.headOption.foreach { u =>
+            // (rebuild-from-history mismatch, because the retreat is recorded by
+            // CLASS not identity). Prefer a Pained unit as in live play; if none
+            // is Pained, FALL BACK to any matching-class unit of that faction in
+            // the region so the recorded region-move still executes and positions
+            // replay correctly (previously this silently skipped, stranding the
+            // unit in the source region). Only skip when no such unit exists at
+            // all — the exact spot that used to throw "head of empty list".
+            f.at(r, uc).%(_.health == Pained).sortP.headOption
+                .orElse(f.at(r, uc).sortP.headOption).foreach { u =>
                 game.fbSuppressCGForPlacement = true
                 u.region = d
                 game.fbSuppressCGForPlacement = false
