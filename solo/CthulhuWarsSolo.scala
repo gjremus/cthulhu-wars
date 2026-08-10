@@ -154,6 +154,19 @@ object CthulhuWarsSolo {
         result.canvas
     }
 
+    // Solid-black silhouette of a sprite (used for the Mind Parasite split-color
+    // divider). "color"-mode tinting can't make true black — it only shifts
+    // hue/saturation — so fill opaque black and mask to the sprite's own alpha.
+    def getBlackSilhouette(k : String) : html.Canvas = {
+        val source = dom.document.getElementById(k).asInstanceOf[html.Image]
+        val result = new Bitmap(source.width, source.height)
+        result.context.fillStyle = "#000000"
+        result.context.fillRect(0, 0, source.width, source.height)
+        result.context.globalCompositeOperation = "destination-in"
+        result.context.drawImage(source, 0, 0)
+        result.canvas
+    }
+
     def newDiv(cl : String, content : String, click : () => Unit = null) = {
         val p = dom.document.createElement("div").asInstanceOf[html.Div]
         p.className = cl
@@ -2336,7 +2349,7 @@ object CthulhuWarsSolo {
                             def generateCandidates(count : Int) = Array.tabulate(count)(n =>
                                 if (partitioned) findWeighted(px, py, r) else find(px, py)
                             ).sortBy { case (x, y) => ((x - px).abs * 5 + (y - py).abs) }
-                                .map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y) }
+                                .map { case (x, y) => DrawItem(d.region, d.faction, d.unit, d.health, d.tags, x, y, d.parasiteOrig) }
 
                             def pickBest(candidates : Array[DrawItem]) : DrawItem = if (board.isLibraryMap && place.nonEmpty) {
                                 val withSpill = candidates.toSeq.map(c => (c, directionalSpill(c.rect)))
@@ -2462,6 +2475,18 @@ object CthulhuWarsSolo {
                         g.rect(d.x + halfW, d.y, d.width - halfW, d.height)
                         g.clip()
                         g.drawImage(rightImg, d.x, d.y, d.width, d.height)
+                        g.restore()
+                        // Thin black divider down the seam so two similar half-colors
+                        // stay distinguishable. Drawn as a BLACK-tinted copy of the same
+                        // sprite clipped to a narrow center band, so the line only lands
+                        // on the figure silhouette (never in the transparent corners).
+                        val blackImg = getBlackSilhouette(d.key)
+                        val bandW = math.max(2, d.width / 24)
+                        g.save()
+                        g.beginPath()
+                        g.rect(d.x + halfW - bandW / 2, d.y, bandW, d.height)
+                        g.clip()
+                        g.drawImage(blackImg, d.x, d.y, d.width, d.height)
                         g.restore()
                     } else if (d.rotation != 0.0) {
                         g.save()
