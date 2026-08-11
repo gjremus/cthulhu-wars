@@ -691,7 +691,7 @@ object DSExpansion extends Expansion {
                 val u = game.unit(ref)
                 val from = u.region
                 u.region = r
-                self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
+                self.log("moved", u.styledName, "from", from, "to", r, "via", Omnipotence.styled(self))
             }
             self.oncePerTurn :+= Omnipotence
             // Chronophage: Omnipotence moved own Avatars → offer teleport (A12).
@@ -702,7 +702,7 @@ object DSExpansion extends Expansion {
                 val u = game.unit(ref)
                 val from = u.region
                 u.region = r
-                self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
+                self.log("moved", u.styledName, "from", from, "to", r, "via", Omnipotence.styled(self))
             }
             self.oncePerTurn :+= Omnipotence
             // Chronophage: Omnipotence moved own Avatars → offer teleport (A12).
@@ -728,7 +728,7 @@ object DSExpansion extends Expansion {
             val u = game.unit(uRef)
             val from = u.region
             u.region = r
-            self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
+            self.log("moved", u.styledName, "from", from, "to", r, "via", Omnipotence.styled(self))
             if (remaining.any)
                 Force(OmnipotenceMoveSeparatelyAction(self, remaining))
             else {

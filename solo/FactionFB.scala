@@ -1092,7 +1092,7 @@ object FBExpansion extends Expansion {
             } else {
                 game.eliminate(u)
                 game.fbWritheKillLog :+= FBWritheKillEntry(uRef, r, origClass, None)
-                self.log(Writhe.styled(FB) + ": eliminated", u.uclass.styled(self), "in", r)
+                self.log(Writhe.styled(FB) + ": eliminated", u.styledName, "in", r)
             }
             Force(FBWritheAssignKillAction(self, remainingKills - 1, remainingPains, $))
 
@@ -1166,7 +1166,7 @@ object FBExpansion extends Expansion {
                 u.region = r
                 u.onGate = false
                 game.fbWritheUsedUnits :+= uRef
-                self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
+                self.log(Writhe.styled(FB) + ": relocated", u.styledName, "from", from, "to", r)
             }
             EndAction(self)
 
@@ -1178,7 +1178,7 @@ object FBExpansion extends Expansion {
                 u.region = r
                 u.onGate = false
                 game.fbWritheUsedUnits :+= uRef
-                self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
+                self.log(Writhe.styled(FB) + ": relocated", u.styledName, "from", from, "to", r)
             }
             EndAction(self)
 
@@ -1229,7 +1229,7 @@ object FBExpansion extends Expansion {
             // Bug fix Round 6: store destination for "join" hint on next unit's region list
             game.fbWritheLastPainRegion = |(r)
             game.fbWritheLastPainedUnit = u.uclass.name
-            self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
+            self.log(Writhe.styled(FB) + ": relocated", u.styledName, "from", from, "to", r)
             if (remaining.any)
                 Force(FBWritheMoveOneAction(self, remaining.head, remaining.tail))
             else
@@ -1244,7 +1244,7 @@ object FBExpansion extends Expansion {
             u.onGate = false
             game.fbWritheLastPainRegion = |(r)
             game.fbWritheLastPainedUnit = u.uclass.name
-            self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
+            self.log(Writhe.styled(FB) + ": relocated", u.styledName, "from", from, "to", r)
             if (remaining.any)
                 Force(FBWritheMoveOneAction(self, remaining.head, remaining.tail))
             else
@@ -1561,7 +1561,7 @@ object FBExpansion extends Expansion {
                 game.eliminate(u)
                 val d = self.at(r, Desiccated).head
                 game.eliminate(d)
-                self.log(TheEyeOpens.styled(FB) + ": eliminated", u.uclass.styled(f), "and", Desiccated.styled(FB), "in", r)
+                self.log(TheEyeOpens.styled(FB) + ": eliminated", u.styledName, "and", Desiccated.styled(FB), "in", r)
                 // Ice Age: costs 1 extra power in Ice Age region
                 val iceAgeExtra = game.factions.exists(wf => wf.iceAge.contains(r))
                 if (iceAgeExtra) {
@@ -1829,7 +1829,7 @@ object FBExpansion extends Expansion {
                     // Only the FB-selected unit (or no other choices) — eliminate it directly
                     val from = u.region
                     game.eliminate(u)
-                    self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + u.uclass.styled(painedFaction) + " in " + from + " had nowhere to retreat and was eliminated")
+                    self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + u.styledName(game) + " in " + from + " had nowhere to retreat and was eliminated")
                     Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
                 } else {
                     // Multiple units — painted faction chooses which to lose
@@ -1840,7 +1840,7 @@ object FBExpansion extends Expansion {
         case FBCyclopeanGazeKillChoiceAction(self, painedFaction, killRef, r, sourceUnit, sourcesPending, actor, fromBattle) =>
             // Round 8 Bug 51: painted faction's "soak" choice — eliminate the chosen unit
             val k = game.unit(killRef)
-            val ucName = k.uclass.styled(painedFaction)
+            val ucName = k.styledName(game)
             game.eliminate(k)
             self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + ucName + " in " + r + " had nowhere to retreat and was eliminated")
             Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
@@ -1854,7 +1854,7 @@ object FBExpansion extends Expansion {
             u.region = dest
             game.fbSuppressCGForPlacement = false
             u.onGate = false
-            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": pained", u.uclass.styled(u.faction), "from", from, "to", dest)
+            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": pained", u.styledName(game), "from", from, "to", dest)
             Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
 
         // Bug fix Round 4: marker that battle-mode Cyclopean Gaze is finished. Battle.scala's

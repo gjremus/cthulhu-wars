@@ -355,6 +355,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         u.onGate = false
         u.add(Retreated)
         u.health = Alive
+        // Hound of Tindalos Chronophage (post-battle): the Hound moves for free whenever its
+        // owner moves any OTHER unit. A pained unit retreating out of the arena IS such a move,
+        // so arm the owning faction for the post-battle teleport offer (consumed at BattleEnd via
+        // houndPostBattleMoveArmed). Every retreat — single-destination, RetreatUnitAction,
+        // RetreatAllAction, Oleaginous — funnels through here, so this one spot covers them all.
+        // The offer is a harmless no-op unless the faction actually owns a Hound sitting on a
+        // Gate with another Gate to jump to (see CronophageAfterMoveAction).
+        if (u.uclass != HoundOfTindalos && u.faction.loyaltyCards.has(HoundOfTindalosCard) && u.faction.allInPlay.%(_.uclass == HoundOfTindalos).any)
+            houndPostBattleMoveArmed = (houndPostBattleMoveArmed :+ u.faction).distinct
     }
 
     def assignedKills(unit : UnitFigure) : Int =
@@ -735,7 +744,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
             refugees.foreach(u => retreat(u, r))
 
-            log(refugees./(_.short).mkString(", "), "retreated to", r)
+            log(refugees./(_.styledName).mkString(", "), "retreated to", r)
 
             proceed()
         }
@@ -867,6 +876,32 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     return jump(PostBattlePhase)
                 }
 
+                // Ghatanothoa IGOO Mummify: mummified cultists "do not participate in Battle"
+                // (rules card). attacker/defender.forces above grab EVERY unit in the arena,
+                // which wrongly included laid-down mummified cultists — so they counted toward
+                // combat strength and could be rolled for / assigned casualties. Exempt them from
+                // both sides here, mirroring the Grasping Dead exemption just below. exempt()
+                // removes the unit from its side's forces without eliminating it, so the cultist
+                // stays in the region (laid on its side) and is neither a combatant nor a
+                // casualty — exactly as the rules require. Re-check for an empty side afterwards
+                // in case every unit on a side was mummified.
+                if (game.mummifiedCultists.any) {
+                    sides.foreach { s =>
+                        s.forces.%(u => game.mummifiedCultists.has(u.ref)).foreach { u =>
+                            log(u.uclass.styled(u.faction), "in", arena, "is Mummified and does not participate in Battle")
+                            exempt(u)
+                        }
+                    }
+                    if (attacker.forces.none) {
+                        log("No attackers left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                    if (defender.forces.none) {
+                        log("No defenders left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                }
+
                 // Albino Penguins: transferred penguins are now in the battle side's units list
                 // (transferred during LaughingstockPhase before BattleStart)
                 // so they're picked up naturally by attacker.at(arena) / defender.at(arena)
@@ -880,7 +915,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             // Move from true owner's forces to insect owner's forces
                             s.forces :-= u
                             controller.forces :+= u
-                            log(u.uclass.styled(u.faction), "fights for", controller.full, "(Mind Parasite)")
+                            log(MindParasite.styledAlt(u.uclass.name, u.faction, controller), "fights for", controller.full, "(Mind Parasite)")
                         }
                     }
                 }
@@ -927,7 +962,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         }
                 }
 
-                log(attacker, "attacked with", attacker.forces./(_.short).mkString(", "), "" + attacker.str.str)
+                log(attacker, "attacked with", attacker.forces./(_.styledName).mkString(", "), "" + attacker.str.str)
 
                 attacker.forces(Nyogtha).foreach { u =>
                     log(u, "had its strength at", 4.str, "while attacking")
@@ -936,7 +971,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 if (attacker.forces.%(_.uclass == AvatarSynthesis).any)
                     log(AvatarSynthesis.styled(DS), "Azathoth die", "[" + DS.azathothDieRoll.styled("doom") + "]", "— strength", DS.azathothDieRoll.max(1).str)
 
-                log(defender, "defended with", defender.forces./(_.short).mkString(", "), "" + defender.str.str)
+                log(defender, "defended with", defender.forces./(_.styledName).mkString(", "), "" + defender.str.str)
 
                 if (defender.forces.%(_.uclass == AvatarSynthesis).any)
                     log(AvatarSynthesis.styled(DS), "Azathoth die", "[" + DS.azathothDieRoll.styled("doom") + "]", "— strength", DS.azathothDieRoll.max(1).str)
@@ -1100,7 +1135,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
 
                     if (killed.any)
-                        log(killed./(_.short).mkString(", ") + (killed.num > 1).?(" were ").|(" was ") + "killed".styled("kill"))
+                        log(killed./(_.styledName).mkString(", ") + (killed.num > 1).?(" were ").|(" was ") + "killed".styled("kill"))
                 }
 
                 jump(YigSnakebitePhase)
@@ -1122,7 +1157,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                                 if (eligible.num == 1) {
                                     // Only one target — auto-assign
                                     assignKill(eligible.head)
-                                    log(eligible.head.uclass.styled(enemy), "was", "killed".styled("kill"), "by", "Snakebite".styled("nt"))
+                                    log(eligible.head.styledName, "was", "killed".styled("kill"), "by", "Snakebite".styled("nt"))
                                     return jump(HarbingerKillPhase)
                                 } else {
                                     // Multiple targets — enemy chooses
@@ -1355,7 +1390,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         val targets = s.opponent.forces.vulnerable
                         if (targets.any)
                             if (count >= targets.num) {
-                                log(targets./(_.short).mkString(", ") + (targets.num > 1).?(" were ").|(" was ") + "eliminated with", Berserkergang)
+                                log(targets./(_.styledName).mkString(", ") + (targets.num > 1).?(" were ").|(" was ") + "eliminated with", Berserkergang)
                                 targets.foreach(eliminate)
                             }
                             else
@@ -1432,7 +1467,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     val pained = s.forces.%(_.health == Pained)
 
                     if (pained.any)
-                        log(pained./(_.short).mkString(", ") + (pained.num > 1).?(" were ").|(" was ") + "pained".styled("pain"))
+                        log(pained./(_.styledName).mkString(", ") + (pained.num > 1).?(" were ").|(" was ") + "pained".styled("pain"))
                 }
 
                 jump(OleaginousPhase)
@@ -1711,12 +1746,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 val returned = new UnitFigure(origOwner.get, u.uclass, u.index, VelvetFanHold(self))
                 origOwner.get.units :+= returned
                 exempt(u)
-                log(self.full, "Velvet Fan".styled("nt") + ": captured", u.uclass.styled(origOwner.get), "onto Loyalty Card")
+                log(self.full, "Velvet Fan".styled("nt") + ": captured", u.styledName, "onto Loyalty Card")
             } else {
                 exempt(u)
                 u.region = VelvetFanHold(self)
                 u.health = Alive
-                log(self.full, "Velvet Fan".styled("nt") + ": captured", u.uclass.styled(u.faction), "onto Loyalty Card")
+                log(self.full, "Velvet Fan".styled("nt") + ": captured", u.styledName, "onto Loyalty Card")
             }
             // ONE unit only — jump past Velvet Fan phase
             jump(CthughaFireVampiresPhase)
@@ -1731,9 +1766,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Firestorm spellbook: also gain 1 ES per spare
             if (self.upgrades.has(Firestorm) && !self.oncePerGame.has(Firestorm)) {
                 self.takeES(1)
-                log(self.full, "Fire Vampires".styled("nt") + " + " + Firestorm.styled(self) + ": spared", u.uclass.styled(u.faction), "for", 1.power, "and", 1.es)
+                log(self.full, "Fire Vampires".styled("nt") + " + " + Firestorm.styled(self) + ": spared", u.styledName, "for", 1.power, "and", 1.es)
             } else {
-                log(self.full, "Fire Vampires".styled("nt") + ": spared", u.uclass.styled(u.faction), "for", 1.power)
+                log(self.full, "Fire Vampires".styled("nt") + ": spared", u.styledName, "for", 1.power)
             }
             // Re-offer remaining killed
             val moreKilled = self.opponent.forces.%(_.health == Killed)
@@ -1787,7 +1822,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Remove old unit
             game.eliminate(oldUnit)
             self.forces :-= oldUnit
-            log(self.full, "Prime Cause".styled("nt") + ": removed", oldUnit.uclass.styled(self), "from", r)
+            log(self.full, "Prime Cause".styled("nt") + ": removed", oldUnit.styledName, "from", r)
             // Place new unit (guard: ensure pool has the unit)
             val newUnit = if (self.pool(newUC).any) {
                 val u = self.pool(newUC).first
@@ -1841,7 +1876,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Permanently remove from game (the Dust to Dust effect — unit
             // never returns to pool)
             self.units = self.units.%(_.ref != uRef)
-            log(self.full, "permanently removed", u.uclass.styled(self), "from the game via", "Dust to Dust".styled("nt"))
+            log(self.full, "permanently removed", u.styledName, "from the game via", "Dust to Dust".styled("nt"))
             // Mark as processed so replay doesn't re-trigger (2026-07-16 FIX)
             dustToDustProcessed :+= quOwner
             proceed()
@@ -2015,7 +2050,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
             if (refugees.any) {
                 refugees.foreach(u => retreat(u, r))
-                log(refugees./(_.short).mkString(", "), "retreated to", r)
+                log(refugees./(_.styledName).mkString(", "), "retreated to", r)
             }
 
             proceed()
@@ -2156,7 +2191,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case YigSnakebiteAssignAction(self, yigOwner, uc) =>
             val u = self.forces.%(_.uclass == uc).%(u => canAssignKills(u) > 0).sortBy(_.uclass.cost).head
             assignKill(u)
-            log(u.uclass.styled(self), "was", "killed".styled("kill"), "by", "Snakebite".styled("nt"))
+            log(u.styledName, "was", "killed".styled("kill"), "by", "Snakebite".styled("nt"))
             jump(HarbingerKillPhase)
 
         // CTHUGHA COMBAT CHOICE (pre-battle)

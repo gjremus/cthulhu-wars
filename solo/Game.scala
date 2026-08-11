@@ -258,6 +258,17 @@ class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int,
             game.fbHasCGActive &&
             FB.units.exists(u => u.region == r && (u.uclass == RevenantOfKnaa || u.uclass == Ghatanothoa)))
             game.fbCyclopeanGazeActionRegions :+= r
+        // Cyclopean Gaze must NOT fire on Pains (rulebook): a Pain-driven forced retreat
+        // is not a Move/placement into the gaze region. The forced-retreat callers set
+        // fbSuppressCGForPlacement, which already blocks the edge-case path above — but the
+        // AfterAction snapshot-DELTA path (FactionFB) compares before/after unit counts and
+        // would still see this arrival as +1 and fire CG. Keep the snapshot in lockstep with
+        // the suppressed arrival so the later delta nets zero. (E.g. Opener of the Way's
+        // Dread Curse of Azathoth pains an enemy unit into a Revenant/Ghatanothoa region.)
+        if (game.fbSuppressCGForPlacement && prev != r && faction != FB &&
+            uclass.utype != Building && game.fbHasCGActive &&
+            game.fbCyclopeanGazeSnapshot.contains((faction, r)))
+            game.fbCyclopeanGazeSnapshot += (faction, r) -> faction.at(r).%(_.uclass.utype != Building).num
     }
 
     override def toString = short
@@ -271,6 +282,13 @@ class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int,
     def styledName(implicit game : Game) : String = if (uclass == MindParasiteCultist) {
         MindParasite.styledUnit(this)
     } else uclass.name.styled(faction)
+
+    // Parasite-aware version of `full` for menu labels: a parasitized cultist
+    // renders its split (original/insect) color exactly as the game log does;
+    // any other unit falls through to the normal full rendering. Use this at
+    // direct g.unit(x).full label sites where a parasitized cultist can appear.
+    def styledFull(implicit game : Game) : String =
+        if (uclass == MindParasiteCultist) MindParasite.styledUnit(this) else full
 
     def tag(s : UnitState) = state.has(s)
     def add(s : UnitState) { state :+= s }
@@ -419,6 +437,14 @@ object MindParasite {
     // Get the original faction of a parasitized unit
     def originalFaction(u : UnitFigure)(implicit game : Game) : |[Faction] =
         game.mindParasiteOriginalFaction.get(u.ref)
+
+    // TRUE owner of a cultist for ownership-based effects (Agony Sting, Tsunami):
+    // a parasitized cultist belongs to its ORIGINAL faction, not the insect
+    // controller its figure currently lives under. Any other unit is owned by
+    // its own faction. Mind Parasite control is limited (§ loyalty card) and must
+    // NOT redirect original-ownership effects (task #110).
+    def trueOwner(u : UnitFigure)(implicit game : Game) : Faction =
+        if (u.uclass == MindParasiteCultist) originalFaction(u).|(u.faction) else u.faction
 
     // Check if an Acolyte SHOULD be parasitized (off-gate, shares area with enemy Insect)
     def shouldParasitize(u : UnitFigure)(implicit game : Game) : |[Faction] = {
@@ -1627,8 +1653,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val others = factions.%(f => !f.gates.contains(r)).%(_.at(r).num > 0).sortBy(f => f.strength(f.at(r), f))
         if (gate || !others.none || ds) {
             $("" + r + ":" + gate.??(" " + keeper./(u => ("[[[".styled(u.faction.style) + " " + u + " " + "]]]".styled(u.faction.style))).|("[[[ GATE ]]]".styled("power"))) + ds.??(" " + ")|(".styled(YS))) ++
-            controler./(f => "    " + f.at(r).diff(keeper.$)./(u => u.short).mkString(", ")).$ ++
-            others.sortBy(_.units.%(_.region == r).num)./ { f =>  "    " + f.at(r)./(u => u.short).mkString(", ") } ++ $("&nbsp;")
+            controler./(f => "    " + f.at(r).diff(keeper.$)./(u => u.styledName(this)).mkString(", ")).$ ++
+            others.sortBy(_.units.%(_.region == r).num)./ { f =>  "    " + f.at(r)./(u => u.styledName(this)).mkString(", ") } ++ $("&nbsp;")
         }
         else
             $
@@ -2035,8 +2061,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // AwakenIGOOMainAction sub-menu (alphabetical, with the others).
 
         // Bokrug: re-awakening (owner keeps card, Bokrug in pool)
-        if (f.loyaltyCards.has(BokrugCard) && f.pool(Bokrug).any && f.power >= 6) {
-            areas.nex.%(f.canAwakenIGOO).%(f.affords(6)).some.foreach { gates =>
+        if (f.loyaltyCards.has(BokrugCard) && f.pool(Bokrug).any && f.power >= 4) {
+            areas.nex.%(f.canAwakenIGOO).%(f.affords(4)).some.foreach { gates =>
                 + IndependentGOOMainAction(f, BokrugCard, gates)
             }
         }
@@ -2479,7 +2505,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 if (captured.any) {
                     captured.foreach(eliminate)
 
-                    f.log("released", captured.mkString(", "))
+                    f.log("released", captured./(_.styledName(this)).mkString(", "))
                 }
             }
             } // end of `if (!shepherdDoneThisGather)` — closes the initial-entry guard

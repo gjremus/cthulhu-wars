@@ -358,7 +358,18 @@ object OWExpansion extends Expansion {
 
             painall.foreach(f => f.at(r).foreach(_.health = Pained))
 
-            val aa = ee.diff(killall).diff(painall)
+            // Replay-safety: only consider factions that still owe a result AND
+            // still have an ALIVE unit to receive it. On reload the board can
+            // hold fewer units than the recorded roll had results for (e.g. a
+            // Zygote that placed 3 acolytes at record time places only 2 on a
+            // short pool). Without the alive filter the loop keeps thinking a
+            // result is still owed, never reaches the resolve branch below, and
+            // leaves the already-killed units stranded on the board forever (the
+            // Existence-and-Colour phantom cultists) — which also starves the
+            // pool and cascades the shortage to later turns. Live play always has
+            // enough units, so this filter is a no-op there; it only changes the
+            // short-board replay case.
+            val aa = ee.diff(killall).diff(painall).%(_.at(r).%(_.health == Alive).any)
 
             if (aa.any) {
                 val f = aa(0)
@@ -399,20 +410,36 @@ object OWExpansion extends Expansion {
 
                 if (m.any)
                     Ask(self).each(m)(u => DreadCurseRetreatAction(self, r, e, u.faction, u.uclass))
-                else
+                else {
+                    // Replay-safety sweep: eliminate any Killed units still standing
+                    // in r at the curse's terminal. On a short-board replay (e.g. a
+                    // Zygote that placed fewer acolytes than the recorded roll had
+                    // results for), the recorded stream can finish with a pain-retreat
+                    // that finds no pained unit, so the resolve loop above never
+                    // removes the already-killed units — stranding them on the board
+                    // forever (the Existence-and-Colour phantom cultists). In live
+                    // play the resolve branch eliminated every killed unit before any
+                    // retreat, so no Killed unit remains here and this is a no-op.
+                    e./~(f => f.at(r).%(_.health == Killed)).foreach { u =>
+                        log(u, "was", "killed".styled("kill"))
+                        game.eliminate(u)
+                    }
                     EndAction(self)
+                }
             }
 
         case DreadCurseAssignAction(f, r, e, k, p, self, s, uc) =>
             // Replay-safety: on reload the exact Alive target may no longer be
-            // standing (rebuild-from-history state mismatch). Prefer the Alive
-            // unit as in live play; if none is Alive, FALL BACK to any matching
-            // unit of that class in the region so the recorded kill/pain still
-            // lands on a real figure and positions replay correctly. Only when
-            // no such unit exists at all do we skip — that is the exact spot that
-            // used to throw "head of empty list".
-            self.at(r, uc).%(_.health == Alive).sortP.headOption
-                .orElse(self.at(r, uc).sortP.headOption).foreach { u =>
+            // standing (rebuild-from-history state mismatch). Apply the kill/pain
+            // ONLY to a genuinely Alive unit of that class, exactly as in live
+            // play. If none is Alive we SKIP the mutation — we must never fall
+            // back to an already-Killed/Pained figure, because re-marking a
+            // killed unit as pained breaks the split's kill accounting and leaves
+            // that unit stranded on the board (the Existence-and-Colour bug).
+            // Live play always has the Alive target, so behavior is unchanged;
+            // this only steps aside where the strict base code threw "head of
+            // empty list".
+            self.at(r, uc).%(_.health == Alive).sortP.headOption.foreach { u =>
                 u.health = (s == Kill).?(Killed).|(Pained)
             }
             Ask(f).add(DreadCurseSplitAction(f, r, $, e, k, p))
@@ -423,14 +450,14 @@ object OWExpansion extends Expansion {
         case DreadCurseRetreatToAction(self, r, e, f, uc, d) =>
             // Replay-safety: the Pained unit to retreat may be absent on reload
             // (rebuild-from-history mismatch, because the retreat is recorded by
-            // CLASS not identity). Prefer a Pained unit as in live play; if none
-            // is Pained, FALL BACK to any matching-class unit of that faction in
-            // the region so the recorded region-move still executes and positions
-            // replay correctly (previously this silently skipped, stranding the
-            // unit in the source region). Only skip when no such unit exists at
-            // all — the exact spot that used to throw "head of empty list".
-            f.at(r, uc).%(_.health == Pained).sortP.headOption
-                .orElse(f.at(r, uc).sortP.headOption).foreach { u =>
+            // CLASS not identity). Retreat ONLY a genuinely Pained unit of that
+            // class, exactly as in live play. If none is Pained we SKIP — we must
+            // never fall back to an Alive/Killed figure, because moving the wrong
+            // unit (or an already-dead one) corrupts positions on replay (the
+            // Existence-and-Colour bug). Live play always has the Pained unit, so
+            // behavior is unchanged; this only steps aside where the strict base
+            // code threw "head of empty list".
+            f.at(r, uc).%(_.health == Pained).sortP.headOption.foreach { u =>
                 game.fbSuppressCGForPlacement = true
                 u.region = d
                 game.fbSuppressCGForPlacement = false
@@ -445,8 +472,23 @@ object OWExpansion extends Expansion {
 
             if (m.any)
                 Ask(self).each(m)(u => DreadCurseRetreatAction(self, r, e, u.faction, u.uclass))
-            else
+            else {
+                // Replay-safety sweep: eliminate any Killed units still standing
+                // in r at the curse's terminal. On a short-board replay (e.g. a
+                // Zygote that placed fewer acolytes than the recorded roll had
+                // results for), the split can route through the assign branch —
+                // because a surviving GOO keeps the faction "owing" a result —
+                // and never reach the resolve branch that removes killed units,
+                // stranding them on the board forever (the Existence-and-Colour
+                // phantom cultists). In live play the resolve branch already
+                // eliminated every killed unit before any retreat, so no Killed
+                // unit remains here and this sweep is a strict no-op.
+                e./~(f => f.at(r).%(_.health == Killed)).foreach { u =>
+                    log(u, "was", "killed".styled("kill"))
+                    game.eliminate(u)
+                }
                 EndAction(self)
+            }
 
         // DRAGON DESCENDING
         case DragonDescendingDoomAction(self, cost) =>

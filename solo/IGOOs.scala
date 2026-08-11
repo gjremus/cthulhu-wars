@@ -352,7 +352,7 @@ case class DoomSarnathChooseOption(self : Faction, option : Int, then : Action) 
 case class DoomSarnathChooseFactionAction(self : Faction, option : Int, target : Faction, then : Action) extends BaseFactionAction(
     implicit g => "Doom that Came to Sarnath".styled("nt"), target.full)
 case class DoomSarnathEliminateUnit(self : Faction, owner : Faction, u : UnitRef, then : Action) extends BaseFactionAction(
-    implicit g => "Choose a " + owner.full + " unit to eliminate", implicit g => g.unitOpt(u)./(uf => uf.uclass.styled(owner) + " in " + uf.region).|(u.uclass.styled(owner))) {
+    implicit g => "Choose a " + owner.full + " unit to eliminate", implicit g => g.unitOpt(u)./(uf => uf.styledName(g) + " in " + uf.region).|(u.uclass.styled(owner))) {
     override def question(implicit game : Game) = self.full + " — " + "Choose a ".styled("nt") + owner.full + " cultist or monster to eliminate"
 }
 case class DoomSarnathDiscardES(self : Faction, owner : Faction, index : Int, then : Action) extends BaseFactionAction(
@@ -474,26 +474,21 @@ object IGOOsExpansion extends Expansion {
                     f.enemies./~(_.at(r).%(_.uclass.utype == Cultist)).foreach { u =>
                         if (!game.mummifiedCultists.has(u.ref)) {
                             game.mummifiedCultists :+= u.ref
-                            log("Execration of Mu".styled("nt") + ":", u.uclass.styled(u.faction), "auto-mummified in", r)
+                            log("Execration of Mu".styled("nt") + ":", u.styledName, "auto-mummified in", r)
                         }
                     }
                 }
             }
         }
 
-        // Ghatanothoa IGOO: un-mummify cultists no longer sharing area with Ghatanothoa
-        if (game.mummifiedCultists.any) {
-            val ghatRegions = factions./~(f => f.allInPlay.%(_.uclass == GhatanotoaIGOO)./(_.region)).toSet
-            val freed = game.mummifiedCultists.%(ref => {
-                val u = game.unitOpt(ref)
-                u.exists(unit => !ghatRegions.contains(unit.region))
-            })
-            freed.foreach { ref =>
-                val u = game.unit(ref)
-                game.mummifiedCultists = game.mummifiedCultists.but(ref)
-                log(u.uclass.styled(u.faction), "in", u.region, "no longer mummified (left", "Ghatanothoa".styled("nt") + "'s area)")
-            }
-        }
+        // Ghatanothoa IGOO Mummify DURATION: Mummify is a LASTING effect. A mummified
+        // cultist stays mummified until the NEXT Doom Phase, at which point ALL mummified
+        // cultists are freed at once (see Game.scala, doom-phase handler:
+        // "Mummify: all mummified cultists are freed at Doom Phase"). It does NOT wear off
+        // when Ghatanothoa leaves the area. An earlier on-leave un-mummify block used to
+        // live here and freed cultists the instant Ghatanothoa moved out of their region
+        // (e.g. following away with Arctic Wind) — that was wrong and has been removed so
+        // the effect persists to the doom phase exactly as the rules require.
 
         // ── iGOO SPELLBOOK REQUIREMENTS (automatic checks) ──
 
@@ -1074,20 +1069,31 @@ object IGOOsExpansion extends Expansion {
 
         // Mother Hydra: Agony Sting
         case MotherHydraAgonyStingMainAction(self) =>
-            // Eligible ocean areas are those holding at least one cultist whose TRUE
-            // (original) owner is an enemy — a cultist self originally owns but that an
-            // enemy has parasitized is still self's, so it does NOT make an area eligible.
+            // === AGONY-STING-110-REVERT (game 454 replay) BEGIN ===
+            // TEMPORARY REVERT: select by CURRENT CONTROL, not true owner. Game 454
+            // ("Existence and Colour") recorded an Agony Sting that moved an enemy-
+            // CONTROLLED (Mind-Parasited) cultist whose true owner is the caster (SL).
+            // The #110 true-owner rule would skip it on replay, stranding it. Restore
+            // the #110 block below when game 454 finishes (see cw-agony-sting-restore cron).
             val oceanAreas = areas.%(_.glyph == Ocean).%(r =>
-                game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist)).exists(u => self.enemies.has(MindParasite.trueOwner(u))))
+                game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist)).exists(u => self.enemies.has(u.faction)))
+            // --- #110 version (restore when 454 done):
+            // val oceanAreas = areas.%(_.glyph == Ocean).%(r =>
+            //     game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist)).exists(u => self.enemies.has(MindParasite.trueOwner(u))))
+            // === AGONY-STING-110-REVERT END ===
             Ask(self).each(oceanAreas)(r => MotherHydraAgonyStingTargetAction(self, r)).cancel
 
         case MotherHydraAgonyStingTargetAction(self, r) =>
             self.power -= 1
-            // Only cultists whose TRUE (original) owner is an enemy of self are moved
-            // (task #110). Self's OWN cultists are immune even while parasitized by an
-            // enemy insect faction; a cultist self has parasitized (originally enemy's) IS affected.
+            // === AGONY-STING-110-REVERT (game 454 replay) BEGIN ===
+            // TEMPORARY REVERT: move cultists by CURRENT CONTROL (u.faction), matching
+            // how game 454 was actually played. Restore the #110 true-owner line below
+            // when game 454 finishes (see cw-agony-sting-restore cron).
             val allCultists = game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist))
-            val perFaction = self.enemies./(owner => (owner, allCultists.%(u => MindParasite.trueOwner(u) == owner)./(_.ref))).%{ case (_, units) => units.any }
+            val perFaction = self.enemies./(owner => (owner, allCultists.%(u => u.faction == owner)./(_.ref))).%{ case (_, units) => units.any }
+            // --- #110 version (restore when 454 done):
+            // val perFaction = self.enemies./(owner => (owner, allCultists.%(u => MindParasite.trueOwner(u) == owner)./(_.ref))).%{ case (_, units) => units.any }
+            // === AGONY-STING-110-REVERT END ===
             self.log("The Agony Sting".styled("nt") + ": all enemy Cultists in", r, "must move to adjacent Land")
             if (perFaction.num > 1)
                 Ask(self).each(perFaction./{ case (f, _) => f })(f => ForcedCultistMoveOrderAction(self, f, r, perFaction, false, EndAction(self)))
@@ -1140,7 +1146,7 @@ object IGOOsExpansion extends Expansion {
                     uf.region = dest
                     uf.onGate = false
                 }
-                self.log(u.uclass.styled(self), "forcibly moved to", dest)
+                self.log(game.unitOpt(u)./(_.styledName).|(u.uclass.styled(self)), "forcibly moved to", dest)
             }
             Force(then)
 
@@ -1213,6 +1219,15 @@ object IGOOsExpansion extends Expansion {
 
         case TheZygoteContinueAction(self) =>
             val remaining = self.pool(Acolyte).num
+            println(s"[ZYGTRACE] continue: ${self.short} poolAcolytes=$remaining  census=" +
+                self.units.%(_.uclass == Acolyte)./(u => s"${u.index}@${u.region}${if (u.tag(Eliminated)) "(ELIM)" else ""}${if (u.region == self.reserve) "(pool)" else ""}").mkString(","))
+            factions.foreach { ff =>
+                val acs = ff.units.%(_.uclass == Acolyte)./(u => s"${u.index}@${u.region}")
+                val mpc = ff.units.%(_.uclass == MindParasiteCultist)./(u => s"MPC${u.index}@${u.region}")
+                if (acs.any || mpc.any) println(s"[ZYGTRACE]   ${ff.short}: acolytes=${acs.mkString(",")}  mpc=${mpc.mkString(",")}")
+            }
+            println(s"[ZYGTRACE]   prisons: " + factions./(f => s"${f.short}.prison=" + factions./~(_.at(f.prison))./(u => s"${u.faction.short}/${u.uclass}/${u.index}").mkString("+")).mkString("  "))
+            println(s"[ZYGTRACE]   insects: " + factions./~(_.units.%(_.uclass == InsectsFromShaggai))./(u => s"${u.faction.short}/Insect/${u.index}@${u.region}").mkString(","))
             if (remaining == 0) {
                 self.log("The Zygote".styled("nt") + ": all Acolytes placed")
                 EndAction(self)
@@ -1490,8 +1505,9 @@ object IGOOsExpansion extends Expansion {
 
         case DoomSarnathEliminateUnit(self, owner, u, then) =>
             val elimRegion = game.unitOpt(u)./(_.region.toString).|("?")
+            val elimName = game.unitOpt(u)./(_.styledName).|(u.uclass.styled(owner))
             game.unitOpt(u).foreach(game.eliminate)
-            self.log("Doom that Came to Sarnath".styled("nt") + ":", self.full, "eliminated", u.uclass.styled(owner), "of", owner.full, "in", elimRegion)
+            self.log("Doom that Came to Sarnath".styled("nt") + ":", self.full, "eliminated", elimName, "of", owner.full, "in", elimRegion)
             Force(then)
 
         case DoomSarnathDiscardES(self, owner, index, then) =>

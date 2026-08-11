@@ -372,7 +372,7 @@ object LibraryExpansion extends Expansion {
             val oubliette = game.board.regions.%(_.name == "Oubliette").head
             u.region = oubliette
             u.onGate = false
-            target.log(u.uclass.styled(target), "moved to", oubliette, "(" + "Custodian".styled("lb") + ")")
+            target.log(u.styledName, "moved to", oubliette, "(" + "Custodian".styled("lb") + ")")
             // Chronophage: the moved unit belongs to `target` (not the activator `self`), so
             // offer `target` its free Hound teleport. No-op unless `target` owns the Hound card.
             Force(CronophageAfterMoveAction(target, CustodianResolveAgonyAction(self, r, remaining)))
@@ -528,7 +528,7 @@ object LibraryExpansion extends Expansion {
                 val u = game.unit(ref)
                 val r = u.region
                 game.eliminate(u)
-                self.log("eliminated", u.uclass.styled(self), "in", r, "to satisfy", "Agony".styled("lb"))
+                self.log("eliminated", u.styledName, "in", r, "to satisfy", "Agony".styled("lb"))
             }
             // 2026-05-11 loop-break: if the bot reaches Done with no eliminations,
             // it picked into Eliminate path but then refused every unit (Bot3 scoring
@@ -752,7 +752,7 @@ object LibraryExpansion extends Expansion {
             u.region = owner.reserve
             u.onGate = false
             game.tomeFaceUp = game.tomeFaceUp + (tome -> true)
-            self.log("released", u.uclass.styled(owner), "to flip", tome.elem, "face-up")
+            self.log("released", u.styledName, "to flip", tome.elem, "face-up")
             Force(MainAction(self))
 
         case FlipTomeDiscardESAction(self, tome) =>
