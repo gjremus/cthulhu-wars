@@ -755,7 +755,9 @@ object FBEExpansion extends Expansion {
 
         case AnimatedRushUnitPickAction(self, movesLeft, moved, discardedDice, originalPositions, rushSource, rushDest) =>
             if (movesLeft <= 0)
-                Force(MoveContinueAction(self, true))
+                // Chronophage: Animated Rush moved own units → offer teleport (A16). If nothing
+                // actually moved, CronophageAfterMoveAction is a no-op and just continues.
+                Force(moved.any.?(CronophageAfterMoveAction(self, MoveContinueAction(self, true)) : ForcedAction).|(MoveContinueAction(self, true)))
             else {
                 val eligible = self.units.%(u => u.region.onMap || u.region == BB.moon).%(_.uclass != Byagoona).%(u => !moved.has(u.ref)).%(u => (if (u.region == BB.moon) areas else game.board.connected(u.region)).%(d => self.affords(0)(d)).any)
                 if (eligible.none) {

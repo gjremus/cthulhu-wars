@@ -1518,7 +1518,7 @@ object Overlays {
             // ANTI-OVERLAP AUTO-SHRINK (BBMoonSizing): when many units crowd the
             // Moon their sprites overlap. Sum every sprite's box area (as a
             // fraction of the visible disc) at default size; if the total exceeds
-            // the empirically-safe ratio (~0.65, above which some unit is likely
+            // the safe ratio (SAFE_AREA_RATIO = 0.60 — the value in live use — above which some unit is likely
             // >50% covered), shrink EVERY sprite by one uniform factor so the sum
             // lands right at the safe ratio. aspect(w/h) per unit comes from the
             // BB unit's on-map height (each BB unit class has a distinct onMapH:
@@ -1854,7 +1854,7 @@ object Overlays {
         ))
         case $("TB", OverlayMantleReq.text) => requirement("Control Gates in 2 adjacent Areas, then overlay the Mantle.")
         case $("TB", TenTentaclesReq.text) => requirement("There are 10 Tentacles in play.")
-        case $("TB", RemoveGatePlaceChthonianReq.text) => requirement("Gain 2 Power, remove a Gate you Control, place a Chthonian in any Area you occupy.")
+        case $("TB", RemoveGatePlaceChthonianReq.text) => requirement("Anytime, Gain 2 Power, then remove a Gate you Control, and place a Chthonian in an Area your Units occupy.")
         case $("TB", GatesAtGOOsReq.text) => requirement("Pay 8 Power, place Gates at every Area containing a Great Old One. Gain 1 Power per Gate placed.")
         case $("TB", AwakenShuddeMellReq.text) => requirement("Awaken Shudde M'ell.")
         case $("TB", ShuddeMellInThreeGlyphsReq.text) => requirement("Shudde M'ell Parts simultaneously in 3 specific Glyph Areas, OR Pay 6 Power as an Action.")

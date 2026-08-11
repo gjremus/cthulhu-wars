@@ -204,6 +204,13 @@ class Serialize(val game : Game) {
         // with the handler doing Force(then). Map the old 3-param form to the new one with
         // then = MoveContinueAction(self, true), reproducing the original post-teleport behavior exactly.
         case EApply("CronophageTeleportAction", ps) if ps.num == 3 => CronophageTeleportAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], MoveContinueAction(parseExpr(ps(0)).asInstanceOf[Faction], true))
+        // [LEGACY REPLAY] Pre-2026-08-10 DC Proselytize new-flow "Done" was 5-param
+        // (self, from, to, picked, then) — one cultist per chosen faction. The fix
+        // added a `perFaction` 6th param (N = DC Acolytes that moved). Old recorded
+        // Dones must replay their ORIGINAL single-drag semantics (their log has only
+        // one DragAction per faction), so map the 5-param form to perFaction=1.
+        case EApply("DCProselytizeDoneAction", ps) if ps.num == 5 =>
+            DCProselytizeDoneAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[$[Faction]], 1, parseExpr(ps(4)).asInstanceOf[Action])
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 

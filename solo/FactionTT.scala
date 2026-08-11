@@ -701,7 +701,8 @@ object TTExpansion extends Expansion {
                 u.add(Moved)
                 self.log(Idolatry.styled(TT), ": moved", u.uclass.styled(TT), "from", from, "to", dest)
             }
-            EndAction(self)
+            // Chronophage: Idolatry moved own units into the glyph area → offer teleport (A17).
+            CronophageAfterMoveAction(self, EndAction(self))
 
         // DOOMSDAY (Sarkomand) — once-only: place cost-2 or cost-4 iGOO at gate, take loyalty card
         case TTDoomsdayMainAction(self) =>

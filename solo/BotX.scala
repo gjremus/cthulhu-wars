@@ -653,6 +653,18 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
                 if (u.is(Acolyte) && !u.region.ownGate) add( 1000, "lose off-gate acolyte to eye opens")
                 add(0, "default eye opens cultist choice")
 
+            // DC Proselytize NEW FLOW (owner spec 2026-08): when DC has chosen to
+            // drag from us and we have a CHOICE of which cultist, pick the least
+            // valuable — keep High Priests and gate keepers, give up cheap off-gate
+            // Acolytes. Mirrors the Eye Opens / CG-kill preference above.
+            case DCProselytizeDragAction(_, _, _, cRef, _, _) =>
+                val u = game.unit(cRef)
+                if (u.uclass == HighPriest)             add(-2000, "don't give up HP to Proselytize")
+                if (u.region.ownGate)                   add(-1500, "keep gate keeper from Proselytize")
+                if (u.is(Acolyte) && !u.region.ownGate) add( 1000, "give up off-gate acolyte to Proselytize")
+                if (u.cultist && !u.region.ownGate)     add(  500, "give up off-gate cultist to Proselytize")
+                add(0, "default Proselytize drag choice")
+
             case _ =>
         }
 

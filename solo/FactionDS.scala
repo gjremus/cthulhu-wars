@@ -705,7 +705,8 @@ object DSExpansion extends Expansion {
                 }
             }
             self.oncePerTurn :+= Omnipotence
-            EndAction(self)
+            // Chronophage: Omnipotence moved own Avatars → offer teleport (A12).
+            CronophageAfterMoveAction(self, EndAction(self))
 
         case OmnipotenceJoinAction(self, selected, r) =>
             selected.foreach { ref =>
@@ -722,12 +723,14 @@ object DSExpansion extends Expansion {
                 }
             }
             self.oncePerTurn :+= Omnipotence
-            EndAction(self)
+            // Chronophage: Omnipotence moved own Avatars → offer teleport (A12).
+            CronophageAfterMoveAction(self, EndAction(self))
 
         case OmnipotenceMoveSeparatelyAction(self, selected) =>
             if (selected.none) {
                 self.oncePerTurn :+= Omnipotence
-                EndAction(self)
+                // Chronophage: all Avatars placed separately → offer teleport once (A12).
+                CronophageAfterMoveAction(self, EndAction(self))
             } else {
                 val ref = selected.head
                 val dsUnits = self.allInPlay./(_.region).distinct.%(r => self.at(r).any)
@@ -755,7 +758,8 @@ object DSExpansion extends Expansion {
                 Force(OmnipotenceMoveSeparatelyAction(self, remaining))
             else {
                 self.oncePerTurn :+= Omnipotence
-                EndAction(self)
+                // Chronophage: last Avatar moved separately → offer teleport once (A12).
+                CronophageAfterMoveAction(self, EndAction(self))
             }
 
         case OmnipotenceCancelAction(self) =>

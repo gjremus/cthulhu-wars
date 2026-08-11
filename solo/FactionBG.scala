@@ -212,7 +212,14 @@ object BGExpansion extends Expansion {
 
             game.reveals(f)
 
-            game.endTurn(f)(f.battled.any)
+            // Fertility Cult: a monster Summon is a free (unlimited) action, so after
+            // using it BG drops back into this full menu. Without this, the turn-ender
+            // would only offer "Pass and lose remaining power" (never a clean "Done")
+            // until BG had battled — trapping BG into spending a full main action they
+            // may not have wanted. Offer the clean "Done" (EndTurnAction) once Fertility
+            // has been used this round, so BG can either end the whole turn on the summon
+            // alone OR still take a full action. The full menu above is untouched.
+            game.endTurn(f)(f.battled.any || f.oncePerRound.has(Fertility))
 
             asking
 

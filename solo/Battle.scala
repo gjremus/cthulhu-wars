@@ -185,7 +185,7 @@ case class BattleProceedAction(next : BattlePhase) extends ForcedAction
 case class BattleRollAction(f : Faction, rolls : $[BattleRoll], next : BattlePhase) extends ForcedAction
 case class AzathothDaemonSultanKillRollAction(self : Faction, roll : Int) extends ForcedAction
 
-case class AssignKillAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Kill" + (count > 1).??("s")).styled("kill"), implicit g => g.unit(ur).full + (ur.faction == TT && ur.uclass == HighPriest && TT.can(Martyrdom)).??(" — all other kills to Pains with " + Martyrdom.styled(TT)))
+case class AssignKillAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Kill" + (count > 1).??("s")).styled("kill"), implicit g => g.unit(ur).styledFull + (ur.faction == TT && ur.uclass == HighPriest && TT.can(Martyrdom)).??(" — all other kills to Pains with " + Martyrdom.styled(TT)))
 case class AssignPainAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Pain" + (count > 1).??("s")).styled("pain"), ur.full)
 
 case class RetreatOrderAction(self : Faction, a : Faction, b : Faction) extends BaseFactionAction("Retreat order", "" + a + " then " + b)
@@ -218,6 +218,12 @@ case class InvisibilityAction(self : Faction, ur : UnitRef, tr : UnitRef) extend
 
 case class SeekAndDestroyPreBattleAction(self : Faction) extends OptionFactionAction(SeekAndDestroy) with PreBattleQuestion with Soft
 case class SeekAndDestroyAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction("Bring with " + SeekAndDestroy, uc.styled(self) + " from " + r)
+
+// Chronophage battle-join: when a pre-battle movement power moves a unit INTO the
+// arena, the owning faction's Hound of Tindalos may teleport into the same battle
+// (Gate→Gate), joining forces exactly like a Hunting Horror flown in by Seek &
+// Destroy. Only legal when the arena is a Gate area (Chronophage is Gate-to-Gate).
+case class HoundJoinBattleAction(self : Faction) extends OptionFactionAction("Cronophage".styled("nt") + " — teleport " + HoundOfTindalos.styled(self) + " into the battle") with PreBattleQuestion with Soft
 
 case class HarbingerPowerAction(self : Faction, ur : UnitRef, n : Int) extends ForcedAction
 case class HarbingerESAction(self : Faction, ur : UnitRef, e : Int) extends ForcedAction
@@ -253,6 +259,7 @@ case class MillionFavoredOnesXAction(self : Faction, r : Region, u : UnitRef, nw
 
 // AN
 case class UnholyGroundAction(self : Faction, o : Faction, cr : Region) extends ForcedAction
+case class UnholyGroundSkipAction(self : Faction) extends ForcedAction
 case class UnholyGroundEliminateAction(self : Faction, f : Faction, ur : UnitRef) extends ForcedAction
 
 // Independent Great Old Ones
@@ -328,6 +335,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // it calls proceed() which resumes the battle from PostBattlePhase, which would
     // otherwise hit the CG hook again with the same Ghatanothoa/Revenant sources.
     var fbCyclopeanGazeFiredThisBattle : Boolean = false
+    // Chronophage: factions that fired a pre-battle MOVE power this battle (Seek &
+    // Destroy, Static Accumulator) — arms the Hound-join pre-battle offer. And the
+    // factions whose Hound has already joined, so the offer is shown at most once.
+    var houndPreBattleMoveArmed : $[Faction] = $
+    var houndJoinedThisBattle : $[Faction] = $
+    // Post-battle Chronophage: powers that move a unit MID-battle (e.g. Necrophagy) arm this;
+    // the Hound teleport offer fires after the battle is fully resolved (at BattleEnd).
+    var houndPostBattleMoveArmed : $[Faction] = $
     var zagazigSkipped : Boolean = false
     var tbAutotomyOffered : Boolean = false
     var tbAutotomyUsed : Boolean = false
@@ -537,6 +552,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s.can(DemandSacrifice) && s.tag(DemandSacrifice).not && s.opponent.tag(KillsArePains).not)
             if (game.options.has(DemandTsathoggua).?(s.forces(Tsathoggua).any).|(s.has(Tsathoggua)))
                 options :+= DemandSacrificePreBattleAction(s)
+
+        // Chronophage (Hound of Tindalos): if self fired a pre-battle MOVE power this
+        // battle (Seek & Destroy or Static Accumulator), offer to teleport its Hound into
+        // the battle — Gate→Gate, so only when the arena is a Gate area and the Hound is
+        // currently in a (different) Gate area. Offered at most once per battle.
+        if (houndPreBattleMoveArmed.has(s) && !houndJoinedThisBattle.has(s) &&
+            s.loyaltyCards.has(HoundOfTindalosCard) &&
+            HoundOfTindalosGates.has(arena) &&
+            s.allInPlay.%(u => u.uclass == HoundOfTindalos && u.region != arena && HoundOfTindalosGates.has(u.region)).any)
+            options :+= HoundJoinBattleAction(s)
 
         // Energy Nexus pre-battle variant: handled after all other pre-battle powers (see PreBattleDoneAction)
 
@@ -1020,6 +1045,32 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     return jump(PostBattlePhase)
                 }
 
+                // Ghatanothoa IGOO Mummify: mummified cultists "do not participate in Battle"
+                // (rules card). attacker/defender.forces above grab EVERY unit in the arena,
+                // which wrongly included laid-down mummified cultists — so they counted toward
+                // combat strength and could be rolled for / assigned casualties. Exempt them from
+                // both sides here, mirroring the Grasping Dead exemption just below. exempt()
+                // removes the unit from its side's forces without eliminating it, so the cultist
+                // stays in the region (laid on its side) and is neither a combatant nor a
+                // casualty — exactly as the rules require. Re-check for an empty side afterwards
+                // in case every unit on a side was mummified.
+                if (game.mummifiedCultists.any) {
+                    sides.foreach { s =>
+                        s.forces.%(u => game.mummifiedCultists.has(u.ref)).foreach { u =>
+                            log(u.uclass.styled(u.faction), "in", arena, "is Mummified and does not participate in Battle")
+                            exempt(u)
+                        }
+                    }
+                    if (attacker.forces.none) {
+                        log("No attackers left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                    if (defender.forces.none) {
+                        log("No defenders left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                }
+
                 // Albino Penguins: transferred penguins are now in the battle side's units list
                 // (transferred during LaughingstockPhase before BattleStart)
                 // so they're picked up naturally by attacker.at(arena) / defender.at(arena)
@@ -1154,7 +1205,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                if (sides.has(BB) && BB.can(Zagazig) && !battle.zagazigSkipped) {
+                // Apply the swap ONLY if BB's side actually chose Use (its ZagazigUseAction
+                // added the Zagazig effect tag). The old gate — BB.can(Zagazig) && not-skipped —
+                // auto-fired whenever no Use/Skip prompt was shown: with no Cat from Mars in the
+                // battle the offer (see above) never appears, so zagazigSkipped stayed false and
+                // the swap ran unprompted. The effect tag can only be present after a real Use,
+                // which requires the Cat-from-Mars offer, so this is the correct condition.
+                if (sides.find(_ == BB).exists(_.tag(Zagazig))) {
                     sides.foreach { side =>
                         side.rolls = side.rolls./(r => if (r == Kill) Pain else if (r == Pain) Kill else r)
                     }
@@ -1631,24 +1688,26 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(UnholyGroundPhase)
 
             case UnholyGroundPhase =>
-                sides.foreach { s =>
-                    if (s.tag(UnholyGround)) {
-                        s.remove(UnholyGround)
-
-                        // Original HRF rule: offer when the loser still has a GOO in
-                        // the cathedral region. NOTE (2026-08-05): a previous "replay
-                        // -compat" guard (replayBlocksUG) was added here that only armed
-                        // the offer when the NEXT recorded action was already an
-                        // UnholyGroundAction/BattleDoneAction. That guard was itself the
-                        // bug: because the offer had never fired in any recorded game,
-                        // every replay saw a different next action and suppressed the
-                        // prompt forever — Unholy Ground could never appear. Removed it
-                        // and restored the plain original condition (matches base HRF).
-                        if (s.opponent.forces.goos.any && game.cathedrals.has(arena))
-                            return Ask(s).each(game.cathedrals)(r => UnholyGroundAction(s, s.opponent, r).as(r)("Remove a cathedral with", UnholyGround)).skip(BattleDoneAction(s))
-                    }
+                // Offer cathedral-removal to a side that earned Unholy Ground when a
+                // cathedral stands in the arena. Two hard constraints (2026-08-05):
+                //  (A) REPLAY SAFETY: games recorded before this offer ever fired have a
+                //      plain BattleProceedAction as their next recorded action here (NOT a
+                //      UG choice). Arming the Ask while the replay feeds such an action
+                //      desyncs the battle and later crashes ("unknown continue on
+                //      CannibalismAction"). So do NOT arm the offer when the replay's next
+                //      action isn't the UG choice — that's the replayBlocksUG gate.
+                //  (B) LIVE PRESENTATION: consume the tag only at RESOLUTION
+                //      (UnholyGroundAction / UnholyGroundSkipAction), NOT here — otherwise
+                //      the online write/read replay re-enters with the tag gone and drops
+                //      the prompt. Leaving it set lets a re-entry re-present the offer.
+                val ugSide = sides.find(_.tag(UnholyGround))
+                val replayBlocksUG = game.nextReplayActionHint.exists(h => !h.startsWith("UnholyGroundAction") && !h.startsWith("UnholyGroundSkipAction"))
+                if (ugSide.isDefined && game.cathedrals.has(arena) && !replayBlocksUG) {
+                    val s = ugSide.get
+                    return Ask(s).each(game.cathedrals)(r => UnholyGroundAction(s, s.opponent, r).as(r)("Remove a cathedral with", UnholyGround)).skip(UnholyGroundSkipAction(s))
                 }
 
+                ugSide.foreach(_.remove(UnholyGround))
                 factions.%(_.can(Necrophagy)).foreach { f =>
                     f.oncePerAction :+= Necrophagy
                 }
@@ -2191,10 +2250,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                if (game.queue.starting.?(_.effect.has(FromBelow)))
-                    ProceedBattlesAction
-                else
-                    AfterAction(attacker)
+                val battleTerminus : ForcedAction =
+                    if (game.queue.starting.?(_.effect.has(FromBelow)))
+                        ProceedBattlesAction
+                    else
+                        AfterAction(attacker)
+
+                // Post-battle Chronophage: a mid-battle move (e.g. Necrophagy) armed this.
+                // The battle is now fully resolved (game.battle = None above), so fire the
+                // ordinary Gate→Gate Hound teleport offer for each armed owner, chaining the
+                // battle terminus after it. (The battle object with these vars is discarded.)
+                houndPostBattleMoveArmed.distinct.foldRight(battleTerminus)((f, then) => CronophageAfterMoveAction(f, then))
 
         }
     }
@@ -2544,6 +2610,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val u = game.unit(ur)
             retreat(u, r)
             log(u, "retreated to", r, "with", Oleaginous, "(Pain became Retreat)")
+            // Chronophage: this Pain-became-Retreat moved TS's own Gla'aki/Deep Tendril mid-
+            // battle. Per owner direction, fire the Hound offer AFTER the battle fully resolves.
+            houndPostBattleMoveArmed = (houndPostBattleMoveArmed :+ self).distinct
             proceed()
 
         case EliminateNoWayAction(self, u) =>
@@ -2644,6 +2713,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             u.region = arena
             self.forces :+= u
             log(u, "flew from", r)
+            // Chronophage: a pre-battle move happened → arm the Hound-join offer for self.
+            houndPreBattleMoveArmed = (houndPreBattleMoveArmed :+ self).distinct
+            proceed()
+
+        // Chronophage: teleport the owner's Hound into this battle (Gate→Gate). Mirrors
+        // Seek & Destroy's join: set region, add to that side's forces, resume. `self` is
+        // the side of the battle that owns the Hound card.
+        case HoundJoinBattleAction(self) =>
+            self.allInPlay.%(u => u.uclass == HoundOfTindalos && u.region != arena && HoundOfTindalosGates.has(u.region)).headOption.foreach { hound =>
+                val from = hound.region
+                hound.region = arena
+                hound.onGate = false
+                self.forces :+= hound
+                log(hound, "Cronophage".styled("nt") + ": teleported from", from, "into the battle")
+            }
+            houndJoinedThisBattle = (houndJoinedThisBattle :+ self).distinct
+            // Strength is (re)computed at PreRoll from forces, mirroring Seek & Destroy.
             proceed()
 
         // YIG SNAKEBITE — enemy assigns extra kill
@@ -2762,6 +2848,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             game.fbSuppressCGForPlacement = false
             u.onGate = false
             log(u, "was howled to", r)
+            // Chronophage: Howl forced `self` (the enemy) to move its own unit pre-battle, so
+            // arm the Hound-join offer for that faction. `self` is a battle side (the Howler's
+            // opponent). No-op unless it owns the Hound card with a Hound in a Gate area.
+            houndPreBattleMoveArmed = (houndPreBattleMoveArmed :+ self).distinct
             proceed()
 
         // HARBINGER
@@ -2800,6 +2890,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             exempt(u)
             sides.foreach(_.rolls :+= Pain)
             log(u, "came from", "" + r + ",", "causing additonal", Pain, "to both sides")
+
+            // Chronophage: Necrophagy moved a Ghoul into the arena. Per owner direction the
+            // Hound trigger fires AFTER the battle fully resolves (not mid-battle) — arm it
+            // here; BattleEnd fires the ordinary Gate→Gate teleport offer for self.
+            houndPostBattleMoveArmed = (houndPostBattleMoveArmed :+ self).distinct
 
             proceed()
 
@@ -2860,6 +2955,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         // UNHOLY GROUND
+        case UnholyGroundSkipAction(self) =>
+            self.remove(UnholyGround)
+            proceed()
+
         case UnholyGroundAction(self, o, cr) =>
             self.add(UnholyGround)
             game.cathedrals :-= cr
@@ -3161,6 +3260,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val xssSide : Side = if (attacker == XSS) attackers else defenders
             xssSide.forces = XSS.at(arena)
             xssSide.add(StaticAccumulator)
+            // Chronophage: a pre-battle move happened → arm the Hound-join offer for XSS.
+            houndPreBattleMoveArmed = (houndPreBattleMoveArmed :+ self).distinct
             proceed()
 
         case CloudOfAshesHoldAction(self, _) =>

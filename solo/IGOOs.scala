@@ -479,19 +479,14 @@ object IGOOsExpansion extends Expansion {
             }
         }
 
-        // Ghatanothoa IGOO: un-mummify cultists no longer sharing area with Ghatanothoa
-        if (game.mummifiedCultists.any) {
-            val ghatRegions = factions./~(f => f.allInPlay.%(_.uclass == GhatanotoaIGOO)./(_.region)).toSet
-            val freed = game.mummifiedCultists.%(ref => {
-                val u = game.unitOpt(ref)
-                u.exists(unit => !ghatRegions.contains(unit.region))
-            })
-            freed.foreach { ref =>
-                val u = game.unit(ref)
-                game.mummifiedCultists = game.mummifiedCultists.but(ref)
-                log(u.uclass.styled(u.faction), "in", u.region, "no longer mummified (left", "Ghatanothoa".styled("nt") + "'s area)")
-            }
-        }
+        // Ghatanothoa IGOO Mummify DURATION: Mummify is a LASTING effect. A mummified
+        // cultist stays mummified until the NEXT Doom Phase, at which point ALL mummified
+        // cultists are freed at once (see Game.scala, doom-phase handler:
+        // "Mummify: all mummified cultists are freed at Doom Phase"). It does NOT wear off
+        // when Ghatanothoa leaves the area. An earlier on-leave un-mummify block used to
+        // live here and freed cultists the instant Ghatanothoa moved out of their region
+        // (e.g. following away with Arctic Wind) — that was wrong and has been removed so
+        // the effect persists to the doom phase exactly as the rules require.
 
         // ── iGOO SPELLBOOK REQUIREMENTS (automatic checks) ──
 

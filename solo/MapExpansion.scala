@@ -376,7 +376,9 @@ object LibraryExpansion extends Expansion {
             game.fbSuppressCGForPlacement = false
             u.onGate = false
             target.log(u.uclass.styled(target), "moved to", oubliette, "(" + "Custodian".styled("lb") + ")")
-            Force(CustodianResolveAgonyAction(self, r, remaining))
+            // Chronophage: the moved unit belongs to `target` (not the activator `self`), so
+            // offer `target` its free Hound teleport. No-op unless `target` owns the Hound card.
+            Force(CronophageAfterMoveAction(target, CustodianResolveAgonyAction(self, r, remaining)))
 
         // ── LIBRARIAN ACTIVATION ──
         case SpendOnLibrarianAction(self) =>
@@ -715,14 +717,14 @@ object LibraryExpansion extends Expansion {
         // ── YR AND THE NHHNGR ──
         case UseTomeYrMainAction(self) =>
             Ask(self)
-                .when(self.pool.%(_.uclass.utype == Monster).any && self.gates.onMap.any)(
+                .when(self.pool.%(_.uclass.utype == Monster).any && self.gates.onMapOrMoon.any)(
                     UseTomeYrMonsterAction(self))
                 .add(UseTomeYrPowerAction(self))
                 .cancel
 
         case UseTomeYrMonsterAction(self) =>
             val monsters = self.pool.%(_.uclass.utype == Monster)./(_.uclass).distinct
-            val gates = self.gates.%(_.glyph.onMap)
+            val gates = self.gates.onMapOrMoon
             Ask(self).each(monsters./~(uc => gates./(r => UseTomeYrMonsterChooseAction(self, uc, r))))(identity).cancel
 
         case UseTomeYrMonsterChooseAction(self, uc, r) =>

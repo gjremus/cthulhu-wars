@@ -357,7 +357,7 @@ case class TBRemoveGatePlaceChthonianAreaAction(self : Faction, removedGate : Re
 
 // -- SBR-4: GATES AT EVERY GOO AREA (§1.9 / §3.12.4 / §4.5) ------------------
 case class TBGatesAtGOOsMainAction(self : Faction)
-    extends OptionFactionAction(GatesAtGOOsReq.text.styled(TB) + " (" + 8.power + ")") with MainQuestion
+    extends OptionFactionAction(GatesAtGOOsReq.text.styled(TB) + ", gain X Power") with MainQuestion
 case class TBGatesAtGOOsAction(self : Faction)
     extends ForcedAction
 case class TBGatesAtGOOsPlaceAction(self : Faction)
@@ -581,8 +581,10 @@ object TBExpansion extends Expansion {
             // Ensnare (§1.10 SB5): Action Cost 1, requires Head in play
             if (f.can(Ensnare) && f.power >= 1 && f.all(ShuddeMellHead).any) {
                 val tentacleAreas = f.onMap(Tentacle)./(_.region).distinct
+                // Holy Ground cathedrals cannot be moved, so an enemy is only a valid
+                // Ensnare target if it has at least one movable unit in the area.
                 val validTargets = tentacleAreas./~(r =>
-                    game.factions.but(f).%(e => !game.tbEnsnareTargetedThisPhase.has(e) && e.at(r).any)./(e => (e, r)))
+                    game.factions.but(f).%(e => !game.tbEnsnareTargetedThisPhase.has(e) && e.at(r).%(_.canBeMoved).any)./(e => (e, r)))
                 if (validTargets.any)
                     + TBEnsnareMainAction(f)
             }
@@ -685,8 +687,9 @@ object TBExpansion extends Expansion {
             u.region = TB.mantle
             u.onGate = false
             self.log(Behemoth.styled(TB) + ": moved", u.uclass.styled(TB), "from", from, "to", TB.mantle)
-            // Unlimited — return to main action (FCG #19)
-            Force(MainAction(self))
+            // Chronophage: moving a Part (a Unit) to the Mantle → offer Hound teleport (A23).
+            // Unlimited — return to main action (FCG #19) after any teleport.
+            CronophageAfterMoveAction(self, MainAction(self))
 
         // Behemoth: Segment-on-zero-Power (automatic)
         case TBBehemothSegmentAction(self, then) =>
@@ -893,8 +896,9 @@ object TBExpansion extends Expansion {
         // ====================================================================
         case TBEnsnareMainAction(self) =>
             val tentacleAreas = self.onMap(Tentacle)./(_.region).distinct
+            // Only enemies with a movable unit here are valid (Holy Ground cathedrals can't be moved).
             val validTargets = tentacleAreas./~(r =>
-                game.factions.but(self).%(e => !game.tbEnsnareTargetedThisPhase.has(e) && e.at(r).any)./(e => (e, r)))
+                game.factions.but(self).%(e => !game.tbEnsnareTargetedThisPhase.has(e) && e.at(r).%(_.canBeMoved).any)./(e => (e, r)))
             Force(TBEnsnarePickEnemyAction(self, validTargets))
 
         case TBEnsnarePickEnemyAction(self, targets) =>
@@ -925,7 +929,8 @@ object TBExpansion extends Expansion {
             if (count <= 0)
                 EndAction(self)
             else {
-                val enemyUnits = enemy.at(area)./(_.ref)
+                // Holy Ground cathedrals cannot be moved, so they are never relocated.
+                val enemyUnits = enemy.at(area).%(_.canBeMoved)./(_.ref)
                 Force(TBEnsnareRelocateAction(enemy, enemy, area, headArea, count, $, enemyUnits))
             }
 

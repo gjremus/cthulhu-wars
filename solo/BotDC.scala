@@ -170,6 +170,20 @@ class GameEvaluationDC(implicit game : Game) extends GameEvaluation(DC)(game) {
                     !game.unit(cultistRef).onGate       |=> 800 -> "sacrifice off-gate cultist"
                     game.unit(cultistRef).onGate        |=> 200 -> "sacrifice on-gate cultist"
 
+                // NEW FLOW (owner spec 2026-08): DC picks which factions to drag from.
+                // Keep adding enemy factions (never DC itself); then finish.
+                case DCProselytizeChooseFactionsAction(_, from, _, _, picked, _) =>
+                    // "Add <faction>" candidates: prefer dragging from enemies.
+                    val remaining = game.factions.but(DC).%(e => e.at(from).cultists.any).%(e => !picked.has(e))
+                    remaining.any                       |=> 900 -> "add enemy faction to Proselytize"
+                    picked.any                          |=> 100 -> "have factions, could finish"
+                case DCProselytizeDoneAction(_, _, _, picked, _, _) =>
+                    picked.any                          |=> 500 -> "done choosing Proselytize factions"
+                    picked.none                         |=> -500 -> "done with no factions"
+                // The per-faction drag is asked of the LOSING faction, not DC — the
+                // enemy's own bot scores it via fbPromptedEvals. DC only scores it in
+                // the rare self-drag case, which should never be chosen.
+
                 case DCSatiateReqOptInAction(f) =>
                     self.needs(SatiateReq)              |=> 1500 -> "take Satiate for SBR"
 

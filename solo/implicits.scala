@@ -53,11 +53,18 @@ trait GameImplicits {
         def targetableAsCultistByEnemy = u.uclass.utype == Cultist || (u.faction == BB && u.uclass == EarthCat)
         def inPlay = u.region.glyph.inPlay
         def onMap = u.region.glyph.onMap
+        // "A battlefield area where standard powers resolve" = the physical map PLUS
+        // the Moon. The Moon (MoonGlyph) is inPlay but has onMap=false so it drops out
+        // of every .onMap filter; standard power targeting must include it by default.
+        // (Deep/Slumber/Sorcery are also inPlay-but-not-onMap holding pens and must NOT
+        // be included, so this tests MoonGlyph specifically, not .inPlay.)
+        def onMapOrMoon = u.region.glyph.onMap || u.region.glyph == MoonGlyph
     }
 
     implicit class RegionEx(r : Region) {
         def inPlay = r.glyph.inPlay
         def onMap = r.glyph.onMap
+        def onMapOrMoon = r.glyph.onMap || r.glyph == MoonGlyph
         def connected(implicit game : Game) = game.board.connected(r)
         def connectedForRetreat(implicit game : Game) = game.board.connectedForRetreat(r)
     }
@@ -65,6 +72,7 @@ trait GameImplicits {
     implicit class RegionListEx(l : $[Region]) {
         def inPlay = l.%(_.glyph.inPlay)
         def onMap = l.%(_.glyph.onMap)
+        def onMapOrMoon = l.%(r => r.glyph.onMap || r.glyph == MoonGlyph)
         def nex(implicit game : Game) = game.nexed.some./(x => l.%(x.has)).|(l)
     }
 
@@ -97,6 +105,7 @@ trait GameImplicits {
         def notCultists = l.%(_.uclass.utype != Cultist)
         def onMap = l.%(_.region.glyph.onMap)
         def inPlay = l.%(_.region.glyph.inPlay)
+        def onMapOrMoon = l.%(u => u.region.glyph.onMap || u.region.glyph == MoonGlyph)
     }
 
     implicit class UnitFigureListGameEx(l : $[UnitFigure])(implicit game : Game) {
@@ -119,8 +128,13 @@ trait GameImplicits {
     implicit def factionToDesc(f : Faction) : Game => String = (g : Game) => f.full
     implicit def spellbookToDesc(b : Spellbook) : Game => String = (g : Game) => b.elem
     implicit def optionToDesc(n : |[String]) : Game => String = (g : Game) => n.|(null)
-    implicit def unitRefShortToDesc(ur : UnitRefShort) : Game => String = (g : Game) => g.unit(ur.r).short
-    implicit def unitRefFullToDesc(ur : UnitRefFull) : Game => String = (g : Game) => g.unit(ur.r).full
+    // Mind Parasite: a parasitized cultist must render its split (original/insect)
+    // color in EVERY menu label, exactly as Game.desc already does for the game
+    // log. These two implicits are the shared choke point for menu labels written
+    // as ur.short / ur.full (Assign Pain, Retreat, Abduct, Capture target, etc.),
+    // so routing MindParasiteCultist through styledName here fixes them all at once.
+    implicit def unitRefShortToDesc(ur : UnitRefShort) : Game => String = (g : Game) => { val u = g.unit(ur.r); if (u.uclass == MindParasiteCultist) u.styledName(g) else u.short }
+    implicit def unitRefFullToDesc(ur : UnitRefFull) : Game => String = (g : Game) => { val u = g.unit(ur.r); if (u.uclass == MindParasiteCultist) u.styledName(g) else u.full }
 
     implicit def actionToForce(a : ForcedAction) : Continue = Force(a)
     implicit def askWrapperToAsk(w : AskWrapper) : Continue = w.ask

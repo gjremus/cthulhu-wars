@@ -280,6 +280,47 @@ case class DCProselytizeEnemyPickAction(self : Faction, from : Region, to : Regi
         implicit g => g.unit(cultist).uclass.styled(self) + (if (g.unit(cultist).onGate) " (on gate)" else ""))
     with PowerNeutral
 
+// ── Proselytize NEW FLOW (owner spec 2026-08): DC PICKS the factions ──────────
+// On a DC cultist move A→B, DC is shown a Catnapping-style multi-select menu
+// titled "Choose factions to Proselytize drag cultists", listing every faction
+// with a cultist in the source region plus Done. DC may add as many as they
+// like. EACH selected faction then gives up ONE of its cultists (dragged to B).
+// If a selected faction has more than one cultist KIND, or cultists of more
+// than one gate-status, that faction's player MUST choose which cultist is
+// dragged (no skip / no done). This is the OPPOSITE of the old auto-drag-from-
+// every-enemy behaviour, which is retained below only so recorded games replay.
+//
+// Replay safety: the "Add faction" steps are Soft (never recorded); the terminal
+// DCProselytizeDoneAction carries the full picked list (exactly like Catnapping),
+// and every per-faction drag is a RECORDED Ask (single-option auto-resolves and
+// records; multi-option is the enemy's mandatory pick). So the admin console —
+// which lists recorded actions — now sees every drag, choice or not.
+case class DCProselytizeChooseFactionsAction(self : Faction, from : Region, to : Region, perFaction : Int, picked : $[Faction], then : Action)
+    extends ForcedAction with PowerNeutral with Soft
+// `perFaction` = how many cultists EACH chosen faction gives up = the number of
+// DC Acolytes that moved A→B (DC guide §1.10, PER-ACOLYTE). Added 2026-08-10 as
+// a 6th arg (was 5). Legacy 5-arg recorded games parse to perFaction=1 (their
+// original single-drag semantics) via the Serialize legacy case, so they replay
+// byte-identically.
+case class DCProselytizeDoneAction(self : Faction, from : Region, to : Region, picked : $[Faction], perFaction : Int, then : Action)
+    extends BaseFactionAction(Proselytize.styled(DC), "Done".styled("power"))
+    with PowerNeutral
+// Per-faction processing glue (walks the drag list one entry at a time). The
+// `remaining` list repeats each chosen faction `perFaction` times so a faction
+// that must give up N cultists appears N times — each pass records one drag.
+case class DCProselytizeProcessFactionAction(from : Region, to : Region, remaining : $[Faction], then : Action)
+    extends ForcedAction with PowerNeutral
+// The recorded drag itself (self = the faction losing the cultist, for its
+// colour). Single-option = no meaningful choice (auto-resolves + records);
+// multi-option = the enemy's mandatory pick of WHICH cultist.
+case class DCProselytizeDragAction(self : Faction, from : Region, to : Region, cultist : UnitRef, remaining : $[Faction], then : Action)
+    extends BaseFactionAction(
+        Proselytize.styled(DC) + ": " + self.short.styled(self) + " drags",
+        implicit g => g.unit(cultist).uclass.styled(self)
+            + (if (g.unit(cultist).onGate && g.unit(cultist).faction.gates.has(g.unit(cultist).region)) " (on gate)" else "")
+            + " to " + to.toString)
+    with PowerNeutral
+
 // ── Satiate (Action: Cost 2 — §1.10) ───────────────────────────────────────
 case class DCSatiateMainAction(self : Faction)
     extends OptionFactionAction(Satiate.styled(DC) + " (Cost " + 2.power + ")")
@@ -291,7 +332,13 @@ case class DCSatiateConfirmAction(self : Faction)
 case class DCSatiateFactionPickAction(self : Faction, area : Region, remaining : $[Faction], capturedSoFar : Int)
     extends ForcedAction with PowerNeutral
 case class DCSatiatePickCultistAction(self : Faction, area : Region, cultist : UnitRef, remaining : $[Faction], capturedSoFar : Int)
-    extends BaseFactionAction(Satiate.styled(DC) + ": " + self.short.styled(self) + " loses", implicit g => cultist.uclass.styled(self))
+    extends BaseFactionAction(Satiate.styled(DC) + ": " + self.short.styled(self) + " loses",
+        // HB Task #125 (2026-08-10): the menu listed every capturable cultist as
+        // plain "Acolyte" with no way to tell an on-gate cultist (whose capture
+        // costs its owner gate control) from an off-gate one. Append the on/off-gate
+        // suffix, mirroring the Proselytize pick label above so both DC menus read
+        // identically.
+        implicit g => g.unit(cultist).uclass.styled(self) + (if (g.unit(cultist).onGate) " (on gate)" else " (off gate)"))
     with PowerNeutral
 case class DCSatiateFinishAction(self : Faction, area : Region, capturedSoFar : Int)
     extends ForcedAction with PowerNeutral
@@ -1093,7 +1140,9 @@ object DCExpansion extends Expansion {
                         c.region = area
                         c.onGate = false
                         e.log(Lure.styled(DC) + ":", e.short.styled(e), "moves", c.uclass.styled(e), "from", from, "to", area)
-                        Force(DCLureFactionPickAction(self, area, remaining.dropStarting))
+                        // Chronophage: the LURED enemy `e` moved its own cultist — offer it the
+                        // free Hound teleport (no-op unless `e` owns the Hound card), then recurse.
+                        Force(CronophageAfterMoveAction(e, DCLureFactionPickAction(self, area, remaining.dropStarting)))
                     }
                 } else {
                     val regions = eligible./(_.region).distinct
@@ -1120,7 +1169,8 @@ object DCExpansion extends Expansion {
                 c.region = area
                 c.onGate = false
                 self.log(Lure.styled(DC) + ":", self.short.styled(self), "moves", c.uclass.styled(self), "from", from, "to", area)
-                Force(DCLureFactionPickAction(DC, area, remaining))
+                // Chronophage: `self` here is the lured enemy that moved its own cultist.
+                Force(CronophageAfterMoveAction(self, DCLureFactionPickAction(DC, area, remaining)))
             } else {
                 implicit val asking = Asking(self)
                 cultists.foreach { c =>
@@ -1140,7 +1190,8 @@ object DCExpansion extends Expansion {
                 c.region = area
                 c.onGate = false
                 self.log(Lure.styled(DC) + ":", self.short.styled(self), "moves", c.uclass.styled(self), "from", from, "to", area)
-                Force(DCLureFactionPickAction(DC, area, remaining))
+                // Chronophage: `self` here is the lured enemy that moved its own cultist.
+                Force(CronophageAfterMoveAction(self, DCLureFactionPickAction(DC, area, remaining)))
             }
 
         // ── Pilgrimage (cost 1, free move for other DC units in Prophet's area) ──
@@ -1389,25 +1440,135 @@ object DCExpansion extends Expansion {
         case DCProselytizeCheckAction(from, to, then) =>
             Force(DCProselytizeAggregatedAction(from, to, 1, then))
 
-        // ── Aggregated Proselytize: faction-picker + assignment + execution ───
+        // ── Aggregated Proselytize: per-enemy-faction drag + execution ────────
+        // RULE (DC guide §1.10, PER-ACOLYTE): when N DC Acolytes move A→B, EVERY
+        // enemy faction with Acolyte(s) in A drags N of its Acolytes (capped at
+        // how many it has). DC does NOT choose which factions; each enemy PLAYER
+        // only chooses WHICH of their Acolytes is dragged. So every enemy faction
+        // gets its own movedCount — NOT a shared pool split across factions.
         case DCProselytizeAggregatedAction(from, to, movedCount, then) =>
             if (game.factions.has(DC) && DC.can(Proselytize) && from != to && movedCount > 0) {
-                val enemies = game.factions.but(DC).%(e => e.at(from).%(_.uclass == Acolyte).any)
+                // Any enemy faction with a cultist (Acolyte OR High Priest, on or
+                // off a gate) in the source region is eligible to be dragged from.
+                val enemies = game.factions.but(DC).%(e => e.at(from).cultists.any)
                 if (enemies.none) {
                     Force(then)
-                } else if (enemies.num == 1) {
-                    // Only one enemy faction: drag up to movedCount of their cultists automatically.
-                    // Cap at available acolytes.
-                    val available = enemies.first.at(from).%(_.uclass == Acolyte).num
-                    val dragCount = movedCount.min(available)
-                    Force(DCProselytizeExecuteDragAction(DC, from, to, $((enemies.first, dragCount)), then))
-                } else {
-                    // Multiple enemy factions: DC picks which to drag from.
+                } else if (game.nextReplayActionHint.exists(h =>
+                            h.startsWith("DCProselytizeDoneAction") ||
+                            h.startsWith("DCProselytizeChooseFactionsAction") ||
+                            h.startsWith("DCProselytizeDragAction"))) {
+                    // NEW-FLOW REPLAY (owner spec 2026-08, e.g. game 655's later
+                    // Proselytizes): the recorded history used the DC-picks-factions
+                    // multi-select. Route into that same flow so the recorded
+                    // Done([factions]) + per-faction Drag actions replay faithfully.
+                    // CRITICAL: this branch MUST come before the auto-every-enemy
+                    // branch below — otherwise a new-flow game replays through the
+                    // legacy auto-drag and pulls cultists from factions DC never
+                    // picked (the FBE-dragged-on-refresh bug).
+                    Force(DCProselytizeChooseFactionsAction(DC, from, to, movedCount, $, then))
+                } else if (game.nextReplayActionHint.exists(h =>
+                            h.startsWith("DCProselytizeSelectFactionAction") ||
+                            h.startsWith("DCProselytizeFactionSelectDoneAction") ||
+                            h.startsWith("DCProselytizeAssignToFactionAction"))) {
+                    // LEGACY REPLAY (oldest flow): a recorded game used the earlier
+                    // DC-picks-factions (shared-pool) flow. Route through it so those
+                    // recorded choices replay faithfully.
                     Force(DCProselytizeFactionSelectAction(DC, from, to, movedCount, movedCount, $, then))
+                } else if (game.nextReplayActionHint.exists(h =>
+                            h.startsWith("DCProselytizeEnemyPickAction") ||
+                            h.startsWith("DCProselytizeExecuteDragAction"))) {
+                    // LEGACY REPLAY (auto-every-enemy flow): the OLDEST recorded games
+                    // (and game 655's FIRST Proselytize) auto-dragged one Acolyte per
+                    // enemy faction, enemy picking only on an on/off-gate choice.
+                    // Reproduce that exactly. Narrowed 2026-08-10 to only fire when the
+                    // recorded next action actually belongs to this flow, so new-flow
+                    // games no longer fall in here by accident.
+                    val assignments = enemies./(e => (e, movedCount.min(e.at(from).%(_.uclass == Acolyte).num)))
+                    Force(DCProselytizeExecuteDragAction(DC, from, to, assignments, then))
+                } else {
+                    // NEW FLOW (owner spec 2026-08): DC chooses which factions to
+                    // drag from via a Catnapping-style multi-select menu. EACH chosen
+                    // faction gives up `movedCount` cultists (one per DC Acolyte that
+                    // moved, per guide §1.10); that faction picks WHICH when it has a
+                    // choice of kind or gate-status.
+                    Force(DCProselytizeChooseFactionsAction(DC, from, to, movedCount, $, then))
                 }
             } else {
                 Force(then)
             }
+
+        // ── NEW-FLOW handlers (owner spec 2026-08) ────────────────────────────
+        // DC's faction-picker menu, modelled on Catnapping (FactionBB.scala).
+        case DCProselytizeChooseFactionsAction(self, from, to, perFaction, picked, then) =>
+            implicit val asking = Asking(self)
+            + GroupAction(Proselytize.styled(DC) + ": choose factions to drag cultists from " + from +
+                (if (perFaction > 1) " (" + perFaction + " each)" else ""))
+            val remaining = game.factions.but(DC).%(e => e.at(from).cultists.any).%(e => !picked.has(e))
+            if (picked.any)
+                + GroupAction(Proselytize.styled(DC) + ": picked " + picked./(_.full).mkString(", "))
+            remaining.foreach { f =>
+                + DCProselytizeChooseFactionsAction(self, from, to, perFaction, picked :+ f, then).as("Add " + f.full)
+            }
+            + DCProselytizeDoneAction(self, from, to, picked, perFaction, then)
+            asking
+
+        case DCProselytizeDoneAction(self, from, to, picked, perFaction, then) =>
+            if (picked.none) {
+                DC.log(Proselytize.styled(DC) + ": declined to drag any cultists")
+                Force(then)
+            } else {
+                // Each chosen faction gives up `perFaction` cultists (one per DC
+                // Acolyte that moved, DC guide §1.10). Repeat each faction that many
+                // times so ProcessFaction records one drag per pass; ProcessFaction
+                // caps at how many cultists the faction actually has in `from`.
+                val dragList = picked./~(f => math.max(1, perFaction).times(f))
+                Force(DCProselytizeProcessFactionAction(from, to, dragList, then))
+            }
+
+        // Walk the chosen factions one at a time; each gives up exactly ONE cultist.
+        case DCProselytizeProcessFactionAction(from, to, remaining, then) =>
+            if (remaining.none) {
+                Force(then)
+            } else {
+                val f = remaining.first
+                val rest = remaining.dropStarting
+                val cultists = f.at(from).cultists
+                if (cultists.none) {
+                    // Faction no longer has a cultist here (edge case) — skip on.
+                    Force(DCProselytizeProcessFactionAction(from, to, rest, then))
+                } else {
+                    // Sanitize stale onGate flags (a cultist forcibly moved may keep
+                    // onGate even without a controlled gate here). Mirrors Satiate.
+                    if (!f.gates.has(from)) {
+                        cultists.foreach(c => c.onGate = false)
+                    } else {
+                        val onGateUnits = cultists.%(_.onGate)
+                        if (onGateUnits.num > 1)
+                            onGateUnits.drop(1).foreach(c => c.onGate = false)
+                    }
+                    // Distinct choosable cultists = unique (kind, on-gate) pairs, so
+                    // the enemy sees e.g. "Acolyte" / "High Priest" / "Acolyte (on
+                    // gate)" rather than duplicate buttons.
+                    val choices = cultists.distinctBy(c => (c.uclass, c.onGate && f.gates.has(from)))
+                    // Single distinct cultist ⇒ no meaningful choice: the Ask auto-
+                    // resolves (and RECORDS) so the drag shows in the admin log.
+                    // Multiple ⇒ the faction MUST pick which one (no skip / no done).
+                    implicit val asking = Asking(f)
+                    choices.foreach { c =>
+                        + DCProselytizeDragAction(f, from, to, c.ref, rest, then)
+                    }
+                    asking
+                }
+            }
+
+        // The recorded drag: move the chosen cultist, log it, continue to next faction.
+        case DCProselytizeDragAction(self, from, to, cultistRef, remaining, then) =>
+            val c = game.unit(cultistRef)
+            c.region = to
+            c.onGate = false
+            self.log(Proselytize.styled(DC) + ":", self.short.styled(self), c.uclass.styled(self),
+                "dragged from", from, "to", to)
+            Force(DCProselytizeProcessFactionAction(from, to, remaining, then))
 
         case DCProselytizeFactionSelectAction(self, from, to, movedCount, remaining, selected, then) =>
             if (remaining <= 0) {
@@ -1485,7 +1646,6 @@ object DCExpansion extends Expansion {
                 } else if (acolytes.num <= count) {
                     // Drag all of them (no choice needed).
                     acolytes.foreach { c =>
-                        println(s"[PROSELYTIZE-DRAG-TRACE] Dragging ${c.ref} from ${c.region} (glyph=${c.region.glyph}) to ${to}")
                         c.region = to
                         c.onGate = false
                     }
@@ -1499,7 +1659,6 @@ object DCExpansion extends Expansion {
                     if (offGate.none || onGate.none) {
                         // All same gate status: no meaningful choice — take first N.
                         acolytes.take(count).foreach { c =>
-                            println(s"[PROSELYTIZE-DRAG-TAKE-N] Dragging ${c.ref} from ${c.region} (glyph=${c.region.glyph}) to ${to}. count=${count}, totalAcolytes=${acolytes.num}")
                             c.region = to
                             c.onGate = false
                         }

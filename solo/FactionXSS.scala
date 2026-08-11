@@ -458,10 +458,11 @@ object XSSExpansion extends Expansion {
             self.log(Tsunami.styled(XSS) + ": moved", EyeOfTheStorm.styled(XSS),
                 (extras.any).??(" and " + extras.num + " other Unit" + (extras.num > 1).??("s")),
                 "from", source, "to", dest)
+            // Chronophage: Eye of the Storm moved XSS's own units → offer teleport (A21).
             if (dcAcolyteMoved && game.factions.has(DC) && DC.can(Proselytize))
-                Force(DCProselytizeCheckAction(source, dest, EndAction(self)))
+                Force(DCProselytizeCheckAction(source, dest, CronophageAfterMoveAction(self, EndAction(self))))
             else
-                EndAction(self)
+                CronophageAfterMoveAction(self, EndAction(self))
 
         // -- STATIC ACCUMULATOR (§1.10 SB2 / §3.10.2) -------------------------
         // Pre-Battle: handled via PreBattleQuestion. Perform logic here for the

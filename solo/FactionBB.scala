@@ -43,9 +43,11 @@ case object Bastet        extends FactionUnitClass(BB, "Bastet",          ElderG
 //     worse than a uniform sprinkle, so the cutoff has to be well under 1.0:
 //       0.65 -> 94% of crowded games still had an over-50 unit
 //       0.45 -> 58%,  0.35 -> 20%,  0.30 -> 8%  (avg 0.09 over-50 units/game)
-//     0.30 is the chosen cutoff: over-50 coverage becomes rare while sprites stay
-//     readable (a fully-packed ~20-unit board shrinks an Earth Cat to ~5.5% of
-//     the moon height, still clearly visible).
+//     The analysis above favored a tighter 0.30, but the value actually in live
+//     use — and confirmed identical + working in BB + HB — is SAFE_AREA_RATIO =
+//     0.60 (see below). 0.60 is deliberately permissive: it keeps sprites large
+//     and readable while still capping the worst crowding. (These comments were
+//     corrected to 0.60 on 2026-08-11; they previously mis-stated 0.30.)
 // The overlay sums areaFraction across the units actually on the Moon; if the
 // sum exceeds SAFE_AREA_RATIO it shrinks every sprite by
 //   scale = sqrt(SAFE_AREA_RATIO / sumRatio)
@@ -391,8 +393,10 @@ object BBExpansion extends Expansion {
             if (f.needs(Pay2ForBB) && f.power >= 2)
                 + Pay2ForBBAction(f)
 
+            // Alt Ancients Holy Ground cathedrals cannot be moved, so they cannot be
+            // Catnapped — require at least one movable enemy unit in Bastet's Area.
             if (f.can(Catnapping) && f.onMap(Bastet).any && f.power >= 1 &&
-                f.onMap(Bastet).headOption.exists(b => game.factions.but(f).exists(e => e.at(b.region).any)))
+                f.onMap(Bastet).headOption.exists(b => game.factions.but(f).exists(e => e.at(b.region).%(_.canBeMoved).any)))
                 + CatnappingMainAction(f)
 
             game.libraryActions(f)
@@ -412,7 +416,9 @@ object BBExpansion extends Expansion {
             val bastetRegion = self.onMap(Bastet).headOption.map(_.region)
             bastetRegion match {
                 case Some(r) =>
-                    val eligibleFactions = game.factions.but(self).%(f => f.at(r).any)
+                    // Only factions with a movable unit here are eligible (Holy Ground
+                    // cathedrals cannot be moved, so they can't be Catnapped).
+                    val eligibleFactions = game.factions.but(self).%(f => f.at(r).%(_.canBeMoved).any)
                     Force(CatnappingFactionPickAction(self, $(), eligibleFactions))
                 case None =>
                     UnknownContinue
@@ -439,7 +445,8 @@ object BBExpansion extends Expansion {
                 case Some(r) =>
                     self.power -= 1
                     picked.foreach { f =>
-                        val units = f.at(r)
+                        // Skip units that cannot be moved (Holy Ground cathedrals).
+                        val units = f.at(r).%(_.canBeMoved)
                         units.foreach { u =>
                             u.region = BB.moon
                             u.onGate = false

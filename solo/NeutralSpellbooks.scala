@@ -68,15 +68,12 @@ object NeutralSpellbooksExpansion extends Expansion {
 
             self.ignorePerInstant :+= sb
 
-            // Moonbeast: if a moonbeast was blocking this spellbook, return it to map
-            val moonbeastEntries = game.moonbeastOnSpellbook.filter { case (_, (target, blockedSB)) => target == self && blockedSB == sb }.toList
-            if (moonbeastEntries.any) {
-                moonbeastEntries.foreach { case (mbRef, _) =>
-                    self.oncePerGame = self.oncePerGame.but(sb)
-                    game.moonbeastOnSpellbook -= mbRef
-                }
-                MoonbeastDoomReturnAction(self, moonbeastEntries, EndAction(self))
-            } else
+            // Moonbeast: if a moonbeast was blocking this discarded spellbook, return it to map.
+            // The unified loop clears the once-per-game lock and unregisters each beast itself.
+            val moonbeastRefs = game.moonbeastOnSpellbook.filter { case (_, (target, blockedSB)) => target == self && blockedSB == sb }.keys.toList
+            if (moonbeastRefs.any)
+                MoonbeastReturnLoopAction(moonbeastRefs, EndAction(self))
+            else
                 EndAction(self)
 
         // UNDIMENSIONED
@@ -109,8 +106,11 @@ object NeutralSpellbooksExpansion extends Expansion {
                 Ask(self).list(options).cancel
 
         case UndimensionedDoneAction(self) =>
+            // Chronophage: if Undimensioned actually rearranged (moved) a unit, offer the
+            // Hound teleport (A14). The Moved tag is still present here; clear it after.
+            val didMove = self.units.tag(Moved).any
             self.units.foreach(_.remove(Moved))
-            EndAction(self)
+            didMove.?(CronophageAfterMoveAction(self, EndAction(self)) : Continue).|(EndAction(self))
 
         case UndimensionedAction(self, destinations, uc, o, r) =>
             if (self.units.onMap.tag(Moved).none) {
