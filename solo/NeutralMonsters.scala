@@ -182,14 +182,26 @@ case class MoonbeastInitialPlaceAction(self : Faction, target : Faction, sb : Sp
 // RECORDED (not Soft): the victim's click must persist to the server so every client — and a
 // refresh — sees it. A Soft entry only mutated the clicker's local state, so the beast owner was
 // never prompted and a refresh popped the beast back onto the Spellbook.
-case class MoonbeastPrematureReturnAction(self : Faction) extends BaseFactionAction("Moonbeast".styled("nt"), "Remove " + "Moonbeast".styled("nt") + " from Spellbook " + "(" + 1.doom + ")")
+// OutOfTurn (mirrors RevealESAction): a RECORDED action taken out of turn that must hand control
+// back to the interrupted menu afterwards. Without OutOfTurn, this recorded click overwrites the
+// engine's saved "return-here" menu (Game.performContinue line ~2383), so the later OutOfTurnReturn
+// re-reads the placement menu and re-prompts endlessly (game "Pain for Oblivion": 7 duplicate
+// MoonbeastReturnPlaceAction entries). OutOfTurn stops the clobber; the trait does NOT change
+// recording or serialization, so existing recorded games replay identically.
+case class MoonbeastPrematureReturnAction(self : Faction) extends BaseFactionAction("Moonbeast".styled("nt"), "Remove " + "Moonbeast".styled("nt") + " from Spellbook " + "(" + 1.doom + ")") with OutOfTurn
 // Unified Moonbeast return flow — used by premature return, the Doom Phase, and Recriminations.
 // Both actions are RECORDED (not Soft) so the beast owner's placement choice persists and survives
 // a refresh. The loop carries only a flat list of UnitRefs (fully serializable — no nested tuples);
 // target / spellbook / owner are re-derived from live state each step, and the once-per-game
 // Spellbook lock is cleared as each beast is removed.
 case class MoonbeastReturnLoopAction(refs : $[UnitRef], then : Action) extends ForcedAction
-case class MoonbeastReturnPlaceAction(self : Faction, mbRef : UnitRef, r : Region, then : Action) extends BaseFactionAction(implicit g => "Moonbeast".styled("nt") + " return", implicit g => "Place at " + r)
+// OutOfTurn (mirrors RevealESAction): the beast owner's placement is a RECORDED click that, in the
+// premature-return path, is the LAST recorded action before OutOfTurnReturn. Untagged, it overwrites
+// the saved "return-here" menu, so OutOfTurnReturn re-reads THIS placement menu and re-prompts (the
+// 7-duplicate bug). OutOfTurn stops the clobber. Shared with the Doom-phase path, where it is
+// harmless: that path ends in DoomPhaseAction, a concrete recorded action that resets the saved menu
+// itself. The trait does NOT change recording/serialization, so existing games replay identically.
+case class MoonbeastReturnPlaceAction(self : Faction, mbRef : UnitRef, r : Region, then : Action) extends BaseFactionAction(implicit g => "Moonbeast".styled("nt") + " return", implicit g => "Place at " + r) with OutOfTurn
 case class MoonbeastChooseFactionAction(self : Faction, target : Faction) extends BaseFactionAction(implicit g => "Moonbeast".styled("nt") + " — choose enemy", target.full) {
     override def question(implicit game : Game) = self.full + " — " + "Moonbeast".styled("nt") + " — choose enemy Faction"
 }
@@ -521,6 +533,19 @@ object NeutralMonstersExpansion extends Expansion {
         case MoonbeastReturnPlaceAction(self, mbRef, r, then) =>
             val mb = game.unit(mbRef)
             mb.region = r
+            // Make this RECORDED action self-contained so it fully "returns" the beast on
+            // its own. Live play already unregistered the beast + cleared the Spellbook lock
+            // inside the (Force'd, un-recorded) MoonbeastReturnLoopAction head before this ran;
+            // on REPLAY that loop head is suppressed, so only this recorded place action fires.
+            // If we merely set the region, moonbeastOnSpellbook still lists the beast and the
+            // board renders it stuck on the Spellbook (CthulhuWarsSolo render keys off that map).
+            // Doing the removal here too is idempotent: a no-op live (already gone), corrective
+            // on replay.
+            if (game.moonbeastOnSpellbook.contains(mbRef)) {
+                val (target, sb) = game.moonbeastOnSpellbook(mbRef)
+                target.oncePerGame = target.oncePerGame.but(sb)
+                game.moonbeastOnSpellbook -= mbRef
+            }
             self.log(MoonbeastUnit.styled(self), "placed at", r)
             Force(then)
 

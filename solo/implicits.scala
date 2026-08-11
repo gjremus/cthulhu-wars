@@ -117,8 +117,13 @@ trait GameImplicits {
     implicit def factionToDesc(f : Faction) : Game => String = (g : Game) => f.full
     implicit def spellbookToDesc(b : Spellbook) : Game => String = (g : Game) => b.elem
     implicit def optionToDesc(n : |[String]) : Game => String = (g : Game) => n.|(null)
-    implicit def unitRefShortToDesc(ur : UnitRefShort) : Game => String = (g : Game) => g.unit(ur.r).short
-    implicit def unitRefFullToDesc(ur : UnitRefFull) : Game => String = (g : Game) => g.unit(ur.r).full
+    // Mind Parasite: a parasitized cultist must render its split (original/insect)
+    // color in EVERY menu label, exactly as Game.desc already does for the game
+    // log. These two implicits are the shared choke point for menu labels written
+    // as ur.short / ur.full (Assign Pain, Retreat, Abduct, Capture target, etc.),
+    // so routing MindParasiteCultist through styledName here fixes them all at once.
+    implicit def unitRefShortToDesc(ur : UnitRefShort) : Game => String = (g : Game) => { val u = g.unit(ur.r); if (u.uclass == MindParasiteCultist) u.styledName(g) else u.short }
+    implicit def unitRefFullToDesc(ur : UnitRefFull) : Game => String = (g : Game) => { val u = g.unit(ur.r); if (u.uclass == MindParasiteCultist) u.styledName(g) else u.full }
 
     implicit def actionToForce(a : ForcedAction) : Continue = Force(a)
     implicit def askWrapperToAsk(w : AskWrapper) : Continue = w.ask
