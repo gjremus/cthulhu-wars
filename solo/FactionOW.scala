@@ -418,8 +418,12 @@ object OWExpansion extends Expansion {
             // flow going so the game does not crash. Live play always has the
             // target, so behavior is unchanged -- this only steps aside in the
             // exact spot that used to throw "head of empty list".
-            self.at(r, uc).%(_.health == Alive).sortP.headOption
-                .orElse(self.at(r, uc).sortP.headOption).foreach { u =>
+            // Replay-safety: apply the kill/pain ONLY to a genuinely Alive unit
+            // of that class. If none is Alive we SKIP the mutation -- never fall
+            // back to an already-Killed/Pained figure, because re-marking a killed
+            // unit breaks the split's kill accounting and strands it on the board
+            // (the Existence-and-Colour bug). Live play always has the Alive target.
+            self.at(r, uc).%(_.health == Alive).sortP.headOption.foreach { u =>
                 u.health = (s == Kill).?(Killed).|(Pained)
             }
             Ask(f).add(DreadCurseSplitAction(f, r, $, e, k, p))
@@ -433,8 +437,11 @@ object OWExpansion extends Expansion {
             // (rebuild-from-history mismatch). Retreat it if present; otherwise
             // skip the placement but continue the retreat chain so the game does
             // not crash. Live play always has the unit, so behavior is unchanged.
-            f.at(r, uc).%(_.health == Pained).sortP.headOption
-                .orElse(f.at(r, uc).sortP.headOption).foreach { u =>
+            // Replay-safety: retreat ONLY a genuinely Pained unit of that class.
+            // If none is Pained we SKIP -- never fall back to an Alive/Killed figure,
+            // because moving the wrong (or already-dead) unit corrupts positions on
+            // replay (the Existence-and-Colour bug). Live play always has the Pained unit.
+            f.at(r, uc).%(_.health == Pained).sortP.headOption.foreach { u =>
                 game.fbSuppressCGForPlacement = true
                 u.region = d
                 game.fbSuppressCGForPlacement = false
@@ -449,8 +456,21 @@ object OWExpansion extends Expansion {
 
             if (m.any)
                 Ask(self).each(m)(u => DreadCurseRetreatAction(self, r, e, u.faction, u.uclass))
-            else
+            else {
+                // Replay-safety sweep: eliminate any Killed units still standing in r
+                // at the curse's terminal. On a short-board replay (e.g. a Zygote that
+                // placed fewer acolytes than the recorded roll had results for), the
+                // recorded stream can finish with a pain-retreat that finds no pained
+                // unit, so the resolve loop never removes the already-killed units --
+                // stranding them on the board forever (the Existence-and-Colour phantom
+                // cultists). In live play every killed unit was already eliminated before
+                // any retreat, so no Killed unit remains here and this is a no-op.
+                e./~(f => f.at(r).%(_.health == Killed)).foreach { u =>
+                    log(u, "was", "killed".styled("kill"))
+                    game.eliminate(u)
+                }
                 EndAction(self)
+            }
 
         // DRAGON DESCENDING
         case DragonDescendingDoomAction(self, cost) =>

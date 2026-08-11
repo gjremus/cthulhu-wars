@@ -182,7 +182,7 @@ case class BattleProceedAction(next : BattlePhase) extends ForcedAction
 case class BattleRollAction(f : Faction, rolls : $[BattleRoll], next : BattlePhase) extends ForcedAction
 case class AzathothDaemonSultanKillRollAction(self : Faction, roll : Int) extends ForcedAction
 
-case class AssignKillAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Kill" + (count > 1).??("s")).styled("kill"), implicit g => g.unit(ur).full + (ur.faction == TT && ur.uclass == HighPriest && TT.can(Martyrdom)).??(" — all other kills to Pains with " + Martyrdom.styled(TT)))
+case class AssignKillAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Kill" + (count > 1).??("s")).styled("kill"), implicit g => g.unit(ur).styledFull + (ur.faction == TT && ur.uclass == HighPriest && TT.can(Martyrdom)).??(" — all other kills to Pains with " + Martyrdom.styled(TT)))
 case class AssignPainAction(self : Faction, count : Int, faction : Faction, ur : UnitRef) extends BaseFactionAction("Assign " + (count > 1).??(count.styled("highlight") + " ") + ("Pain" + (count > 1).??("s")).styled("pain"), ur.full)
 
 case class RetreatOrderAction(self : Faction, a : Faction, b : Faction) extends BaseFactionAction("Retreat order", "" + a + " then " + b)
@@ -941,6 +941,32 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     log("No defenders left to battle")
 
                     return jump(PostBattlePhase)
+                }
+
+                // Ghatanothoa IGOO Mummify: mummified cultists "do not participate in Battle"
+                // (rules card). attacker/defender.forces above grab EVERY unit in the arena,
+                // which wrongly included laid-down mummified cultists — so they counted toward
+                // combat strength and could be rolled for / assigned casualties. Exempt them from
+                // both sides here, mirroring the Grasping Dead exemption just below. exempt()
+                // removes the unit from its side's forces without eliminating it, so the cultist
+                // stays in the region (laid on its side) and is neither a combatant nor a
+                // casualty — exactly as the rules require. Re-check for an empty side afterwards
+                // in case every unit on a side was mummified.
+                if (game.mummifiedCultists.any) {
+                    sides.foreach { s =>
+                        s.forces.%(u => game.mummifiedCultists.has(u.ref)).foreach { u =>
+                            log(u.uclass.styled(u.faction), "in", arena, "is Mummified and does not participate in Battle")
+                            exempt(u)
+                        }
+                    }
+                    if (attacker.forces.none) {
+                        log("No attackers left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                    if (defender.forces.none) {
+                        log("No defenders left to battle")
+                        return jump(PostBattlePhase)
+                    }
                 }
 
                 // Albino Penguins: transferred penguins are now in the battle side's units list

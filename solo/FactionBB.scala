@@ -46,9 +46,10 @@ case object Bastet        extends FactionUnitClass(BB, "Bastet",          ElderG
 //     worse than a uniform sprinkle, so the cutoff has to be well under 1.0:
 //       0.65 -> 94% of crowded games still had an over-50 unit
 //       0.45 -> 58%,  0.35 -> 20%,  0.30 -> 8%  (avg 0.09 over-50 units/game)
-//     0.30 is the chosen cutoff: over-50 coverage becomes rare while sprites stay
-//     readable (a fully-packed ~20-unit board shrinks an Earth Cat to ~5.5% of
-//     the moon height, still clearly visible).
+//     (Those figures come from the original harsher calibration pass.) The value
+//     ACTUALLY IN LIVE USE is SAFE_AREA_RATIO = 0.60 (see below) — a deliberately
+//     gentler cutoff that keeps sprites larger and more readable, accepting a
+//     little more coverage. Comment corrected 2026-08-11 to match the real code.
 // The overlay sums areaFraction across the units actually on the Moon; if the
 // sum exceeds SAFE_AREA_RATIO it shrinks every sprite by
 //   scale = sqrt(SAFE_AREA_RATIO / sumRatio)
