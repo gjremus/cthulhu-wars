@@ -246,6 +246,17 @@ class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int,
             game.fbHasCGActive &&
             FB.units.exists(u => u.region == r && (u.uclass == RevenantOfKnaa || u.uclass == Ghatanothoa)))
             game.fbCyclopeanGazeActionRegions :+= r
+        // Cyclopean Gaze must NOT fire on Pains (rulebook): a Pain-driven forced retreat
+        // is not a Move/placement into the gaze region. Pain-arrivals are wrapped in
+        // fbSuppressCGForPlacement, which already blocks the edge-case path above — but the
+        // snapshot-DELTA path in FactionFB.scala compares before/after counts and would still
+        // see the arrival. Keep the snapshot in lockstep with the suppressed arrival so the
+        // later delta nets zero. (E.g. Opener of the Way's Dread Curse of Azathoth pains an
+        // enemy unit into a Revenant/Ghatanothoa region.)
+        if (game.fbSuppressCGForPlacement && prev != r && faction != FB &&
+            uclass.utype != Building && game.fbHasCGActive &&
+            game.fbCyclopeanGazeSnapshot.contains((faction, r)))
+            game.fbCyclopeanGazeSnapshot += (faction, r) -> faction.at(r).%(_.uclass.utype != Building).num
     }
 
     override def toString = short

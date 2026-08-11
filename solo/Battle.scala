@@ -386,10 +386,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s.has(MillionFavoredOnes))
             s.add(MillionFavoredOnes)
 
-        if (s.has(UnholyGround)) {
+        if (s.has(UnholyGround))
             s.add(UnholyGround)
-            log("[UG-TRACE] preroll:", s.full, "gained UnholyGround battle tag")
-        }
     }
 
     def postroll(s : Faction) {
@@ -863,8 +861,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
             case UnholyGroundPhase =>
                 sides.foreach { s =>
-                    if (s.has(UnholyGround) || s.tag(UnholyGround))
-                        log("[UG-TRACE] phase:", s.full, "hasUG=" + s.has(UnholyGround), "tagUG=" + s.tag(UnholyGround), "cathedralInArena=" + game.cathedrals.has(arena))
                     if (s.tag(UnholyGround)) {
                         s.remove(UnholyGround)
 

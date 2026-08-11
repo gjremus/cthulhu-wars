@@ -1451,48 +1451,56 @@ object CthulhuWarsSolo {
                         regionGeomComputed = true
                     }
 
-                    // Identify "small" library regions (bbox area ≤ Gloomloft 5U).
-                    // Every object in these regions gets a flat 0.852 shrink applied
-                    // up front. Class-global shrink (below) is suppressed for these,
-                    // since the uniform handles them.
+                    // 2026-08-10 (Task #124): ONE continuous coverage-based uniform shrink,
+                    // reusing the Moon's consistent-percentage algorithm (BBMoonSizing.shrinkFactor).
+                    // For each region we sum every sprite's on-screen box area (scaled proto
+                    // width*height) as a fraction of the region's bbox area. If that coverage
+                    // exceeds the safe budget, EVERY object in the region is shrunk by one
+                    // uniform factor sqrt(LibrarySafeCoverage / coverage). Because sprite area
+                    // scales with the SQUARE of the linear factor, this one pass lands the
+                    // post-shrink coverage exactly at the budget — identical math to the Moon.
+                    //
+                    // This deliberately REPLACES the three old fixed-0.852 triggers
+                    // (small-area ≤ Gloomloft-5U, large-unit maxDim > 96, count ≥ 5): the
+                    // single coverage sum subsumes all of them — a big unit inflates the
+                    // numerator, many units inflate the numerator, and a small room shrinks
+                    // the denominator. The factor is applied UNIFORMLY to every unit in the
+                    // room (all classes shrink by the same percentage), NOT the BB per-unit
+                    // relative-by-physical-size scaling. Floored so units never vanish.
+                    val LibrarySafeCoverage = 0.42
+                    val LibraryUniformShrinkFloor = 0.455
                     regionUniformShrink.clear()
-                    regionArea.foreach { case (rg, area) =>
-                        if (area <= SmallRegionAreaCutoff) regionUniformShrink(rg) = SmallRegionUniformShrink
-                    }
-
-                    // 2026-05-21: any non-small region that contains a "large" unit
-                    // (proto.maxDim > LargeUnitTriggerMaxDim) ALSO gets the flat uniform
-                    // shrink applied to every object in that region — per user spec
-                    // "If a large unit triggers the shrinking rule in an area, then
-                    // apply the all unit resizing to that area." This replaces the
-                    // per-class shrink behavior that used to run for those regions.
-                    factions.foreach { f =>
-                        f.allInPlay.foreach { u =>
-                            if (u.region != null && regionGeom.contains(u.region) && !regionUniformShrink.contains(u.region)) {
-                                val sample = DrawItem(u.region, f, u.uclass, u.health, u.state, 0, 0)
-                                val protoR = sample.proto
-                                if (protoR != null) {
-                                    val maxDim = math.max(protoR.width, protoR.height)
-                                    if (maxDim > LargeUnitTriggerMaxDim)
-                                        regionUniformShrink(u.region) = SmallRegionUniformShrink
-                                }
-                            }
+                    val regionSpriteArea = scala.collection.mutable.Map[Region, Double]().withDefaultValue(0.0)
+                    def tallySprite(rg : Region, protoR : DrawRect) : Unit = {
+                        if (protoR != null) {
+                            val w = protoR.width * board.unitScale
+                            val h = protoR.height * board.unitScale
+                            regionSpriteArea(rg) = regionSpriteArea(rg) + w * h
                         }
                     }
-
-                    // Unit-count-based shrink: regions above the small-area cutoff that
-                    // still have no shrink trigger get uniform shrink when crowded (5+ units).
-                    val UnitCountShrinkThreshold = 5
-                    val regionUnitCount = scala.collection.mutable.Map[Region, Int]().withDefaultValue(0)
                     factions.foreach { f =>
                         f.allInPlay.foreach { u =>
                             if (u.region != null && regionGeom.contains(u.region))
-                                regionUnitCount(u.region) = regionUnitCount(u.region) + 1
+                                tallySprite(u.region, DrawItem(u.region, f, u.uclass, u.health, u.state, 0, 0).proto)
                         }
                     }
-                    regionUnitCount.foreach { case (rg, count) =>
-                        if (count >= UnitCountShrinkThreshold && !regionUniformShrink.contains(rg))
-                            regionUniformShrink(rg) = SmallRegionUniformShrink
+                    // Custodian + Librarian belong to LibraryFaction (not in `factions`);
+                    // count their sprites toward crowding too so a room with a big library
+                    // unit shrinks consistently.
+                    $((TheCustodian, game.custodianRegion), (TheLibrarian, game.librarianRegion)).foreach { case (uc, regionOpt) =>
+                        regionOpt.foreach { r =>
+                            if (regionGeom.contains(r))
+                                tallySprite(r, DrawItem(r, LibraryFaction, uc, Alive, $, 0, 0).proto)
+                        }
+                    }
+                    regionSpriteArea.foreach { case (rg, spriteArea) =>
+                        regionArea.get(rg).foreach { area =>
+                            if (area > 0) {
+                                val coverage = spriteArea / area.toDouble
+                                val k = if (coverage > LibrarySafeCoverage) math.sqrt(LibrarySafeCoverage / coverage).max(LibraryUniformShrinkFloor) else 1.0
+                                if (k < 0.999) regionUniformShrink(rg) = k
+                            }
+                        }
                     }
 
                     // classRegions: now only ever contains regions that have a large unit
