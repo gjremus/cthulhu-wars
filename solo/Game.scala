@@ -780,6 +780,12 @@ sealed abstract class GateDiplomacyPlan(val label : String) extends Plan {
 case object GateDiplomacyPrompt extends GateDiplomacyPlan("Display all options") with DefaultPlan with OneOfPlan
 case object GateDiplomacySkipAbandon extends GateDiplomacyPlan("Don't prompt abandoning gates") with OneOfPlan
 case object GateDiplomacyCling extends GateDiplomacyPlan("Cling to the gates") with OneOfPlan
+// HB Fix (2026-08-11): "Only Manual Gate Control" — when set, a unit moving into
+// a region with an empty gate (or a unit left standing when a gate is abandoned)
+// does NOT automatically occupy the gate. The gate stays uncontrolled until the
+// player explicitly uses the "Control gates" menu. Suppresses the auto-assign in
+// checkGatesGained; the manual AdjustGateControlAction path is unchanged.
+case object GateDiplomacyOnlyManual extends GateDiplomacyPlan("Only Manual Gate Control") with OneOfPlan
 
 
 sealed abstract class HighPriestGatesPlan(val label : String) extends Plan {
@@ -2304,6 +2310,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                                     self.log("gate control in", r, "blocked by", blockers.mkString(" and ").styled("nt"))
                                 }
                             }
+                            else if (self.commands.has(GateDiplomacyOnlyManual)) {
+                                // "Only Manual Gate Control": the player opted out of
+                                // automatic gate capture. A unit entering a region with an
+                                // empty/abandoned gate does NOT occupy it — the gate stays
+                                // uncontrolled until the player uses the "Control gates"
+                                // menu. Suppress the auto-assign entirely.
+                            }
                             else {
                                 self.at(r).%(_.canControlGate).sortBy(_.uclass @@ {
                                     case DarkYoung => 1
@@ -2427,6 +2440,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (gates.nex.%(r => DS.chaosGateRegions.has(r).not || f == DS).exists(r => factions.%(_.gates.has(r)).none && f.at(r).exists(_.canControlGate))
             || f.gates.nex.exists(r => f.at(r).%(_.canControlGate)./(_.uclass).distinct.diff(f.commands.has(HighPriestGatesSkip).$(HighPriest)).num > 1)
             || (f.commands.has(GateDiplomacyPrompt) && f.gates.nex.any)
+            || (f.commands.has(GateDiplomacyOnlyManual) && f.gates.nex.any)
         )
             + AdjustGateControlAction(f, false, MainAction(f))
     }
@@ -2963,6 +2977,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         GateDiplomacyPrompt,
                         GateDiplomacySkipAbandon,
                         GateDiplomacyCling,
+                        GateDiplomacyOnlyManual,
                     )
 
                     if (options.has(QuickGame))
@@ -5367,6 +5382,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Safety: add TBStalkThreatTBMoves to existing games (2026-08-05)
             if (f == TB && f.plans.of[TBStalkPlan].any && !f.plans.has(TBStalkThreatTBMoves)) {
                 f.plans :+= TBStalkThreatTBMoves
+            }
+
+            // Safety: add GateDiplomacyOnlyManual to existing GateDiplomacy games (2026-08-11)
+            if (options.has(GateDiplomacy) && f.plans.of[GateDiplomacyPlan].any && !f.plans.has(GateDiplomacyOnlyManual)) {
+                f.plans :+= GateDiplomacyOnlyManual
             }
 
             val visiblePlans = f.plans
