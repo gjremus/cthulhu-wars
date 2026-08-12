@@ -2743,8 +2743,19 @@ object CthulhuWarsSolo {
                     // Extra overlay params for specific iGOOs
                     val extraParams = if (lc == AzathothIGOOCard) ", " + game.azathothGlyphPosition
                         else if (lc == BloatedWomanCard) {
-                            val captured = factions./~(ff => ff.at(VelvetFanHold(f)))./(u => u.uclass.name + " (" + u.faction.short + ")")
-                            ", " + captured.num + ", \"" + captured.mkString(", ").replace("\"", "") + "\""
+                            val held = factions./~(ff => ff.at(VelvetFanHold(f)))
+                            val captured = held./(u => u.uclass.name + " (" + u.faction.short + ")")
+                            // Packed sprite list for the overlay: "assetId|display|fShort", ;-separated.
+                            // assetId comes from the unit's own map DrawItem proto so it works for
+                            // cultists, faction monsters and neutral monsters in every build. The
+                            // overlay tints each sprite by faction and lays them out above the
+                            // spellbook requirement. Mirrors the BB Moon overlay's packed-sprite path.
+                            def safeS(s : String) = s.replace("\"", "").replace("'", "").replace(";", "").replace("|", "")
+                            val sprites = held./(u => {
+                                val p = DrawItem(null, u.faction, u.uclass, Alive, $, 0, 0).proto
+                                if (p == null) "" else safeS(p.key) + "|" + safeS(u.uclass.name) + " (" + safeS(u.faction.short) + ")|" + safeS(u.faction.short)
+                            }).filter(_.nonEmpty).mkString(";")
+                            ", " + captured.num + ", \"" + captured.mkString(", ").replace("\"", "") + "\", \"" + sprites + "\""
                         }
                         else ""
                     val sb = spellbook @@ {
@@ -2772,6 +2783,9 @@ object CthulhuWarsSolo {
                     // Atlach-Nacha iGOO: overlay web token count on the silhouette icon
                     else if (lc == AtlachNachaCard && game.webTokens.num > 0)
                         img + s"""<span style='position:absolute;bottom:0.25vh;bottom:0.25dvh;right:${right/12.0}vh;right:${right/12.0}dvh;height:5vh;height:5dvh;width:5vh;width:5dvh;display:flex;align-items:center;justify-content:center;transform:scale(0.8);transform-origin:bottom right;font:bold 3.6vh "Bohemian Typewriter",monospace;color:#ff3333;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;pointer-events:none;'>${game.webTokens.num}</span>"""
+                    // Bloated Woman iGOO: overlay count of units held on the Velvet Fan
+                    else if (lc == BloatedWomanCard && factions./~(ff => ff.at(VelvetFanHold(f))).num > 0)
+                        img + s"""<span style='position:absolute;bottom:0.25vh;bottom:0.25dvh;right:${right/12.0}vh;right:${right/12.0}dvh;height:5vh;height:5dvh;width:5vh;width:5dvh;display:flex;align-items:center;justify-content:center;transform:scale(0.8);transform-origin:bottom right;font:bold 3.6vh "Bohemian Typewriter",monospace;color:#ff3333;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;pointer-events:none;'>${factions./~(ff => ff.at(VelvetFanHold(f))).num}</span>"""
                     else
                         img
                 }.mkString("")
@@ -3174,14 +3188,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         dd(DrawItem(null, f, DimensionalShamblerUnit, Alive, $, x + 35, y + 75).rect)
                 }
 
-                // Bloated Woman Velvet Fan: render captured units on BW owner's faction card
-                val velvetFanUnits = game.setup./~(e => e.at(VelvetFanHold(f)))
-                velvetFanUnits.reverse.zipWithIndex.foreach { case (u, i) =>
-                    val shamblerCount = f.at(ShamblerHold(f)).num
-                    val x = w - iconsWidth - 40 - (shamblerCount + i) * 40
-                    val y = h - 85 - 12
-                    dd(DrawItem(null, u.faction, u.uclass, Alive, $, x + 35, y + 75).rect)
-                }
+                // Bloated Woman Velvet Fan: units held on the Velvet Fan are NOT drawn on the
+                // faction card. They are shown on the Bloated Woman overlay (loyalty-card popup)
+                // instead, with a red count badge on her silhouette icon. See the BloatedWomanCard
+                // branches in the loyalty-card-icon block above and the overlay dispatch.
             }
 
             def updateStatus() {
