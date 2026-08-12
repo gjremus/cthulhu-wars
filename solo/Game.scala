@@ -548,6 +548,11 @@ sealed abstract class GateDiplomacyPlan(val label : String) extends Plan {
 case object GateDiplomacyPrompt extends GateDiplomacyPlan("Display all options") with DefaultPlan with OneOfPlan
 case object GateDiplomacySkipAbandon extends GateDiplomacyPlan("Don't prompt abandoning gates") with OneOfPlan
 case object GateDiplomacyCling extends GateDiplomacyPlan("Cling to the gates") with OneOfPlan
+// Fix (2026-08-11): "Only Manual Gate Control" — when set, a unit moving into a
+// region with an empty gate (or left standing when a gate is abandoned) does NOT
+// automatically occupy the gate. The gate stays uncontrolled until the player
+// uses the manual "Control gates" menu. Suppresses auto-assign in checkGatesGained.
+case object GateDiplomacyOnlyManual extends GateDiplomacyPlan("Only Manual Gate Control") with OneOfPlan
 
 
 sealed abstract class HighPriestGatesPlan(val label : String) extends Plan {
@@ -1451,6 +1456,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                                 self.log("gate control in", r, "blocked by", blockers.mkString(" and ").styled("nt"))
                             }
                         }
+                        else if (self.commands.has(GateDiplomacyOnlyManual)) {
+                            // "Only Manual Gate Control": the player opted out of
+                            // automatic gate capture. When a unit enters a region with
+                            // an empty gate (or a controlled gate is abandoned), do NOT
+                            // auto-assign the gate. The unit stays off the gate; the
+                            // player uses the "Control Gates" menu option to take it.
+                        }
                         else {
                             self.at(r).%(_.canControlGate).sortBy(_.uclass @@ {
                                 case DarkYoung => 1
@@ -1554,6 +1566,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (gates.nex.%(r => DS.chaosGateRegions.has(r).not || f == DS).exists(r => factions.%(_.gates.has(r)).none && f.at(r).exists(_.canControlGate))
             || f.gates.nex.exists(r => f.at(r).%(_.canControlGate)./(_.uclass).distinct.diff(f.commands.has(HighPriestGatesSkip).$(HighPriest)).num > 1)
             || (f.commands.has(GateDiplomacyPrompt) && f.gates.nex.any)
+            || (f.commands.has(GateDiplomacyOnlyManual) && f.gates.nex.any)
         )
             + AdjustGateControlAction(f, false, MainAction(f))
     }
@@ -1759,6 +1772,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         GateDiplomacyPrompt,
                         GateDiplomacySkipAbandon,
                         GateDiplomacyCling,
+                        GateDiplomacyOnlyManual,
                     )
 
                     if (options.has(QuickGame))
@@ -3231,6 +3245,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // COMMANDS
         case CommandsMainAction(f) =>
+            // Safety: add GateDiplomacyOnlyManual to existing GateDiplomacy games (2026-08-11)
+            if (options.has(GateDiplomacy) && f.plans.of[GateDiplomacyPlan].any && !f.plans.has(GateDiplomacyOnlyManual)) {
+                f.plans :+= GateDiplomacyOnlyManual
+            }
             // 2026-05-30 gate-diplomacy lock (v5.2 follow-up): mirror the same filter applied
             // in extraActions so the Commands menu itself can't surface GateDiplomacyPlan or
             // HighPriestGatesPlan entries outside the action phase. UnspeakableOathPlan stays.
