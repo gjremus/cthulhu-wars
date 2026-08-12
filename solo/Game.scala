@@ -2667,8 +2667,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     def doomDone(f : Faction, blockDone : Boolean = false)(implicit w : AskWrapper) {
         if (f.has(GhatanotoaIGOO) && f.upgrades.has(ExecrationOfMu).not) {
-            val gatesOnMap = f.allGates.onMap.num
-            val cultistsOnMap = f.units.%(u => u.region.onMap && u.uclass.utype == Cultist).num
+            val gatesOnMap = f.allGates.%(r => r.onMap || r == BB.moon).num
+            val cultistsOnMap = f.units.%(u => (u.region.onMap || u.region == BB.moon) && u.uclass.utype == Cultist).num
             if (gatesOnMap + cultistsOnMap < 6) {
                 f.upgrades :+= ExecrationOfMu
                 f.log("gained", ExecrationOfMu.styled(f), "for", GhatanotoaIGOO.styled(f), "(" + (gatesOnMap + cultistsOnMap) + " Gates + Cultists on map)")
