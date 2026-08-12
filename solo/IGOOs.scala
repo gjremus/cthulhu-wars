@@ -347,18 +347,20 @@ case class GhostsOfIbSkipAction(self : Faction, then : Action) extends ForcedAct
 case class DoomSarnathMainAction(self : Faction, then : Action) extends ForcedAction
 case class DoomSarnathChooseOption(self : Faction, option : Int, then : Action) extends BaseFactionAction(
     implicit g => "Doom that Came to Sarnath".styled("nt"),
-    implicit g => if (option == 1) "An enemy chooses a monster or cultist of yours to eliminate" else "An enemy chooses one of your elder signs to discard") {
-    override def question(implicit game : Game) = self.full + " — " + "Doom that Came to Sarnath".styled("nt")
+    implicit g => if (option == 1) "Monster / Cultist" else "Elder Sign") {
+    override def question(implicit game : Game) = "Doom that Came to Sarnath".styled("nt") + ": Choose what will be lost"
 }
 case class DoomSarnathChooseFactionAction(self : Faction, option : Int, target : Faction, then : Action) extends BaseFactionAction(
-    implicit g => "Doom that Came to Sarnath".styled("nt"), target.full)
+    implicit g => "Doom that Came to Sarnath".styled("nt"), target.full) {
+    override def question(implicit game : Game) = "Doom that Came to Sarnath".styled("nt") + ": Choose what enemy will decide which " + (if (option == 1) "unit" else "elder sign") + " is lost"
+}
 case class DoomSarnathEliminateUnit(self : Faction, owner : Faction, u : UnitRef, then : Action) extends BaseFactionAction(
-    implicit g => "Choose a " + owner.full + " unit to eliminate", implicit g => g.unitOpt(u)./(uf => uf.uclass.styled(owner) + " in " + uf.region).|(u.uclass.styled(owner))) {
-    override def question(implicit game : Game) = self.full + " — " + "Choose a ".styled("nt") + owner.full + " cultist or monster to eliminate"
+    implicit g => "Doom that Came to Sarnath".styled("nt"), implicit g => g.unitOpt(u)./(uf => uf.styledName(g) + " in " + uf.region + (if (uf.onGate) " (on gate)" else "")).|(u.uclass.styled(owner))) {
+    override def question(implicit game : Game) = "Doom that Came to Sarnath".styled("nt") + ": Choose which " + owner.full + " unit will be eliminated"
 }
 case class DoomSarnathDiscardES(self : Faction, owner : Faction, index : Int, then : Action) extends BaseFactionAction(
-    implicit g => "Choose an elder sign of " + owner.full + " to discard", implicit g => "Elder Sign #" + (index + 1)) {
-    override def question(implicit game : Game) = self.full + " — " + "Choose an elder sign of ".styled("nt") + owner.full + " to discard"
+    implicit g => "Doom that Came to Sarnath".styled("nt"), implicit g => "Elder Sign #" + (index + 1)) {
+    override def question(implicit game : Game) = "Doom that Came to Sarnath".styled("nt") + ": Choose which " + owner.full + " elder sign will be discarded"
 }
 
 // Forced cultist move: shared between Tsunami and Agony Sting
@@ -1448,18 +1450,18 @@ object IGOOsExpansion extends Expansion {
             val bokrugOwner = factions.%(f => f.loyaltyCards.has(BokrugCard) && f.has(DoomThatCameToSarnath) && !f.oncePerGame.has(DoomThatCameToSarnath)).headOption
             bokrugOwner match {
                 case Some(owner) =>
-                    val hasUnits = owner.allInPlay.%(u => u.uclass.utype == Monster || u.uclass.utype == Cultist).any
+                    val hasUnits = owner.units.%(u => u.region.onMap && (u.uclass.utype == Monster || u.uclass.utype == Cultist)).any
                     val hasES = owner.es.any
-                    if (hasUnits || hasES) {
-                        var ask = Ask(owner)
-                        if (hasUnits)
-                            ask = ask.add(DoomSarnathChooseOption(owner, 1, then))
-                        if (hasES)
-                            ask = ask.add(DoomSarnathChooseOption(owner, 2, then))
-                        ask
-                    } else {
+                    // Both available → owner picks (menu 1). Only one available → skip menu 1
+                    // and go straight to the enemy-faction menu (mandatory, no skip/done).
+                    if (hasUnits && hasES)
+                        Ask(owner).add(DoomSarnathChooseOption(owner, 1, then)).add(DoomSarnathChooseOption(owner, 2, then))
+                    else if (hasUnits)
+                        Force(DoomSarnathChooseOption(owner, 1, then))
+                    else if (hasES)
+                        Force(DoomSarnathChooseOption(owner, 2, then))
+                    else
                         Force(then)
-                    }
                 case _ => Force(then)
             }
 
@@ -1486,15 +1488,16 @@ object IGOOsExpansion extends Expansion {
 
         case DoomSarnathEliminateUnit(self, owner, u, then) =>
             val elimRegion = game.unitOpt(u)./(_.region.toString).|("?")
+            val elimName = game.unitOpt(u)./(_.styledName).|(u.uclass.styled(owner))
             game.unitOpt(u).foreach(game.eliminate)
-            self.log("Doom that Came to Sarnath".styled("nt") + ":", self.full, "eliminated", u.uclass.styled(owner), "of", owner.full, "in", elimRegion)
+            self.log(self.full, "chose to eliminate", owner.full, elimName, "from", elimRegion, "for", "Doom that Came to Sarnath".styled("nt"))
             Force(then)
 
         case DoomSarnathDiscardES(self, owner, index, then) =>
             val es = owner.es(index)
             val value = es.value
             owner.es = owner.es.patch(index, Nil, 1)
-            self.log(self.full, "discarded an elder sign of", owner.full, "worth", value.doom)
+            self.log(self.full, "chose to discard", owner.full, "Elder Sign worth", value.doom, "for", "Doom that Came to Sarnath".styled("nt"))
             Force(then)
 
         case _ => UnknownContinue
