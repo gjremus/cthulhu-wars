@@ -1073,36 +1073,24 @@ object Overlays {
     // Round 8 Bug 40: added facedown parameter. When true, spellbook title and text
     // are shown with strikethrough (text-decoration: line-through) to indicate the
     // spellbook has been flipped facedown via Infernal Pact and its power is disabled.
-    // Bloated Woman Velvet Fan: turn the packed sprite list "assetId|display|fShort;..."
+    // Bloated Woman Velvet Fan: turn the packed sprite list "assetId|display|tint:screen:overlay;..."
     // (built in CthulhuWarsSolo when the BW loyalty-card icon is rendered) into a row of
-    // tinted unit sprites for her overlay. Each sprite is tinted by its owner's faction
-    // colour using the same canvas tint engine the map/Moon use, so cultists, faction
-    // monsters and neutral monsters all render correctly. Missing assets are skipped.
+    // tinted unit sprites for her overlay. Each sprite is tinted with the faction colour
+    // triple carried in the entry, replayed through the same canvas tint engine the map
+    // and Moon overlay use — so cultists, faction monsters and neutral monsters all render
+    // correctly with no per-build faction table here. Missing assets are skipped.
     def bloatedWomanHeldHtml(spriteList : String) : String = {
         val entries = if (spriteList.trim.nonEmpty) spriteList.split(";").toList else List.empty
         val imgs = entries./(entry => {
             val parts = entry.split("\\|", 3)
             val assetId = if (parts.length > 0) parts(0).trim else ""
             val display = if (parts.length > 1) parts(1).trim else assetId
-            val fShort  = if (parts.length > 2) parts(2).trim else ""
+            val tintSpec = if (parts.length > 2) parts(2).trim else ""
             if (assetId.isEmpty || dom.document.getElementById(assetId) == null) ""
             else {
-                val tint = fShort match {
-                    case "GC" => CthulhuWarsSolo.Processing(|("#77a055"), |("#222222"), None)
-                    case "CC" => CthulhuWarsSolo.Processing(|("#4977b3"), |("#111111"), None)
-                    case "BG" => CthulhuWarsSolo.Processing(|("#cd3233"), None, |("#555555"))
-                    case "YS" => CthulhuWarsSolo.Processing(|("#ffd000"), |("#663344"), None)
-                    case "WW" => CthulhuWarsSolo.Processing(|("#88a9be"), |("#5577aa"), None)
-                    case "SL" => CthulhuWarsSolo.Processing(|("#db6a33"), |("#4a1a1a"), None)
-                    case "OW" => CthulhuWarsSolo.Processing(|("#6c4296"), None, |("#4c4c4c"))
-                    case "AN" => CthulhuWarsSolo.Processing(|("#47a5bc"), |("#333333"), None)
-                    case "TS" => CthulhuWarsSolo.Processing(|("#BDE0BC"), |("#333333"), None)
-                    case "FB" => CthulhuWarsSolo.Processing(|("#CB307E"), |("#333333"), None)
-                    case "DS" => CthulhuWarsSolo.Processing(|("#3A2825"), None, |("#120E0C"))
-                    case "TT" => CthulhuWarsSolo.Processing(|("#fc9ca0"), |("#333333"), None)
-                    case "BB" => CthulhuWarsSolo.Processing(|("#c8a84b"), |("#333333"), None)
-                    case _    => CthulhuWarsSolo.Processing(None, None, None)
-                }
+                val tp = tintSpec.split(":", -1)
+                def comp(i : Int) : |[String] = if (tp.length > i && tp(i).nonEmpty) |(tp(i)) else None
+                val tint = CthulhuWarsSolo.Processing(comp(0), comp(1), comp(2))
                 val src = CthulhuWarsSolo.getTintedAsset(assetId, tint).toDataURL("image/png")
                 s"""<img src="$src" title="$display" style="height:9vh;height:9dvh;width:auto;object-fit:contain;vertical-align:bottom;margin:0 0.4vh;" />"""
             }

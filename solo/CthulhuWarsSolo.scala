@@ -2752,8 +2752,16 @@ object CthulhuWarsSolo {
                             // spellbook requirement. Mirrors the BB Moon overlay's packed-sprite path.
                             def safeS(s : String) = s.replace("\"", "").replace("'", "").replace(";", "").replace("|", "")
                             val sprites = held./(u => {
-                                val p = DrawItem(null, u.faction, u.uclass, Alive, $, 0, 0).proto
-                                if (p == null) "" else safeS(p.key) + "|" + safeS(u.uclass.name) + " (" + safeS(u.faction.short) + ")|" + safeS(u.faction.short)
+                                val di = DrawItem(null, u.faction, u.uclass, Alive, $, 0, 0)
+                                val p = di.proto
+                                if (p == null) "" else {
+                                    // Carry the faction tint (tint:screen:overlay hex triple) so the
+                                    // overlay needs no per-build faction table — it just replays the
+                                    // same canvas tint the map uses. Empty component = no colour.
+                                    val t = di.tint
+                                    val tintStr = t.tint.|("") + ":" + t.screen.|("") + ":" + t.overlay.|("")
+                                    safeS(p.key) + "|" + safeS(u.uclass.name) + " (" + safeS(u.faction.short) + ")|" + tintStr
+                                }
                             }).filter(_.nonEmpty).mkString(";")
                             ", " + captured.num + ", \"" + captured.mkString(", ").replace("\"", "") + "\", \"" + sprites + "\""
                         }
