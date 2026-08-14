@@ -148,6 +148,14 @@ object DSExpansion extends Expansion {
             asking
 
         // ACTIONS
+        case MainAction(f) if f.has(Psychosis) && f != DS =>
+            implicit val asking = Asking(f)
+
+            if (f.pool.%(_.uclass == Acolyte).any && areas.nex.%(r => game.factions.%(_.at(r).any).none && f.affords(1)(r)).any)
+                + PsychosisAction(f)
+
+            UnknownContinue
+
         case MainAction(f : DS.type) if f.active.not =>
             UnknownContinue
 
