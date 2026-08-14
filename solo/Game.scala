@@ -4561,7 +4561,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             EndAction(self)
 
         // SUMMON
-        case SummonMainAction(self, uc, l) =>
+        case SummonMainAction(self, uc, l, _) =>
             // Servitor of the Outer Gods: block non-terror monster summons inside this sub-menu
             val servitorBlocking = self.loyaltyCards.has(ServitorCard) && self.pool(ServitorUnit).any
             if (servitorBlocking && uc.utype == Monster && uc != ServitorUnit)
