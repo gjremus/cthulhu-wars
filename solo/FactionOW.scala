@@ -294,6 +294,11 @@ object OWExpansion extends Expansion {
             self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
             val gateType = if (game.factions.has(DS) && DS.chaosGateRegions.has(r)) "Chaos Gate" else "gate"
             self.log("moved", gateType, "with", uc.styled(self), "from", o, "to", r)
+
+            // Firstborn Crater: immediately destroy gate if moved to crater region
+            if (game.factions.has(FB) && game.fbCraters.has(r))
+                FBExpansion.checkCraterDestroysGate(r)
+
             // Catnapping: Beyond One spent 1 Power to move OW's own cost-3+ unit off `o`.
             // Credit BB when that unit leaves the Moon (logged AFTER the move). The gate
             // leg is a non-unit and irrelevant to Catnapping; credit once.

@@ -1466,6 +1466,8 @@ case class RecruitAction(self : Faction, uc : UnitClass, r : Region) extends Bas
 
 case class SummonMainAction(self : Faction, uc : UnitClass, l : $[Region]) extends OptionFactionAction("Summon " + uc.styled(self)) with MainQuestion with Soft
 case class SummonAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => "Summon " + uc.styled(self) + g.forNPowerWithTax(r, self, self.summonCost(uc, r)) + " in", implicit g => r + self.iced(r))
+case class SummonFromPoolAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => "Summon " + uc.styled(self) + " from pool" + g.forNPowerWithTax(r, self, self.summonCost(uc, r)) + " in", implicit g => r + self.iced(r))
+case class SummonFromVelvetFanAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => "Summon " + uc.styled(self) + " from Velvet Fan" + g.forNPowerWithTax(r, self, self.summonCost(uc, r)) + " in", implicit g => r + self.iced(r))
 case class SummonedAction(self : Faction, uc : UnitClass, r : Region, l : $[Region]) extends ForcedAction
 
 case class AwakenMainAction(self : Faction, uc : UnitClass, l : $[Region]) extends OptionFactionAction("Awaken " + uc.styled(self)) with MainQuestion with Soft
@@ -2553,21 +2555,30 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         }
 
         // Abhoth Filth: Special Ability — suppressed by Elder Thing
+        // ALSO blocked by Servitor (must summon Servitors first)
         if (f.has(Abhoth) && f.pool(Filth).any && f.allInPlay.%(_.uclass == Abhoth).exists(u => ElderThingMindControl.suppresses(u)))
             + GroupAction("Filth".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
+        else if (servitorBlocking)
+            + GroupAction("Filth".styled("nt") + " blocked by " + "Servitor of the Outer Gods".styled("nt"))
         else if (f.has(Abhoth) && f.pool(Filth).any && !f.allInPlay.%(_.uclass == Abhoth).exists(u => ElderThingMindControl.suppresses(u))) {
             areas.nex.%(r => f.affords(f.summonCost(Filth, r))(r)).some.foreach { l =>
                 + FilthMainAction(f, l)
             }
         }
 
-        if (!servitorBlocking && f.loyaltyCards.has(DimensionalShamblerCard) && f.pool(DimensionalShamblerUnit).any && f.power >= f.summonCost(DimensionalShamblerUnit, f.reserve))
+        // Dimensional Shambler: blocked by Servitor (must summon Servitors first)
+        if (servitorBlocking && f.loyaltyCards.has(DimensionalShamblerCard) && f.pool(DimensionalShamblerUnit).any)
+            + GroupAction("Dimensional Shambler".styled("nt") + " blocked by " + "Servitor of the Outer Gods".styled("nt"))
+        else if (!servitorBlocking && f.loyaltyCards.has(DimensionalShamblerCard) && f.pool(DimensionalShamblerUnit).any && f.power >= f.summonCost(DimensionalShamblerUnit, f.reserve))
             + ShamblerSummonMainAction(f)
 
         // Moonbeast: custom summon onto enemy spellbook
         // Exclude moonbeasts already on spellbooks from available pool
+        // ALSO blocked by Servitor (must summon Servitors first)
         val availableMoonbeasts = f.pool(MoonbeastUnit).%(u => !game.moonbeastOnSpellbook.contains(u.ref))
-        if (!servitorBlocking && f.loyaltyCards.has(MoonbeastCard) && availableMoonbeasts.any && f.power >= 2 && f.allGates.onMapOrMoon.any) {
+        if (servitorBlocking && f.loyaltyCards.has(MoonbeastCard) && availableMoonbeasts.any)
+            + GroupAction("Moonbeast".styled("nt") + " blocked by " + "Servitor of the Outer Gods".styled("nt"))
+        else if (!servitorBlocking && f.loyaltyCards.has(MoonbeastCard) && availableMoonbeasts.any && f.power >= 2 && f.allGates.onMapOrMoon.any) {
             val hasTarget = f.enemies.exists(e => e.spellbooks.any || e.unfulfilled.any)
             if (hasTarget)
                 + MoonbeastSummonMainAction(f)
@@ -2577,13 +2588,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // Bloated Woman Velvet Fan: offer summon for monsters held on any faction's Velvet Fan
         // Skip if pool already has the same unit class (normal summon already offered)
+        // ALSO skip if Servitor blocking is active (must summon Servitors first)
         val poolMonsterClasses = f.pool.monsterly./(_.uclass).distinct
         val velvetFanMonsters = f.units.%(u => u.region.is[VelvetFanHold] && u.uclass.utype == Monster)
-        velvetFanMonsters./(_.uclass).distinct.diff(poolMonsterClasses).%(_ => !servitorBlocking).foreach { uc =>
+        velvetFanMonsters./(_.uclass).distinct.diff(poolMonsterClasses).foreach { uc =>
+            // Servitor blocking: only allow ServitorUnit itself
+            if (!servitorBlocking || uc == ServitorUnit) {
             // HB Fix 113 (2026-06-13): Tenebrosum-repeat affords bypass (Sin-paid).
             // HB Fix 117 (2026-06-15): gate on SIN affordability under the guard.
             summonAreas.nex.%(r => (if (dcTenebrosumGuard) (if (f == SL) slSin else dcSin) >= f.summonCost(uc, r) else f.affords(f.summonCost(uc, r))(r))).%(f.canAccessGate).some.foreach { l =>
                 + SummonMainAction(f, uc, l)
+            }
             }
         }
     }
@@ -5224,9 +5239,74 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val servitorBlocking = self.loyaltyCards.has(ServitorCard) && self.pool(ServitorUnit).any
             if (servitorBlocking && uc.utype == Monster && uc != ServitorUnit)
                 Ask(self).add(GroupAction(uc.name + " summon blocked by " + "Servitor of the Outer Gods".styled("nt"))).cancel
-            else
-                Ask(self).each(l)(r => SummonAction(self, uc, r)).cancel
+            else {
+                val hasPoolUnit = self.pool(uc).any
+                val hasVelvetFanUnit = self.units.%(u => u.uclass == uc && u.region.is[VelvetFanHold]).any
 
+                if (hasPoolUnit && hasVelvetFanUnit) {
+                    // Both available: offer choice of source
+                    Ask(self)
+                        .each(l)(r => SummonFromPoolAction(self, uc, r))
+                        .each(l)(r => SummonFromVelvetFanAction(self, uc, r))
+                        .cancel
+                } else if (hasVelvetFanUnit) {
+                    // Only Velvet Fan available
+                    Ask(self).each(l)(r => SummonFromVelvetFanAction(self, uc, r)).cancel
+                } else {
+                    // Only pool available (or neither, will be caught by handler)
+                    Ask(self).each(l)(r => SummonFromPoolAction(self, uc, r)).cancel
+                }
+            }
+
+        // SUMMON FROM POOL (explicit choice)
+        case SummonFromPoolAction(self, uc, r) =>
+            if (self.pool(uc).none || self.affords(self.summonCost(uc, r))(r).not)
+                EndAction(self)
+            else {
+                val cost = self.summonCost(uc, r)
+                self.power -= cost
+                self.payTax(r)
+                self.place(uc, r)
+                self.log("summoned", uc.styled(self), "in", r, "from pool")
+
+                // Universal CG trigger: non-FB summon into a gaze region.
+                if (self != FB && uc.utype != Building && fbHasCGActive &&
+                    FB.units.exists(uf => uf.region == r && (uf.uclass == RevenantOfKnaa || uf.uclass == Ghatanothoa)))
+                    fbCyclopeanGazeActionRegions :+= r
+
+                SummonedAction(self, uc, r, $)
+            }
+
+        // SUMMON FROM VELVET FAN (explicit choice)
+        case SummonFromVelvetFanAction(self, uc, r) =>
+            val onCard = self.units.%(u => u.uclass == uc && u.region.is[VelvetFanHold])
+            if (onCard.none || self.affords(self.summonCost(uc, r))(r).not)
+                EndAction(self)
+            else {
+                val cost = self.summonCost(uc, r)
+                self.power -= cost
+                self.payTax(r)
+                val u = onCard.head
+                val bwOwner = u.region.asInstanceOf[VelvetFanHold].faction
+                u.region = r
+                // Card: "no one will be paid Power for this while she is out of play"
+                val bwInPlay = bwOwner.allInPlay.%(_.uclass == BloatedWoman).any
+                if (bwInPlay) {
+                    bwOwner.power += cost
+                    self.log("summoned", uc.styled(self), "in", r, "from", "Velvet Fan".styled("nt"), "— paid", cost.power, "to", bwOwner.full)
+                } else {
+                    self.log("summoned", uc.styled(self), "in", r, "from", "Velvet Fan".styled("nt"), "— Bloated Woman out of play, no payment")
+                }
+
+                // Universal CG trigger: non-FB summon into a gaze region.
+                if (self != FB && uc.utype != Building && fbHasCGActive &&
+                    FB.units.exists(uf => uf.region == r && (uf.uclass == RevenantOfKnaa || uf.uclass == Ghatanothoa)))
+                    fbCyclopeanGazeActionRegions :+= r
+
+                SummonedAction(self, uc, r, $)
+            }
+
+        // SUMMON (legacy handler for backward compat — now routes to specific handlers internally)
         case SummonAction(self, uc, r) =>
             // Bloated Woman: units on VelvetFanHold count as available for summoning
             val hasVelvetFanUnit = self.units.%(u => u.uclass == uc && u.region.is[VelvetFanHold]).any
@@ -5285,6 +5365,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
 
         case SummonedAction(self, uc, r, l) =>
+            // SATYR FECUND: must fire before BG Fertility's unlimited-action return
+            // (BG Fertility handler below would Force(MainAction) and skip this)
+            if (uc == Satyr && self.loyaltyCards.has(SatyrCard) && self.pool(Acolyte).any) {
+                self.place(Acolyte, r)
+                self.log("Fecund".styled("nt") + ": placed", Acolyte.styled(self), "in", r, "with", Satyr.styled(self))
+            }
+
             // BG Fertility Cult: unlimited action (return to main menu after summon)
             if (self.name == "BG" && self.oncePerRound.contains(Fertility)) {
                 triggers()
