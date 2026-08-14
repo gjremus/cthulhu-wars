@@ -291,6 +291,11 @@ object OWExpansion extends Expansion {
                 self.log("moved", "Chaos Gate".styled("ds"), "with", uc.styled(self), "from", o, "to", r)
             else
                 self.log("moved gate with", uc.styled(self), "from", o, "to", r)
+
+            // Firstborn Crater: immediately destroy gate if moved to crater region
+            if (game.factions.has(FB) && game.fbCraters.has(r))
+                FBExpansion.checkCraterDestroysGate(r)
+
             // Chronophage: Beyond One moved own cost-3+ unit (with its gate) → offer teleport (A11).
             CronophageAfterMoveAction(self, EndAction(self))
 

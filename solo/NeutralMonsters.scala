@@ -370,10 +370,8 @@ object NeutralMonstersExpansion extends Expansion {
             Force(then)
 
         // SATYR FECUND: when a Satyr is summoned, also place 1 Acolyte from Pool
-        case SummonedAction(self, uc, r, l) if uc == Satyr && self.loyaltyCards.has(SatyrCard) && self.pool(Acolyte).any =>
-            self.place(Acolyte, r)
-            self.log("Fecund".styled("nt") + ": placed", Acolyte.styled(self), "in", r, "with", Satyr.styled(self))
-            EndAction(self)
+        // SATYR FECUND: moved to Game.scala SummonedAction handler to run before
+        // BG Fertility's unlimited-action return (which would skip this handler)
 
         // HOUND OF TINDALOS CRONOPHAGE: when owner moves another unit, offer free Hound teleport
         // Card: "teleports directly from an Area with a Gate to another Area with a Gate"
