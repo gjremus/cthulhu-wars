@@ -1953,6 +1953,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // Servitor of the Outer Gods: if faction has ServitorCard and servitors in pool,
         // block all non-terror monster summons (not ServitorUnit itself)
         // Blocking text shown inside summon sub-menu, not here in top-level menu
+        val servitorBlocking = f.loyaltyCards.has(ServitorCard) && f.pool(ServitorUnit).any
 
         f.pool.monsterly.sortP./(_.uclass).distinct.%(_.canBeSummoned(f)).%(uc => f.all(uc).num < f.units./(_.uclass).count(uc)).foreach { uc =>
             areas.nex.%(r => f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
@@ -1995,7 +1996,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // Bloated Woman Velvet Fan: offer summon for monsters held on any faction's Velvet Fan
         // Skip if pool already has the same unit class (normal summon already offered)
         // ALSO skip if Servitor blocking is active (must summon Servitors first)
-        val servitorBlocking = f.loyaltyCards.has(ServitorCard) && f.pool(ServitorUnit).any
         val poolMonsterClasses = f.pool.monsterly./(_.uclass).distinct
         val velvetFanMonsters = f.units.%(u => u.region.is[VelvetFanHold] && u.uclass.utype == Monster)
         velvetFanMonsters./(_.uclass).distinct.diff(poolMonsterClasses).foreach { uc =>
