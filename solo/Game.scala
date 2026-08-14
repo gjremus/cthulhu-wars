@@ -1298,7 +1298,7 @@ case class MindParasiteAllowCaptureAction(self : Faction, captor : Faction, r : 
 case class RecruitMainAction(self : Faction, uc : UnitClass, l : $[Region]) extends OptionFactionAction("Recruit " + uc.styled(self)) with MainQuestion with Soft
 case class RecruitAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => "Recruit " + uc.styled(self) + g.forNPowerWithTax(r, self, self.recruitCost(uc, r)) + " in", implicit g => r + self.iced(r))
 
-case class SummonMainAction(self : Faction, uc : UnitClass, l : $[Region]) extends OptionFactionAction("Summon " + uc.styled(self)) with MainQuestion with Soft
+case class SummonMainAction(self : Faction, uc : UnitClass, l : $[Region], suffix : String = "") extends OptionFactionAction("Summon " + uc.styled(self) + suffix) with MainQuestion with Soft
 case class SummonAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => "Summon " + uc.styled(self) + g.forNPowerWithTax(r, self, self.summonCost(uc, r)) + " in", implicit g => r + self.iced(r))
 case class SummonFromPoolAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => "Summon " + uc.styled(self) + " from pool" + g.forNPowerWithTax(r, self, self.summonCost(uc, r)) + " in", implicit g => r + self.iced(r))
 case class SummonFromVelvetFanAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => "Summon " + uc.styled(self) + " from Velvet Fan" + g.forNPowerWithTax(r, self, self.summonCost(uc, r)) + " in", implicit g => r + self.iced(r))
@@ -2035,40 +2035,35 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def summons(f : Faction)(implicit w : AskWrapper) {
         // Servitor of the Outer Gods: if faction has ServitorCard and servitors in pool,
         // block all non-terror monster summons (not ServitorUnit itself)
-        // Blocking text shown inside summon sub-menu, not here in top-level menu
         val servitorBlocking = f.loyaltyCards.has(ServitorCard) && f.pool(ServitorUnit).any
 
         f.pool.monsterly.sortP./(_.uclass).distinct.%(_.canBeSummoned(f)).%(uc => f.all(uc).num < f.units./(_.uclass).count(uc)).foreach { uc =>
-            areas.nex.%(r => f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
-                + SummonMainAction(f, uc, l)
+            // Skip non-Servitor monsters when Servitor blocking is active
+            if (!servitorBlocking || uc == ServitorUnit || uc.utype == Terror) {
+                areas.nex.%(r => f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
+                    val suffix = if (uc == ServitorUnit && servitorBlocking) " — other summons blocked" else ""
+                    + SummonMainAction(f, uc, l, suffix)
+                }
             }
         }
 
         // Abhoth Filth: Special Ability — suppressed by Elder Thing
-        // ALSO blocked by Servitor (must summon Servitors first)
+        // Completely hidden when Servitor blocking (don't show menu item at all)
         if (f.has(Abhoth) && f.pool(Filth).any && f.allInPlay.%(_.uclass == Abhoth).exists(u => ElderThingMindControl.suppresses(u)))
             + GroupAction("Filth".styled("nt") + " blocked by " + "Elder Thing".styled("nt"))
-        else if (servitorBlocking)
-            + GroupAction("Filth".styled("nt") + " blocked by " + "Servitor of the Outer Gods".styled("nt"))
-        else if (f.has(Abhoth) && f.pool(Filth).any && !f.allInPlay.%(_.uclass == Abhoth).exists(u => ElderThingMindControl.suppresses(u))) {
+        else if (f.has(Abhoth) && f.pool(Filth).any && !servitorBlocking && !f.allInPlay.%(_.uclass == Abhoth).exists(u => ElderThingMindControl.suppresses(u))) {
             areas.nex.%(r => f.affords(f.summonCost(Filth, r))(r)).some.foreach { l =>
                 + FilthMainAction(f, l)
             }
         }
 
-        // Dimensional Shambler: blocked by Servitor (must summon Servitors first)
-        if (servitorBlocking && f.loyaltyCards.has(DimensionalShamblerCard) && f.pool(DimensionalShamblerUnit).any)
-            + GroupAction("Dimensional Shambler".styled("nt") + " blocked by " + "Servitor of the Outer Gods".styled("nt"))
-        else if (f.loyaltyCards.has(DimensionalShamblerCard) && f.pool(DimensionalShamblerUnit).any && f.power >= f.summonCost(DimensionalShamblerUnit, f.reserve))
+        // Dimensional Shambler: completely hidden when Servitor blocking
+        if (!servitorBlocking && f.loyaltyCards.has(DimensionalShamblerCard) && f.pool(DimensionalShamblerUnit).any && f.power >= f.summonCost(DimensionalShamblerUnit, f.reserve))
             + ShamblerSummonMainAction(f)
 
-        // Moonbeast: custom summon onto enemy spellbook
-        // Exclude moonbeasts already on spellbooks from available pool
-        // ALSO blocked by Servitor (must summon Servitors first)
+        // Moonbeast: completely hidden when Servitor blocking
         val availableMoonbeasts = f.pool(MoonbeastUnit).%(u => !game.moonbeastOnSpellbook.contains(u.ref))
-        if (servitorBlocking && f.loyaltyCards.has(MoonbeastCard) && availableMoonbeasts.any)
-            + GroupAction("Moonbeast".styled("nt") + " blocked by " + "Servitor of the Outer Gods".styled("nt"))
-        else if (f.loyaltyCards.has(MoonbeastCard) && availableMoonbeasts.any && f.power >= 2 && f.allGates.onMap.any) {
+        if (!servitorBlocking && f.loyaltyCards.has(MoonbeastCard) && availableMoonbeasts.any && f.power >= 2 && f.allGates.onMap.any) {
             val hasTarget = f.enemies.exists(e => e.spellbooks.any || e.unfulfilled.any)
             if (hasTarget)
                 + MoonbeastSummonMainAction(f)
@@ -2076,14 +2071,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // Moonbeast: premature return moved to extraActions (available any time, not just own turn)
 
-        // Bloated Woman Velvet Fan: offer summon for monsters held on any faction's Velvet Fan
-        // Skip if pool already has the same unit class (normal summon already offered)
-        // ALSO skip if Servitor blocking is active (must summon Servitors first)
-        val poolMonsterClasses = f.pool.monsterly./(_.uclass).distinct
-        val velvetFanMonsters = f.units.%(u => u.region.is[VelvetFanHold] && u.uclass.utype == Monster)
-        velvetFanMonsters./(_.uclass).distinct.diff(poolMonsterClasses).foreach { uc =>
-            // Servitor blocking: only allow ServitorUnit itself
-            if (!servitorBlocking || uc == ServitorUnit) {
+        // Bloated Woman Velvet Fan: skip monster summons when Servitor blocking
+        if (!servitorBlocking) {
+            val poolMonsterClasses = f.pool.monsterly./(_.uclass).distinct
+            val velvetFanMonsters = f.units.%(u => u.region.is[VelvetFanHold] && u.uclass.utype == Monster)
+            velvetFanMonsters./(_.uclass).distinct.diff(poolMonsterClasses).foreach { uc =>
                 areas.nex.%(r => f.affords(f.summonCost(uc, r))(r)).%(f.canAccessGate).some.foreach { l =>
                     + SummonMainAction(f, uc, l)
                 }
