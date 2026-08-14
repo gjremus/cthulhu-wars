@@ -386,14 +386,8 @@ object NeutralMonstersExpansion extends Expansion {
 
         // SATYR FECUND: when a Satyr is summoned, also place 1 Acolyte from Pool
         // BB Fix 81, v2.4.31 — Use EarthCat for BB instead of Acolyte.
-        case SummonedAction(self, uc, r, l) if uc == Satyr && self.loyaltyCards.has(SatyrCard) && {
-                val satyrFecundUC : UnitClass = if (self == BB) EarthCat else Acolyte
-                self.pool(satyrFecundUC).any
-            } =>
-            val satyrFecundUC : UnitClass = if (self == BB) EarthCat else Acolyte
-            self.place(satyrFecundUC, r)
-            self.log("Fecund".styled("nt") + ": placed", satyrFecundUC.styled(self), "in", r, "with", Satyr.styled(self))
-            EndAction(self)
+        // SATYR FECUND: moved to Game.scala SummonedAction handler to run before
+        // BG Fertility's unlimited-action return (which would skip this handler)
 
         // HOUND OF TINDALOS CRONOPHAGE: when owner moves another unit, offer free Hound teleport
         // Card: "teleports directly from an Area with a Gate to another Area with a Gate"

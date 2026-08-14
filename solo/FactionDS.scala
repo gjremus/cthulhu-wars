@@ -183,6 +183,14 @@ object DSExpansion extends Expansion {
             asking
 
         // ACTIONS
+        case MainAction(f) if f.has(Psychosis) && f != DS =>
+            implicit val asking = Asking(f)
+
+            if (f.pool.%(_.uclass == Acolyte).any && areas.nex.%(r => game.factions.%(_.at(r).any).none && f.affords(1)(r)).any)
+                + PsychosisAction(f)
+
+            UnknownContinue
+
         case MainAction(f : DS.type) if f.active.not =>
             UnknownContinue
 
@@ -562,6 +570,11 @@ object DSExpansion extends Expansion {
 
             self.oncePerTurn :+= AnimateMatter
             self.log("used", AnimateMatter.styled(self), "moving", ChaosGate.styled(self), "from", from, "to", to)
+
+            // Firstborn Crater: immediately destroy gate if moved to crater region
+            if (game.factions.has(FB) && game.fbCraters.has(to))
+                FBExpansion.checkCraterDestroysGate(to)
+
             EndAction(self)
             }
 

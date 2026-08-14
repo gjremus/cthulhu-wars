@@ -295,6 +295,11 @@ object OWExpansion extends Expansion {
                 self.log("moved", "Chaos Gate".styled("ds"), "with", uc.styled(self), "from", o, "to", r)
             else
                 self.log("moved gate with", uc.styled(self), "from", o, "to", r)
+
+            // Firstborn Crater: immediately destroy gate if moved to crater region
+            if (game.factions.has(FB) && game.fbCraters.has(r))
+                FBExpansion.checkCraterDestroysGate(r)
+
             // Catnapping: Beyond One spent 1 Power to move OW's own cost-3+ unit off `o`.
             // Credit BB when that unit leaves the Moon (logged AFTER the move); the gate
             // leg is a non-unit and irrelevant to Catnapping.
