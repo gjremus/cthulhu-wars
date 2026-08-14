@@ -232,6 +232,12 @@ object BGExpansion extends Expansion {
 
         // FERTILITY
         case SummonedAction(self, uc, r, l) if self.can(Fertility) && self.oncePerRound.has(Fertility).not =>
+            // SATYR FECUND: place Acolyte with Satyr before marking Fertility as used
+            if (uc == Satyr && self.loyaltyCards.has(SatyrCard) && self.pool(Acolyte).any) {
+                self.place(Acolyte, r)
+                self.log("Fecund".styled("nt") + ": placed", Acolyte.styled(self), "in", r, "with", Satyr.styled(self))
+            }
+
             self.oncePerRound :+= Fertility
             SummonedAction(self, uc, r, l)
 
