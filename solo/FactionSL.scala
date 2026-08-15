@@ -162,6 +162,15 @@ object SLExpansion extends Expansion {
             if (f.can(Hibernate))
                 + HibernateMainAction(f, min(f.power, f.enemies./~(_.goos.distinctBy(_.uclass)).num))
 
+            // Psychosis borrowed via Ancient Sorcery (DS ability). Must be offered
+            // inside SL's own MainAction menu — the mirror handler in FactionDS
+            // (case MainAction(f) if f.has(Psychosis) && f != DS) builds a LOCAL
+            // Asking and returns UnknownContinue, so internalPerform's expansions
+            // loop discards it and it never reaches the player. Same working shape
+            // as Hibernate (WW) above and Writhe (FB) below.
+            if (f.can(Psychosis) && f.pool.%(_.uclass == Acolyte).any && areas.nex.%(r => game.factions.%(_.at(r).any).none && f.affords(1)(r)).any)
+                + PsychosisAction(f)
+
             game.moves(f)
 
             if (f.has(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(f.affords(1)).any)
