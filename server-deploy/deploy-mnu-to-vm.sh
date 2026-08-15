@@ -21,8 +21,8 @@
 
 set -euo pipefail
 
-MNU_ROOT="/Users/gremus/cthulhu-wars More Neutral Units"
-SSH_KEY="/Users/gremus/My Drive/Personal/Games/Cthulhu Wars/Library at Celaeno/Server Deployment/oracle_cw_ed25519"
+MNU_ROOT="/Users/gremus/Claude-Projects/cw-mnu-wt"
+SSH_KEY="/Users/gremus/Library/CloudStorage/GoogleDrive-gremus@salesforce.com/My Drive/Personal/Games/Cthulhu Wars/Maps/Library at Celaeno/Server Deployment/oracle_cw_ed25519"
 HOST="oracle-cw-server@35.255.125.91"
 REMOTE_ROOT="/opt/cwo/mnu"
 
