@@ -993,33 +993,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Albino Penguins Laughingstock:
                 // Choice to involve penguins or not, then which penguins from which region
                 // Done exits entirely. Cancel goes back to main choice.
-                // Penguins may battle on the Moon. Only BB-owned Penguins are blocked
-                // from being SENT to the Moon (BB may not send any non-BB unit to the
-                // Moon, and here the loyalty-card owner is also the sender). Non-BB
-                // Penguins may be sent into a Moon battle freely.
+                // Penguins may battle on the Moon. The Moon is Bubastis's home region:
+                // only BB-owned units may be SENT there. So when BB owns the Penguins it
+                // CAN move them into a Moon battle; a non-BB owner may only involve
+                // Penguins already on the Moon (it cannot move Penguins in from other
+                // regions). This mirrors the general rule that any neutral unit (monster/
+                // terror/IGOO/loyalty-card unit) owned by BB is free to go to the Moon,
+                // including via its special power.
                 factions.%(f => f.loyaltyCards.has(AlbinoPenguinsCard)).foreach { owner =>
-                    if (arena == BB.moon && owner == BB) {
-                        log(BB.full, "Laughingstock".styled("nt"), "blocked: Bubastis-owned", AlbinoPenguins.styled(BB), "may not be sent to a battle on", BB.moon)
+                    // Moving a Penguin TO the Moon is allowed only when BB owns it.
+                    val blockedFromMoon = arena == BB.moon && owner != BB
+                    val penguinsElsewhere = blockedFromMoon.?($).|(owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region != arena))
+                    if (penguinsElsewhere.any) {
+                        return Ask(owner)
+                            .each(penguinsElsewhere)(u => LaughingstockMoveAction(owner, u.ref))
+                            .add(LaughingstockDoneAction(owner))
                     }
-                    else {
-                        // Penguins may join a Moon battle only if ALREADY on the Moon
-                        // (moving a unit TO the Moon is forbidden). So when the arena is
-                        // the Moon, do not offer penguins from other regions to move in;
-                        // penguins already on the Moon are handled by the in-arena block below.
-                        val penguinsElsewhere = (arena == BB.moon).?($).|(owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region != arena))
-                        if (penguinsElsewhere.any) {
+                    // Penguins in arena but not yet assigned to a side (owner NOT in battle)
+                    if (!sides.has(owner)) {
+                        val unassigned = owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region == arena).%(u => !penguinOriginalOwner.contains(u.ref))
+                        if (unassigned.any) {
                             return Ask(owner)
-                                .each(penguinsElsewhere)(u => LaughingstockMoveAction(owner, u.ref))
-                                .add(LaughingstockDoneAction(owner))
-                        }
-                        // Penguins in arena but not yet assigned to a side (owner NOT in battle)
-                        if (!sides.has(owner)) {
-                            val unassigned = owner.allInPlay.%(_.uclass == AlbinoPenguins).%(_.region == arena).%(u => !penguinOriginalOwner.contains(u.ref))
-                            if (unassigned.any) {
-                                return Ask(owner)
-                                    .add(LaughingstockSideAction(owner, attacker))
-                                    .add(LaughingstockSideAction(owner, defender))
-                            }
+                                .add(LaughingstockSideAction(owner, attacker))
+                                .add(LaughingstockSideAction(owner, defender))
                         }
                     }
                 }

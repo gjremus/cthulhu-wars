@@ -238,8 +238,13 @@ case class PredatorSkipAction(self : Faction)
     extends OptionFactionAction(("Skip " + Predator.name).styled(BB)) with PostBattleQuestion
 case class PredatorPickEnemyTypeAction(self : Faction, lostTypes : $[UnitClass])
     extends ForcedAction with PowerNeutral with Soft
+// NOTE: must be RECORDED (no Soft). BB clicks this to pick the unit class; the
+// handler then returns an Ask directed at the affected enemy faction. `continue`
+// (the live menu) is only updated for recorded actions (Game.scala isRecorded /
+// performContinue), so a Soft here left the type-pick menu on screen and the pick
+// appeared to loop — the enemy's instance prompt never showed.
 case class PredatorTypeChoiceAction(self : Faction, uc : UnitClass)
-    extends BaseFactionAction(Predator.styled(BB) + ": choose enemy unit class to eliminate", implicit g => uc.styled(BB)) with PowerNeutral with Soft
+    extends BaseFactionAction(Predator.styled(BB) + ": choose enemy unit class to eliminate", implicit g => uc.styled(BB)) with PowerNeutral
 // FCG #26: affected-faction is `self`, so the enemy gets to pick which unit dies.
 // FCG #27: identify the specific unit by UnitRef, not (UnitClass, Region).
 case class PredatorEnemyEliminateAction(self : Faction, picker : Faction, u : UnitRef)
