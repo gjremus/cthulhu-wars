@@ -3644,19 +3644,23 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 return AfterAction(self)
             }
 
-            // Round 8 Bug 60: snapshot FB.power BEFORE the 1-power attack cost is deducted,
-            // so Ghatanothoa's combat strength uses the pre-battle power (not post-cost).
-            // The original snapshot was in ProceedBattlesAction (line ~2570), but that runs
-            // AFTER this handler — by which time `self.power -= 1` has already executed.
-            // For FB-attacker: snapshot here is pre-deduct (correct). For non-FB attacker:
-            // FB.power isn't being changed by this action, so snapshot is also correct.
-            if (factions.has(FB))
-                fbPowerAtBattleStart = FB.power
-
             if (effect.has(FromBelow).not)
                 self.power -= 1
 
             self.payTax(r)
+
+            // Ghatanothoa's combat = FB's Power AFTER the battle's power cost is spent,
+            // INCLUDING the Infernal Pact discount. The FBExpansion AttackAction intercept
+            // pre-adds the consumed IP discount to FB.power as a transient boost (so the
+            // base `self.power -= 1` nets to the discounted cost). Snapshotting BEFORE the
+            // deduct therefore captured the inflated pre-cost power (e.g. real 4 power +
+            // 1 IP boost = 5), giving Ghatanothoa one combat die too many. Snapshot HERE —
+            // after the attack cost and tax are paid — to record the true post-payment
+            // power. (Reverses Round 8 Bug 60, per owner ruling.) For a non-FB attacker
+            // FB.power isn't changed by this action, so the value is unaffected.
+            if (factions.has(FB))
+                fbPowerAtBattleStart = FB.power
+
             self.log("battled", f, "in", r, effect./("with " + _).|(""))
 
             if (effect.has(FromBelow))
