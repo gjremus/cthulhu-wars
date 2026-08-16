@@ -528,8 +528,21 @@ object BBExpansion extends Expansion {
         case PredatorEnemyEliminateAction(self, picker, uref) =>
             val u = game.unit(uref)
             val r = u.region
+            val wasMonster = u.uclass.utype == Monster
             game.eliminate(u)
             picker.log(Predator.styled(BB) + ":", u.uclass.styled(self), "in", r, "eliminated by", picker.full)
+            // Carnivore (alt SB) reads "1 Doom per enemy Monster Killed OR Eliminated by You
+            // in Battle." A Monster removed by Predator is an elimination caused by BB as part
+            // of the Battle, so it earns Carnivore Doom on top of the arena kills tallied at
+            // Battle.scala PostBattlePhase. The Predator target is a SEPARATE map unit that is
+            // never added to the battle `eliminated` list, so this cannot double-count that
+            // batch award. Validated against game 669 "Pain for Oblivion": GC/DeepOne/4
+            // eliminated by Predator adds +1 on top of the +2 for the two Deep Ones killed in
+            // the arena, for a total Carnivore yield of 3.
+            if (wasMonster && BB.has(Carnivore)) {
+                BB.log(Carnivore.styled(BB) + ": gained", 1.doom, "for enemy Monster eliminated by", Predator.name)
+                BB.doom += 1
+            }
             UnknownContinue
 
         // ── DOOM PHASE END: reset BB doom-phase sentinels (CRIT-7) ───────────────
