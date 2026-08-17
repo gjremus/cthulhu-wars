@@ -17,7 +17,7 @@ set -euo pipefail
 
 BB_ROOT="/Users/gremus/Claude-Projects/cthulhu-wars-Bubastis"
 SSH_KEY="/Users/gremus/.ssh/oracle_cw_ed25519"
-HOST="oracle-cw-server@35.255.125.91"
+HOST="oracle-cw-server@cwo.freeddns.org"
 REMOTE_ROOT="/opt/cwo/bb"
 
 DO_BUILD=false
