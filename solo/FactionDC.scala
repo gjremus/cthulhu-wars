@@ -2114,8 +2114,12 @@ case class DCProselytizeReqOptInAction(self : Faction)
     with DoomQuestion
 case class DCSatiateReqOptInAction(self : Faction)
     extends OptionFactionAction(implicit g => {
-        val claimedSBs = self.spellbooks.%(sb => DC.library.contains(sb) && sb != Satiate).num
-        val unclaimedSBs = 5 - claimedSBs
-        "SBR".styled(DC) + ": " + ("+" + claimedSBs + " Power").styled("power") + ", " + ("+" + unclaimedSBs + " Sin").styled("dc") + " (1P/ other earned SB, 1S/ pool SB excl. this)"
+        // HB Fix (2026-08-17): mirror the HANDLER exactly (count EVERY earned
+        // library SB incl. Satiate). The old label excluded Satiate (sb != Satiate),
+        // so the menu showed "+4 Power, +1 Sin" while the effect granted 5/0 — the
+        // preview must match what the player actually receives. Power + Sin == 5.
+        val earnedSBs   = math.min(5, self.spellbooks.%(sb => DC.library.contains(sb)).num)
+        val unclaimedSBs = 5 - earnedSBs
+        "SBR".styled(DC) + ": " + ("+" + earnedSBs + " Power").styled("power") + ", " + ("+" + unclaimedSBs + " Sin").styled("dc") + " (1P/ earned SB, 1S/ pool SB excl. the one now taken)"
     })
     with DoomQuestion
