@@ -1476,6 +1476,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var ritualMarker = 0
     var ritualHistory : $[Faction] = $
     var ritualHistoryCeremony : $[Boolean] = $
+
+    // Non-standard Ritual of Annihilation paths (Hecatomb pure-DH, BB Requires Attention)
+    // bypass RitualAction dispatch and ritualHistory polling, so they don't naturally
+    // notify cross-faction RoA spellbook reactors. This helper explicitly satisfies them.
+    def notifyRoAReactors(performer : Faction) : Unit = {
+        if (setup.has(TT) && performer != TT)
+            TT.satisfyIf(TTSycophancyTrigger, "Another faction ritualed or reached 15 Doom", true)
+    }
+
     var battle : |[Battle] = None
     var nexed : $[Region] = $
     var battleResumePhase : |[String] = None  // Energy Nexus PB: resume battle at this phase after SL turn
@@ -3642,6 +3651,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             ritualHistory :+= self
             ritualHistoryCeremony :+= false
             triggers()
+            // Requires Attention bypasses RitualAction dispatch, so notify cross-faction RoA reactors explicitly
+            notifyRoAReactors(self)
             if (ritualTrack(ritualMarker) != 999)
                 ritualMarker += 1
             showROAT()

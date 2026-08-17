@@ -358,6 +358,8 @@ object TSExpansion extends Expansion {
 
                 game.triggers()
                 game.showROAT()
+                // Pure-DH Hecatomb bypasses RitualAction dispatch, so notify cross-faction RoA reactors explicitly
+                game.notifyRoAReactors(self)
 
                 self.satisfy(PerformRitual, "Perform Ritual of Annihilation (Hecatomb pure DH)")
 
