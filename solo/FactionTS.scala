@@ -357,6 +357,16 @@ object TSExpansion extends Expansion {
 
                 self.satisfy(PerformRitual, "Perform Ritual of Annihilation (Hecatomb pure DH)")
 
+                // TS's OWN ritual spellbook requirement (TSRitualOrEnemyGate) is normally
+                // satisfied by TSExpansion.triggers() polling ritualHistory.has(TS). Pure-DH
+                // Hecatomb deliberately skips ritualHistory (no track glyph), so that poll
+                // never fires and TS would not unlock its spellbook from a pure-DH ritual —
+                // unlike a standard/mixed Hecatomb (which routes through RitualAction and
+                // does append ritualHistory). Satisfy it directly so a pure-DH Hecatomb
+                // unlocks TS's spellbook too. `satisfy` is idempotent (only logs + fulfils
+                // if still needed); the CheckSpellbooksAction below then prompts the SB pick.
+                self.satisfy(TSRitualOrEnemyGate, "Hecatomb Ritual of Annihilation")
+
                 // Continue doom phase — exactly as standard ritual does for TS (no tome penalty)
                 CheckSpellbooksAction(DoomAction(self))
             }
