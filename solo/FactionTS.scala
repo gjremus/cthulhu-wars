@@ -350,6 +350,12 @@ object TSExpansion extends Expansion {
                 game.triggers()
                 game.showROAT()
 
+                // Pure-DH Hecatomb resolves doom directly (no ritualHistory glyph, no
+                // RitualAction dispatch), so it bypasses BOTH channels that normally
+                // notify cross-faction RoA reactors. Notify DC Pilgrimage / TT Sycophancy
+                // explicitly — a Hecatomb IS a Ritual of Annihilation for them.
+                game.notifyRoAReactors(self)
+
                 self.satisfy(PerformRitual, "Perform Ritual of Annihilation (Hecatomb pure DH)")
 
                 // Continue doom phase — exactly as standard ritual does for TS (no tome penalty)

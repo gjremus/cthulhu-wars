@@ -1591,6 +1591,26 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var ritualMarker = 0
     var ritualHistory : $[Faction] = $
     var ritualHistoryCeremony : $[Boolean] = $
+
+    // ── Cross-faction "any/another player performs a Ritual of Annihilation" hook ──
+    // A STANDARD RoA (RitualAction) trips the cross-faction spellbook requirements
+    // that react to it automatically: DC Pilgrimage via the RitualAction intercept
+    // in FactionDC, and TT Sycophancy via the ritualHistory poll in
+    // TTExpansion.triggers(). A NON-STANDARD RoA that resolves its doom directly —
+    // Tombstalker Hecatomb pure-Death's-Head (no ritualHistory glyph, no RitualAction)
+    // and Bubastis Requires Attention (no RitualAction) — bypasses one or both of
+    // those channels, so those requirements never fire even though a Ritual of
+    // Annihilation genuinely happened. Every such path must call this so the
+    // reacting factions are notified exactly as a standard ritual would.
+    //   NOTE: Opener Dragon Descending re-dispatches a real RitualAction, so it is
+    //   already covered and does NOT call this (calling it would just be idempotent).
+    //   `performer` is the faction that performed the RoA.
+    def notifyRoAReactors(performer : Faction) : Unit = {
+        if (setup.has(DC))
+            DC.satisfyIf(PilgrimageReq, "A player performed a Ritual of Annihilation", true)
+        if (setup.has(TT) && performer != TT)
+            TT.satisfyIf(TTSycophancyTrigger, "Another faction ritualed or reached 15 Doom", true)
+    }
     var battle : |[Battle] = None
     var nexed : $[Region] = $
     var battleResumePhase : |[String] = None  // Energy Nexus PB: resume battle at this phase after SL turn
@@ -4022,6 +4042,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             ritualHistory :+= self
             ritualHistoryCeremony :+= false
             triggers()
+            // Requires Attention bypasses the RitualAction intercept, so notify the
+            // cross-faction RoA reactors (DC Pilgrimage, TT Sycophancy) explicitly.
+            notifyRoAReactors(self)
             if (ritualTrack(ritualMarker) != 999)
                 ritualMarker += 1
             showROAT()
