@@ -52,7 +52,7 @@ case object DarkBargain extends FactionSpellbook(DC, "Dark Bargain")
 // ── SPELLBOOK REQUIREMENTS ─────────────────────────────────────────────────
 // 1-to-1 slot mapping per authoritative §1.9 user-supplied list.
 case object ProselytizeReq extends Requirement("Doom Phase: gain 2 Sin per enemy GOO")
-case object SatiateReq     extends Requirement("Doom Phase: +1 Power per other SB earned, +1 Sin per pool SB not counting this one")
+case object SatiateReq     extends Requirement("Doom Phase: +1 Power per SB earned, +1 Sin per pool SB not counting the one now taken")
 case object LureReq        extends Requirement("No Mindless Husks in your Pool")
 case object EscharReq      extends Requirement("No Fallen Prophets in your Pool")
 case object PilgrimageReq  extends Requirement("Any player performs a Ritual of Annihilation")
@@ -872,7 +872,7 @@ object DCExpansion extends Expansion {
             // ProselytizeReq: Doom-Phase opt-in (+2 Sin per enemy GOO on satisfy)
             if (f.needs(ProselytizeReq))
                 + DCProselytizeReqOptInAction(f)
-            // SatiateReq: Doom-Phase opt-in (+1 Power per other SB earned, +1 Sin per pool SB excl. this; sum=5)
+            // SatiateReq: Doom-Phase opt-in (+1 Power per earned SB, +1 Sin per pool SB excl. the one now taken; sum=5)
             if (f.needs(SatiateReq))
                 + DCSatiateReqOptInAction(f)
 
@@ -896,13 +896,19 @@ object DCExpansion extends Expansion {
             Force(CheckSpellbooksAction(DoomAction(self)))
 
         case DCSatiateReqOptInAction(self) =>
-            val otherSBs = self.spellbooks.%(sb => DC.library.contains(sb) && sb != Satiate).num
-            val poolSBs  = 5 - otherSBs
-            self.satisfy(SatiateReq, "Doom Phase SBR: +1 Power per other SB earned, +1 Sin per pool SB (excl. this)")
-            self.power += otherSBs
+            // HB Fix (2026-08-17): count EVERY earned library Spellbook on the
+            // sheet (including Satiate), NOT "other" ones — +1 Power per earned SB,
+            // +1 Sin per pool SB EXCLUDING the one now being taken. Power + Sin
+            // always == 5. e.g. 5 earned -> 5 Power / 0 Sin; 0 earned -> 0 / 5.
+            // The old code excluded Satiate from the Power count, producing an
+            // off-by-one (4 Power / 1 Sin instead of 5 / 0) — ref game 655.
+            val earnedSBs = math.min(5, self.spellbooks.%(sb => DC.library.contains(sb)).num)
+            val poolSBs   = 5 - earnedSBs
+            self.satisfy(SatiateReq, "Doom Phase SBR: +1 Power per earned SB, +1 Sin per pool SB (excl. the one now taken)")
+            self.power += earnedSBs
             // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
             val satiateGained = game.grantDCSin(poolSBs)
-            self.log("SBR: gained", otherSBs.power, "and", satiateGained.toString.styled("dc"), "Sin")
+            self.log("SBR: gained", earnedSBs.power, "and", satiateGained.toString.styled("dc"), "Sin")
             if (satiateGained < poolSBs)
                 self.log("SBR: Sin capped at", game.dcSinCap.toString.styled("dc"), "(2 × Ritual Marker " + game.dcRitualMarkerPosition + ")")
             Force(CheckSpellbooksAction(DoomAction(self)))

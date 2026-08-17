@@ -1186,7 +1186,7 @@ object Overlays {
 
         // Defilers Court (DC): spellbook requirement info card overlays
         case $("DC", ProselytizeReq.text) => requirement("You may take this spellbook in the Doom Phase. When you do, gain 2 Sin per enemy Great Old One in play.")
-        case $("DC", SatiateReq.text)     => requirement("You may take this spellbook in the Doom Phase. When you do, gain 1 Power for each other Spellbook on your Faction Sheet and 1 Sin for each remaining Spellbook in your Pool.")
+        case $("DC", SatiateReq.text)     => requirement("You may take this spellbook in the Doom Phase. When you do, gain 1 Power for each Spellbook already on your Faction Sheet and 1 Sin for each Spellbook remaining in your Pool other than the one you are now taking. (Power + Sin always totals 5.)")
         case $("DC", LureReq.text)        => requirement("Have no Mindless Husks in your Pool.")
         case $("DC", EscharReq.text)      => requirement("Have no Fallen Prophets in your Pool.")
         case $("DC", PilgrimageReq.text)  => requirement("Any player performs a Ritual of Annihilation.")

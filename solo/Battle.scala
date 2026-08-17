@@ -3115,6 +3115,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case SavagerySkipAction(self) =>
+            // HB Fix (2026-08-17): mark Savagery handled so the pre-battle offer
+            // (gated on !s.tag(Savagery)) does not re-appear. Without this the
+            // Skip option looped forever — ref game 669. tag(Savagery) is read
+            // ONLY at the offer site, so tagging here has no effect on combat.
+            (self : Side).add(Savagery)
             self.log(Savagery.styled(BB) + ": skipped")
             proceed()
 

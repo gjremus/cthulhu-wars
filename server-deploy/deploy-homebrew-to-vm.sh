@@ -28,7 +28,7 @@ set -euo pipefail
 
 HB_ROOT="/Users/gremus/Claude-Projects/cw-homebrew-wt"
 SSH_KEY="/Users/gremus/.ssh/oracle_cw_ed25519"
-HOST="oracle-cw-server@35.255.125.91"
+HOST="oracle-cw-server@cwo.freeddns.org"
 REMOTE_ROOT="/opt/cwo/HB"
 PUBLIC_BASE="https://cwo.freeddns.org/HB"
 OPT_DIR="target/scala-2.13/cthulhu-wars-solo-hrf-opt"
