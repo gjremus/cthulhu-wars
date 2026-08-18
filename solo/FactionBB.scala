@@ -505,7 +505,12 @@ object BBExpansion extends Expansion {
             lostTypes.foreach { uc =>
                 + PredatorTypeChoiceAction(self, uc)
             }
-            + CancelAction
+            // Use a real decline here, NOT CancelAction. This menu is Soft and is
+            // Force'd from the already-RECORDED PredatorUseAction, so Cancel only
+            // rewinds to that recorded Use, which immediately re-Forces this same
+            // menu — the Cancel button appeared to do nothing (ref game 669).
+            // PredatorSkipAction cleanly logs "declined" and ends via UnknownContinue.
+            + PredatorSkipAction(self)
             asking
 
         // FCG #26: when BB has picked the unit class, hand the prompt to the
