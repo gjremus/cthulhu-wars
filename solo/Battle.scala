@@ -660,7 +660,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         else if (s.has(Harbinger) && !s.has(Harbinger) && game.moonbeastOnSpellbook.values.exists(t => t._1 == s && t._2 == Harbinger))
             log(s, Harbinger.styled(s), "blocked by", "Moonbeast".styled("nt"))
 
-        if (s.can(Emissary) && side.forces(Nyarlathotep).any && s.opponent.forces.%(u => u.uclass.utype == GOO || (u.uclass == Cathedral && AN.can(HolyGround))).none)
+        // Bastet is an ElderGod, a subclass of GOO, so she counts as an enemy GOO here:
+        // Emissary (Nyarlathotep "survives the kill") must NOT activate when she is present.
+        // Use .isGOO (== GOO || == ElderGod) rather than the bare == GOO check. HB targeted fix 2026-08-18.
+        if (s.can(Emissary) && side.forces(Nyarlathotep).any && s.opponent.forces.%(u => u.uclass.isGOO || (u.uclass == Cathedral && AN.can(HolyGround))).none)
             s.add(Emissary)
         else if (s.has(Emissary) && !s.can(Emissary) && side.forces(Nyarlathotep).any && game.moonbeastOnSpellbook.values.exists(t => t._1 == s && t._2 == Emissary))
             log(s, Emissary.styled(s), "blocked by", "Moonbeast".styled("nt"))
@@ -1427,7 +1430,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 sides.foreach { s =>
                     if (s.tag(Harbinger)) {
                         // Holy Ground: Cathedrals count as GOOs during Action Phase (cost 3 for Harbinger)
-                        val harbingerGoos = s.opponent.units.goos ++ (game.inActionPhase && AN.can(HolyGround)).??(s.opponent.units(Cathedral))
+                        // Bastet (ElderGod) counts as an enemy GOO for Harbinger's kill reward too.
+                        // Filter locally with .isGOO instead of the shared .goos helper (which is bare == GOO)
+                        // so this stays a targeted HB fix and does not alter .goos everywhere. 2026-08-18.
+                        val harbingerGoos = s.opponent.units.%(_.uclass.isGOO) ++ (game.inActionPhase && AN.can(HolyGround)).??(s.opponent.units(Cathedral))
                         // A GOO whose Kill was cancelled by Distributed Death still counts as Killed
                         // for Harbinger — the Kill was applied, only its effect was prevented (§3.14.3).
                         harbingerGoos.%(u => u.health == Killed || fbeDistributedDeathPrevented.contains(u.ref)).not(Harbinged).some.foreach { l =>
