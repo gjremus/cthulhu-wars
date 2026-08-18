@@ -1986,7 +1986,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     val bbHadUranus = bbSide.forces.%(_.uclass == CatFromUranus).any
                     if (bbHadUranus) {
                         val enemy = if (attacker == BB) defender else attacker
+                        // Predator eliminates ANOTHER unit of a type killed in the battle, so a
+                        // lost type is only a legal target if the enemy STILL has a unit of that
+                        // class in play to eliminate. A unique unit killed here (e.g. Nyarlathotep)
+                        // has no surviving copy and must NOT be offered — otherwise BB is stuck on
+                        // a dead-end pick that eliminates nothing and cannot cleanly proceed.
+                        // HB fix 2026-08-18 (ref game 669 "Pain for Oblivion").
                         val lostTypes = eliminated.%(_.faction == enemy)./(_.uclass).distinct
+                            .%(uc => enemy.allInPlay.%(_.uclass == uc).any)
                         if (lostTypes.any) {
                             BB.oncePerAction :+= Predator
                             return Ask(BB).add(PredatorUseAction(BB)).add(PredatorSkipAction(BB))

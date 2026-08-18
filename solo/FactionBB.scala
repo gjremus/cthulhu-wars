@@ -244,7 +244,15 @@ case class PredatorPickEnemyTypeAction(self : Faction, lostTypes : $[UnitClass])
 // performContinue), so a Soft here left the type-pick menu on screen and the pick
 // appeared to loop — the enemy's instance prompt never showed.
 case class PredatorTypeChoiceAction(self : Faction, uc : UnitClass)
-    extends BaseFactionAction(Predator.styled(BB) + ": choose enemy unit class to eliminate", implicit g => uc.styled(BB)) with PowerNeutral
+    extends BaseFactionAction(Predator.styled(BB) + ": choose an enemy unit type to hunt down",
+        // Show each type in the OWNING enemy's colour with a count of how many are
+        // still on the map, so BB can tell what it is actually eliminating (was a
+        // bare class name mis-coloured as BB's). Menu cleanup 2026-08-18.
+        implicit g => {
+            val owner = g.factions.find(f => f != self && f.allInPlay.%(_.uclass == uc).any)
+            val n = owner.map(e => e.allInPlay.%(_.uclass == uc).num).getOrElse(0)
+            uc.styled(owner.getOrElse(self)) + " (" + n + " on map)"
+        }) with PowerNeutral
 // FCG #26: affected-faction is `self`, so the enemy gets to pick which unit dies.
 // FCG #27: identify the specific unit by UnitRef, not (UnitClass, Region).
 case class PredatorEnemyEliminateAction(self : Faction, picker : Faction, u : UnitRef)
@@ -475,7 +483,11 @@ object BBExpansion extends Expansion {
             game.battle match {
                 case Some(b) =>
                     val enemy = if (b.attacker == BB) b.defender else b.attacker
+                    // Only offer a lost type the enemy still has a unit of in play — a unique
+                    // unit killed in the battle (e.g. Nyarlathotep) has no surviving copy to
+                    // eliminate, so offering it dead-ends the menu. HB fix 2026-08-18 (game 669).
                     val lostTypes = b.eliminated.%(_.faction == enemy)./(_.uclass).distinct
+                        .%(uc => enemy.allInPlay.%(_.uclass == uc).any)
                     if (lostTypes.any) Force(PredatorPickEnemyTypeAction(self, lostTypes))
                     else UnknownContinue
                 case None => UnknownContinue
