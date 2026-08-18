@@ -250,7 +250,10 @@ case class PredatorTypeChoiceAction(self : Faction, uc : UnitClass)
 case class PredatorEnemyEliminateAction(self : Faction, picker : Faction, u : UnitRef)
     extends BaseFactionAction(
         implicit g => Predator.styled(BB) + ": " + self.name.styled(self) + " choose " + g.unit(u).uclass.styled(self) + " to eliminate",
-        implicit g => g.unit(u).full)
+        // Show the region each candidate is in so the enemy can tell same-class
+        // units in different areas apart (mirrors the Ubbo-Sathla eliminate menu
+        // pattern: unit .full + " in " + region). Ref: user request 2026-08-18.
+        implicit g => g.unit(u).full + " in " + g.unit(u).region)
 
 // ── REQUIRES ATTENTION RITUAL (Task 3.4.3) ───────────────────────────────────
 case class RequiresAttentionMainAction(self : Faction)
