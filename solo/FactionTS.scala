@@ -562,13 +562,11 @@ object TSExpansion extends Expansion {
             Force(GraspingDeadChooseRegionAction(self))
 
         case GraspingDeadChooseRegionAction(self) =>
-            // Add any newly eligible regions (e.g., TombHerds pained into regions with enemies)
-            val alreadyScheduled = TSExpansion.graspingDeadRemaining ++ TSExpansion.graspingDeadFought
-            val allAreas = areas ++ game.factions.has(BB).??($(BB.moon))
-            val newRegions = allAreas.%(r => self.at(r, TombHerd).any && self.enemies.exists(_.at(r).any) && !alreadyScheduled.has(r))
-            if (newRegions.any)
-                TSExpansion.graspingDeadRemaining ++= newRegions
-            // Filter to regions still valid (TombHerd present + enemy present) from the remaining list
+            // Rule 2026-08-18: Grasping Dead battles occur ONLY in regions that held a
+            // Tomb-Herd at the START of the action (the snapshot captured into
+            // graspingDeadRemaining at pay time). A Tomb-Herd pained into a NEW region
+            // mid-action does NOT add a battle there. (Previously new eligible regions
+            // were appended here.) Keep only start regions still valid (TombHerd + enemy).
             val eligible = TSExpansion.graspingDeadRemaining.%(r => self.at(r, TombHerd).any && self.enemies.exists(_.at(r).any))
             if (eligible.any) {
                 TSExpansion.graspingDeadRemaining = eligible
@@ -599,7 +597,7 @@ object TSExpansion extends Expansion {
             }
 
         case AfterAction(self) if self == TS && TSExpansion.graspingDeadActive =>
-            // GD chain still active — check for more regions (including pained TombHerds in new regions)
+            // GD chain still active — re-check the START regions for more battles.
             Force(GraspingDeadChooseRegionAction(self))
 
         // ...
