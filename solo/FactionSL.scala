@@ -184,7 +184,11 @@ object SLExpansion extends Expansion {
 
             game.captures(f)
 
-            if (f.can(CaptureMonster) && areas.nex.%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).goos.none && e.at(r).monsters.%(_.uclass != EarthCat).any))).any)
+            // Moon Power Reference marks Capture Monster as allowed on the Moon: Tsathoggua
+            // standing on the Moon itself must unlock this the same as standing anywhere else.
+            // areas.nex never contained the Moon (it's not a normal map area), so that case was
+            // silently skipped — same root cause as the earlier Lethargy-on-Moon fix.
+            if (f.can(CaptureMonster) && areasWithMoon.nex.%(f.affords(1)).%(r => f.at(r, Tsathoggua).any && (f.enemies.exists(e => e.at(r).goos.none && e.at(r).monsters.%(_.uclass != EarthCat).any))).any)
                 + CaptureMonsterMainAction(f)
 
             game.recruits(f)
