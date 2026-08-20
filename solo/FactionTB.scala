@@ -243,12 +243,19 @@ case class TBAutotomySkipAction(self : Faction)
 }
 // Crawling Chaos Madness: TB consent for the enemy to use Subterrane (Mantle /
 // tentacle adjacency) when the enemy chooses where TB's pained units retreat.
+// RECORDED (not Soft) + OutOfTurn — mirrors RevealESAction / the Moonbeast premature-return fix.
+// These are asked to TB during the ENEMY's turn (the enemy is retreating TB's pained units via
+// Crawling Chaos Madness). As Soft, the click only mutated the clicker's local state and never
+// persisted to the server, so a refresh reverted it and the same prompt reappeared ("click does
+// nothing, refreshes, still have the choice"). Dropping Soft makes the click a recorded action that
+// persists; OutOfTurn stops the recorded out-of-turn click from clobbering the interrupted battle
+// menu. The traits do not change serialization, so previously recorded games replay identically.
 case class TBSubterranePainUseAction(self : Faction)
-    extends OptionFactionAction("Allow " + Subterrane.styled(TB) + " for retreats") with Soft {
+    extends OptionFactionAction("Allow " + Subterrane.styled(TB) + " for retreats") with OutOfTurn {
     override def question(implicit game : Game) = Subterrane.styled(TB) + ": allow the enemy to retreat your pained Units via the Mantle?"
 }
 case class TBSubterranePainSkipAction(self : Faction)
-    extends OptionFactionAction("Deny " + Subterrane.styled(TB) + " — adjacent areas only") with Soft {
+    extends OptionFactionAction("Deny " + Subterrane.styled(TB) + " — adjacent areas only") with OutOfTurn {
     override def question(implicit game : Game) = Subterrane.styled(TB) + ": allow the enemy to retreat your pained Units via the Mantle?"
 }
 case class TBAutotomyPickSegmentAction(self : Faction, segments : $[UnitRef])
