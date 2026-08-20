@@ -1,6 +1,6 @@
 name := "Cthulhu Wars Solo HRF"
 
-version := "bubastis-v2.4.89"
+version := "bubastis-v2.4.90"
 
 scalaVersion := "2.13.16"
 
