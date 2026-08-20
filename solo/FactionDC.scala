@@ -1777,6 +1777,25 @@ object DCExpansion extends Expansion {
         case SummonAction(self, uc, r) if tenebrosumEligible(self) =>
             recordTenebrosum(action, self.summonCost(uc, r), "Summon")
             UnknownContinue
+        // HB Fix (2026-08-20): commit dac9973 (2026-08-14, "Velvet Fan parallel
+        // summon") split the normal summon flow into SummonFromPoolAction /
+        // SummonFromVelvetFanAction (a source picker for pool vs Bloated Woman's
+        // Velvet Fan). The legacy SummonAction is now only produced by the
+        // Tenebrosum repeat path itself, so a NORMAL monster summon stopped being
+        // recorded here and the Sin-paid "Repeat Summon" offer never appeared
+        // (owner report: "Tenebrosum isn't firing on a standard monster summon").
+        // Record both new summon actions exactly like the old one — as a
+        // synthesized SummonAction(self, uc, r) — so every downstream Tenebrosum
+        // check (isInstanceOf[SummonAction], tenebrosumRepeatChooser, the guarded
+        // repeat handler) behaves precisely as it did before the refactor. The
+        // synthesized action is only stored in dcLastActionForTenebrosum (never
+        // dispatched or serialized), so this is purely a type/label anchor.
+        case SummonFromPoolAction(self, uc, r) if tenebrosumEligible(self) =>
+            recordTenebrosum(SummonAction(self, uc, r), self.summonCost(uc, r), "Summon")
+            UnknownContinue
+        case SummonFromVelvetFanAction(self, uc, r) if tenebrosumEligible(self) =>
+            recordTenebrosum(SummonAction(self, uc, r), self.summonCost(uc, r), "Summon")
+            UnknownContinue
         case CaptureAction(self, _, _, _) if tenebrosumEligible(self) =>
             recordTenebrosum(action, 1, "Capture")
             UnknownContinue

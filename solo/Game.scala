@@ -5259,6 +5259,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val servitorBlocking = self.loyaltyCards.has(ServitorCard) && self.pool(ServitorUnit).any
             if (servitorBlocking && uc.utype == Monster && uc != ServitorUnit)
                 Ask(self).add(GroupAction(uc.name + " summon blocked by " + "Servitor of the Outer Gods".styled("nt"))).cancel
+            else if (dcTenebrosumGuard)
+                // HB Fix (2026-08-20): a Tenebrosum repeat is paid in Sin, not
+                // Power. The dac9973 parallel-summon split (SummonFromPoolAction /
+                // SummonFromVelvetFanAction) has NO dcTenebrosumGuard logic — those
+                // handlers always debit Power — so a repeat routed through them would
+                // wrongly charge Power (and could drive the caster negative). The
+                // legacy SummonAction handler is the ONLY summon path that honors the
+                // guard (skips the Power debit, debits Sin at the picked unit's cost)
+                // and it already handles Velvet-Fan sourcing internally. So under the
+                // guard, route to it exactly as the pre-dac9973 code did.
+                Ask(self).each(l)(r => SummonAction(self, uc, r)).cancel
             else {
                 val hasPoolUnit = self.pool(uc).any
                 val hasVelvetFanUnit = self.units.%(u => u.uclass == uc && u.region.is[VelvetFanHold]).any
