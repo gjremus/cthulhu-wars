@@ -83,7 +83,12 @@ trait GameImplicits {
         def one(uc : UnitClass) = l.%(_.uclass == uc).sortBy(_.onGate).first
         def one(ut : UnitType) = l.%(_.uclass.utype == ut).sortBy(_.onGate).first
         def goos = l.%(_.uclass.isGOO)
-        def factionGOOs = l.%(u => u.uclass.isGOO && u.uclass.is[IGOO].not)
+        // factionGOOs = a faction's own standard Great Old Ones, used for counting (ritual Elder-Sign
+        // contribution at Game.scala:3554 + the awaken menu at Game.scala:2350). ElderGods (Bastet) are
+        // carved OUT here per BB Implementation Guide §1.3: no ES on a Ritual of Annihilation, and Bastet
+        // has her own dedicated awaken loop (Game.scala:2357). Bastet still counts as a GOO everywhere
+        // else via .isGOO / .goos / at(_, GOO, ElderGod).
+        def factionGOOs = l.%(u => u.uclass.isGOO && u.uclass.is[IGOO].not && !u.uclass.isElderGod)
         def independentGOOs = l.%(u => u.uclass.utype == GOO && u.uclass.is[IGOO])
         def cultists = l.%(_.uclass.utype == Cultist)
         def acolytes = l.%(_.uclass == Acolyte)
