@@ -817,7 +817,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // normal adjacent areas.
         if (s == TB && retreater(s) != TB && game.tbMantleInPlay && TB.has(Subterrane) && !tbSubterranePainOffered) {
             val tentacleAreas = TB.onMap(Tentacle)./(_.region).distinct
-            val mantleRelevant = arena == TB.mantle || game.tbMantleAreas.has(arena) || tentacleAreas.has(arena)
+            // Owner ruling (2026-08-20): never prompt when the battle Area is one of
+            // the nominated Mantle-adjacent Areas (tbMantleAreas) — retreat there is
+            // already normal-adjacent, so consent is moot. Always prompt when the
+            // battle Area IS the Mantle itself. In any other Area, prompt only if a
+            // TB Tentacle occupies that Area right now (at pain-resolution time).
+            val mantleRelevant =
+                if (arena == TB.mantle) true
+                else if (game.tbMantleAreas.has(arena)) false
+                else tentacleAreas.has(arena)
             if (mantleRelevant) {
                 tbSubterranePainOffered = true
                 return Ask(TB).add(TBSubterranePainUseAction(TB)).add(TBSubterranePainSkipAction(TB))
