@@ -3423,6 +3423,28 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 }
             }
 
+            // MNU Fix (2026-08-20): this dice-roll undo guard existed in every
+            // other build (HB/BB/TT/Library) but was never added to MNU, so an
+            // MNU game (e.g. "Existence and Colour") could undo back PAST a battle
+            // roll and re-roll it. Standard rule: you cannot undo past a random
+            // event; undoing to the edge preserves the result. isRollAction lists
+            // every recorded random-roll action type. (AzathothDaemonSultanKill-
+            // RollAction is a BB-only class and is intentionally omitted here.)
+            def isRollAction(a : Action) : Boolean = a.unwrap match {
+                case _ : BattleRollAction => true
+                case _ : DesecrateRollAction => true
+                case _ : GhrothRollAction => true
+                case _ : DreadCurseRollAction => true
+                case _ : ThousandFormsRollAction => true
+                case _ : AzathothCombatDieRollAction => true
+                case _ : AzathothSynthesisRollAction => true
+                case _ : FBWritheRollResultAction => true
+                case _ : CustodianAgonyRolledAction => true
+                case _ : LibrarianAgonyRolledAction => true
+                case _ : NuclearChaosRollAction => true
+                case _ => false
+            }
+
             def showUndo(n : Int) : () => Unit = () => {
                 show(undoDiv.parentElement.parentElement)
 
@@ -3432,7 +3454,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                 val style = None
 
-                if (hash != "")
+                val hasRollAfter = hash != "" && actions.reverse.drop(n).exists(isRollAction)
+
+                if (hasRollAfter)
+                    undoDiv.appendChild(newDiv("", "Cannot undo past a dice roll"))
+                else if (hash != "")
                     undoDiv.appendChild(newDiv("option" + style./(" " + _).|(""), "Undo to here".hl, () => { clear(undoDiv); performUndoOnline(n) }))
                 else
                     undoDiv.appendChild(newDiv("option" + style./(" " + _).|(""), "Undo to here".hl, () => { clear(undoDiv); performUndoLocal(n) }))
