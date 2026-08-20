@@ -1973,7 +1973,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     // ~line 2194), so also count an on-map Avatar Thesis flagged Retreated.
                     val thesisSurvived = dsSide.forces(AvatarThesis).any ||
                         DS.onMap(AvatarThesis).exists(_.tag(Retreated))
-                    if (thesisSurvived) {
+                    // Replay-compat guard (2026-08-20): broadening thesisSurvived means existing
+                    // games whose pained-Thesis battle predates this fix would now hit a prompt that
+                    // was never recorded there — a desync. If we are replaying and the NEXT recorded
+                    // action is not the Directed Energy response, suppress the prompt. Live play
+                    // (nextReplayActionHint == None) and games that DID record the response are
+                    // unaffected, so it still fires going forward.
+                    val replayBlocksDE = game.nextReplayActionHint.exists(h =>
+                        !h.startsWith("DirectedEnergyPostBattleAction") && !h.startsWith("DirectedEnergySkipAction"))
+                    if (thesisSurvived && !replayBlocksDE) {
                         val chaosGates = DS.chaosGateRegions.%(r => DS.gates.has(r)).num
                         DS.add(DirectedEnergy)
                         return Ask(DS).add(DirectedEnergyPostBattleAction(DS, chaosGates)).add(DirectedEnergySkipAction(DS))
