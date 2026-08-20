@@ -1964,7 +1964,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // DS Directed Energy: post-battle, Avatar Thesis survived, gain power per Chaos Gate
                 if (factions.has(DS) && DS.can(DirectedEnergy) && sides.has(DS) && !DS.tag(DirectedEnergy)) {
                     val dsSide = if (attacker == DS) attackers else defenders
-                    val thesisSurvived = dsSide.forces(AvatarThesis).any
+                    // HB Fix (2026-08-20): "survived" must include an Avatar Thesis that was PAINED
+                    // and retreated, not just one still standing in the arena. A pained unit is moved
+                    // out of the arena by retreat() (its region changes), so by PostBattlePhase it is
+                    // no longer in dsSide.forces (which is arena-only) — the old check silently missed
+                    // it and Directed Energy never prompted. A unit that retreated in THIS battle
+                    // still carries the Retreated tag here (it is not cleared until battle cleanup,
+                    // ~line 2194), so also count an on-map Avatar Thesis flagged Retreated.
+                    val thesisSurvived = dsSide.forces(AvatarThesis).any ||
+                        DS.onMap(AvatarThesis).exists(_.tag(Retreated))
                     if (thesisSurvived) {
                         val chaosGates = DS.chaosGateRegions.%(r => DS.gates.has(r)).num
                         DS.add(DirectedEnergy)
