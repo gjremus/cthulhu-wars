@@ -3196,6 +3196,17 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         dd(DrawItem(null, f, DimensionalShamblerUnit, Alive, $, x + 35, y + 75).rect)
                 }
 
+                // Bokrug: once killed, he sits in his controller's own off-map hold (f.pool),
+                // not the shared pool, and his loyalty card stays on that faction's card.
+                // Draw his actual unit figure on the card (in addition to the silhouette
+                // loyalty-card icon above) the same way DimensionalShamblerUnit-held figures
+                // are shown, positioned just left of any Shambler-held figures.
+                if (f.loyaltyCards.has(BokrugCard) && f.pool(Bokrug).any) {
+                    val bx = w - iconsWidth - 40 - f.at(ShamblerHold(f)).num * 40 - 70
+                    val by = h - 125 - 12
+                    dd(DrawItem(null, f, Bokrug, Alive, $, bx + 55, by + 115).rect)
+                }
+
                 // Bloated Woman Velvet Fan: units held on the Velvet Fan are NOT drawn on the
                 // faction card. They are shown on the Bloated Woman overlay (loyalty-card popup)
                 // instead, with a red count badge on her silhouette icon. See the BloatedWomanCard
