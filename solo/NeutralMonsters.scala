@@ -516,7 +516,6 @@ object NeutralMonstersExpansion extends Expansion {
         // `self`, so it serializes cleanly; the placement loop re-derives its work from
         // game.moonbeastOnSpellbook on every step, so nothing tuple-shaped is ever persisted.
         case MoonbeastPrematureReturnAction(self) =>
-            println(s"[MB-TRACE] MoonbeastPrematureReturnAction PERFORMED self=$self doomBefore=${self.doom} beasts=${game.moonbeastOnSpellbook.filter(_._2._1 == self).keys.toList}")
             self.doom -= 1
             self.log("spent", 1.doom, "to remove Moonbeasts from Spellbooks")
             // Return every beast this faction had blocking a Spellbook, then resume the
