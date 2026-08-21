@@ -4809,8 +4809,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             EndAction(self)
 
         case MoveAction(self, u, o, r, cost) =>
-            if (u.faction.short == "FBE")
-                println(s"[FBE-MOVE-TRACE] ${u.ref} region=${u.region} (glyph=${u.region.glyph}), origin=${o}, dest=${r}. Prison guard DID NOT fire.")
             if (u.region != o)
                 println(s"[MOVE-MISMATCH-TRACE] ${u.ref} expected origin=${o} but actual region=${u.region} (glyph=${u.region.glyph}). Moving to ${r}.")
             val t = self.payTax(r)

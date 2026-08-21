@@ -2269,7 +2269,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 game.fbeShapestolen = $
                 game.fbeByagoonaKillPrevented = false
 
-                println(s"[BATTLE-END-TRACE] Clearing game.battle. arena=${arena} attacker=${attacker} defender=${defender}")
                 game.battle = None
 
                 // Fix: refresh CG snapshot after battle. Retreats/pains moved units

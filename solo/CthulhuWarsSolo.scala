@@ -2383,7 +2383,15 @@ object CthulhuWarsSolo {
                                 else candidates.minBy(overlapOf)
                             } else candidates.minBy(overlapOf)
 
-                            var chosen = pickBest(generateCandidates(candidateCount))
+                            val candidatesForArcticTrace = generateCandidates(candidateCount)
+                            var chosen = pickBest(candidatesForArcticTrace)
+
+                            // Master ticker row 2 (2026-08-21): Arctic Ocean units bunch to one
+                            // end of the region in rotated/portrait view only. Log-only trace,
+                            // no behavior change — scoped tight (portrait + non-library + this
+                            // one region) so it can't spam any other game.
+                            if (!horizontal && !board.isLibraryMap && r.name == "Arctic Ocean")
+                                println(s"[ARCTIC-PLACE-TRACE] unit=${d.unit} anchor=(${px},${py}) candidates=${candidatesForArcticTrace.map(c => s"(${c.x},${c.y})").mkString(",")} chosen=(${chosen.x},${chosen.y}) mpH=${mp.height} mpW=${mp.width}")
 
                             // Library-map overlap check: if chosen overlaps >30% onto
                             // another unit, retry once with an extended candidate pool.
