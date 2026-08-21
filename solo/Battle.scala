@@ -1790,6 +1790,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // PROCEED
         case VelvetFanCaptureAction(self, uRef) =>
             val u = game.unit(uRef)
+            // Moonbeast: capturing a Moonbeast that is blocking an enemy Spellbook must
+            // release that block — the figure is now out of play (on the capturer's Loyalty
+            // Card), so it can no longer be "on" the victim's Spellbook. Without this, the
+            // block lingers forever (no premature return, no Doom Phase auto-return can ever
+            // find it, since both key off the same moonbeastOnSpellbook map).
+            if (game.moonbeastOnSpellbook.contains(uRef)) {
+                val (mbTarget, mbSb) = game.moonbeastOnSpellbook(uRef)
+                mbTarget.oncePerGame = mbTarget.oncePerGame.but(mbSb)
+                game.moonbeastOnSpellbook -= uRef
+            }
             // Card: "place it on this card; that Unit is considered to be out of play"
             // Penguin: if transferred, return to original owner first
             val origOwner = penguinOriginalOwner.get(u.ref)
