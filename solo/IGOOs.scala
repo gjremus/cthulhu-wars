@@ -1221,15 +1221,6 @@ object IGOOsExpansion extends Expansion {
 
         case TheZygoteContinueAction(self) =>
             val remaining = self.pool(Acolyte).num
-            println(s"[ZYGTRACE] continue: ${self.short} poolAcolytes=$remaining  census=" +
-                self.units.%(_.uclass == Acolyte)./(u => s"${u.index}@${u.region}${if (u.tag(Eliminated)) "(ELIM)" else ""}${if (u.region == self.reserve) "(pool)" else ""}").mkString(","))
-            factions.foreach { ff =>
-                val acs = ff.units.%(_.uclass == Acolyte)./(u => s"${u.index}@${u.region}")
-                val mpc = ff.units.%(_.uclass == MindParasiteCultist)./(u => s"MPC${u.index}@${u.region}")
-                if (acs.any || mpc.any) println(s"[ZYGTRACE]   ${ff.short}: acolytes=${acs.mkString(",")}  mpc=${mpc.mkString(",")}")
-            }
-            println(s"[ZYGTRACE]   prisons: " + factions./(f => s"${f.short}.prison=" + factions./~(_.at(f.prison))./(u => s"${u.faction.short}/${u.uclass}/${u.index}").mkString("+")).mkString("  "))
-            println(s"[ZYGTRACE]   insects: " + factions./~(_.units.%(_.uclass == InsectsFromShaggai))./(u => s"${u.faction.short}/Insect/${u.index}@${u.region}").mkString(","))
             if (remaining == 0) {
                 self.log("The Zygote".styled("nt") + ": all Acolytes placed")
                 EndAction(self)
