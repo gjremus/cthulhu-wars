@@ -855,7 +855,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Gated on TB being the one choosing its own units' retreat: when an enemy
         // controls the retreat via Crawling Chaos Madness the Mantle is withheld
         // unless TB consented above (tbSubterranePainConsent), and neutral units never reach it.
-        val mantleAllowed = retreater(s) == TB || tbSubterranePainConsent
+        // EXCEPTION: when the battle Area is itself one of the nominated Mantle-adjacent
+        // Areas (game.tbMantleAreas), the consent ask above is skipped entirely as moot
+        // (owner ruling 2026-08-20: "retreat there is already normal-adjacent"), so this
+        // must count as allowed too — otherwise skipping the ask silently loses the Mantle
+        // option instead of granting it. Bug reported live: game woqplpnbjkvtyzrp, Crawling
+        // Chaos Madness active, battle in a nominated Mantle-adjacent Area (South America);
+        // "to Mantle" showed as a normal-adjacency destination but was not actually offered.
+        val mantleAllowed = retreater(s) == TB || tbSubterranePainConsent || game.tbMantleAreas.has(arena)
         val mantleDest : $[Region] = (s == TB && mantleAllowed && game.tbMantleInPlay).?? {
             val tentacleAreas = TB.has(Subterrane).??(TB.onMap(Tentacle)./(_.region).distinct)
             if (arena == TB.mantle) (game.tbMantleAreas ++ tentacleAreas).distinct
