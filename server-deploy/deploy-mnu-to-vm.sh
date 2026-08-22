@@ -24,7 +24,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MNU_ROOT="$(dirname "$SCRIPT_DIR")"
 SSH_KEY="/Users/gremus/.ssh/oracle_cw_ed25519"
-HOST="oracle-cw-server@35.255.125.91"
+# VM IP changes across restarts (GCP free tier); use the DNS hostname so SSH
+# tracks whatever IP Dynu currently points cwo.freeddns.org at (was 35.255.125.91,
+# then 34.27.40.209 — stop chasing IPs).
+HOST="oracle-cw-server@cwo.freeddns.org"
 REMOTE_ROOT="/opt/cwo/mnu"
 
 DO_BUILD=false
