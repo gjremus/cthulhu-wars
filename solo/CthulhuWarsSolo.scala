@@ -3336,13 +3336,31 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         if (backgroundCheckThread.has(token)) {
                             getF(server + "read/" + hash + "/" + (actions.num + 3)) { ll =>
                                 if (backgroundCheckThread.has(token)) {
-                                    if (ll.splt("\n").but("").any) {
+                                    val fwd = ll.splt("\n").but("")
+                                    // STALE RE-SERVE GUARD (game 454 "Existence and Colour" Directed-Energy
+                                    // crash). On a position-skewed / rolled-back stream the forward read
+                                    // read/hash/(actions.num+3) can return actions we have ALREADY applied
+                                    // (the server re-serves the tail). Treating that as a new move fires
+                                    // UpdateAction, re-performs the duplicate tail, advances the game past a
+                                    // pending human Ask (DS's Directed Energy) and writes a phantom
+                                    // BattleProceedAction — which crashes replay on the next load. Detect the
+                                    // pure re-serve (every returned line duplicates our applied tail, in
+                                    // order) and keep waiting instead of acting on it, so the human's prompt
+                                    // stays live and only their real choice gets recorded.
+                                    val staleReserve = fwd.any && fwd.num <= actions.num &&
+                                        fwd.indexed./((line, i) => line.replace("&gt;", ">") == serializer.write(actions(fwd.num - 1 - i)).replace("&gt;", ">")).but(true).none
+                                    if (fwd.any && !staleReserve) {
                                         backgroundCheckThread = None
 
                                         // ask("Waiting for update >" + ll + "<", $, n => {})
                                         ask("Waiting for update", $, n => {})
 
                                         perform(UpdateAction)
+                                    }
+                                    else if (staleReserve) {
+                                        // Nothing genuinely new — poll again later without disturbing the
+                                        // pending prompt already on screen (the human can still answer it).
+                                        executeBackgroundCheck(token)
                                     }
                                     else if (actions.num > 0) {
                                         // Rollback detection (2026-08-02): the forward read is empty on a
@@ -3526,7 +3544,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 queue.@@ {
                     case head :: rest =>
                         queue = rest
-                        // println(head)
                         head match {
                             case UILog(l) => {
                                 log(l, showUndo(actions.num))
@@ -3652,7 +3669,28 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                 val initial = actions.none
 
-                                recorded.indexed./ { (a, n) =>
+                                // STALE RE-SERVE GUARD (game 454 "Existence and Colour"): the online read
+                                // endpoint can re-serve trailing actions we've ALREADY applied (on a
+                                // position-skewed / rolled-back stream). Re-performing them double-advances
+                                // the game past a pending Ask (DS's Directed Energy) and records a phantom
+                                // BattleProceedAction that crashes replay. Drop the longest leading run of
+                                // actions that duplicates our already-applied tail (in order) and keep only
+                                // genuinely new ones. (On initial load `actions` is empty, so nothing drops.)
+                                def dupMatches(m : Int) : Boolean = {
+                                    var i = 0
+                                    var ok = true
+                                    while (ok && i < m) {
+                                        if (serializer.write(recorded(i)).replace("&gt;", ">") != serializer.write(actions(m - 1 - i)).replace("&gt;", ">"))
+                                            ok = false
+                                        i += 1
+                                    }
+                                    ok
+                                }
+                                var dupN = math.min(recorded.num, actions.num)
+                                while (dupN > 0 && !dupMatches(dupN)) dupN -= 1
+                                val fresh = recorded.drop(dupN)
+
+                                fresh.indexed./ { (a, n) =>
                                     actions +:= a
 
                                     if (a.is[ReloadAction.type] && initial.not) {
@@ -3662,7 +3700,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     }
 
                                     if (a.isVoid.not) {
-                                        game.nextReplayActionHint = if (n + 1 < recorded.num) Some(serializer.write(recorded(n + 1))) else None
+                                        game.nextReplayActionHint = if (n + 1 < fresh.num) Some(serializer.write(fresh(n + 1))) else None
                                         val (l, c) = game.perform(a.unwrap)
                                         game.nextReplayActionHint = None
 
