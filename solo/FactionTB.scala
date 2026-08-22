@@ -609,12 +609,11 @@ object TBExpansion extends Expansion {
                 + TBRemoveGatePlaceChthonianMainAction(f)
 
             // SBR-4: Gates at every GOO Area (Action, pay 8 Power)
-            if (f.needs(GatesAtGOOsReq) && f.power >= 8) {
-                val gooAreas = game.factions./~(fx => fx.all(GOO)./(_.region)).distinct
-                val ungated = gooAreas.%!(r => game.gates.has(r))
-                if (ungated.any)
-                    + TBGatesAtGOOsMainAction(f)
-            }
+            // Per the rule text, TB may always attempt this Action once it can afford it —
+            // there is no rules requirement that an ungated GOO Area exist first. Even if
+            // 0 Gates end up being placed, the 8-Power payment still satisfies the requirement.
+            if (f.needs(GatesAtGOOsReq) && f.power >= 8)
+                + TBGatesAtGOOsMainAction(f)
 
             // SBR-6: 3-Glyph alt 6-Power Action
             if (f.needs(ShuddeMellInThreeGlyphsReq) && f.power >= 6)
