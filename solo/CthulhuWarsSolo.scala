@@ -3402,29 +3402,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                 val initial = actions.none
 
-                                // STALE RE-SERVE GUARD (game 454 "Existence and Colour"): the online read
-                                // endpoint can re-serve trailing actions we've ALREADY applied (on a
-                                // position-skewed / rolled-back stream). Re-performing them double-advances
-                                // the game past a pending Ask (DS's Directed Energy) and records a phantom
-                                // BattleProceedAction that crashes replay. Drop the longest leading run of
-                                // actions that duplicates our already-applied tail (in order) and keep only
-                                // genuinely new ones. (On initial load `actions` is empty, so nothing drops.)
-                                def dupMatches(m : Int) : Boolean = {
-                                    var i = 0
-                                    var ok = true
-                                    while (ok && i < m) {
-                                        if (serializer.write(recorded(i)).replace("&gt;", ">") != serializer.write(actions(m - 1 - i)).replace("&gt;", ">"))
-                                            ok = false
-                                        i += 1
-                                    }
-                                    ok
-                                }
-                                var dupN = math.min(recorded.num, actions.num)
-                                while (dupN > 0 && !dupMatches(dupN)) dupN -= 1
-                                val fresh = recorded.drop(dupN)
-
                                 try {
-                                fresh.indexed./ { (a, n) =>
+                                recorded.indexed./ { (a, n) =>
                                     actions +:= a
 
                                     if (a.is[ReloadAction.type] && initial.not) {
