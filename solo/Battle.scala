@@ -118,7 +118,7 @@ case class PrimeCauseChooseReplacementAction(self : Faction, oldRef : UnitRef, n
         // without Extinction → 6, with Extinction → 4, etc.). Replacing an
         // Elder Shoggoth itself still costs 0 (free swap-out).
         val cost = if (oldU.uclass == ElderShoggoth) 0
-                   else if (newUC.utype == GOO) self.awakenCost(newUC, r)(g).getOrElse(self.gooValue(newUC)(g)) / 2
+                   else if (newUC.isGOO) self.awakenCost(newUC, r)(g).getOrElse(self.gooValue(newUC)(g)) / 2
                    else self.summonCost(newUC, r)(g) / 2
         "Replace with " + newUC.styled(self) + (cost > 0).??(" (" + cost.power + ")")
     }) {
@@ -1176,7 +1176,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     val enemySide = if (s == attacker) defenders else attackers
                     val enemy = s.opponent
                     if (mySide.forces.%(_.uclass == Cthugha).any) {
-                        val enemyGOOs = enemySide.forces.%(u => u.uclass.utype == GOO || (u.uclass == Cathedral && AN.can(HolyGround)))
+                        val enemyGOOs = enemySide.forces.%(u => u.uclass.isGOO || (u.uclass == Cathedral && AN.can(HolyGround)))
                         if (enemyGOOs.num > 1) {
                             val gooTypes = enemyGOOs./(_.uclass).distinct
                             val combats = gooTypes./(goo => (goo, enemy.strength(enemySide.forces.%(_.uclass == goo), s)))
@@ -1445,9 +1445,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 sides.foreach { s =>
                     if (s.tag(Harbinger)) {
                         // Holy Ground: Cathedrals count as GOOs during Action Phase (cost 3 for Harbinger)
-                        // Bastet (ElderGod) counts as an enemy GOO for Harbinger's kill reward too.
-                        // Filter locally with .isGOO instead of the shared .goos helper (which is bare == GOO)
-                        // so this stays a targeted HB fix and does not alter .goos everywhere. 2026-08-18.
+                        // Bastet (ElderGod) counts as an enemy GOO for Harbinger's kill reward too;
+                        // .goos now resolves via .isGOO so ElderGod is included. Filter locally here
+                        // only to append the Holy-Ground Cathedral case, which .goos does not cover.
                         val harbingerGoos = s.opponent.units.%(_.uclass.isGOO) ++ (game.inActionPhase && AN.can(HolyGround)).??(s.opponent.units(Cathedral))
                         // A GOO whose Kill was cancelled by Distributed Death still counts as Killed
                         // for Harbinger — the Kill was applied, only its effect was prevented (§3.14.3).
@@ -2374,8 +2374,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // for THIS region are met. `self.awakenCost(uc, r)` returns Some
             // only when the awaken conditions are satisfied; we filter on that.
             val battleRegion = game.unit(uRef).region
-            val poolNonGoo  = self.pool.%(_.uclass.utype != GOO)./(_.uclass).distinct
-            val poolGooKnown = self.pool.%(_.uclass.utype == GOO).%(u =>
+            val poolNonGoo  = self.pool.%(!_.uclass.isGOO)./(_.uclass).distinct
+            val poolGooKnown = self.pool.%(_.uclass.isGOO).%(u =>
                 u.uclass.isInstanceOf[FactionUnitClass] && self.awakenCost(u.uclass, battleRegion).nonEmpty
             )./(_.uclass).distinct
             val poolUnits = (poolNonGoo ++ poolGooKnown).distinct
@@ -2395,7 +2395,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             //   without Extinction → 3 = 6/2; with Extinction → 2 = 4/2; etc.).
             //   Replacing an Elder Shoggoth itself still costs 0.
             val cost = if (isES) 0
-                       else if (newUC.utype == GOO) self.awakenCost(newUC, r).getOrElse(self.gooValue(newUC)) / 2
+                       else if (newUC.isGOO) self.awakenCost(newUC, r).getOrElse(self.gooValue(newUC)) / 2
                        else self.summonCost(newUC, r) / 2
             // [2026-05-23] Prime Cause logs split into 4 separate events per user spec:
             //   1) unit removed, 2) unit replaced, 3) ES given (GOO penalty), 4) doom given (Terror penalty)
@@ -2428,7 +2428,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     enemy.doom += 1
                     log(enemy.full, "Prime Cause".styled("nt") + ": gained", 1.doom, "(Terror replaced)")
                 }
-                if (oldUnit.uclass.utype == GOO) {
+                if (oldUnit.uclass.isGOO) {
                     val enemy = self.opponent
                     enemy.takeES(1)
                     log(enemy.full, "Prime Cause".styled("nt") + ": gained", 1.es, "(GOO replaced)")

@@ -2273,7 +2273,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (f.commands.has(ShamblerThreatOfAttackOnGOO))
                 (f.onMap(GOO) ++ f.onMap(ElderGod))./(_.region).%(r => e.canAttack(r)(f)).%(r => e.strength(e.at(r), f) / 2 + 1 > f.at(r).notGOOs.num).%{ r =>
                     // Exclude Nyarlathotep with Emissary when no enemy GOO is in the battle
-                    val nyaSafe = f == CC && f.can(Emissary) && e.at(r).%(u => u.uclass.utype == GOO || (u.uclass == Cathedral && AN.can(HolyGround))).none
+                    val nyaSafe = f == CC && f.can(Emissary) && e.at(r).%(u => u.uclass.isGOO || (u.uclass == Cathedral && AN.can(HolyGround))).none
                     // Exclude Rhan-Tegoth with Eternal when WW has power to pay
                     val rtSafe = f == WW && f.can(Eternal) && f.power >= 1
                     !nyaSafe && !rtSafe

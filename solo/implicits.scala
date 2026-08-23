@@ -42,8 +42,8 @@ trait GameImplicits {
     }
 
     implicit class UnitFigureEx(u : UnitFigure) {
-        def goo = u.uclass.utype == GOO
-        def factionGOO = u.uclass.utype == GOO && u.uclass.is[IGOO].not
+        def goo = u.uclass.isGOO
+        def factionGOO = u.uclass.isGOO && u.uclass.is[IGOO].not
         def independentGOO = u.uclass.utype == GOO && u.uclass.is[IGOO]
         def monster = u.uclass.utype == Monster
         def monsterly = u.uclass.utype == Monster || u.uclass.utype == Terror
@@ -93,8 +93,11 @@ trait GameImplicits {
         def got(uc : UnitClass) = l.exists(_.uclass == uc)
         def one(uc : UnitClass) = l.%(_.uclass == uc).sortBy(_.onGate).first
         def one(ut : UnitType) = l.%(_.uclass.utype == ut).sortBy(_.onGate).first
-        def goos = l.%(_.uclass.utype == GOO)
-        def factionGOOs = l.%(u => u.uclass.utype == GOO && u.uclass.is[IGOO].not)
+        def goos = l.%(_.uclass.isGOO)
+        // ElderGod (Bastet) is a GOO for all inherited rules (isGOO), but has its OWN
+        // dedicated awaken/pool loop, so it must be carved OUT of the generic faction-GOO
+        // list to avoid double-handling. IGOOs are excluded here as usual.
+        def factionGOOs = l.%(u => u.uclass.isGOO && u.uclass.is[IGOO].not && !u.uclass.isElderGod)
         def independentGOOs = l.%(u => u.uclass.utype == GOO && u.uclass.is[IGOO])
         def cultists = l.%(_.uclass.utype == Cultist)
         def acolytes = l.%(_.uclass == Acolyte)
