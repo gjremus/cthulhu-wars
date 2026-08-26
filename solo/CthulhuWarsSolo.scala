@@ -1107,7 +1107,7 @@ object CthulhuWarsSolo {
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
                         // Colour Out of Space (CS): acolyte unit sprite
-                        case CS => DrawRect("cs-acolyte", None, x - 17, y - 54, 38, 60)
+                        case CS => DrawRect("cs-acolyte", None, x - 17, y - 54, 34, 60)
                         case _ => null
                     }
 
@@ -1139,7 +1139,7 @@ object CthulhuWarsSolo {
                         case TT => DrawRect("tt-high-priest", |(tint), x - 35, y - 60, 70, 68)
                         case TB => DrawRect("tb-high-priest", None, x - 35, y - 60, 70, 67)
                         // Colour Out of Space (CS): high priest unit sprite
-                        case CS => DrawRect("cs-high-priest", None, x - 35, y - 60, 70, 66)
+                        case CS => DrawRect("cs-high-priest", None, x - 34, y - 60, 69, 66)
                         case _ => DrawRect("gc-high-priest", |(tint), x - 35, y - 60, 70, 66)
                     }
 
@@ -1281,7 +1281,17 @@ object CthulhuWarsSolo {
                     case ChaosGate        => DrawRect("gate", |(Processing(|("#3C2E18"), None, |("#130E08"))), x - 38, y - 38, 76, 76)
                     // Colour Out of Space (CS): the well sprite is a pre-colored multi-hue asset,
                     // so no tint Processing — same 76x76 gate footprint so a Cultist sits inside it.
-                    case PrismaticWell    => DrawRect("cs-prismatic-well", None, x - 38, y - 38, 76, 76)
+                    case PrismaticWell    => DrawRect("cs-prismatic-well", None, x - 30, y - 38, 60, 76)
+
+                    // Colour Out of Space (CS): unit sprites (scaled relative to Cultist 60h baseline)
+                    // Meteorite (cost 1, small): 40h, width scaled proportionally
+                    case Meteorite        => DrawRect("cs-meteorite", None, x - 39, y - 52, 78, 52)
+                    // Effervescent Excrescence (cost 2, medium): 75h, width scaled
+                    case EffervescentExcrescence => DrawRect("cs-effervescent-excrescence", None, x - 28, y - 75, 56, 75)
+                    // Luminous Globule (cost 4, terror-sized): 85h, width scaled
+                    case LuminousGlobule  => DrawRect("cs-luminous-globule", None, x - 16, y - 34, 33, 34)
+                    // Tulzscha GOO (faction unique): 155h, large
+                    case CSTulzscha       => DrawRect("cs-tulzscha", None, x - 41, y - 155, 82, 155)
 
                     case Ghast         => DrawRect("n-ghast", |(neutralTint), x - 17, y - 53, 35, 59)
                     case Gug           => DrawRect("n-gug", |(neutralTint), x - 36, y - 78, 73, 90)
@@ -5778,7 +5788,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // apart at a glance. These whited glyphs are ONLY used in the
             // picker; once the game starts the normal colored glyph is used.
             def entryGlyphSrc(e : PickerEntry) : String =
-                if (e.alt && (e.faction == OW || e.faction == SL || e.faction == AN || e.faction == DS || e.faction == BB))
+                if (e.alt && (e.faction == OW || e.faction == SL || e.faction == AN || e.faction == DS || e.faction == BB || e.faction == CS))
                     "webp/images/" + e.faction.short.toLowerCase + "-glyph-hb.webp"
                 else glyphSrc(e.faction)
 

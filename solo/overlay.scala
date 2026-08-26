@@ -1202,6 +1202,11 @@ object Overlays {
         case $("DC", Pilgrimage.name)  => spellbook(Pilgrimage.name,  "Action: Cost 1", "Choose a Fallen Prophet, then move any or all of your other Units from that Area to an adjacent Area for free.")
         case $("DC", DarkBargain.name) => spellbook(DarkBargain.name, "Action: Cost 0", "If Y'Golonac is in play, all enemies have 30 seconds to choose a number using a D6. You gain Sin equal to one of those numbers of your choice, then distribute an equal amount of Power as evenly as possible among all enemies. Flip this spellbook facedown until the Gather Power Phase.")
 
+        // ── COLOUR OUT OF SPACE (CS) — Homebrew faction overlays ──────────────
+        // Delegated to csOverlay(...) to keep the giant `info` match under the JVM
+        // 64KB method-size limit.
+        case s2 if s2.headOption.exists(_ == "CS") => csOverlay(s2)
+
         // ── FACELESS BLIGHT (FBE) — Homebrew faction overlays ───────────────
         // Delegated to fbeOverlay(...) to keep the giant `info` match under the JVM
         // 64KB method-size limit (the inline cases overflowed it).
@@ -1483,7 +1488,7 @@ object Overlays {
                         case "DC" => CthulhuWarsSolo.Processing(|("#F0EDA8"), |("#333333"), None)
                         case "XSS" => CthulhuWarsSolo.Processing(|("#4a6b7a"), |("#333333"), None)
                         case "TB" => CthulhuWarsSolo.Processing(|("#8b6914"), |("#333333"), None)
-                        case "CS" => CthulhuWarsSolo.Processing(None, None, None)
+                        case "CS" => CthulhuWarsSolo.Processing(|("#6b4c9a"), |("#333333"), None)
                         case "FBE" => CthulhuWarsSolo.Processing(None, None, None, |("#3d5f1c"))
                         case _    => CthulhuWarsSolo.Processing(None, None, None)
                     }
@@ -2321,6 +2326,60 @@ object Overlays {
                 <div class=p>${combat} Add 1 Kill to your combat total (Bastet rolls no dice); the enemy must lower their Kill total by 1.</div>
                 <div class=p>${reference(BB, RequiresAttention)} ${cost("(Doom Phase):")} During the Doom Phase, if Bastet is in an Area containing an enemy Cultist, you may perform a Ritual of Annihilation. For you, this adds exactly 4 Doom plus: if Bastet’s Area has an Enemy-Controlled Gate, gain <span class=es>1 Elder Sign</span>; if Bastet’s Area has an Enemy Great Old One, gain <span class=es>2 Elder Sign</span>. These rewards are additive.</div>""")
         ))
+    }
+
+    def csFactionOverlay() = {
+        // All faction-card text below is VERBATIM from the Colour Out of Space
+        // faction card (implementation guide §1.5–§1.10). The only intentional
+        // change is the creator-requested reorder of Tulzscha's Awaken steps
+        // (pay Power first — guide §1.3/§1.12/§4.6). Do not paraphrase.
+        faction(CS, "info:cs-background", ChromaticPerversion, "Ongoing",
+            "Globules transform all standard gates in their regions to prismatic wells. Prismatic wells give 3 power during gather power, and may only summon excrescences. Any excrescence in a region with a controlled well is owned by the controller of that well.",
+            $(Insanity, VermiculiteHypertrophy, CosmicLandfall, SpectralCollapse, EffulgentSacrifice, CoreExposure), $(
+            (Acolyte,                 6, "1", "0", ""),
+            (Meteorite,               6, "1", "0", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, CosmicLandfall)}, ${reference(CS, CoreExposure)}</div>"""),
+            (EffervescentExcrescence, 8, "2", "2", s"""<div class=p>Spellbook: ${reference(CS, VermiculiteHypertrophy)}</div>"""),
+            (LuminousGlobule,         6, "4", "—", s"""<div class=p>Spellbooks: ${reference(CS, VermiculiteHypertrophy)}, ${reference(CS, ChromaticPerversion)}, ${reference(CS, CoreExposure)}, ${reference(CS, EffulgentSacrifice)}</div>"""),
+            (CSTulzscha,              1, "5", "?", s"""
+                <div class=p>${cost(s"How to Awaken ${CSTulzscha.name}:")}</div>
+                <div class=p>${cost("1)")} Pay ${power(5)}.</div>
+                <div class=p>${cost("2)")} In a region with a cultist and a globule, eliminate the cultist, and roll a die. If you roll a kill, eliminate the globule and take an <span class=es>elder sign</span>. Tulzscha appears in the region.</div>
+                <div class=p>${combat} twice the globules on the map.</div>
+                <div class=p>${reference(CS, CorruptedRending)} ${cost("(1 Power, Action):")} Choose a region with a globule and at least 2 enemy factions. Initiate a battle between 2 enemy factions. Factions roll to choose attacker.</div>""")
+        ), setup = true)
+    }
+
+    // Colour Out of Space (CS) — overlay dispatch helper (extracted from the giant
+    // `info` match so that method stays under the JVM 64KB limit). Handles the
+    // faction info card, the 6 spellbook-requirement panels, and the 6 spellbook /
+    // ability info cards.
+    // Colour Out of Space (CS) — overlay dispatch helper (extracted from the giant
+    // `info` match so that method stays under the JVM 64KB limit). Handles the
+    // faction info card, the 6 spellbook-requirement panels, and the 6 spellbook /
+    // ability info cards.
+    def csOverlay(s : $[Any]) : String = s match {
+        case $("CS") => csFactionOverlay()
+
+        // Verbatim faction-card / spellbook text (implementation guide §1.6, §1.8, §1.9, §1.10). Do not paraphrase.
+        case $("CS", "Setup") => requirement("Start with 8 Power. Place 6 Acolytes and a Controlled Gate in an area with no faction glyph, after Ancients.")
+
+        case $("CS", CSMeteoriteInEnemyStart.text)       => requirement("A meteorite exists in another player's starting area.")
+        case $("CS", CSPrismaticWellExists.text)         => requirement("A prismatic well exists.")
+        case $("CS", CSGlobuleEliminated.text)          => requirement("A globule is eliminated.")
+        case $("CS", CSSacrificeGlobule.text)           => requirement("Sacrifice a globule as an action. If an enemy controls a well in its region, they gain 2 power.")
+        case $("CS", CSEnemyControlsExcrescence.text)   => requirement("Another player controls an excrescence.")
+        case $("CS", CSAwakenTulzscha.text)             => requirement("Awaken Tulzscha.")
+
+        case $("CS", ChromaticPerversion.name)         => spellbook(ChromaticPerversion.name, "Ongoing (Faction Ability)", "Globules transform all standard gates in their regions to prismatic wells. Prismatic wells give 3 power during gather power, and may only summon excrescences. Any excrescence in a region with a controlled well is owned by the controller of that well.")
+        case $("CS", CorruptedRending.name)            => spellbook(CorruptedRending.name, "1 Power, Action (Faction Ability)", "Choose a region with a globule and at least 2 enemy factions. Initiate a battle between 2 enemy factions. Factions roll to choose attacker.")
+        case $("CS", Insanity.name)                    => spellbook(Insanity.name, "Post Battle", "In areas with a meteorite, extra, unapplied combat results are applied according to the following: - Results against you are applied to the attacking faction - Results in battles without you are applied to the rolling faction.")
+        case $("CS", VermiculiteHypertrophy.name)      => spellbook(VermiculiteHypertrophy.name, "Action: Cost 2", "You may summon an excrescence without a gate, by a cultist with a globule. Sacrifice that cultist. Excrescences now have 6 combat, are killed by pains, and cannot be moved by any means.")
+        case $("CS", CosmicLandfall.name)              => spellbook(CosmicLandfall.name, "Ongoing", "Any time a GOO is awakened for 4 power or more, place a meteorite for free in an empty region of your choice.")
+        case $("CS", SpectralCollapse.name)            => spellbook(SpectralCollapse.name, "Post Battle", "If 1 or more units are killed or eliminated in any region with a globule, either faction may roll a combat die (you need not have participated in the battle). You collect 1 doom for pains, 1 ES for kills. Then, eliminate the globule.")
+        case $("CS", EffulgentSacrifice.name)          => spellbook(EffulgentSacrifice.name, "Action: Cost 1", "Sacrifice a globule you control for an elder sign. Any cultists or excrescences in the region are eliminated. Their owners receive half their cost, rounded up.")
+        case $("CS", CoreExposure.name)                => spellbook(CoreExposure.name, "Action: Cost 0", "Summon a globule in a region with a cultist and a meteorite. The meteorite is eliminated. A gate is not required. Globules can now only be moved (for free) alongside a cultist. They cannot be moved by any other means, and do not participate in combat.")
+
+        case _ => ""
     }
 
     // Faceless Blight (FBE) — overlay dispatch helper (extracted from the giant
