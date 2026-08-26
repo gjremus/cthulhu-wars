@@ -72,6 +72,7 @@ object Host {
                     case FBE => BotFBE.ask(actions, 0.03)(g)
                     case XSS => BotXSS.ask(actions, 0.03)(g)
                     case TB => BotTB.ask(actions, 0.03)(g)
+                    case CS => BotCS.ask(actions, 0.03)(g)
                     // [2026-05-24] Neutral / Library factions (NeutralAbhoth,
                     // LibraryFaction, etc.) don't have a strategic bot — when
                     // asked, just pick the first action. This is a no-op for

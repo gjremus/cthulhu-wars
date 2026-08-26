@@ -862,9 +862,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // option instead of granting it. Bug reported live: game woqplpnbjkvtyzrp, Crawling
         // Chaos Madness active, battle in a nominated Mantle-adjacent Area (South America);
         // "to Mantle" showed as a normal-adjacency destination but was not actually offered.
+        // The consent gate above governs only TB's OWN pained units (whether an enemy
+        // controlling TB's retreat via Crawling Chaos Madness may use the Mantle on
+        // TB's behalf). It has no bearing on a different faction retreating its own
+        // units. Section 1.2 of the guide: "The Mantle is a Land Area, adjacent to all
+        // Areas it touches" — that base geometry is universal (mirrors moonRetreatDests
+        // above, which is likewise open to any faction retreating from the Moon), unlike
+        // Subterrane's Tentacle-Area edge, which the guide states is "for your Units
+        // only" (TB-only) and stays gated below. Bug reported live: game
+        // dndskdbnvndlfezw ("Break through Lunacy"), Alt Ancients pained in MantleHold
+        // had zero retreat destinations offered — North Atlantic, a nominated
+        // tbMantleAreas member, was wrongly never added because the whole mantleDest
+        // block (including the TB-only-in-name-but-universal-in-practice base edge)
+        // was hard-gated to s == TB below.
         val mantleAllowed = retreater(s) == TB || tbSubterranePainConsent || game.tbMantleAreas.has(arena)
-        val mantleDest : $[Region] = (s == TB && mantleAllowed && game.tbMantleInPlay).?? {
-            val tentacleAreas = TB.has(Subterrane).??(TB.onMap(Tentacle)./(_.region).distinct)
+        val tbMantleGeneralGate = s != TB || mantleAllowed
+        val mantleDest : $[Region] = (tbMantleGeneralGate && game.tbMantleInPlay).?? {
+            val tentacleAreas = (s == TB && TB.has(Subterrane)).??(TB.onMap(Tentacle)./(_.region).distinct)
             if (arena == TB.mantle) (game.tbMantleAreas ++ tentacleAreas).distinct
             else if (game.tbMantleAreas.has(arena) || tentacleAreas.has(arena)) $(TB.mantle)
             else $
@@ -2178,12 +2192,76 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         .add(TTFulminationDeclineAction(TT)))
                 }
 
+                // Colour Out of Space (CS) Spectral Collapse (§3.10.4): post-battle, if a Globule
+                // sits in the arena and 1+ units were killed/eliminated this battle, offer the
+                // trigger sequentially — CS first (only if it was NOT in this battle), then the
+                // attacker, then the defender. The first to accept rolls one combat die (Kill → 1
+                // Elder Sign, Pain → 1 Doom) and the Globule collapses. Once any accepts (or all
+                // decline) the chain resumes the battle via proceed(). Guarded once-per-action so
+                // re-entering PostBattlePhase after proceed() does not re-arm it.
+                if (factions.has(CS) && CS.can(SpectralCollapse) && !CS.oncePerAction.has(SpectralCollapse) &&
+                    CS.at(arena).%(_.uclass == LuminousGlobule).not(Zeroed).any && eliminated.any) {
+                    CS.oncePerAction :+= SpectralCollapse
+                    val queue = ((!sides.has(CS)).??($(CS))) ++ $(attacker, defender).%(_ != CS)
+                    if (queue.any)
+                        return Ask(queue.head)
+                            .add(CSSpectralCollapseUseAction(queue.head, arena, queue.tail))
+                            .add(CSSpectralCollapseSkipAction(queue.head, arena, queue.tail))
+                }
+
                 jump(BattleEnd)
 
             case BattleEnd =>
                 // Firstborn (FB): reset the Carnage once-per-battle flag at end of battle
                 if (factions.has(FB))
                     FB.oncePerAction :-= Carnage
+
+                // Colour Out of Space (CS) Insanity (§1.8 / Task 3.10.1): in any region with a
+                // Meteorite, surplus (unapplied) Kill results are redirected instead of wasted:
+                //  - in a battle CS is NOT part of, each side's surplus Kills rebound onto that same
+                //    (rolling) faction's own surviving units;
+                //  - in a battle CS IS part of, the surplus rolled AGAINST CS (by CS's opponent) is
+                //    applied to the attacking faction's units.
+                // This MUST run BEFORE Firstborn's Augury banked-kills handler below so that any Kills
+                // Insanity actually applies here are consumed and cannot ALSO be banked by Augury; only
+                // Kills still unapplied after Insanity's redirect flow into Augury (subtracted below via
+                // csInsanityAtkConsumed / csInsanityDefConsumed, keyed to the faction that ROLLED them).
+                var csInsanityAtkConsumed = 0
+                var csInsanityDefConsumed = 0
+                if (factions.has(CS) && CS.can(Insanity) && CS.at(arena).%(_.uclass == Meteorite).any) {
+                    val atkKills = attackers.rolls.count(_ == Kill)
+                    val defKills = defenders.rolls.count(_ == Kill)
+                    val atkSurplus = max(0, atkKills - exempted.count(_.faction == defender))
+                    val defSurplus = max(0, defKills - exempted.count(_.faction == attacker))
+
+                    // (surplusKills, recipientFaction, rolledByAttacker) per the two Insanity rules.
+                    val redirects : $[(Int, Faction, Boolean)] =
+                        if (sides.has(CS)) {
+                            if (CS == defender)
+                                $((atkSurplus, attacker, true))   // attacker rolled against CS → hits the attacking faction
+                            else
+                                $((defSurplus, attacker, false))  // CS is attacker; defender rolled against CS → hits the attacking faction (CS)
+                        } else
+                            $((atkSurplus, attacker, true), (defSurplus, defender, false))  // each side's surplus rebounds onto itself
+
+                    redirects.foreach { case (surplus, recipient, byAttacker) =>
+                        if (surplus > 0) {
+                            var remaining = surplus
+                            var applied = 0
+                            recipient.at(arena).%(_.uclass.utype != Building).sortBy(_.uclass.cost).foreach { v =>
+                                if (remaining > 0 && v.region == arena) {
+                                    game.eliminate(v)
+                                    remaining -= 1
+                                    applied += 1
+                                }
+                            }
+                            if (applied > 0) {
+                                log(CS, Insanity.styled(CS) + ": redirected", applied, "unapplied Kill" + (applied > 1).?("s").|(""), "onto", recipient.full, "in", arena)
+                                if (byAttacker) csInsanityAtkConsumed += applied else csInsanityDefConsumed += applied
+                            }
+                        }
+                    }
+                }
 
                 // Firstborn (FB) Augury: after battle ends, count Kill results that were not applied
                 // (e.g. more kills than enemy units) and store them on the Augury spellbook for later use.
@@ -2193,15 +2271,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // every killed unit into the battle-level `exempted` list (see EliminatePhase, line ~768),
                 // so counting `exempted` units by faction gives the true per-side kill/elimination total.
                 if (factions.has(FB) && FB.can(Augury) && sides.has(FB)) {
-                    // Attacker side: kills rolled minus defender units actually killed/eliminated
+                    // Attacker side: kills rolled minus defender units actually killed/eliminated,
+                    // minus any of the attacker's surplus Kills already consumed by CS Insanity above.
                     val attackerKillsRolled = attackers.rolls.count(_ == Kill)
                     val defenderUnitsKilled = exempted.count(_.faction == defender)
-                    val attackerSurplus = max(0, attackerKillsRolled - defenderUnitsKilled)
+                    val attackerSurplus = max(0, attackerKillsRolled - defenderUnitsKilled - csInsanityAtkConsumed)
 
-                    // Defender side: kills rolled minus attacker units actually killed/eliminated
+                    // Defender side: kills rolled minus attacker units actually killed/eliminated,
+                    // minus any of the defender's surplus Kills already consumed by CS Insanity above.
                     val defenderKillsRolled = defenders.rolls.count(_ == Kill)
                     val attackerUnitsKilled = exempted.count(_.faction == attacker)
-                    val defenderSurplus = max(0, defenderKillsRolled - attackerUnitsKilled)
+                    val defenderSurplus = max(0, defenderKillsRolled - attackerUnitsKilled - csInsanityDefConsumed)
 
                     val unapplied = attackerSurplus + defenderSurplus
                     if (unapplied > 0) {
@@ -2290,7 +2370,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 }
 
                 val battleTerminus : ForcedAction =
-                    if (game.queue.starting.?(_.effect.has(FromBelow)))
+                    if (game.csCorruptedRendingActor.any) {
+                        // Corrupted Rending (§1.8): this battle was FORCED by CS between two other
+                        // factions. Post-battle control returns to CS's own turn, not the declarant.
+                        val cs = game.csCorruptedRendingActor.get
+                        game.csCorruptedRendingActor = None
+                        AfterAction(cs)
+                    }
+                    else if (game.queue.starting.?(_.effect.has(FromBelow)))
                         ProceedBattlesAction
                     else
                         AfterAction(attacker)
@@ -2646,7 +2733,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case RetreatSeparatelyAction(self, f, l) =>
-            val u = f.forces.%(_.health == Pained).first
+            val pained = f.forces.%(_.health == Pained)
+            // TB Subterrane (owner request): mantleDest above is recomputed fresh each
+            // time retreat(s) runs, and only offers the Mantle when this arena currently
+            // contains a TB Tentacle. If a Tentacle is retreated first here, the arena
+            // loses that Tentacle before the REST of the pained units get their turn,
+            // silently taking away their Mantle option. Fix: when retreating "separately"
+            // and both Tentacle and non-Tentacle units are pained together, always send a
+            // non-Tentacle unit through first; Tentacles retreat last, once nothing else
+            // in this arena still needs the Subterrane/Mantle edge.
+            val u = if (f == TB && TB.has(Subterrane) && pained.exists(_.uclass == Tentacle) && pained.exists(_.uclass != Tentacle))
+                pained.%(_.uclass != Tentacle).first
+            else
+                pained.first
             // Xyrious Storm Whirlwind: non-Twister units cannot retreat to Sea Areas
             // with enemy units (Whirlwind destinations). Filter per-unit.
             val validDest = if (u.uclass == Twister) l
@@ -3243,6 +3342,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case NecromanticSporesSkipAction(self) =>
+            proceed()
+
+        // COLOUR OUT OF SPACE (CS): SPECTRAL COLLAPSE — post-battle chain. CSExpansion handles the
+        // roll/doom/ES/Globule-collapse logic and the decline-chaining (returning the next Ask, or
+        // UnknownContinue when the chain is exhausted); these cases resume battle flow via proceed().
+        case CSSpectralCollapseSkipAction(self, _, _) =>
+            proceed()
+
+        case CSSpectralCollapseRollAction(self, _, _) =>
             proceed()
 
         case TBAutotomySkipAction(self) =>

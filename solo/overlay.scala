@@ -1483,6 +1483,7 @@ object Overlays {
                         case "DC" => CthulhuWarsSolo.Processing(|("#F0EDA8"), |("#333333"), None)
                         case "XSS" => CthulhuWarsSolo.Processing(|("#4a6b7a"), |("#333333"), None)
                         case "TB" => CthulhuWarsSolo.Processing(|("#8b6914"), |("#333333"), None)
+                        case "CS" => CthulhuWarsSolo.Processing(None, None, None)
                         case "FBE" => CthulhuWarsSolo.Processing(None, None, None, |("#3d5f1c"))
                         case _    => CthulhuWarsSolo.Processing(None, None, None)
                     }

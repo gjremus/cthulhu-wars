@@ -1541,6 +1541,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case XSS => $(XSSExpansion)
             // The Burrowers Beneath (TB): Homebrew faction
             case TB => $(TBExpansion)
+            // Colour Out of Space (CS): Homebrew faction
+            case CS => $(CSExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any).$(NeutralMonstersExpansion) ++
@@ -1573,6 +1575,26 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def allGates = gates ++ factions./~(_.unitGate)./(_.region)
     var cathedrals : $[Region] = $
     var desecrated : $[Region] = $
+    // Colour Out of Space (CS) Chromatic Perversion: gate-regions corrupted into
+    // Prismatic Wells. State lives on Game (per undo HARD RULE) so `new Game()`
+    // resets it and action/trigger replay rebuilds it — same pattern as fbCraters.
+    // The Well keeps its original controller; this list just marks which gates are wells.
+    var csPrismaticWellRegions : $[Region] = $
+
+    // Colour Out of Space (CS) Cosmic Landfall (SB3, §3.10.3): a running snapshot of every
+    // GOO/iGOO ref currently on the map (across all factions), used by CSExpansion.afterAction to
+    // detect a NEWLY-awakened GOO worth 4+ Power, and a pending flag consumed at EndAction to offer
+    // CS a free Meteorite. Both live on Game so `new Game()` resets them and replay rebuilds them
+    // deterministically (same undo-safety pattern as csPrismaticWellRegions above).
+    var csKnownGOORefs : $[UnitRef] = $
+    var csCosmicLandfallPending : Boolean = false
+
+    // Corrupted Rending (Tulzscha's GOO ability, §1.8): when CS forces a battle between two OTHER
+    // factions, control at the end of that battle must return to CS (for its unlimited actions and
+    // end of turn) — NOT to the winning declarant. This transient flag, set as CS launches the
+    // forced battle and consumed at the battle terminus (Battle.scala), redirects that return.
+    // None in every ordinary battle, so non-CS games and CS's own real battles are unaffected.
+    var csCorruptedRendingActor : |[Faction] = None
 
     // DS singleton vars must be reset here so undo replay (which creates a new Game) starts clean
     DS.chaosGateRegions = $
@@ -2557,7 +2579,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         //  backstop.)
         val servitorBlocking = f.loyaltyCards.has(ServitorCard) && f.pool(ServitorUnit).any
 
-        val summonAreas = areas ++ ((f == BB || (f == OW && f.can(TheyBreakThrough))).??($(BB.moon))) ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))
+        // Colour Out of Space (CS): a Prismatic Well this faction controls may ONLY summon
+        // Effervescent Excrescences (offered separately below via CSWellSummonMainAction), so
+        // exclude those Well regions from the normal monster-summon targets. Guarded on CS being
+        // in the game, so it is a no-op for every non-CS game.
+        val summonAreas = (areas ++ ((f == BB || (f == OW && f.can(TheyBreakThrough))).??($(BB.moon))) ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))).diff(factions.has(CS).??(csPrismaticWellRegions.%(r => f.gates.has(r))))
 
         // HB Fix 113 (2026-06-13): under a DC/SL Tenebrosum repeat (dcTenebrosumGuard),
         // the action is paid in Sin, not Power — so the per-region power-affordability
@@ -2613,6 +2639,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     + SummonMainAction(f, uc, l)
                 }
             }
+        }
+
+        // Colour Out of Space (CS) — Chromatic Perversion (Task 3.8.3): a Prismatic Well may
+        // ONLY summon Effervescent Excrescences, drawn from CS's pool, by whichever faction
+        // controls that Well's Gate (any faction, including CS itself), for 2 Power. Guarded on
+        // CS being in the game and still holding an Excrescence in its pool; offered only where
+        // THIS faction controls a Well-gate it can afford to summon into.
+        if (factions.has(CS) && CS.pool(EffervescentExcrescence).any) {
+            val wellRegions = csPrismaticWellRegions.%(r => f.gates.has(r)).%(r => f.affords(EffervescentExcrescence.cost)(r))
+            if (wellRegions.any)
+                + CSWellSummonMainAction(f, wellRegions)
         }
     }
 
@@ -3202,6 +3239,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val yogGateCount = f.unitGate.any.??(if (yogGateSuppressed) 0 else 1)
                 val ownGates = if (disasterLooms) 0 else f.gates.num + yogGateCount
                 val disasterLoomsGates = if (disasterLooms) f.gates.num + yogGateCount else 0
+                // Colour Out of Space (CS) Chromatic Perversion: any faction's Gate that is a
+                // Prismatic Well yields 3 Power total (not 2). Each well-gate is already counted
+                // once in ownGates*2 (=2); add +1 each to make it 3. Applies to whichever faction
+                // controls the well-gate. Suppressed under Disaster Looms (which zeroes ownGates).
+                val csWellGates = if (disasterLooms || !factions.has(CS)) 0 else f.gates.%(r => csPrismaticWellRegions.has(r)).num
                 val oceanGates = (f.can(YhaNthlei) && f.has(Cthulhu)).??(f.enemies./(f => f.allGates.%(_.glyph == Ocean).num).sum)
                 val darkYoungs = f.can(RedSign).??(f.all(DarkYoung).num)
                 val feast = f.has(Feast).??(desecrated.%(r => f.at(r).any).num)
@@ -3225,7 +3267,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val bbCats = if (f == BB) f.allInPlay.%(u => u.uclass.utype == Monster).num else 0
                 val bbHP = if (f == BB && options.has(HighPriests)) 1 else 0
 
-                f.power = hibernate + ownGates * 2 + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship + fbHPBonus + tbTentacleAreas + bbCats + bbHP
+                f.power = hibernate + ownGates * 2 + csWellGates + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship + fbHPBonus + tbTentacleAreas + bbCats + bbHP
                 f.hibernating = false
 
                 val fromHibernate = (hibernate > 0).?(hibernate.styled("region") + (wasHibernating.?(" hibernate").|(" carried over")))
@@ -3245,8 +3287,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val fromTBTentacles = (tbTentacleAreas > 0).?(tbTentacleAreas.styled("region") + " Tentacle area".s(tbTentacleAreas))
                 val fromBBCats = (bbCats > 0).?(bbCats.styled("region") + " Cat".s(bbCats))
                 val fromBBHP = (bbHP > 0).?(bbHP.styled("region") + " High Priest Bonus")
+                // Colour Out of Space (CS): log the +1-per-Prismatic-Well bonus (each well-gate = 3 Power total)
+                val fromWells = (csWellGates > 0).?(csWellGates.styled("region") + " Prismatic Well".s(csWellGates) + " (+1 each → 3 Power)")
 
-                f.log(if (f == BB) "gained" else "got", f.power.power, "(" + $(fromHibernate, fromGates, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP, fromTBTentacles, fromBBCats, fromBBHP).flatten.mkString(" + ") + ")")
+                f.log(if (f == BB) "gained" else "got", f.power.power, "(" + $(fromHibernate, fromGates, fromWells, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP, fromTBTentacles, fromBBCats, fromBBHP).flatten.mkString(" + ") + ")")
 
                 if (greenDecayCultists > 0) {
                     f.log("Green Decay".styled("nt") + ":", greenDecayCultists, "captured " + "cultist".s(greenDecayCultists), "→", greenDecayCultists.es, "(not power)")
@@ -4465,10 +4509,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 fbeActionInProgress = true
                 // Brown Jenkin Familiar: forced respawn for any faction with BJ in pool + 2 Power
                 val bjFaction = factions.find(f => f.loyaltyCards.has(BrownJenkinCard) && f.allInPlay.%(_.uclass == BrownJenkin).none && f.pool(BrownJenkin).any && f.power >= 2 && f.allGates.onMapOrMoon.any)
-                bjFaction match {
+                val afterBJ = bjFaction match {
                     case Some(f) => BrownJenkinFamiliarCheckAction(f, CheckSpellbooksAction(PreMainAction(self)))
                     case None => CheckSpellbooksAction(PreMainAction(self))
                 }
+                // CS Cosmic Landfall (SB3): a GOO/iGOO was just awakened for 4+ Power (armed by
+                // CSExpansion.afterAction). Thread CS's free-Meteorite offer ahead of the normal
+                // end-of-action continuation; the flag stays set if a rarer nexed/CG branch above
+                // preempts this one, so the offer is never lost.
+                if (setup.has(CS) && csCosmicLandfallPending)
+                    CSCosmicLandfallCheckAction(CS, afterBJ)
+                else
+                    afterBJ
             }
 
         case EndTurnAction(f) =>

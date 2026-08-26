@@ -787,6 +787,8 @@ object CthulhuWarsSolo {
                                         case XSS => BotXSS  .ask(actions, 0.2)(game)
                                         // The Burrowers Beneath (TB): bot dispatch (Easy)
                                         case TB => BotTB    .ask(actions, 0.2)(game)
+                                        // Colour Out of Space (CS): bot dispatch (Easy)
+                                        case CS => BotCS    .ask(actions, 0.2)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -815,6 +817,8 @@ object CthulhuWarsSolo {
                                         case XSS => BotXSS  .ask(actions, 0.03)(game)
                                         // The Burrowers Beneath (TB): bot dispatch (Normal)
                                         case TB => BotTB    .ask(actions, 0.03)(game)
+                                        // Colour Out of Space (CS): bot dispatch (Normal)
+                                        case CS => BotCS    .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -847,6 +851,8 @@ object CthulhuWarsSolo {
                                         case XSS => BotXSS  .ask(as, 0.03)(game)
                                         // The Burrowers Beneath (TB): bot dispatch (AllVsHuman)
                                         case TB => BotTB    .ask(as, 0.03)(game)
+                                        // Colour Out of Space (CS): bot dispatch (AllVsHuman)
+                                        case CS => BotCS    .ask(as, 0.03)(game)
                                     })
 
 
@@ -887,6 +893,9 @@ object CthulhuWarsSolo {
             case object Crater extends FactionUnitClass(FB, "Crater", Token, 0)
             // Daemon Sultan (DS): Chaos Gate rendered as Token
             case object ChaosGate extends FactionUnitClass(DS, "Chaos Gate", Token, 0)
+            // Colour Out of Space (CS): a Gate corrupted into a Prismatic Well is rendered as a
+            // Token in place of the normal Gate (display-only; the well is not a placeable unit).
+            case object PrismaticWell extends FactionUnitClass(CS, "Prismatic Well", Token, 0)
             case object Gate extends UnitClass("Gate", Token, 3)
             case object FactionGlyph extends UnitClass("Faction Glyph", Token, 0)
             // Round 8 Bug 53: separate UnitClass for the on-map dynamic-start glyph render.
@@ -1036,6 +1045,8 @@ object CthulhuWarsSolo {
                     case FBE => Processing(None, None, None, |("#3d5f1c"))
                     // Xyrious Storm (XSS): stormy blue-grey #4a6b7a
                     case XSS => Processing(|("#4a6b7a"), None, None)
+                    // Colour Out of Space (CS): placeholder with no tint
+                    case CS => Processing(None, None, None)
                     // The Burrowers Beneath (TB): earthy brown #8b6914
                     case TB => Processing(|("#8b6914"), |("#333333"), None)
                     // Library map units: no tint (use original icon images)
@@ -1061,6 +1072,7 @@ object CthulhuWarsSolo {
                     case FBE => Processing(None, None, None, |("#3d5f1c"))
                     case XSS => Processing(|("#4a6b7a"), None, None)
                     case TB => Processing(|("#8b6914"), |("#333333"), None)
+                    case CS => Processing(None, None, None)
                     case _  => defaultProcessing
                 }
 
@@ -1094,6 +1106,8 @@ object CthulhuWarsSolo {
                         // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
+                        // Colour Out of Space (CS): acolyte unit sprite
+                        case CS => DrawRect("cs-acolyte", None, x - 17, y - 54, 38, 60)
                         case _ => null
                     }
 
@@ -1124,6 +1138,8 @@ object CthulhuWarsSolo {
                         case TS => DrawRect("ts-high-priest", |(tint), x - 35, y - 60, 70, 66)
                         case TT => DrawRect("tt-high-priest", |(tint), x - 35, y - 60, 70, 68)
                         case TB => DrawRect("tb-high-priest", None, x - 35, y - 60, 70, 67)
+                        // Colour Out of Space (CS): high priest unit sprite
+                        case CS => DrawRect("cs-high-priest", None, x - 35, y - 60, 70, 66)
                         case _ => DrawRect("gc-high-priest", |(tint), x - 35, y - 60, 70, 66)
                     }
 
@@ -1156,6 +1172,8 @@ object CthulhuWarsSolo {
                         case FBE => DrawRect("fbe-glyph", None, x - 50, y - 50, 100, 100)
                         case XSS => DrawRect("xss-glyph", None, x - 50, y - 50, 100, 100)
                         case TB => DrawRect("tb-glyph", None, x - 50, y - 50, 100, 100)
+                        // Colour Out of Space (CS): faction glyph sprite
+                        case CS => DrawRect("cs-glyph", None, x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
                         case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
@@ -1261,6 +1279,9 @@ object CthulhuWarsSolo {
                     case IceAgeToken      => DrawRect("ww-ice-age", None, x - 44, y - 67, 91, 75)
                     case Cathedral        => DrawRect("an-cathedral", None, x - 39, y - 90, 78, 110)
                     case ChaosGate        => DrawRect("gate", |(Processing(|("#3C2E18"), None, |("#130E08"))), x - 38, y - 38, 76, 76)
+                    // Colour Out of Space (CS): the well sprite is a pre-colored multi-hue asset,
+                    // so no tint Processing — same 76x76 gate footprint so a Cultist sits inside it.
+                    case PrismaticWell    => DrawRect("cs-prismatic-well", None, x - 38, y - 38, 76, 76)
 
                     case Ghast         => DrawRect("n-ghast", |(neutralTint), x - 17, y - 53, 35, 59)
                     case Gug           => DrawRect("n-gug", |(neutralTint), x - 36, y - 78, 73, 90)
@@ -1940,8 +1961,17 @@ object CthulhuWarsSolo {
                     var sticking : $[DrawItem] = $
                     var free : $[DrawItem] = $
 
-                    if (gated && DS.chaosGateRegions.has(r).not)
+                    // Colour Out of Space (CS): a Gate corrupted into a Prismatic Well
+                    // (display-only, keyed off csPrismaticWellRegions) renders as the well sprite
+                    // in place of the normal Gate — the keeper Cultist below still draws on top so
+                    // it appears standing inside the well's body.
+                    val csWell = game.csPrismaticWellRegions.has(r)
+
+                    if (gated && DS.chaosGateRegions.has(r).not && csWell.not)
                         fixed +:= DrawItem(r, null, Gate, Alive, $, adjGatePx, adjGatePy)
+
+                    if (gated && DS.chaosGateRegions.has(r).not && csWell)
+                        fixed +:= DrawItem(r, CS, PrismaticWell, Alive, $, adjGatePx, adjGatePy)
 
                     if (DS.chaosGateRegions.has(r))
                         fixed +:= DrawItem(r, DS, ChaosGate, Alive, $, adjGatePx, adjGatePy)
@@ -4146,6 +4176,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 case _ : CustodianAgonyRolledAction => true
                 case _ : LibrarianAgonyRolledAction => true
                 case _ : NuclearChaosRollAction => true
+                // Colour Out of Space (CS): Tulzscha's awaken kill-roll — undo cannot rewind past it.
+                case _ : CSTulzschaAwakenRollAction => true
+                case _ : CSSpectralCollapseRollAction => true
+                // Corrupted Rending attacker-selection rolls — undo cannot rewind past a committed roll.
+                case _ : CSRendingRollBAction => true
+                case _ : CSRendingCompareAction => true
                 case _ => false
             }
 
@@ -4637,6 +4673,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         case FBE => BotFBE
                                         case XSS => BotXSS
                                         case TB => BotTB
+                                        case CS => BotCS
                                     })
                                     bot.eval(g, aa).sortWith(bot.compare)
                                 }
@@ -5450,7 +5487,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Order: GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB
         // Faceless Blight (FBE): Homebrew faction appended (§3.13.1)
         // Xyrious Storm (XSS): Homebrew faction appended
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, CS)
 
         // Alt picker display order (may differ from allFactions).
         // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB, DC.
@@ -5473,7 +5510,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // standard PickerEntry pipeline — glyphSrc resolves to dc-glyph.webp
         // from DC.short.toLowerCase, matching every other faction.
         // Faceless Blight (FBE): Homebrew faction appended to the alt picker (§3.13.1)
-        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB)
+        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS)
         // [2026-07-23] §3.13.5: OW / SL / DS each get a SECOND ("alt") entry
         // immediately after their standard entry, matching the AN and BB alt
         // entries added earlier. Picking an alt entry auto-flips that
