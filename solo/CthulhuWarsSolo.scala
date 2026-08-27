@@ -2843,6 +2843,16 @@ object CthulhuWarsSolo {
                 val dcSinStr  = (f == DC).?(" | " + (game.dcSin.toString + " / " + game.dcSinCap.toString + " Sin").styled(DC)).|("")
                 val dcSinMStr = (f == DC).?(" | " + (game.dcSin.toString + "/" + game.dcSinCap.toString + "S").styled(DC)).|("")
                 val dcSinSStr = (f == DC).?(" " + (game.dcSin.toString + "/" + game.dcSinCap.toString + "S").styled(DC)).|("")
+                // SL Ancient Sorcery Sin counter: once SL permanently copies a DC Sin
+                // power (Depravity = accrue, Tenebrosum = spend) via Ancient Sorcery it
+                // maintains its OWN Sin pool (game.slSin, accrued in the Doom Phase at
+                // Game.scala Depravity accrual). SL slSin has NO cap (unlike dcSinCap),
+                // so display the bare count. Appears immediately when the power is
+                // copied so the player has a visible tracker, mirroring DC's counter.
+                val slHasSinPower = f == SL && (game.slPermanentBorrowed.contains(Depravity) || game.slPermanentBorrowed.contains(Tenebrosum))
+                val slSinStr  = slHasSinPower.?(" | " + (game.slSin.toString + " Sin").styled(DC)).|("")
+                val slSinMStr = slHasSinPower.?(" | " + (game.slSin.toString + "S").styled(DC)).|("")
+                val slSinSStr = slHasSinPower.?(" " + (game.slSin.toString + "S").styled(DC)).|("")
                 // Faceless Blight (FBE): Faction-Card dice-pool strip + Byagoona awaken-selector
                 // (Tasks 3.11.1 / 3.11.6 / 3.11.9; §4.0.4 / §4.0.7). The dice pool is FBE's
                 // pseudo-currency — render a clickable strip of face icons (Kill crimson / Pain
@@ -2885,9 +2895,9 @@ object CthulhuWarsSolo {
                         else ""
                     }
                 } else ""
-                val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr + dcSinStr + fbeDiceStr + fbeByagoonaStr)
-                val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr + dcSinMStr + fbeDiceStr + fbeByagoonaStr)
-                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr + dcSinSStr + fbeDiceStr + fbeByagoonaStr)
+                val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr + dcSinStr + slSinStr + fbeDiceStr + fbeByagoonaStr)
+                val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr + dcSinMStr + slSinMStr + fbeDiceStr + fbeByagoonaStr)
+                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr + dcSinSStr + slSinSStr + fbeDiceStr + fbeByagoonaStr)
                 // Firstborn (FB): read Infernal Pact discount and stored Augury kills for the faction panel display
                 val fbIPDiscount = if (f == FB) game.fbInfernalPactDiscount else 0
                 val fbAugury = if (f == FB) game.fbAuguryKills else 0
