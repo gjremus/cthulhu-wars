@@ -918,7 +918,18 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
         else
         if (refugees.num == 1 || s.forces.tag(Retreated).any) {
-            val u = refugees.first
+            // TB Subterrane tentacle-last rule (see RetreatSeparatelyAction below for the
+            // original fix and full rationale): that fix only covered the FIRST unit sent
+            // back in a multi-unit separate retreat. Every subsequent retreat in the same
+            // battle lands here instead (this branch fires once ANY unit has already
+            // retreated, via s.forces.tag(Retreated).any) and previously just took
+            // refugees.first with no Tentacle check — so a Tentacle could still leave before
+            // a later non-Tentacle unit, exactly reproducing the bug the original fix was
+            // meant to prevent. Apply the same non-Tentacle-first rule here too.
+            val u = if (s == TB && TB.has(Subterrane) && refugees.exists(_.uclass == Tentacle) && refugees.exists(_.uclass != Tentacle))
+                refugees.%(_.uclass != Tentacle).first
+            else
+                refugees.first
             // For non-Twisters, restrict to standard destinations only — but the
             // Moon-is-adjacent-to-all pain-retreat set (moonRetreatDests) is safe for
             // EVERY unit type, so it must be included here too. Omitting it eliminated
