@@ -1281,7 +1281,7 @@ object CthulhuWarsSolo {
                     case ChaosGate        => DrawRect("gate", |(Processing(|("#3C2E18"), None, |("#130E08"))), x - 38, y - 38, 76, 76)
                     // Colour Out of Space (CS): the well sprite is a pre-colored multi-hue asset,
                     // so no tint Processing — same 76x76 gate footprint so a Cultist sits inside it.
-                    case PrismaticWell    => DrawRect("cs-prismatic-well", None, x - 30, y - 38, 60, 76)
+                    case PrismaticWell    => DrawRect("cs-prismatic-well", None, x - 38, y - 38, 76, 76)
 
                     // Colour Out of Space (CS): unit sprites (scaled relative to Cultist 60h baseline)
                     // Meteorite (cost 1, small): 40h, width scaled proportionally

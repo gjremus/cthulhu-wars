@@ -183,12 +183,12 @@ case class CSSpectralCollapseSkipAction(self : Faction, r : Region, queue : $[Fa
 case class CSSpectralCollapseRollAction(self : Faction, r : Region, rolls : $[BattleRoll]) extends ForcedAction
 
 
-// SB3 Cosmic Landfall (Task 3.10.3) — after any faction awakens a GOO/iGOO for 4+ Power, CS may
-// place one free Meteorite in an empty region. The interrupt is threaded into EndAction's normal
+// SB3 Cosmic Landfall (Task 3.10.3) — when the (standard) Ancients build their 4th cathedral, CS
+// may place one free Meteorite in an empty region. The interrupt is threaded into EndAction's normal
 // end-of-action continuation (Game.scala) via `then`, exactly like BrownJenkinFamiliarCheckAction:
 // the Check offers the region menu (skippable) and every branch resumes the game by Force(then).
-// Detection lives in CSExpansion.afterAction (a GOO-ref snapshot), so no action-consuming hook is
-// needed and it replays deterministically alongside csPrismaticWellRegions.
+// Detection lives in CSExpansion.afterAction (a cathedral-count snapshot), so no action-consuming
+// hook is needed and it replays deterministically alongside csPrismaticWellRegions.
 case class CSCosmicLandfallCheckAction(self : Faction, then : ForcedAction) extends ForcedAction
 case class CSCosmicLandfallPlaceAction(self : Faction, r : Region, then : ForcedAction) extends BaseFactionAction(implicit g => "Place a free " + Meteorite.styled(CS) + " (" + CosmicLandfall.styled(CS) + ") in", implicit g => r + CS.iced(r))
 
@@ -271,25 +271,20 @@ object CSExpansion extends Expansion {
     }
 
     // SB3 Cosmic Landfall (Task 3.10.3) detection. afterAction() runs after every EndAction for
-    // every expansion (Game.scala), so CS observes awakens by ANY faction without consuming their
-    // AwakenedAction. We keep a snapshot of every on-map GOO/iGOO ref (game.csKnownGOORefs); a ref
-    // that is present now but was not last action is a fresh awaken. If CS controls Cosmic Landfall
-    // and that GOO's awaken cost was 4+ Power, arm the pending flag — Game.scala's EndAction tail
-    // then threads the free-Meteorite offer to CS. The snapshot is a Game var, so `new Game()`
-    // resets it and replay rebuilds it in lock-step (same undo-safety as csPrismaticWellRegions).
+    // every expansion (Game.scala), so CS observes the Ancients building cathedrals without
+    // consuming their action. Cosmic Landfall fires when the (standard) Ancients build their 4th
+    // cathedral: game.cathedrals is an AN-only region list, so its count reaching 4 is exactly that
+    // moment (the same count AN.canAwakenIGOO gates on). We snapshot last action's count in
+    // game.csKnownCathedralCount; a transition from <4 to >=4 is the 4th-cathedral build. If CS
+    // controls Cosmic Landfall, arm the pending flag — Game.scala's EndAction tail then threads the
+    // free-Meteorite offer to CS. The snapshot is a Game var, so `new Game()` resets it and replay
+    // rebuilds it in lock-step (same undo-safety as csPrismaticWellRegions).
     override def afterAction()(implicit game : Game) : Unit = {
         if (game.setup.has(CS).not) return
-        val current = game.setup.flatMap(e => e.allInPlay.%(_.uclass.isGOO)).not(Zeroed)
-        if (CS.can(CosmicLandfall)) {
-            current.%(u => game.csKnownGOORefs.has(u.ref).not).foreach { u =>
-                // Real awaken Power: the owner's own awakenCost formula (GC/DC/etc. override it);
-                // fall back to the class's nominal cost for GOOs that use the default awaken price.
-                val pwr = u.faction.awakenCost(u.uclass, u.region).getOrElse(u.uclass.cost)
-                if (pwr >= 4)
-                    game.csCosmicLandfallPending = true
-            }
-        }
-        game.csKnownGOORefs = current./(_.ref)
+        val cathedrals = game.cathedrals.num
+        if (CS.can(CosmicLandfall) && game.setup.has(AN) && game.csKnownCathedralCount < 4 && cathedrals >= 4)
+            game.csCosmicLandfallPending = true
+        game.csKnownCathedralCount = cathedrals
     }
 
     // SBR3: a Globule is eliminated (by any cause). eliminate() fires exactly when a unit is
@@ -430,6 +425,13 @@ object CSExpansion extends Expansion {
             CS.satisfy(CSAwakenTulzscha, "Awaken Tulzscha")
             // AwakenedAction so downstream GOO-awaken hooks fire (incl. Cosmic Landfall SB3).
             AwakenedAction(CS, CSTulzscha, r, 5)
+
+        // Terminal consumer for the AwakenedAction above — every custom-effect GOO awaken
+        // needs one of these or the dispatcher crashes with "unknown continue" (this one was
+        // missing, which is what crashed the game). Tulzscha has no further bonus effect here;
+        // CSAwakenTulzscha was already satisfied above, so just end the turn.
+        case AwakenedAction(self : CS.type, CSTulzscha, _, _) =>
+            EndAction(self)
 
         // SB2 Vermiculite Hypertrophy summon-without-gate (Task 3.10.2).
         case CSVermiculiteMainAction(l) =>

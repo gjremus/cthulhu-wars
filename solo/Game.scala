@@ -1582,11 +1582,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var csPrismaticWellRegions : $[Region] = $
 
     // Colour Out of Space (CS) Cosmic Landfall (SB3, §3.10.3): a running snapshot of every
-    // GOO/iGOO ref currently on the map (across all factions), used by CSExpansion.afterAction to
-    // detect a NEWLY-awakened GOO worth 4+ Power, and a pending flag consumed at EndAction to offer
-    // CS a free Meteorite. Both live on Game so `new Game()` resets them and replay rebuilds them
-    // deterministically (same undo-safety pattern as csPrismaticWellRegions above).
-    var csKnownGOORefs : $[UnitRef] = $
+    // Ancients cathedral count seen last action, used by CSExpansion.afterAction to detect the
+    // (standard) Ancients building their 4th cathedral, and a pending flag consumed at EndAction to
+    // offer CS a free Meteorite. Both live on Game so `new Game()` resets them and replay rebuilds
+    // them deterministically (same undo-safety pattern as csPrismaticWellRegions above).
+    var csKnownCathedralCount : Int = 0
     var csCosmicLandfallPending : Boolean = false
 
     // Corrupted Rending (Tulzscha's GOO ability, §1.8): when CS forces a battle between two OTHER
@@ -4512,7 +4512,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     case Some(f) => BrownJenkinFamiliarCheckAction(f, CheckSpellbooksAction(PreMainAction(self)))
                     case None => CheckSpellbooksAction(PreMainAction(self))
                 }
-                // CS Cosmic Landfall (SB3): a GOO/iGOO was just awakened for 4+ Power (armed by
+                // CS Cosmic Landfall (SB3): the Ancients just built their 4th cathedral (armed by
                 // CSExpansion.afterAction). Thread CS's free-Meteorite offer ahead of the normal
                 // end-of-action continuation; the flag stays set if a rarer nexed/CG branch above
                 // preempts this one, so the offer is never lost.
