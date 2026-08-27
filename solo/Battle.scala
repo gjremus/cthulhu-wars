@@ -1128,6 +1128,27 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // Colour Out of Space (CS) Core Exposure: while CS controls this spellbook, its
+                // Luminous Globules "do not participate in combat" (faction card). Exempt them from
+                // both sides — like Mummify/Grasping Dead above — so they add no strength and take
+                // no casualties (they simply remain in the region). Re-check for an emptied side.
+                if (game.setup.has(CS) && CS.can(CoreExposure)) {
+                    sides.foreach { s =>
+                        s.forces.%(u => u.faction == CS && u.uclass == LuminousGlobule).foreach { u =>
+                            log(LuminousGlobule.styled(CS), "in", arena, "does not participate in combat (" + CoreExposure.styled(CS) + ")")
+                            exempt(u)
+                        }
+                    }
+                    if (attacker.forces.none) {
+                        log("No attackers left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                    if (defender.forces.none) {
+                        log("No defenders left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                }
+
                 sides.foreach(s => s.forces.foreach(u => u.health = Alive))
 
                 sides.foreach(s => s.str = s.strength(s.forces, s.opponent))

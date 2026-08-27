@@ -2340,12 +2340,13 @@ object Overlays {
             (Meteorite,               6, "1", "0", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, CosmicLandfall)}, ${reference(CS, CoreExposure)}</div>"""),
             (EffervescentExcrescence, 8, "2", "2", s"""<div class=p>Spellbook: ${reference(CS, VermiculiteHypertrophy)}</div>"""),
             (LuminousGlobule,         6, "4", "—", s"""<div class=p>Spellbooks: ${reference(CS, VermiculiteHypertrophy)}, ${reference(CS, ChromaticPerversion)}, ${reference(CS, CoreExposure)}, ${reference(CS, EffulgentSacrifice)}</div>"""),
-            (CSTulzscha,              1, "5", "?", s"""
+            (CSTulzscha,              1, "5", "2×Globules", s"""
                 <div class=p>${cost(s"How to Awaken ${CSTulzscha.name}:")}</div>
                 <div class=p>${cost("1)")} Pay ${power(5)}.</div>
                 <div class=p>${cost("2)")} In a region with a cultist and a globule, eliminate the cultist, and roll a die. If you roll a kill, eliminate the globule and take an <span class=es>elder sign</span>. Tulzscha appears in the region.</div>
                 <div class=p>${combat} twice the globules on the map.</div>
-                <div class=p>${reference(CS, CorruptedRending)} ${cost("(1 Power, Action):")} Choose a region with a globule and at least 2 enemy factions. Initiate a battle between 2 enemy factions. Factions roll to choose attacker.</div>""")
+                <div class=p>${reference(CS, CorruptedRending)} ${cost("(1 Power, Action):")} Choose a region with a globule and at least 2 enemy factions. Initiate a battle between 2 enemy factions. Factions roll to choose attacker.</div>"""),
+            (PrismaticWell,           0, "—", "—", s"""<div class=p>Any standard Gate in a region with a Luminous Globule becomes a Prismatic Well (Chromatic Perversion). Gives ${power(3)} during Gather Power; may only summon Effervescent Excrescences. Any Excrescence in a region with a controlled Well is owned by that Well's controller.</div>""")
         ), setup = true)
     }
 
@@ -2546,7 +2547,7 @@ object Overlays {
                 <tr>
                     <th style=width:9%>
                     </th>
-                    <th style=width:13%>
+                    <th style=width:18%>
                     </th>
                     <th style=width:4%>
                     </th>
@@ -2554,7 +2555,7 @@ object Overlays {
                     </th>
                     <th style=width:7%>
                     </th>
-                    <th style=width:60%>
+                    <th style=width:55%>
                     </th>
                 </tr>
             </thead>
@@ -2627,7 +2628,7 @@ object Overlays {
                             <td>
                                 <img class="img" src=${imageSource("info:" + f.short.toLowerCase + "-" + uc.name.toLowerCase.replace(" ", "-").replace("'", "").replace("(", "").replace(")", ""))}>
                             </td>
-                            <td>
+                            <td style="overflow-wrap:anywhere;">
                                 <div class="unit-desc">
                                     <div class="p"><span class=unit-name>${uc.name}${(n > 1).??(s"""<sup>(${n})</sup>""")}</div>
                                     <div class="p"><span class=unit-type>${uc.utype.name.replace("GOO", "Great Old One")}</div>

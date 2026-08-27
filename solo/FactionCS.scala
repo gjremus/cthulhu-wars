@@ -201,8 +201,8 @@ case class CSCosmicLandfallPlaceAction(self : Faction, r : Region, then : Forced
 // two roll-receiver actions are whitelisted in isRollAction so undo can't rewind past a committed roll.
 case class CSCorruptedRendingMainAction(l : $[Region]) extends OptionFactionAction(CorruptedRending.styled(CS) + " — force a battle between two enemies") with MainQuestion { override def self = CS }
 case class CSCorruptedRendingRegionAction(r : Region) extends BaseFactionAction(implicit g => CorruptedRending.styled(CS) + " — force a battle (1 Power) in", implicit g => r + CS.iced(r)) { override def self = CS }
-case class CSRendingPickFirstAction(r : Region, a : Faction) extends BaseFactionAction(a.full, r) { override def self = CS }
-case class CSRendingPickSecondAction(r : Region, a : Faction, b : Faction) extends BaseFactionAction(implicit g => a.full + " vs " + b.full, r) { override def self = CS }
+case class CSRendingPickFirstAction(r : Region, a : Faction) extends BaseFactionAction(CorruptedRending.styled(CS) + " — force a battle in " + r + ". Choose factions to participate in battle.", a.full) { override def self = CS }
+case class CSRendingPickSecondAction(r : Region, a : Faction, b : Faction) extends BaseFactionAction(CorruptedRending.styled(CS) + " — force a battle in " + r + ". Choose the second faction (to battle " + a.full + ").", b.full) { override def self = CS }
 case class CSRendingRollAAction(r : Region, a : Faction, b : Faction) extends ForcedAction
 case class CSRendingRollBAction(r : Region, a : Faction, b : Faction, rollsA : $[BattleRoll]) extends ForcedAction
 case class CSRendingCompareAction(r : Region, a : Faction, b : Faction, rollsA : $[BattleRoll], rollsB : $[BattleRoll]) extends ForcedAction
@@ -270,21 +270,26 @@ object CSExpansion extends Expansion {
         }
     }
 
-    // SB3 Cosmic Landfall (Task 3.10.3) detection. afterAction() runs after every EndAction for
-    // every expansion (Game.scala), so CS observes the Ancients building cathedrals without
-    // consuming their action. Cosmic Landfall fires when the (standard) Ancients build their 4th
-    // cathedral: game.cathedrals is an AN-only region list, so its count reaching 4 is exactly that
-    // moment (the same count AN.canAwakenIGOO gates on). We snapshot last action's count in
-    // game.csKnownCathedralCount; a transition from <4 to >=4 is the 4th-cathedral build. If CS
-    // controls Cosmic Landfall, arm the pending flag — Game.scala's EndAction tail then threads the
-    // free-Meteorite offer to CS. The snapshot is a Game var, so `new Game()` resets it and replay
-    // rebuilds it in lock-step (same undo-safety as csPrismaticWellRegions).
+    // SB3 Cosmic Landfall (Task 3.10.3) detection. afterAction() runs after every action for every
+    // expansion (Game.scala:4481), so CS observes the whole board without consuming anyone's action.
+    // The faction card fires Cosmic Landfall "any time a GOO is awakened for 4 power or more" — so we
+    // watch the TOTAL number of Great Old Ones in play across ALL factions (own Tulzscha and enemy
+    // GOOs alike). A rise since last action means a GOO just entered play, i.e. was awakened; GOO
+    // awaken costs in this game are always >= 4 Power, so the count going up is exactly the trigger.
+    // We can't read the power paid from this observer hook (afterAction gets no action), and the
+    // per-awaken AwakenedAction is single-handler (adding a broad case would steal enemy GOO
+    // handling), so the board-count snapshot is the safe, order-independent detector. On a rise we
+    // arm the pending flag; Game.scala's EndAction tail (csCosmicLandfallPending) then threads CS's
+    // free-Meteorite offer. The snapshot is a Game var, so `new Game()` resets it and replay rebuilds
+    // it in lock-step (same undo-safety as csPrismaticWellRegions).
+    //   (This replaces the v2.24 4th-cathedral trigger, which required the Ancients faction to be in
+    //   the game and so never fired at all in Ancients-less games — the "isn't firing" bug.)
     override def afterAction()(implicit game : Game) : Unit = {
         if (game.setup.has(CS).not) return
-        val cathedrals = game.cathedrals.num
-        if (CS.can(CosmicLandfall) && game.setup.has(AN) && game.csKnownCathedralCount < 4 && cathedrals >= 4)
+        val goos = game.factions.flatMap(_.allInPlay).%(_.uclass.isGOO).not(Zeroed).num
+        if (CS.can(CosmicLandfall) && goos > game.csKnownGOOCount)
             game.csCosmicLandfallPending = true
-        game.csKnownCathedralCount = cathedrals
+        game.csKnownGOOCount = goos
     }
 
     // SBR3: a Globule is eliminated (by any cause). eliminate() fires exactly when a unit is
@@ -580,6 +585,9 @@ object CSExpansion extends Expansion {
             val enemies = game.setup.but(CS).%(e => e.at(r).not(Zeroed).any)
             if (globuleIn(r).not || enemies.num < 2 || CS.power < 1)
                 EndAction(CS)
+            else if (enemies.num == 2)
+                // Only two enemy factions here — no choice to make; go straight to the battle.
+                Force(CSRendingPickSecondAction(r, enemies.head, enemies.last))
             else
                 Ask(CS).each(enemies)(a => CSRendingPickFirstAction(r, a)).cancel
 

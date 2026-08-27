@@ -1581,12 +1581,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // The Well keeps its original controller; this list just marks which gates are wells.
     var csPrismaticWellRegions : $[Region] = $
 
-    // Colour Out of Space (CS) Cosmic Landfall (SB3, §3.10.3): a running snapshot of every
-    // Ancients cathedral count seen last action, used by CSExpansion.afterAction to detect the
-    // (standard) Ancients building their 4th cathedral, and a pending flag consumed at EndAction to
-    // offer CS a free Meteorite. Both live on Game so `new Game()` resets them and replay rebuilds
-    // them deterministically (same undo-safety pattern as csPrismaticWellRegions above).
+    // Colour Out of Space (CS) Cosmic Landfall (SB3, §3.10.3): the faction card fires this "any time
+    // a GOO is awakened for 4 power or more." csKnownGOOCount is a running snapshot of the total
+    // Great Old Ones in play across ALL factions seen last action; CSExpansion.afterAction arms the
+    // pending flag whenever that count rises (a GOO just entered play — own Tulzscha or an enemy
+    // GOO), and the flag is consumed at EndAction to offer CS a free Meteorite. Both live on Game so
+    // `new Game()` resets them and replay rebuilds them deterministically (same undo-safety pattern
+    // as csPrismaticWellRegions above). (csKnownCathedralCount is the retired v2.24 cathedral-trigger
+    // snapshot, kept only so nothing else that references it breaks.)
     var csKnownCathedralCount : Int = 0
+    var csKnownGOOCount : Int = 0
     var csCosmicLandfallPending : Boolean = false
 
     // Corrupted Rending (Tulzscha's GOO ability, §1.8): when CS forces a battle between two OTHER
