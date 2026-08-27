@@ -789,6 +789,8 @@ object CthulhuWarsSolo {
                                         case TB => BotTB    .ask(actions, 0.2)(game)
                                         // Colour Out of Space (CS): bot dispatch (Easy)
                                         case CS => BotCS    .ask(actions, 0.2)(game)
+                                        // The Invasion (TI): generic Bot3 (LAYER 1 — dedicated BotTI deferred)
+                                        case TI => Bot3(TI) .ask(actions, 0.2)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -819,6 +821,8 @@ object CthulhuWarsSolo {
                                         case TB => BotTB    .ask(actions, 0.03)(game)
                                         // Colour Out of Space (CS): bot dispatch (Normal)
                                         case CS => BotCS    .ask(actions, 0.03)(game)
+                                        // The Invasion (TI): generic Bot3 (LAYER 1 — dedicated BotTI deferred)
+                                        case TI => Bot3(TI) .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -853,6 +857,8 @@ object CthulhuWarsSolo {
                                         case TB => BotTB    .ask(as, 0.03)(game)
                                         // Colour Out of Space (CS): bot dispatch (AllVsHuman)
                                         case CS => BotCS    .ask(as, 0.03)(game)
+                                        // The Invasion (TI): generic Bot3 (LAYER 1 — dedicated BotTI deferred)
+                                        case TI => Bot3(TI) .ask(as, 0.03)(game)
                                     })
 
 
@@ -1047,6 +1053,8 @@ object CthulhuWarsSolo {
                     case XSS => Processing(|("#4a6b7a"), None, None)
                     // Colour Out of Space (CS): placeholder with no tint
                     case CS => Processing(None, None, None)
+                    // The Invasion (TI): faction red #94382b
+                    case TI => Processing(|("#94382b"), |("#333333"), None)
                     // The Burrowers Beneath (TB): earthy brown #8b6914
                     case TB => Processing(|("#8b6914"), |("#333333"), None)
                     // Library map units: no tint (use original icon images)
@@ -1073,6 +1081,7 @@ object CthulhuWarsSolo {
                     case XSS => Processing(|("#4a6b7a"), None, None)
                     case TB => Processing(|("#8b6914"), |("#333333"), None)
                     case CS => Processing(None, None, None)
+                    case TI => Processing(|("#94382b"), |("#333333"), None)
                     case _  => defaultProcessing
                 }
 
@@ -1174,6 +1183,8 @@ object CthulhuWarsSolo {
                         case TB => DrawRect("tb-glyph", None, x - 50, y - 50, 100, 100)
                         // Colour Out of Space (CS): faction glyph sprite
                         case CS => DrawRect("cs-glyph", None, x - 50, y - 50, 100, 100)
+                        // The Invasion (TI): LAYER 1 placeholder glyph (reuse dc-glyph tinted TI red)
+                        case TI => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
                         case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
@@ -1422,6 +1433,15 @@ object CthulhuWarsSolo {
                     case Chthonian         => DrawRect("tb-chthonian", None, x - 30, y - 60, 60, 63)
                     case ShuddeMellHead    => DrawRect("tb-shudde-mell-head", None, x - 66, y - 158, 131, 158)
                     case ShuddeMellSegment => DrawRect("tb-shudde-mell-segment", None, x - 45, y - 40, 90, 40)
+
+                    // The Invasion (TI): LAYER 1 placeholder sprites (no art yet), all
+                    // tinted TI red. Demon Larvae = dc-acolyte, Gryllus = Ghast,
+                    // Fiend = Gug, Baphomet (GOO) = Ygolonac-sized. Swap to real
+                    // ti-*.webp assets when art lands.
+                    case DemonLarvae => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                    case Gryllus     => DrawRect("n-ghast", |(tint), x - 17, y - 53, 35, 59)
+                    case Fiend       => DrawRect("n-gug", |(tint), x - 36, y - 78, 73, 90)
+                    case Baphomet    => DrawRect("n-ygolonac", |(tint), x - 66, y - 158, 131, 175)
 
                     case _ => null
                 }
@@ -4668,7 +4688,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                 // Tombstalker (TS), BG, and BB: use Bot3 evaluation for debug action sorting
                                 // NOTE: only fires in Debug difficulty mode, not during normal bot play
-                                val sorted = if (f == BG || f == TS || f == BB)
+                                val sorted = if (f == BG || f == TS || f == BB || f == TI)
                                     Bot3(f).eval(aa)(g).sortBy(-_.evaluations.map(_.weight).sum)
                                 else
                                 if (f == null) {
@@ -4694,6 +4714,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         case XSS => BotXSS
                                         case TB => BotTB
                                         case CS => BotCS
+                                        // The Invasion (TI): handled by the Bot3 branch above (f == TI),
+                                        // like BG/TS/BB, since Bot3 has a different eval/compare shape.
                                     })
                                     bot.eval(g, aa).sortWith(bot.compare)
                                 }
@@ -5507,7 +5529,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Order: GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB
         // Faceless Blight (FBE): Homebrew faction appended (§3.13.1)
         // Xyrious Storm (XSS): Homebrew faction appended
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, CS)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, CS, TI)
 
         // Alt picker display order (may differ from allFactions).
         // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB, DC.

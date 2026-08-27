@@ -1543,6 +1543,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case TB => $(TBExpansion)
             // Colour Out of Space (CS): Homebrew faction
             case CS => $(CSExpansion)
+            // The Invasion (TI): Homebrew faction
+            case TI => $(TIExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any).$(NeutralMonstersExpansion) ++

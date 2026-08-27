@@ -1207,6 +1207,11 @@ object Overlays {
         // 64KB method-size limit.
         case s2 if s2.headOption.exists(_ == "CS") => csOverlay(s2)
 
+        // ── THE INVASION (TI) — Homebrew faction overlays ─────────────────────
+        // Delegated to tiOverlay(...) to keep the giant `info` match under the JVM
+        // 64KB method-size limit.
+        case s2 if s2.headOption.exists(_ == "TI") => tiOverlay(s2)
+
         // ── FACELESS BLIGHT (FBE) — Homebrew faction overlays ───────────────
         // Delegated to fbeOverlay(...) to keep the giant `info` match under the JVM
         // 64KB method-size limit (the inline cases overflowed it).
@@ -1489,6 +1494,7 @@ object Overlays {
                         case "XSS" => CthulhuWarsSolo.Processing(|("#4a6b7a"), |("#333333"), None)
                         case "TB" => CthulhuWarsSolo.Processing(|("#8b6914"), |("#333333"), None)
                         case "CS" => CthulhuWarsSolo.Processing(|("#6b4c9a"), |("#333333"), None)
+                        case "TI" => CthulhuWarsSolo.Processing(|("#94382b"), |("#333333"), None)
                         case "FBE" => CthulhuWarsSolo.Processing(None, None, None, |("#3d5f1c"))
                         case _    => CthulhuWarsSolo.Processing(None, None, None)
                     }
@@ -1733,6 +1739,7 @@ object Overlays {
                         case "fbe" => "#3d5f1c"
                         case "xss" => "#4a6b7a"
                         case "tb" => "#8b6914"
+                        case "ti" => "#94382b"
                         case _    => "#888888"
                     }
                     val processing = CthulhuWarsSolo.Processing(None, None, None, |(factionColor))
@@ -2379,6 +2386,62 @@ object Overlays {
         case $("CS", SpectralCollapse.name)            => spellbook(SpectralCollapse.name, "Post Battle", "If 1 or more units are killed or eliminated in any region with a globule, either faction may roll a combat die (you need not have participated in the battle). You collect 1 doom for pains, 1 ES for kills. Then, eliminate the globule.")
         case $("CS", EffulgentSacrifice.name)          => spellbook(EffulgentSacrifice.name, "Action: Cost 1", "Sacrifice a globule you control for an elder sign. Any cultists or excrescences in the region are eliminated. Their owners receive half their cost, rounded up.")
         case $("CS", CoreExposure.name)                => spellbook(CoreExposure.name, "Action: Cost 0", "Summon a globule in a region with a cultist and a meteorite. The meteorite is eliminated. A gate is not required. Globules can now only be moved (for free) alongside a cultist. They cannot be moved by any other means, and do not participate in combat.")
+
+        case _ => ""
+    }
+
+    // The Invasion (TI) — faction info card. All text VERBATIM from the Invasion
+    // implementation guide §1.5–§1.10. Do not paraphrase.
+    def tiFactionOverlay() = {
+        faction(TI, "info:ti-background", EternalServitude, "Ongoing",
+            "If you have 0 Power and Baphomet is in play and another player is still Active, then during your turn participate as if you had 2 Power. You cannot perform Rituals of Annihilation. This is not optional.",
+            $(Scavenge, Eclipse, Infernolatreia, Hellgate, BloodOffering, EntropySiphon), $(
+            (DemonLarvae, 6, "1", "0", s"""<div class=p>Abilities: ${reference(TI, Portend)}, ${reference(TI, Larvae)}</div>"""),
+            (Gryllus,     6, "2", "1", s"""<div class=p>Spellbook: ${reference(TI, Scavenge)}</div>"""),
+            (Fiend,       4, "4", "3", s"""<div class=p>Spellbook: ${reference(TI, EntropySiphon)}</div>"""),
+            (Baphomet,    1, "0", "4+", s"""
+                <div class=p>${cost("How to Awaken Baphomet:")}</div>
+                <div class=p>${cost("1)")} Permanently remove your Faction Unit in an Area from the game.</div>
+                <div class=p>${cost("2)")} Baphomet appears in that Area.</div>
+                <div class=p>${combat} 4 plus the total Doom you have earned from Elder Signs this Action Phase.</div>
+                <div class=p>${reference(TI, UnquenchableThirst)}, ${reference(TI, SacramentOfFlesh)}, ${reference(TI, BaphometsFury)}</div>""")
+        ), setup = true)
+    }
+
+    // The Invasion (TI) — overlay dispatch helper (extracted from the giant `info`
+    // match so that method stays under the JVM 64KB method-size limit). Handles the
+    // faction info card, the 6 spellbook-requirement panels, and the spellbook /
+    // ability info cards. LAYER 1: text is live; the mechanics are layered in later.
+    def tiOverlay(s : $[Any]) : String = s match {
+        case $("TI") => tiFactionOverlay()
+
+        // Setup (guide §1.6). LAYER 1 note: the Lord's Shadow is stood in by an
+        // ordinary Controlled Gate and the opponent Portent-placement step is deferred.
+        case $("TI", "Setup") => requirement("After Windwalker, start with 8 Power and place a Lord's Shadow, a Fiend and 6 Demon Larvae in any unoccupied Area (following any Map restrictions that would apply to Opener of the Way). You can only Awaken Independent Great Old Ones if doing so would not have you Control more total Great Old Ones than Lord's Shadows.")
+
+        // Spellbook requirements (guide §1.9) — the six brown boxes.
+        case $("TI", TIAwakenBaphomet.text)      => requirement("Awaken Baphomet.")
+        case $("TI", TISecondDoomPhase.text)     => requirement("At the end of the second Doom Phase, take this Spellbook. All other players lose 1 Doom.")
+        case $("TI", TIPayPowerDoom.text)        => requirement("Pay 4 Power and 1 Doom as your Action.")
+        case $("TI", TICapturedTwoFactions.text) => requirement("Have Captured Cultists on your Faction Sheet from 2 or more Factions.")
+        case $("TI", TICreateShadow1.text)       => requirement("Create a Lord's Shadow.")
+        case $("TI", TICreateShadow2.text)       => requirement("Create another Lord's Shadow.")
+
+        // Faction abilities (guide §1.5, §1.7, §1.8).
+        case $("TI", EternalServitude.name)   => spellbook(EternalServitude.name, "Ongoing (Faction Ability)", "If you have 0 Power and Baphomet is in play and another player is still Active, then during your turn participate as if you had 2 Power. You cannot perform Rituals of Annihilation. This is not optional.")
+        case $("TI", Portend.name)            => spellbook(Portend.name, "Demon Larvae Action, Cost X", "In an Area containing Demon Larvae and a Portent, add another Portent. If there are 4 Portents in the Area, remove them and put a Lord's Shadow and a Fiend in the Area. Cost equals the number of Portents already in the Area plus one (2, 3 or 4), OR 0 if the number of your Larvae in the Area is equal to or greater than the number of Portents already in the Area plus one.")
+        case $("TI", Larvae.name)             => spellbook(Larvae.name, "Demon Larvae Ongoing", "Your Larvae cannot Build or Control Gates but count as Acolytes for all other purposes. This is not optional.")
+        case $("TI", UnquenchableThirst.name) => spellbook(UnquenchableThirst.name, "Baphomet Ongoing", "Pay 1 Doom (instead of Power) to Attack or Capture in Baphomet's Area. This is not optional and cannot be disabled or removed by other effects.")
+        case $("TI", SacramentOfFlesh.name)   => spellbook(SacramentOfFlesh.name, "Baphomet, Doom Phase", "If Baphomet is in play, you must: (1) Permanently remove a Faction Unit you Control from the game (or 2 Units if you have all 6 Spellbooks). Spare 1 Unit for each Cultist that was on your Faction Card during Gather Power. (2) Gain 1 Elder Sign (or 2 if you have all 6 Spellbooks).")
+        case $("TI", BaphometsFury.name)      => spellbook(BaphometsFury.name, "Baphomet, two-sided card", "Front (inactive): no effect until the Ritual Track Marker hits the first '7', then flip. Back (active) — Torment (Ongoing): When you would Kill or Eliminate enemy Unit(s) (except via Capture), the enemy instead loses Power for each Unit lost, equal to half the original cost of the Unit rounded up. If the enemy cannot pay the total Power loss, this has no effect. — Transference (Ongoing): When an enemy Faction Kills or Eliminates one of your Units (not via Capture), transfer ownership of Baphomet's Fury to that enemy at the end of the current Action. When it changes ownership, The Invasion gains 1 Doom. Not optional.")
+
+        // Library spellbooks (guide §1.10).
+        case $("TI", Scavenge.name)       => spellbook(Scavenge.name, "Action: Cost 2", "Move any number of your Gryllusses. Then, as part of the same Action, all of your Gryllusses may either Battle in their Area(s) for free or Capture in their Area(s) by paying 1 Power each (but not more than one Battle or Capture per Area). Only your Gryllusses participate on your side of any Battles.")
+        case $("TI", Eclipse.name)        => spellbook(Eclipse.name, "Only Once", "Play this at any time prior to the Doom Phase. All other Factions (except Sleeper, if copying Eternal Servitude) do not gain Doom for Unit-Controlled Gates this Doom Phase. They may still earn Doom from Rituals and other effects, if able. Flip this Spellbook face down after use to indicate it cannot be used again.")
+        case $("TI", Infernolatreia.name) => spellbook(Infernolatreia.name, "Ongoing", "If you would gain 1 or more Elder Signs, you may instead first draw and look at Elder Signs equal to the number of your Lord's Shadows plus one. Keep the gained amount and return the rest (if any).")
+        case $("TI", Hellgate.name)       => spellbook(Hellgate.name, "Action: Cost 2", "Relocate any number of your Units from a single Area with a Lord's Shadow to another single Area with a Lord's Shadow.")
+        case $("TI", BloodOffering.name)  => spellbook(BloodOffering.name, "Action: Cost 0", "Draw and reveal 4 Elder Signs. Enemies have 2 minutes to offer you a Cultist from play in exchange for the Doom from a single revealed Elder Sign. You may accept one offer and Capture that Cultist; that player gains Doom for that Elder Sign, which is discarded. Return all remaining Elder Signs to the pool. Flip this face down until the Gather Power Phase.")
+        case $("TI", EntropySiphon.name)  => spellbook(EntropySiphon.name, "Ongoing", "Fiends can Control Gates. At the end of the Doom Phase, enemies must collectively decide how to lose 4 Power for each Fiend-Controlled Gate. For every 4 Power not lost this way, all players with more Doom than you lose 1 Doom.")
 
         case _ => ""
     }
