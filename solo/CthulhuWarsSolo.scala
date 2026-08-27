@@ -893,9 +893,9 @@ object CthulhuWarsSolo {
             case object Crater extends FactionUnitClass(FB, "Crater", Token, 0)
             // Daemon Sultan (DS): Chaos Gate rendered as Token
             case object ChaosGate extends FactionUnitClass(DS, "Chaos Gate", Token, 0)
-            // Colour Out of Space (CS): a Gate corrupted into a Prismatic Well is rendered as a
-            // Token in place of the normal Gate (display-only; the well is not a placeable unit).
-            case object PrismaticWell extends FactionUnitClass(CS, "Prismatic Well", Token, 0)
+            // Colour Out of Space (CS): PrismaticWell (the corrupted-Gate render Token) now lives at
+            // top level in FactionCS.scala so the faction overlay card can list it; still referenced
+            // here for the map render.
             case object Gate extends UnitClass("Gate", Token, 3)
             case object FactionGlyph extends UnitClass("Faction Glyph", Token, 0)
             // Round 8 Bug 53: separate UnitClass for the on-map dynamic-start glyph render.

@@ -44,6 +44,10 @@ case object LuminousGlobule extends FactionUnitClass(CS, "Luminous Globule", Ter
     override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = CS.can(CoreExposure).not
 }
 case object CSTulzscha extends FactionUnitClass(CS, "Tulzscha", GOO, 5)
+// A Gate corrupted into a Prismatic Well is rendered as a Token in place of the normal Gate
+// (display-only; the well is not a placeable pool unit). Lives at top level (moved out of
+// CthulhuWarsSolo's render-token block) so the faction overlay card can list it too.
+case object PrismaticWell extends FactionUnitClass(CS, "Prismatic Well", Token, 0)
 
 
 // Colour Out of Space (CS) ABILITIES (always-on faction powers, use .has())
