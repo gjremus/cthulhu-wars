@@ -1731,18 +1731,16 @@ case class Bot3(faction : Faction) {
                     case PrimeCauseCancelReplacementAction(_) =>
                         true |=> -1000 -> "prime cause: cancel replacement (bot never cancels)"
 
-                    // ── Dhole Planetary Destruction (opponent's choice) ─────
-                    case DholePlanetaryDestructionDoomAction(_, _) =>
-                        // Opponent picks own doom vs own power. Doom is worse for us.
-                        // We're the opponent of dhole owner here. Pick LESS bad option.
-                        self.power > 5 |=> 200 -> "take power penalty (have plenty)"
-                        self.power <= 2 |=> -500 -> "dont take power loss when low"
-                        true |=> 100 -> "planetary destruction: doom choice"
+                    // ── Dhole Planetary Destruction (owner's choice) ──────
+                    case DholePlanetaryDestructionDoomAction(_, opponent) =>
+                        // Owner picks what to give opponent. Doom helps them win.
+                        opponent.doom >= 25 |=> 300 -> "give doom when opponent close to winning anyway"
+                        true |=> -200 -> "planetary destruction: avoid giving doom"
 
-                    case DholePlanetaryDestructionPowerAction(_, _) =>
-                        self.power > 5 |=> -300 -> "dont take power loss when high (prefer doom)"
-                        self.power <= 2 |=> 500 -> "take doom when low power"
-                        true |=> 200 -> "planetary destruction: power choice"
+                    case DholePlanetaryDestructionPowerAction(_, opponent) =>
+                        // Power is temporary, less dangerous than doom
+                        opponent.power <= 2 |=> 100 -> "give power when opponent is low"
+                        true |=> 200 -> "planetary destruction: prefer giving power"
 
                     // ── Laughingstock (Penguin owner) ───────────────────────
                     case LaughingstockMoveAction(_, uRef) =>

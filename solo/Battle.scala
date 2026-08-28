@@ -166,9 +166,9 @@ trait PostBattleQuestion extends FactionAction {
 }
 
 case class BattleDoneAction(self : Faction) extends ForcedAction
-// Dhole: Planetary Destruction — opponent chooses 2 Doom or 2 Power
-case class DholePlanetaryDestructionDoomAction(self : Faction, owner : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "Opponent gains " + 2.doom) { override def question(implicit game : Game) = "Planetary Destruction".styled("nt") + " — choose what opponent gains" }
-case class DholePlanetaryDestructionPowerAction(self : Faction, owner : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "Opponent gains " + "2 Power".styled("power")) { override def question(implicit game : Game) = "Planetary Destruction".styled("nt") + " — choose what opponent gains" }
+// Dhole: Planetary Destruction — owner chooses whether opponent gains 2 Doom or 2 Power
+case class DholePlanetaryDestructionDoomAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => 2.doom) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
+case class DholePlanetaryDestructionPowerAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "2 Power".styled("power")) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
 // Leng Spider: Bloodthirst — choose which faction's pains to convert
 case class BloodthirstChooseFactionAction(self : Faction, target : Faction) extends BaseFactionAction(implicit g => "Bloodthirst".styled("nt"), implicit g => "Convert " + target.full + "'s 2 " + Pain + " → 1 " + Kill) { override def question(implicit game : Game) = self.full + " — " + "Bloodthirst".styled("nt") + ": choose faction" }
 case class BloodthirstDoneAction(self : Faction) extends BaseFactionAction(implicit g => "Bloodthirst".styled("nt"), "Skip") { override def question(implicit game : Game) = self.full + " — " + "Bloodthirst".styled("nt") }
@@ -345,6 +345,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     var eliminated : $[UnitFigure] = $
+
+    // Dhole: track sides that already triggered Planetary Destruction (prevents re-trigger on proceed / eliminated-path re-entry)
+    var dholePlanetaryProcessed : $[Faction] = $
 
     def eliminate(u : UnitFigure) {
         exempt(u)
@@ -1454,17 +1457,25 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             case DholePlanetaryDestructionPhase =>
                 val replayBlocksDhole = game.nextReplayActionHint.exists(h => !h.contains("DholePlanetaryDestruction"))
                 if (!replayBlocksDhole) {
+                    // Card: "If the Dhole is Killed or Eliminated in Battle"
+                    // Check forces (Killed by dice) AND eliminated list (Eliminated by Devour/Abduct)
                     sides.foreach { s =>
-                        val killedDholes = s.forces(Dhole).%(_.health == Killed)
-                        if (killedDholes.any) {
-                            val dholeOwner = s
-                            val opponent = s.opponent
-                            dholeOwner.takeES(2)
-                            log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
-                            killedDholes.foreach(exempt)
-                            return Ask(dholeOwner)
-                                .add(DholePlanetaryDestructionDoomAction(opponent, dholeOwner))
-                                .add(DholePlanetaryDestructionPowerAction(opponent, dholeOwner))
+                        if (!dholePlanetaryProcessed.has(s)) {
+                            val killedDholes = s.forces(Dhole).%(_.health == Killed)
+                            val eliminatedDholes = eliminated.%(u => u.uclass == Dhole && u.faction == s)
+                            val allDead = killedDholes ++ eliminatedDholes
+                            if (allDead.any) {
+                                val dholeOwner = s
+                                val opponent = s.opponent
+                                dholePlanetaryProcessed :+= s
+                                dholeOwner.takeES(2)
+                                log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
+                                killedDholes.foreach(exempt)
+                                // OWNER (the prompted faction) chooses what the enemy gains; enemy gains it.
+                                return Ask(dholeOwner)
+                                    .add(DholePlanetaryDestructionDoomAction(dholeOwner, opponent))
+                                    .add(DholePlanetaryDestructionPowerAction(dholeOwner, opponent))
+                            }
                         }
                     }
                 }
@@ -2057,14 +2068,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             dustToDustProcessed :+= quOwner
             proceed()
 
-        case DholePlanetaryDestructionDoomAction(self, owner) =>
-            self.doom += 2
-            log(self.full, "chose", 2.doom, "from", "Planetary Destruction".styled(owner))
+        case DholePlanetaryDestructionDoomAction(self, opponent) =>
+            opponent.doom += 2
+            log(self.full, "chose", 2.doom, "for", opponent.full, "from", "Planetary Destruction".styled(self))
             proceed()
 
-        case DholePlanetaryDestructionPowerAction(self, owner) =>
-            self.power += 2
-            log(self.full, "chose", "2 Power".styled("power"), "from", "Planetary Destruction".styled(owner))
+        case DholePlanetaryDestructionPowerAction(self, opponent) =>
+            opponent.power += 2
+            log(self.full, "chose", "2 Power".styled("power"), "for", opponent.full, "from", "Planetary Destruction".styled(self))
             proceed()
 
         case BloodthirstChooseFactionAction(self, target) =>

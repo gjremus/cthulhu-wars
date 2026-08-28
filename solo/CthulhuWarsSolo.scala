@@ -2868,11 +2868,20 @@ object CthulhuWarsSolo {
                     onclick='event.stopPropagation(); onExternalClick($fClickArgs)'
                     onpointerover='event.stopPropagation(); onExternalOver("${f.short}")'
                     onpointerout='event.stopPropagation(); onExternalOut("${f.short}")'
+                    style='position:relative; z-index:2;'
                     >${div("top")(s) + sb + lcis}</div>"""
 
                 val bitmap = b.get(w, h)
 
                 bitmap.canvas.style.pointerEvents = "none"
+                bitmap.canvas.style.position = "absolute"
+                bitmap.canvas.style.top = "0"
+                bitmap.canvas.style.left = "0"
+                // Faction-card unit sprites share this single canvas with the glyph,
+                // Cursed Slumber gate/cultist, Ancient Sorcery serpent men, etc. It sits
+                // BEHIND the text div (z-index 2) so faction power / acronym / dice-count
+                // text is never covered — matches cwo.im (HRF) and the other builds.
+                bitmap.canvas.style.zIndex = "1"
                 bitmap.canvas.style.width = "" + b.node.clientWidth + "px"
                 bitmap.canvas.style.height = "" + b.node.clientHeight + "px"
 
