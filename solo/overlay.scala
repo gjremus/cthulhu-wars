@@ -1740,6 +1740,7 @@ object Overlays {
                         case "xss" => "#4a6b7a"
                         case "tb" => "#8b6914"
                         case "ti" => "#94382b"
+                        case "cs" => "#d070d0"
                         case _    => "#888888"
                     }
                     val processing = CthulhuWarsSolo.Processing(None, None, None, |(factionColor))

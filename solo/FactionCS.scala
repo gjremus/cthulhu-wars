@@ -152,17 +152,17 @@ case class CSTulzschaAwakenRollAction(r : Region, rolls : $[BattleRoll]) extends
 
 // SB2 Vermiculite Hypertrophy (Task 3.10.2): a Cultist sharing a region with a Globule may summon
 // an Excrescence there WITHOUT a Gate, sacrificing that Cultist and paying the 2-Power Excrescence cost.
-case class CSVermiculiteMainAction(l : $[Region]) extends OptionFactionAction("Summon " + EffervescentExcrescence.styled(CS) + " at a " + Acolyte.styled(CS) + " (" + VermiculiteHypertrophy.styled(CS) + ")") with MainQuestion { override def self = CS }
+case class CSVermiculiteMainAction(l : $[Region]) extends OptionFactionAction("Summon " + EffervescentExcrescence.styled(CS) + " at a " + Acolyte.styled(CS) + " (" + VermiculiteHypertrophy.styled(CS) + ")") with MainQuestion with Soft { override def self = CS }
 case class CSVermiculiteAction(r : Region) extends BaseFactionAction(implicit g => "Summon " + EffervescentExcrescence.styled(CS) + g.forNPowerWithTax(r, CS, EffervescentExcrescence.cost) + ", sacrificing a " + Acolyte.styled(CS) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
 
 // SB5 Effulgent Sacrifice (Task 3.10.5): sacrifice a controlled Globule for an Elder Sign (Cost 1);
 // any Cultists or Excrescences in that region are eliminated, each owner refunded half cost (round up).
-case class CSEffulgentMainAction(l : $[Region]) extends OptionFactionAction("Sacrifice " + LuminousGlobule.styled(CS) + " for an " + "Elder Sign".styled("es") + " (" + EffulgentSacrifice.styled(CS) + ")") with MainQuestion { override def self = CS }
+case class CSEffulgentMainAction(l : $[Region]) extends OptionFactionAction("Sacrifice " + LuminousGlobule.styled(CS) + " for an " + "Elder Sign".styled("es") + " (" + EffulgentSacrifice.styled(CS) + ")") with MainQuestion with Soft { override def self = CS }
 case class CSEffulgentAction(r : Region) extends BaseFactionAction(implicit g => "Sacrifice " + LuminousGlobule.styled(CS) + g.forNPowerWithTax(r, CS, 1) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
 
 // SB6 Core Exposure (Task 3.10.6): summon a Globule (no Gate) in a region with a Cultist and a
 // Meteorite; the Meteorite is eliminated. Cost 0.
-case class CSCoreExposureMainAction(l : $[Region]) extends OptionFactionAction("Summon " + LuminousGlobule.styled(CS) + " at a " + Meteorite.styled(CS) + " (" + CoreExposure.styled(CS) + ")") with MainQuestion { override def self = CS }
+case class CSCoreExposureMainAction(l : $[Region]) extends OptionFactionAction("Summon " + LuminousGlobule.styled(CS) + " at a " + Meteorite.styled(CS) + " (" + CoreExposure.styled(CS) + ")") with MainQuestion with Soft { override def self = CS }
 case class CSCoreExposureAction(r : Region) extends BaseFactionAction(implicit g => "Summon " + LuminousGlobule.styled(CS) + ", consuming a " + Meteorite.styled(CS) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
 
 // SB6 Core Exposure free-carry (Task 3.10.6): once Core Exposure is active a Globule may ONLY move
@@ -174,7 +174,7 @@ case class CSCarryGlobuleAction(self : Faction, o : Region, ur : UnitRef, to : R
 
 // SBR4 standalone sacrifice action (Task 3.12.2): sacrifice a Globule as an action; if an enemy
 // controls a Well in its region, they gain 2 Power. Offered while the requirement is unmet.
-case class CSSacrificeGlobuleMainAction(l : $[Region]) extends OptionFactionAction("Sacrifice " + LuminousGlobule.styled(CS) + " as an action") with MainQuestion { override def self = CS }
+case class CSSacrificeGlobuleMainAction(l : $[Region]) extends OptionFactionAction("Sacrifice " + LuminousGlobule.styled(CS) + " as an action") with MainQuestion with Soft { override def self = CS }
 case class CSSacrificeGlobuleAction(r : Region) extends BaseFactionAction(implicit g => "Sacrifice " + LuminousGlobule.styled(CS) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
 
 // SB4 Spectral Collapse (Task 3.10.4) — post-battle sequential offer chain. `self` is the faction
@@ -203,7 +203,7 @@ case class CSCosmicLandfallPlaceAction(self : Faction, r : Region, then : Forced
 // each rolls 3 dice (Kill>Pain>Miss, ties reroll both) → the winner chooses Attacker or Defender →
 // a normal battle runs between them; afterward control returns to CS (csCorruptedRendingActor). The
 // two roll-receiver actions are whitelisted in isRollAction so undo can't rewind past a committed roll.
-case class CSCorruptedRendingMainAction(l : $[Region]) extends OptionFactionAction(CorruptedRending.styled(CS) + " — force a battle between two enemies") with MainQuestion { override def self = CS }
+case class CSCorruptedRendingMainAction(l : $[Region]) extends OptionFactionAction(CorruptedRending.styled(CS) + " — force a battle between two enemies") with MainQuestion with Soft { override def self = CS }
 case class CSCorruptedRendingRegionAction(r : Region) extends BaseFactionAction(implicit g => CorruptedRending.styled(CS) + " — force a battle (1 Power) in", implicit g => r + CS.iced(r)) { override def self = CS }
 case class CSRendingPickFirstAction(r : Region, a : Faction) extends BaseFactionAction(CorruptedRending.styled(CS) + " — force a battle in " + r + ". Choose factions to participate in battle.", a.full) { override def self = CS }
 case class CSRendingPickSecondAction(r : Region, a : Faction, b : Faction) extends BaseFactionAction(CorruptedRending.styled(CS) + " — force a battle in " + r + ". Choose the second faction (to battle " + a.full + ").", b.full) { override def self = CS }
