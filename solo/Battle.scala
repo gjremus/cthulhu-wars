@@ -170,8 +170,8 @@ trait PostBattleQuestion extends FactionAction {
 
 case class BattleDoneAction(self : Faction) extends ForcedAction
 // Dhole: Planetary Destruction — owner chooses whether opponent gains 2 Doom or 2 Power
-case class DholePlanetaryDestructionDoomAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "Opponent gains " + 2.doom) { override def question(implicit game : Game) = "Planetary Destruction".styled("nt") + " — choose what opponent gains" }
-case class DholePlanetaryDestructionPowerAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "Opponent gains " + "2 Power".styled("power")) { override def question(implicit game : Game) = "Planetary Destruction".styled("nt") + " — choose what opponent gains" }
+case class DholePlanetaryDestructionDoomAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => 2.doom) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
+case class DholePlanetaryDestructionPowerAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "2 Power".styled("power")) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
 // Leng Spider: Bloodthirst — choose which faction's pains to convert
 case class BloodthirstChooseFactionAction(self : Faction, target : Faction) extends BaseFactionAction(implicit g => "Bloodthirst".styled("nt"), implicit g => "Convert " + target.full + "'s 2 " + Pain + " → 1 " + Kill) { override def question(implicit game : Game) = self.full + " — " + "Bloodthirst".styled("nt") + ": choose faction" }
 case class BloodthirstDoneAction(self : Faction) extends BaseFactionAction(implicit g => "Bloodthirst".styled("nt"), "Skip") { override def question(implicit game : Game) = self.full + " — " + "Bloodthirst".styled("nt") }
