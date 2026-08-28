@@ -1455,27 +1455,28 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(DholePlanetaryDestructionPhase)
 
             case DholePlanetaryDestructionPhase =>
-                val replayBlocksDhole = game.nextReplayActionHint.exists(h => !h.contains("DholePlanetaryDestruction"))
-                if (!replayBlocksDhole) {
-                    // Card: "If the Dhole is Killed or Eliminated in Battle"
-                    // Check forces (Killed by dice) AND eliminated list (Eliminated by Devour/Abduct)
-                    sides.foreach { s =>
-                        if (!dholePlanetaryProcessed.has(s)) {
-                            val killedDholes = s.forces(Dhole).%(_.health == Killed)
-                            val eliminatedDholes = eliminated.%(u => u.uclass == Dhole && u.faction == s)
-                            val allDead = killedDholes ++ eliminatedDholes
-                            if (allDead.any) {
-                                val dholeOwner = s
-                                val opponent = s.opponent
+                // Card: "If the Dhole is Killed or Eliminated in Battle"
+                // Check forces (Killed by dice) AND eliminated list (Eliminated by Devour/Abduct)
+                sides.foreach { s =>
+                    if (!dholePlanetaryProcessed.has(s)) {
+                        val killedDholes = s.forces(Dhole).%(_.health == Killed)
+                        val eliminatedDholes = eliminated.%(u => u.uclass == Dhole && u.faction == s)
+                        val allDead = killedDholes ++ eliminatedDholes
+                        if (allDead.any) {
+                            val dholeOwner = s
+                            val opponent = s.opponent
+                            val replayBlocksDhole = game.nextReplayActionHint.exists(h => !h.contains("DholePlanetaryDestruction"))
+                            if (replayBlocksDhole) {
                                 dholePlanetaryProcessed :+= s
+                                killedDholes.foreach(exempt)
                                 dholeOwner.takeES(2)
                                 log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
-                                killedDholes.foreach(exempt)
+                            }
+                            else
                                 // OWNER (the prompted faction) chooses what the enemy gains; enemy gains it.
                                 return Ask(dholeOwner)
                                     .add(DholePlanetaryDestructionDoomAction(dholeOwner, opponent))
                                     .add(DholePlanetaryDestructionPowerAction(dholeOwner, opponent))
-                            }
                         }
                     }
                 }
@@ -2069,11 +2070,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case DholePlanetaryDestructionDoomAction(self, opponent) =>
+            dholePlanetaryProcessed :+= self
+            self.forces(Dhole).%(_.health == Killed).foreach(exempt)
             opponent.doom += 2
             log(self.full, "chose", 2.doom, "for", opponent.full, "from", "Planetary Destruction".styled(self))
             proceed()
 
         case DholePlanetaryDestructionPowerAction(self, opponent) =>
+            dholePlanetaryProcessed :+= self
+            self.forces(Dhole).%(_.health == Killed).foreach(exempt)
             opponent.power += 2
             log(self.full, "chose", "2 Power".styled("power"), "for", opponent.full, "from", "Planetary Destruction".styled(self))
             proceed()
