@@ -886,8 +886,10 @@ object LibraryCelaeno55 extends Board {
         // Colour Out of Space (CS): starts in one empty Area (no printed faction
         // glyph); already-taken setup areas are removed by the .diff(starting.values.$)
         // filter in Game.scala SetupFactionsAction. Same option-count class as AN, so
-        // CS seats after the fixed-glyph Ancients but before OW/FBE (§1 setup).
-        case CS => regions
+        // CS seats after the fixed-glyph Ancients but before OW/FBE (§1 setup). Uses
+        // nonFactionRegions (like AN/TS) to honour the card's "no faction glyph" rule —
+        // plain `regions` wrongly allowed CS to start on a printed faction-glyph area.
+        case CS => nonFactionRegions
         case TS => nonFactionRegions.%(_.glyph == Ocean)
         case FB => regions.diff(tomeRegions)
         case DS => $()

@@ -138,11 +138,15 @@ case object CS extends Faction { f =>
 case class CSWellSummonMainAction(self : Faction, l : $[Region]) extends OptionFactionAction("Summon " + EffervescentExcrescence.styled(CS) + " from a " + "Prismatic Well".styled(CS)) with MainQuestion with Soft
 case class CSWellSummonAction(self : Faction, r : Region) extends BaseFactionAction(implicit g => "Summon " + EffervescentExcrescence.styled(CS) + g.forNPowerWithTax(r, self, EffervescentExcrescence.cost) + " in", implicit g => r + self.iced(r))
 
-// Colour Out of Space (CS) — Tulzscha awaken kill-roll resolution (Task 3.4.1). The combat die
-// is rolled via a RollBattle continuation (NOT a direct BattleRoll.roll(), so the dice-roll UI
-// and undo guard handle it); this ForcedAction receives the roll result. On a Kill it eliminates
-// the region's Globule and takes an Elder Sign, then places Tulzscha regardless of the result.
-// MUST be registered in isRollAction (every build) so undo cannot rewind past the roll.
+// Colour Out of Space (CS) — Tulzscha awaken kill-roll resolution (Task 3.4.1). One die is rolled
+// via a RollD6 continuation (like the FBE Byagoona awaken die): in auto-dice mode the app rolls a
+// genuine random 1-6; in manual-dice mode the player enters the actual die FACE (1-6), NOT a
+// pre-labelled Kill/Pain/Miss outcome — so there is no "pick Kill" shortcut that lets the awaken
+// always eliminate the globule. The pip is mapped to a BattleRoll (6 = Kill, 5|4 = Pain, else Miss,
+// matching BattleRoll.roll) and stored here as a single-element list so the recorded action shape is
+// unchanged (older games recorded `CSTulzschaAwakenRollAction(r, [Kill])` — replay stays valid). On a
+// Kill it eliminates the region's Globule and takes an Elder Sign, then places Tulzscha regardless of
+// the result. MUST be registered in isRollAction (every build) so undo cannot rewind past the roll.
 case class CSTulzschaAwakenRollAction(r : Region, rolls : $[BattleRoll]) extends ForcedAction
 
 
@@ -399,8 +403,9 @@ object CSExpansion extends Expansion {
 
         // Tulzscha custom awaken (Task 3.4.1) — intercept the generic AwakenAction leaf BEFORE
         // Game's own handler (CSExpansion is dispatched ahead of `this`). Pay a fixed 5 Power
-        // (always), sacrifice an Acolyte in the region, then roll one combat die. Tulzscha is
-        // placed only after the roll resolves, so hand off to a RollBattle continuation.
+        // (always), sacrifice an Acolyte in the region, then roll one die. Tulzscha is placed only
+        // after the roll resolves, so hand off to a RollD6 continuation (auto: random 1-6; manual:
+        // player enters the actual face). The pip maps to a BattleRoll exactly like BattleRoll.roll.
         case AwakenAction(CS, CSTulzscha, r, cost) =>
             val acolytes = CS.at(r).%(_.uclass == Acolyte).not(Zeroed)
             val globules = CS.at(r).%(_.uclass == LuminousGlobule).not(Zeroed)
@@ -413,7 +418,10 @@ object CSExpansion extends Expansion {
                 val a = acolytes.head
                 game.eliminate(a)
                 CS.log("sacrificed", a, "in", r, "to awaken", CSTulzscha.styled(CS))
-                RollBattle(CS, "Tulzscha's awakening", 1, rolls => CSTulzschaAwakenRollAction(r, rolls))
+                RollD6(_ => "Roll a die for " + CSTulzscha.styled(CS) + "'s awakening", pip => {
+                    val result = pip @@ { case 6 => Kill; case 5 | 4 => Pain; case _ => Miss }
+                    CSTulzschaAwakenRollAction(r, $(result))
+                })
             }
 
         case CSTulzschaAwakenRollAction(r, rolls) =>
@@ -425,6 +433,8 @@ object CSExpansion extends Expansion {
                     CS.takeES(1)
                 }
             }
+            else
+                CS.log("no", "Kill".styled("kill"), "— the", LuminousGlobule.styled(CS), "survives")
             CS.place(CSTulzscha, r)
             // Set CS's start area to Tulzscha's region if it was never recorded (per spec); at
             // setup CS already chose a start, so this is normally a no-op but kept for safety.

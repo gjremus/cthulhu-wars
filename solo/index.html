@@ -248,7 +248,15 @@
             }
 
             .cs {
-                color: #d070d0;
+                /* Colour Out of Space (guide A.vi): rainbow text, first letter vibrant pink-purple.
+                   Horizontal gradient begins at the pink-purple so leading letters read pink-purple
+                   and sweep through the rainbow across the word (like the "Homebrew" builds label).
+                   Additive: only the .cs class changes; no other faction's text is touched. */
+                background: linear-gradient(90deg, #d070d0 0%, #b45cff 14%, #6a7bff 30%, #3fc8d0 46%, #4fd06b 60%, #ffd23f 74%, #ff8c42 88%, #ff5fa2 100%);
+                -webkit-background-clip: text;
+                background-clip: text;
+                -webkit-text-fill-color: transparent;
+                color: #d070d0; /* fallback if background-clip:text is unsupported */
             }
 
             .ti {
