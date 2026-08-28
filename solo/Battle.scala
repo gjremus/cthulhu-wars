@@ -162,6 +162,10 @@ case class BattleDoneAction(self : Faction) extends ForcedAction
 // Dhole: Planetary Destruction — owner chooses whether enemy gains 2 Doom or 2 Power (self = choosing owner)
 case class DholePlanetaryDestructionDoomAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => 2.doom) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
 case class DholePlanetaryDestructionPowerAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "2 Power".styled("power")) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
+// Recorded post-battle Elder Sign award (mirrors HarbingerESAction): performing this
+// action lands an editable entry in the journal/admin log in sync with the player log,
+// then presents the mandatory enemy-benefit choice.
+case class DholePlanetaryESAction(self : Faction, e : Int, opponent : Faction) extends ForcedAction
 // Leng Spider: Bloodthirst — choose which faction's pains to convert
 case class BloodthirstChooseFactionAction(self : Faction, target : Faction) extends BaseFactionAction(implicit g => "Bloodthirst".styled("nt"), implicit g => "Convert " + target.full + "'s 2 " + Pain + " → 1 " + Kill) { override def question(implicit game : Game) = self.full + " — " + "Bloodthirst".styled("nt") + ": choose faction" }
 case class BloodthirstDoneAction(self : Faction) extends BaseFactionAction(implicit g => "Bloodthirst".styled("nt"), "Skip") { override def question(implicit game : Game) = self.full + " — " + "Bloodthirst".styled("nt") }
@@ -1349,16 +1353,22 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             val dholeOwner = s
                             val opponent = s.opponent
                             dholePlanetaryProcessed :+= s
-                            // Owner gains 2 ES
-                            dholeOwner.takeES(2)
-                            log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
                             // Exempt Dhole from forces to prevent re-trigger on re-entry
                             // Don't eliminate yet — EliminatePhase will handle that (avoids stale UnitRef crash)
                             killedDholes.foreach(exempt)
-                            // OWNER (the prompted faction) chooses what the enemy gains; enemy gains it.
-                            return Ask(dholeOwner)
-                                .add(DholePlanetaryDestructionDoomAction(dholeOwner, opponent))
-                                .add(DholePlanetaryDestructionPowerAction(dholeOwner, opponent))
+                            // Replay-compat: games recorded before this recorded-action flow existed
+                            // have no DholePlanetaryESAction as their next recorded action. For those,
+                            // fall back to the old inline award (no recorded action, no choice) so replay
+                            // stays in sync. Live play (hint == None) uses the recorded flow.
+                            val replayBlocks = game.nextReplayActionHint.exists(h => !h.startsWith("DholePlanetaryESAction"))
+                            if (replayBlocks) {
+                                dholeOwner.takeES(2)
+                                log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
+                            }
+                            else
+                                // Route the ES award through a recorded ForcedAction so it lands in the
+                                // journal/admin log immediately post-battle, then the mandatory choice.
+                                return Then(DholePlanetaryESAction(dholeOwner, 2, opponent))
                         }
                     }
                 }
@@ -1927,6 +1937,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Mark as processed so replay doesn't re-trigger (2026-07-16 FIX)
             dustToDustProcessed :+= quOwner
             proceed()
+
+        case DholePlanetaryESAction(self, e, opponent) =>
+            // Award the Elder Signs (same takeES the old code used) — but now inside a recorded
+            // action, so the journal/admin log and player log stay in sync (mirrors HarbingerESAction).
+            self.takeES(e)
+            log(Dhole.styled(self), "Planetary Destruction".styled("nt") + ":", self.full, "gained", e.es)
+            // Mandatory: owner chooses what the enemy gains; enemy gains it.
+            Ask(self)
+                .add(DholePlanetaryDestructionDoomAction(self, opponent))
+                .add(DholePlanetaryDestructionPowerAction(self, opponent))
 
         case DholePlanetaryDestructionDoomAction(self, opponent) =>
             opponent.doom += 2
