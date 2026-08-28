@@ -162,10 +162,15 @@ case class BattleDoneAction(self : Faction) extends ForcedAction
 // Dhole: Planetary Destruction — owner chooses whether enemy gains 2 Doom or 2 Power (self = choosing owner)
 case class DholePlanetaryDestructionDoomAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => 2.doom) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
 case class DholePlanetaryDestructionPowerAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "2 Power".styled("power")) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
-// Recorded post-battle Elder Sign award (mirrors HarbingerESAction): performing this
-// action lands an editable entry in the journal/admin log in sync with the player log,
-// then presents the mandatory enemy-benefit choice.
-case class DholePlanetaryESAction(self : Faction, e : Int, opponent : Faction) extends ForcedAction
+// Recorded post-battle Elder Sign award (mirrors HarbingerESAction / QuachilDustToDustESAction):
+// presented inside an Ask so the driver records it as an editable journal/admin-log entry in
+// sync with the player log. Performing it awards the ES, then presents the mandatory
+// enemy-benefit choice. The single-option Ask makes the mandatory award an explicit,
+// recorded, editable step (the reliable recording path at the batch/live edge).
+case class DholePlanetaryESAction(self : Faction, e : Int, opponent : Faction) extends BaseFactionAction(
+    implicit g => "Planetary Destruction".styled("nt"), implicit g => "Gain " + e + " " + "Elder Sign".styled("es")) {
+    override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " destroyed — collect " + e + " " + "Elder Sign".styled("es")
+}
 // Leng Spider: Bloodthirst — choose which faction's pains to convert
 case class BloodthirstChooseFactionAction(self : Faction, target : Faction) extends BaseFactionAction(implicit g => "Bloodthirst".styled("nt"), implicit g => "Convert " + target.full + "'s 2 " + Pain + " → 1 " + Kill) { override def question(implicit game : Game) = self.full + " — " + "Bloodthirst".styled("nt") + ": choose faction" }
 case class BloodthirstDoneAction(self : Faction) extends BaseFactionAction(implicit g => "Bloodthirst".styled("nt"), "Skip") { override def question(implicit game : Game) = self.full + " — " + "Bloodthirst".styled("nt") }
@@ -1352,23 +1357,34 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         if (allDead.any) {
                             val dholeOwner = s
                             val opponent = s.opponent
-                            dholePlanetaryProcessed :+= s
-                            // Exempt Dhole from forces to prevent re-trigger on re-entry
-                            // Don't eliminate yet — EliminatePhase will handle that (avoids stale UnitRef crash)
-                            killedDholes.foreach(exempt)
                             // Replay-compat: games recorded before this recorded-action flow existed
                             // have no DholePlanetaryESAction as their next recorded action. For those,
                             // fall back to the old inline award (no recorded action, no choice) so replay
                             // stays in sync. Live play (hint == None) uses the recorded flow.
                             val replayBlocks = game.nextReplayActionHint.exists(h => !h.startsWith("DholePlanetaryESAction"))
                             if (replayBlocks) {
+                                dholePlanetaryProcessed :+= dholeOwner
+                                killedDholes.foreach(exempt)
                                 dholeOwner.takeES(2)
                                 log(Dhole.styled(dholeOwner), "Planetary Destruction".styled("nt") + ":", dholeOwner.full, "gained", 2.es)
                             }
                             else
-                                // Route the ES award through a recorded ForcedAction so it lands in the
-                                // journal/admin log immediately post-battle, then the mandatory choice.
-                                return Then(DholePlanetaryESAction(dholeOwner, 2, opponent))
+                                // Present the ES award inside an Ask — the SAME driver-recorded pattern
+                                // Harbinger (HarbingerESAction) and Quachil (QuachilDustToDustESAction) use.
+                                // A returned Ask halts proceed() and becomes the pending prompt, so the
+                                // driver records the chosen action as an editable journal/admin-log entry in
+                                // sync with the player log. Single mandatory option: the owner clicks to
+                                // collect the 2 ES, then chooses the enemy benefit.
+                                //
+                                // IMPORTANT: do NOT mark dholePlanetaryProcessed or exempt the Dhole here.
+                                // Marking before the Ask makes the phase non-idempotent: a re-proceed() while
+                                // the Ask is still pending (dangling prompt at the batch/live edge) would find
+                                // the side already processed, skip the phase, and fall through to Necrophagy —
+                                // dropping the prompt. Harbinger stays idempotent by tagging units only in its
+                                // action handler. We do the same: mark + exempt happen in the ESAction handler,
+                                // so any re-proceed re-detects the killed Dhole and re-presents the SAME Ask.
+                                return Ask(dholeOwner)
+                                    .add(DholePlanetaryESAction(dholeOwner, 2, opponent))
                         }
                     }
                 }
@@ -1926,9 +1942,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case QuachilDustToDustESAction(self, uRef, quOwner) =>
             val u = game.unit(uRef)
-            println(s"[TRACE] QuachilDustToDustESAction: ${quOwner.short} gaining 1 ES (current: ${quOwner.es})")
             quOwner.takeES(1)
-            println(s"[TRACE] QuachilDustToDustESAction: ${quOwner.short} ES after takeES: ${quOwner.es}")
             log(quOwner.full, "gained", 1.es, "from", "Dust to Dust".styled("nt"))
             // Per-battle, not per-unit (user 2026-05-24): the ES choice means
             // "don't remove any unit permanently"; all killed units stay in
@@ -1939,6 +1953,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case DholePlanetaryESAction(self, e, opponent) =>
+            // Now that the owner has acted, mark the side processed and exempt the killed Dhole so
+            // the phase won't re-trigger. (Kept out of the phase itself to keep it idempotent while
+            // the Ask is pending — see DholePlanetaryDestructionPhase.) Don't eliminate here;
+            // EliminatePhase handles that (avoids stale UnitRef crash).
+            dholePlanetaryProcessed :+= self
+            self.forces(Dhole).%(_.health == Killed).foreach(exempt)
             // Award the Elder Signs (same takeES the old code used) — but now inside a recorded
             // action, so the journal/admin log and player log stay in sync (mirrors HarbingerESAction).
             self.takeES(e)
