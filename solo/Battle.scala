@@ -494,6 +494,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
     def assignPain(unit : UnitFigure) {
+        // Colour Out of Space (CS) Vermiculite Hypertrophy: once active, Effervescent
+        // Excrescences are killed by pains instead of being pained (and cannot be moved,
+        // enforced separately in FactionCS's canMove/canBeMoved).
+        if (unit.uclass == EffervescentExcrescence && CS.can(VermiculiteHypertrophy)) {
+            log(EffervescentExcrescence.styled(CS), "assigned", Pain, "— converted to", Kill, "(" + VermiculiteHypertrophy.styled(CS) + ")")
+            assignKill(unit)
+            return
+        }
          unit.health = unit.health match {
             case Killed => log("ERROR - Assign PAIN to KILLED"); Pained
             case Spared(_) => log("ERROR - Assign PAIN to SPARED"); Killed
@@ -2263,15 +2271,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
                 // Colour Out of Space (CS) Spectral Collapse (§3.10.4): post-battle, if a Globule
                 // sits in the arena and 1+ units were killed/eliminated this battle, offer the
-                // trigger sequentially — CS first (only if it was NOT in this battle), then the
-                // attacker, then the defender. The first to accept rolls one combat die (Kill → 1
-                // Elder Sign, Pain → 1 Doom) and the Globule collapses. Once any accepts (or all
-                // decline) the chain resumes the battle via proceed(). Guarded once-per-action so
-                // re-entering PostBattlePhase after proceed() does not re-arm it.
+                // trigger sequentially — CS always first (whether or not it was in this battle),
+                // then the attacker, then the defender. The first to accept rolls one combat die
+                // (Kill → 1 Elder Sign, Pain → 1 Doom) and the Globule collapses. Once any accepts
+                // (or all decline) the chain resumes the battle via proceed(). Guarded once-per-action
+                // so re-entering PostBattlePhase after proceed() does not re-arm it.
                 if (factions.has(CS) && CS.can(SpectralCollapse) && !CS.oncePerAction.has(SpectralCollapse) &&
                     CS.at(arena).%(_.uclass == LuminousGlobule).not(Zeroed).any && eliminated.any) {
                     CS.oncePerAction :+= SpectralCollapse
-                    val queue = ((!sides.has(CS)).??($(CS))) ++ $(attacker, defender).%(_ != CS)
+                    val queue = $(CS) ++ $(attacker, defender).%(_ != CS)
                     if (queue.any)
                         return Ask(queue.head)
                             .add(CSSpectralCollapseUseAction(queue.head, arena, queue.tail))

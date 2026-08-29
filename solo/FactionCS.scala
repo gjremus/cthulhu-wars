@@ -176,8 +176,8 @@ case class CSEffulgentAction(r : Region) extends BaseFactionAction(implicit g =>
 case class CSEffulgentRetreatFactionsAction(r : Region, remaining : $[Faction]) extends ForcedAction
 case class CSEffulgentRetreatPickFactionAction(r : Region, a : Faction, remaining : $[Faction]) extends ForcedAction
 case class CSEffulgentRetreatUnitAction(f : Faction, r : Region, remaining : $[Faction]) extends ForcedAction
-case class CSEffulgentRetreatUnitPickAction(f : Faction, u : UnitFigure, r : Region, remaining : $[Faction]) extends ForcedAction
-case class CSEffulgentRetreatMoveAction(f : Faction, u : UnitFigure, to : Region, r : Region, remaining : $[Faction]) extends ForcedAction
+case class CSEffulgentRetreatUnitPickAction(f : Faction, u : UnitRef, r : Region, remaining : $[Faction]) extends ForcedAction
+case class CSEffulgentRetreatMoveAction(f : Faction, u : UnitRef, to : Region, r : Region, remaining : $[Faction]) extends ForcedAction
 
 // SB6 Core Exposure (Task 3.10.6): summon a Globule (no Gate) in a region with a Cultist and a
 // Meteorite; the Meteorite is eliminated. Cost 1 Power.
@@ -244,7 +244,7 @@ object CSExpansion extends Expansion {
     // Derived controller of an Excrescence per Chromatic Perversion (Section 1.5): if its region is
     // a Prismatic Well, the faction controlling that Well's Gate owns it; otherwise it is CS's own
     // (summoned via Vermiculite Hypertrophy without a Gate). Figures always stay physical CS units.
-    private def excrescenceOwner(u : UnitFigure)(implicit game : Game) : Faction =
+    def excrescenceOwner(u : UnitFigure)(implicit game : Game) : Faction =
         if (game.csPrismaticWellRegions.has(u.region))
             game.setup.find(e => e.gates.has(u.region)).getOrElse(CS)
         else CS
@@ -541,15 +541,15 @@ object CSExpansion extends Expansion {
             if (units.none)
                 Force(CSEffulgentRetreatFactionsAction(r, remaining))
             else
-                Ask(f).each(units)(u => CSEffulgentRetreatUnitPickAction(f, u, r, remaining).as(u)("Retreat a unit from", r))
+                Ask(f).each(units)(u => CSEffulgentRetreatUnitPickAction(f, u.ref, r, remaining).as(u.ref)("Retreat a unit from", r))
 
         case CSEffulgentRetreatUnitPickAction(f, u, r, remaining) =>
-            Ask(f).each(r.connectedForRetreat)(to => CSEffulgentRetreatMoveAction(f, u, to, r, remaining).as(to)("Retreat", u.ref.full, "to"))
+            Ask(f).each(r.connectedForRetreat)(to => CSEffulgentRetreatMoveAction(f, u, to, r, remaining).as(to)("Retreat", u.full, "to"))
 
         case CSEffulgentRetreatMoveAction(f, u, to, r, remaining) =>
             u.region = to
             u.onGate = false
-            f.log("retreated", u.ref.full, "from", r, "to", to, "(" + EffulgentSacrifice.styled(CS) + ")")
+            f.log("retreated", u.full, "from", r, "to", to, "(" + EffulgentSacrifice.styled(CS) + ")")
             Force(CSEffulgentRetreatUnitAction(f, r, remaining))
 
         // SB6 Core Exposure (Task 3.10.6).

@@ -1297,8 +1297,11 @@ object CthulhuWarsSolo {
                     // Colour Out of Space (CS): unit sprites (scaled relative to Cultist 60h baseline)
                     // Meteorite (cost 1, small): 40h, width scaled proportionally
                     case Meteorite        => DrawRect("cs-meteorite", None, x - 39, y - 52, 78, 52)
-                    // Effervescent Excrescence (cost 2, medium): 75h, width scaled
-                    case EffervescentExcrescence => DrawRect("cs-effervescent-excrescence", None, x - 28, y - 75, 56, 75)
+                    // Effervescent Excrescence (cost 2, medium): 75h, width scaled. Tinted with the
+                    // passed-in faction's color (None for CS itself, per its own placeholder tint
+                    // above) so a Well-controlled Excrescence (Chromatic Perversion) shows the
+                    // controller's color, same tint mechanism every cross-faction unit already uses.
+                    case EffervescentExcrescence => DrawRect("cs-effervescent-excrescence", |(tint), x - 28, y - 75, 56, 75)
                     // Luminous Globule (cost 4, terror-sized): 85h, width scaled
                     case LuminousGlobule  => DrawRect("cs-luminous-globule", None, x - 16, y - 34, 33, 34)
                     // Tulzscha GOO (faction unique): 155h, large
@@ -2023,7 +2026,14 @@ object CthulhuWarsSolo {
                             // this override) revert automatically at battle-end. Without
                             // this the unit kept its original owner's color and the steal
                             // looked like it "vanished" (esp. after a page refresh).
-                            val drawFaction = if (game.fbeShapestolen.contains(u.ref)) FBE else f
+                            val drawFaction =
+                                if (game.fbeShapestolen.contains(u.ref)) FBE
+                                // Colour Out of Space Chromatic Perversion (Section 1.5): an
+                                // Excrescence sitting in a Well controlled by another faction is
+                                // rendered in that faction's color, same shared control-derivation
+                                // used to decide who actually owns it.
+                                else if (u.uclass == EffervescentExcrescence) CSExpansion.excrescenceOwner(u)
+                                else f
                             // Per-figure Mind Parasite original faction, so each
                             // parasitized cultist splits with its OWN true color
                             // (refreshed every render from the live mapping).
