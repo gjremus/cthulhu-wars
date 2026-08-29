@@ -512,7 +512,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     def prebattle(s : Faction, next : BattlePhase) : Continue = {
-        if (attackers.forces.none || defenders.forces.none) {
+        // REPLAY SAFETY: a later rule/exemption change (e.g. a newly added combat
+        // exemption) can make a side that fought normally when a game was first played
+        // come up empty on replay under today's code. Ending the battle here changes what
+        // the next recorded action means and desyncs replay ("unknown continue on ...").
+        // If the replay's next hint is an ordinary battle-continuation action, the old
+        // game actually continued with that side simply rolling zero dice — so honor that
+        // instead of ending the battle early.
+        val replayExpectsContinue = game.nextReplayActionHint.exists(h =>
+            h.startsWith("PreBattleDoneAction") || h.startsWith("BattleRollAction") || h.startsWith("CthughaCombatChoose"))
+
+        if ((attackers.forces.none || defenders.forces.none) && !replayExpectsContinue) {
             if (attackers.forces.none)
                 log(attacker, "had no units remaining")
 

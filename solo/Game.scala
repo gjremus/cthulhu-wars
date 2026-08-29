@@ -5638,7 +5638,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // remaining log replays.
         case action : PreBattleQuestion =>
             log("[warn] battle action " + action.getClass.getSimpleName + " skipped — no active battle")
-            UnknownContinue
+            StartContinue
 
         // Defensive: FB Carnage/CG post-battle actions whose state mutation is
         // handled by FBExpansion (returns UnknownContinue) but whose battle-flow
