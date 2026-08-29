@@ -160,14 +160,29 @@ case class CSVermiculiteMainAction(l : $[Region]) extends OptionFactionAction("S
 case class CSVermiculiteAction(r : Region) extends BaseFactionAction(implicit g => "Summon " + EffervescentExcrescence.styled(CS) + g.forNPowerWithTax(r, CS, EffervescentExcrescence.cost) + ", sacrificing a " + Acolyte.styled(CS) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
 
 // SB5 Effulgent Sacrifice (Task 3.10.5): sacrifice a controlled Globule for an Elder Sign (Cost 1);
-// any Cultists or Excrescences in that region are eliminated, each owner refunded half cost (round up).
+// any Cultists or Excrescences in that region are eliminated, each owner refunded half cost (round
+// down). Additionally, every OTHER faction with units remaining in the region must retreat them
+// all out (a plain forced retreat, not a battle pain — see CSEffulgentRetreat* below).
 case class CSEffulgentMainAction(l : $[Region]) extends OptionFactionAction("Sacrifice " + LuminousGlobule.styled(CS) + " for an " + "Elder Sign".styled("es") + " (" + EffulgentSacrifice.styled(CS) + ")") with MainQuestion with Soft { override def self = CS }
 case class CSEffulgentAction(r : Region) extends BaseFactionAction(implicit g => "Sacrifice " + LuminousGlobule.styled(CS) + g.forNPowerWithTax(r, CS, 1) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
 
+// SB5 Effulgent Sacrifice retreat sweep (addendum): after the sacrifice and cultist/excrescence
+// cleanup resolve, every OTHER faction (game.setup.but(CS)) with units still in the region must
+// retreat all of them out. If 2+ other factions are present, CS chooses which faction goes next
+// (skipped when only one remains); the chosen faction then picks its own units to retreat one at
+// a time, in its own chosen order, looping until it has none left in the region before moving on
+// to the next faction. Modelled on Howl's per-unit retreat (Battle.scala) and Corrupted Rending's
+// faction-ordering (below) — this is a plain retreat (no kill/pain assignment).
+case class CSEffulgentRetreatFactionsAction(r : Region, remaining : $[Faction]) extends ForcedAction
+case class CSEffulgentRetreatPickFactionAction(r : Region, a : Faction, remaining : $[Faction]) extends ForcedAction
+case class CSEffulgentRetreatUnitAction(f : Faction, r : Region, remaining : $[Faction]) extends ForcedAction
+case class CSEffulgentRetreatUnitPickAction(f : Faction, u : UnitFigure, r : Region, remaining : $[Faction]) extends ForcedAction
+case class CSEffulgentRetreatMoveAction(f : Faction, u : UnitFigure, to : Region, r : Region, remaining : $[Faction]) extends ForcedAction
+
 // SB6 Core Exposure (Task 3.10.6): summon a Globule (no Gate) in a region with a Cultist and a
-// Meteorite; the Meteorite is eliminated. Cost 0.
+// Meteorite; the Meteorite is eliminated. Cost 1 Power.
 case class CSCoreExposureMainAction(l : $[Region]) extends OptionFactionAction("Summon " + LuminousGlobule.styled(CS) + " at a " + Meteorite.styled(CS) + " (" + CoreExposure.styled(CS) + ")") with MainQuestion with Soft { override def self = CS }
-case class CSCoreExposureAction(r : Region) extends BaseFactionAction(implicit g => "Summon " + LuminousGlobule.styled(CS) + ", consuming a " + Meteorite.styled(CS) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
+case class CSCoreExposureAction(r : Region) extends BaseFactionAction(implicit g => "Summon " + LuminousGlobule.styled(CS) + g.forNPowerWithTax(r, CS, 1) + ", consuming a " + Meteorite.styled(CS) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
 
 // SB6 Core Exposure free-carry (Task 3.10.6): once Core Exposure is active a Globule may ONLY move
 // for free alongside a moving Cultist (paid moves are blocked by LuminousGlobule.canMove/canBeMoved).
@@ -191,8 +206,8 @@ case class CSSpectralCollapseSkipAction(self : Faction, r : Region, queue : $[Fa
 case class CSSpectralCollapseRollAction(self : Faction, r : Region, rolls : $[BattleRoll]) extends ForcedAction
 
 
-// SB3 Cosmic Landfall (Task 3.10.3) — when the (standard) Ancients build their 4th cathedral, CS
-// may place one free Meteorite in an empty region. The interrupt is threaded into EndAction's normal
+// SB3 Cosmic Landfall (Task 3.10.3) — when a GOO is awakened for 4+ Power, CS
+// may place one free Meteorite in any region of its choice. The interrupt is threaded into EndAction's normal
 // end-of-action continuation (Game.scala) via `then`, exactly like BrownJenkinFamiliarCheckAction:
 // the Check offers the region menu (skippable) and every branch resumes the game by Force(then).
 // Detection lives in CSExpansion.afterAction (a cathedral-count snapshot), so no action-consuming
@@ -354,6 +369,7 @@ object CSExpansion extends Expansion {
             if (f.can(CoreExposure) && f.pool(LuminousGlobule).any) {
                 val rs = f.onMap(Meteorite).not(Zeroed)./(_.region).distinct
                     .%(r => f.at(r).%(_.uclass == Acolyte).not(Zeroed).any)
+                    .%(r => f.affords(1)(r))
                 if (rs.any)
                     + CSCoreExposureMainAction(rs)
             }
@@ -486,12 +502,12 @@ object CSExpansion extends Expansion {
                 CS.log("sacrificed", LuminousGlobule.styled(CS), "in", r, "for an", "Elder Sign".styled("es"), "(" + EffulgentSacrifice.styled(CS) + ")")
                 CS.takeES(1)
                 // Any Cultists or Excrescences in the region are eliminated; each owner refunded
-                // half the unit's cost rounded up. An Excrescence's owner is its derived Well
+                // half the unit's cost rounded down. An Excrescence's owner is its derived Well
                 // controller (Section 1.5), else CS; a Cultist's owner is its own faction.
                 game.setup.foreach { e =>
                     e.at(r).%(u => u.uclass.utype == Cultist || u.uclass == EffervescentExcrescence).not(Zeroed).foreach { u =>
                         val owner = (u.uclass == EffervescentExcrescence).?(excrescenceOwner(u)).|(u.faction)
-                        val refund = (u.uclass.cost + 1) / 2
+                        val refund = u.uclass.cost / 2
                         game.eliminate(u)
                         if (refund > 0) {
                             owner.power += refund
@@ -499,8 +515,42 @@ object CSExpansion extends Expansion {
                         }
                     }
                 }
-                EndAction(CS)
+                // Every other faction with units still standing in r must now retreat them all out.
+                val others = game.setup.but(CS).%(e => e.at(r).not(Zeroed).any)
+                if (others.any)
+                    Force(CSEffulgentRetreatFactionsAction(r, others))
+                else
+                    EndAction(CS)
             }
+
+        // SB5 Effulgent Sacrifice retreat sweep (addendum) — see case classes above.
+        case CSEffulgentRetreatFactionsAction(r, remaining) =>
+            if (remaining.none)
+                EndAction(CS)
+            else if (remaining.num == 1)
+                Force(CSEffulgentRetreatUnitAction(remaining.head, r, $))
+            else
+                Ask(CS).each(remaining)(a => CSEffulgentRetreatPickFactionAction(r, a, remaining.%(_ != a)).as(a)("Choose the next faction to retreat out of", r))
+
+        case CSEffulgentRetreatPickFactionAction(r, a, remaining) =>
+            CS.log("chose", a.full, "to retreat next out of", r, "(" + EffulgentSacrifice.styled(CS) + ")")
+            Force(CSEffulgentRetreatUnitAction(a, r, remaining))
+
+        case CSEffulgentRetreatUnitAction(f, r, remaining) =>
+            val units = f.at(r).not(Zeroed)
+            if (units.none)
+                Force(CSEffulgentRetreatFactionsAction(r, remaining))
+            else
+                Ask(f).each(units)(u => CSEffulgentRetreatUnitPickAction(f, u, r, remaining).as(u)("Retreat a unit from", r))
+
+        case CSEffulgentRetreatUnitPickAction(f, u, r, remaining) =>
+            Ask(f).each(r.connectedForRetreat)(to => CSEffulgentRetreatMoveAction(f, u, to, r, remaining).as(to)("Retreat", u.ref.full, "to"))
+
+        case CSEffulgentRetreatMoveAction(f, u, to, r, remaining) =>
+            u.region = to
+            u.onGate = false
+            f.log("retreated", u.ref.full, "from", r, "to", to, "(" + EffulgentSacrifice.styled(CS) + ")")
+            Force(CSEffulgentRetreatUnitAction(f, r, remaining))
 
         // SB6 Core Exposure (Task 3.10.6).
         case CSCoreExposureMainAction(l) =>
@@ -509,9 +559,11 @@ object CSExpansion extends Expansion {
         case CSCoreExposureAction(r) =>
             val mets = CS.at(r).%(_.uclass == Meteorite).not(Zeroed)
             val cultists = CS.at(r).%(_.uclass == Acolyte).not(Zeroed)
-            if (CS.pool(LuminousGlobule).none || mets.none || cultists.none)
+            if (CS.pool(LuminousGlobule).none || mets.none || cultists.none || CS.affords(1)(r).not)
                 EndAction(CS)
             else {
+                CS.power -= 1
+                CS.payTax(r)
                 game.eliminate(mets.head)
                 CS.place(LuminousGlobule, r)
                 CS.log("consumed a", Meteorite.styled(CS), "to summon", LuminousGlobule.styled(CS), "in", r, "(" + CoreExposure.styled(CS) + ")")
@@ -575,13 +627,12 @@ object CSExpansion extends Expansion {
 
         // SB3 Cosmic Landfall (Task 3.10.3) — the interrupt, threaded from Game.scala's EndAction
         // tail. Consume the pending flag here (idempotent + replay-stable); if CS still controls the
-        // spellbook, has a Meteorite in pool, and an empty region exists, offer the (skippable)
-        // region menu. Every path resumes the game via Force(then).
+        // spellbook and has a Meteorite in pool, offer the (skippable) region menu covering any
+        // region on the board (not just empty ones). Every path resumes the game via Force(then).
         case CSCosmicLandfallCheckAction(self, then) =>
             game.csCosmicLandfallPending = false
-            val empties = areas.%(r => game.setup.forall(e => e.at(r).none))
-            if (CS.can(CosmicLandfall) && CS.pool(Meteorite).any && empties.any)
-                Ask(CS).each(empties)(r => CSCosmicLandfallPlaceAction(CS, r, then)).skip(then)
+            if (CS.can(CosmicLandfall) && CS.pool(Meteorite).any)
+                Ask(CS).each(areas)(r => CSCosmicLandfallPlaceAction(CS, r, then)).skip(then)
             else
                 Force(then)
 
