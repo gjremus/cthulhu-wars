@@ -219,7 +219,10 @@ object OWExpansion extends Expansion {
                     n += 1
                 if (n > 0) {
                     val allAreas = areas ++ game.factions.has(BB).??($(BB.moon))
-                    val l = allAreas.%(f.affords(2)).%(r => f.enemies.exists(_.at(r).any))
+                    // Dread Curse of Azathoth targets enemy UNITS. A still-Building AN
+                    // Cathedral is not a Unit, so a region whose only enemy presence is a
+                    // dormant Cathedral is NOT a valid target (mirror AN.unitsAt below).
+                    val l = allAreas.%(f.affords(2)).%(r => f.enemies.exists(e => AN.unitsAt(e, r).any))
                     if (l.any)
                         + DreadCurseMainAction(f, n, l)
                 }
@@ -333,22 +336,25 @@ object OWExpansion extends Expansion {
             if (k + p == 0)
                 EndAction(self)
             else {
-                val e = self.enemies.%(f => f.at(r).any).sortBy(-_.at(r).sortBy(_.uclass.cost).take(k)./(_.uclass.cost).sum)
+                // Dread Curse targets UNITS only: AN.unitsAt drops any AN Cathedral that is
+                // still a Building (no-op for every other figure), so a dormant Cathedral is
+                // never counted, targeted, or hit by the curse.
+                val e = self.enemies.%(f => AN.unitsAt(f, r).any).sortBy(f => -AN.unitsAt(f, r).sortBy(_.uclass.cost).take(k)./(_.uclass.cost).sum)
 
                 val kva = e./~(f => k.times(f)).combinations(k).$.sortBy(_.distinct.num)
                 val pva = e./~(f => p.times(f)).combinations(p).$.sortBy(_.distinct.num)
                 val kpva = kva./~(kk => pva./(pp => (kk, pp))).sortBy(v => 100 * v._1.distinct.num + 10 * v._2.distinct.num + (v._1 ++ v._2).distinct.num)
 
-                val n = e./(_.at(r).num).sum
+                val n = e./(f => AN.unitsAt(f, r).num).sum
 
                 while (n < k + p && p > 0)
                     p -= 1
                 while (n < k && k > 0)
                     k -= 1
 
-                val kvb = e./~(f => min(k, f.at(r).num).times(f)).combinations(k).$
-                val pvb = e./~(f => min(p, f.at(r).num).times(f)).combinations(p).$
-                val kpvb = kvb./~(kk => pvb./(pp => (kk, pp))).%((a, b) => e.%(f => f.at(r).num < (a ++ b).count(f)).none)
+                val kvb = e./~(f => min(k, AN.unitsAt(f, r).num).times(f)).combinations(k).$
+                val pvb = e./~(f => min(p, AN.unitsAt(f, r).num).times(f)).combinations(p).$
+                val kpvb = kvb./~(kk => pvb./(pp => (kk, pp))).%((a, b) => e.%(f => AN.unitsAt(f, r).num < (a ++ b).count(f)).none)
 
                 Ask(self).each(kpvb)((a, b) => DreadCurseSplitAction(self, r, x, e.%(f => a.contains(f) || b.contains(f)), a, b))
             }
@@ -360,29 +366,29 @@ object OWExpansion extends Expansion {
                 }
             }
 
-            val ee = e.%(f => f.at(r).%(_.health == Killed).num < k.count(f) || f.at(r).%(_.health == Pained).num < p.count(f))
+            val ee = e.%(f => AN.unitsAt(f, r).%(_.health == Killed).num < k.count(f) || AN.unitsAt(f, r).%(_.health == Pained).num < p.count(f))
 
-            val killall = ee.%(f => f.at(r).num == k.count(f))
+            val killall = ee.%(f => AN.unitsAt(f, r).num == k.count(f))
 
-            killall.foreach(f => f.at(r).foreach(_.health = Killed))
+            killall.foreach(f => AN.unitsAt(f, r).foreach(_.health = Killed))
 
-            val painall = ee.%(f => f.at(r).num == p.count(f))
+            val painall = ee.%(f => AN.unitsAt(f, r).num == p.count(f))
 
-            painall.foreach(f => f.at(r).foreach(_.health = Pained))
+            painall.foreach(f => AN.unitsAt(f, r).foreach(_.health = Pained))
 
             val aa = ee.diff(killall).diff(painall)
 
             if (aa.any) {
                 val f = aa(0)
-                val rs = (k.count(f) - f.at(r).%(_.health == Killed).num).times(Kill) ++ (p.count(f) - f.at(r).%(_.health == Pained).num).times(Pain)
-                val us = f.at(r).%(_.health == Alive)./(_.uclass).sortBy(_.cost)
+                val rs = (k.count(f) - AN.unitsAt(f, r).%(_.health == Killed).num).times(Kill) ++ (p.count(f) - AN.unitsAt(f, r).%(_.health == Pained).num).times(Pain)
+                val us = AN.unitsAt(f, r).%(_.health == Alive)./(_.uclass).sortBy(_.cost)
                 val uu = (us.num > 1).?(us).|(us.take(1))
                 Ask(f).each(uu)(u => DreadCurseAssignAction(self, r, e, k, p, f, rs.first, u))
             }
             else {
                 // Opener Buff: Yog Curse Die — ES for each enemy GOO pained or killed
                 if (game.options.has(OpenerYogCurseDie)) {
-                    val goosHit = e./~(f => f.at(r).%(u => u.goo && (u.health == Killed || u.health == Pained)))
+                    val goosHit = e./~(f => AN.unitsAt(f, r).%(u => u.goo && (u.health == Killed || u.health == Pained)))
                     if (goosHit.any) {
                         self.takeES(goosHit.num)
                         self.log("gained", goosHit.num.es, "from", DreadCurse, "(GOO pained/killed)")
@@ -390,7 +396,7 @@ object OWExpansion extends Expansion {
                 }
 
                 e.foreach { f =>
-                    f.at(r).%(_.health == Killed).foreach { u =>
+                    AN.unitsAt(f, r).%(_.health == Killed).foreach { u =>
                         log(u, "was", "killed".styled("kill"))
                         game.eliminate(u)
 
@@ -405,7 +411,7 @@ object OWExpansion extends Expansion {
                     }
                 }
 
-                var m = e./~(f => f.at(r).%(_.health == Pained))
+                var m = e./~(f => AN.unitsAt(f, r).%(_.health == Pained))
 
                 m = m.take(1)
 
@@ -454,7 +460,7 @@ object OWExpansion extends Expansion {
                 log(u, "was", "pained".styled("pain"), "to", d)
             }
 
-            var m = e./~(f => f.at(r).%(_.health == Pained))
+            var m = e./~(f => AN.unitsAt(f, r).%(_.health == Pained))
 
             m = m.take(1)
 
@@ -469,7 +475,7 @@ object OWExpansion extends Expansion {
                 // stranding them on the board forever (the Existence-and-Colour phantom
                 // cultists). In live play every killed unit was already eliminated before
                 // any retreat, so no Killed unit remains here and this is a no-op.
-                e./~(f => f.at(r).%(_.health == Killed)).foreach { u =>
+                e./~(f => AN.unitsAt(f, r).%(_.health == Killed)).foreach { u =>
                     log(u, "was", "killed".styled("kill"))
                     game.eliminate(u)
                 }

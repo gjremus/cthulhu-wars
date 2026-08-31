@@ -338,7 +338,9 @@ object DSExpansion extends Expansion {
 
         case UndirectedEnergyConfirmAction(self) =>
             val r = self.all(AvatarThesis).head.region
-            val n = game.factions.%(_.at(r).any).num
+            // Card text: power for each faction WITH UNITS in the Area. A still-Building
+            // AN Cathedral is not a Unit, so it must not make AN count here.
+            val n = game.factions.%(f => AN.unitsAt(f, r).any).num
             self.power -= 1
             self.payTax(r)
             self.power += n
@@ -349,7 +351,9 @@ object DSExpansion extends Expansion {
         // FIENDISH GROWTH
         case FiendishGrowthAction(self) =>
             val r = self.all(AvatarAntithesis).head.region
-            val n = game.factions.%(_.at(r).any).num
+            // Card text: place units per faction WITH UNITS in the Area. A still-Building
+            // AN Cathedral is not a Unit, so it must not make AN count here.
+            val n = game.factions.%(f => AN.unitsAt(f, r).any).num
             Force(FiendishGrowthPlaceAction(self, r, n))
 
         case FiendishGrowthPlaceAction(self, r, n) =>

@@ -79,6 +79,12 @@ case object AN extends Faction { f =>
     // Cathedral that is currently just a Building. Only AN has Building-type figures,
     // so this is a no-op (always true) for every other faction's units.
     def figureIsUnit(u : UnitFigure)(implicit game : Game) : Boolean = u.uclass != Cathedral || cathedralCountsAsUnit
+    // A faction's figures in a region that currently count as Units — i.e. dropping any
+    // AN Cathedral that is still just a Building. For every non-AN faction (and for AN once
+    // Holy Ground is earned in the Action Phase) this is exactly f.at(r), so callers can use
+    // it in "units in area" / unit-targeting contexts as a strict no-op except for a dormant
+    // Cathedral. Only AN has Building figures, so no other faction's units are ever dropped.
+    def unitsAt(f : Faction, r : Region)(implicit game : Game) : $[UnitFigure] = f.at(r).%(u => figureIsUnit(u))
 
     val allUnits =
         4.times(Cathedral) ++
