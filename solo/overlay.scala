@@ -2342,19 +2342,18 @@ object Overlays {
         // change is the creator-requested reorder of Tulzscha's Awaken steps
         // (pay Power first — guide §1.3/§1.12/§4.6). Do not paraphrase.
         faction(CS, "info:cs-background", ChromaticPerversion, "Ongoing",
-            "Globules transform all standard gates in their regions to prismatic wells. Prismatic wells give 3 power during gather power, and may only summon excrescences. Any excrescence in a region with a controlled well is owned by the controller of that well.",
+            "Meteorites or globules transform all standard gates in their regions to prismatic wells. Prismatic wells give 3 power during gather power, and may only summon excrescences. Any excrescence in a region with a controlled well is owned by the controller of that well.",
             $(Insanity, VermiculiteHypertrophy, CosmicLandfall, SpectralCollapse, EffulgentSacrifice, CoreExposure), $(
             (Acolyte,                 6, "1", "0", ""),
             (Meteorite,               6, "1", "0", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, CosmicLandfall)}, ${reference(CS, CoreExposure)}</div>"""),
             (EffervescentExcrescence, 8, "2", "2", s"""<div class=p>Spellbook: ${reference(CS, VermiculiteHypertrophy)}</div>"""),
-            (LuminousGlobule,         6, "4", "—", s"""<div class=p>Spellbooks: ${reference(CS, VermiculiteHypertrophy)}, ${reference(CS, ChromaticPerversion)}, ${reference(CS, CoreExposure)}, ${reference(CS, EffulgentSacrifice)}</div>"""),
+            (LuminousGlobule,         6, "4", "—", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, VermiculiteHypertrophy)}, ${reference(CS, ChromaticPerversion)}, ${reference(CS, CoreExposure)}, ${reference(CS, EffulgentSacrifice)}</div>"""),
             (CSTulzscha,              1, "5", calc(g => { implicit val gg : Game = g; 2 * CS.onMap(LuminousGlobule).not(Zeroed).num }), s"""
                 <div class=p>${cost(s"How to Awaken ${CSTulzscha.name}:")}</div>
                 <div class=p>${cost("1)")} Pay ${power(5)}.</div>
                 <div class=p>${cost("2)")} In a region with a cultist and a globule, eliminate the cultist, and roll a die. If you roll a kill, eliminate the globule and take an <span class=es>elder sign</span>. Tulzscha appears in the region.</div>
                 <div class=p>${combat} twice the globules on the map.</div>
-                <div class=p>${reference(CS, CorruptedRending)} ${cost("(1 Power, Action):")} Choose a region with a globule and at least 2 enemy factions. Initiate a battle between 2 enemy factions. Factions roll to choose attacker.</div>"""),
-            (PrismaticWell,           0, "—", "—", s"""<div class=p>Any standard Gate in a region with a Luminous Globule becomes a Prismatic Well (Chromatic Perversion). Gives ${power(3)} during Gather Power; may only summon Effervescent Excrescences. Any Excrescence in a region with a controlled Well is owned by that Well's controller.</div>""")
+                <div class=p>${reference(CS, CorruptedRending)} ${cost("(1 Power, Action):")} Choose a region with a globule or meteorite and at least 2 factions. Initiate a battle between 2 factions. Factions roll to choose attacker.</div>""")
         ), setup = true)
     }
 
@@ -2380,9 +2379,9 @@ object Overlays {
         case $("CS", CSAwakenTulzscha.text)             => requirement("Awaken Tulzscha.")
 
         case $("CS", ChromaticPerversion.name)         => spellbook(ChromaticPerversion.name, "Ongoing (Faction Ability)", "Globules transform all standard gates in their regions to prismatic wells. Prismatic wells give 3 power during gather power, and may only summon excrescences. Any excrescence in a region with a controlled well is owned by the controller of that well.")
-        case $("CS", CorruptedRending.name)            => spellbook(CorruptedRending.name, "1 Power, Action (Faction Ability)", "Choose a region with a globule and at least 2 enemy factions. Initiate a battle between 2 enemy factions. Factions roll to choose attacker.")
-        case $("CS", Insanity.name)                    => spellbook(Insanity.name, "Post Battle", "In areas with a meteorite, extra, unapplied combat results are applied according to the following: - Results against you are applied to the attacking faction - Results in battles without you are applied to the rolling faction.")
-        case $("CS", VermiculiteHypertrophy.name)      => spellbook(VermiculiteHypertrophy.name, "Action: Cost 2", "You may summon an excrescence without a gate, by a cultist with a globule. Sacrifice that cultist. Effervescent Excrescences now have 6 combat and cannot be moved by any means. Any pains assigned to an excrescence is changed to a kill.")
+        case $("CS", CorruptedRending.name)            => spellbook(CorruptedRending.name, "1 Power, Action (Faction Ability)", "Choose a region with a globule or meteorite and at least 2 factions. Initiate a battle between 2 factions. Factions roll to choose attacker.")
+        case $("CS", Insanity.name)                    => spellbook(Insanity.name, "Post Battle", "In areas with a meteorite or globule, extra, unapplied combat results are applied according to the following: - Results against you are applied to the attacking faction - Results in battles without you are applied to the rolling faction.")
+        case $("CS", VermiculiteHypertrophy.name)      => spellbook(VermiculiteHypertrophy.name, "Action: Cost 2", "You may summon an excrescence without a gate, by a cultist with a globule. Sacrifice that cultist. Effervescent Excrescences now have 6 combat and cannot be moved by any means. Any pain assigned to an excrescence is changed to a kill.")
         case $("CS", CosmicLandfall.name)              => spellbook(CosmicLandfall.name, "Ongoing", "Any time a GOO is awakened for 4 power or more, place a meteorite for free in any region of your choice.")
         case $("CS", SpectralCollapse.name)            => spellbook(SpectralCollapse.name, "Post Battle", "If 1 or more units are killed or eliminated in any region with a globule, either faction may roll a combat die (you need not have participated in the battle). You collect 1 doom for pains, 1 ES for kills. Then, eliminate the globule.")
         case $("CS", EffulgentSacrifice.name)          => spellbook(EffulgentSacrifice.name, "Action: Cost 1", "Sacrifice a globule you control for an elder sign. Any cultists or excrescences in the region are eliminated. Their owners receive half their cost, rounded down. All other units in the region must then retreat out — you choose the order factions go in, then each faction chooses how to retreat its own units.")

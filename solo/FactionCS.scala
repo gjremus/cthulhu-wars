@@ -51,7 +51,7 @@ case object PrismaticWell extends FactionUnitClass(CS, "Prismatic Well", Token, 
 
 
 // Colour Out of Space (CS) ABILITIES (always-on faction powers, use .has())
-// Chromatic Perversion — Globules convert gates in their region to Prismatic Wells.
+// Chromatic Perversion — Meteorites or Globules convert gates in their region to Prismatic Wells.
 // Corrupted Rending — Tulzscha's GOO ability: force a battle between two other factions.
 case object ChromaticPerversion extends FactionSpellbook(CS, "Chromatic Perversion")
 case object CorruptedRending extends FactionSpellbook(CS, "Corrupted Rending")
@@ -161,14 +161,14 @@ case class CSVermiculiteAction(r : Region) extends BaseFactionAction(implicit g 
 
 // SB5 Effulgent Sacrifice (Task 3.10.5): sacrifice a controlled Globule for an Elder Sign (Cost 1);
 // any Cultists or Excrescences in that region are eliminated, each owner refunded half cost (round
-// down). Additionally, every OTHER faction with units remaining in the region must retreat them
-// all out (a plain forced retreat, not a battle pain — see CSEffulgentRetreat* below).
+// down). Additionally, every faction (including CS itself) with units remaining in the region must
+// retreat them all out (a plain forced retreat, not a battle pain — see CSEffulgentRetreat* below).
 case class CSEffulgentMainAction(l : $[Region]) extends OptionFactionAction("Sacrifice " + LuminousGlobule.styled(CS) + " for an " + "Elder Sign".styled("es") + " (" + EffulgentSacrifice.styled(CS) + ")") with MainQuestion with Soft { override def self = CS }
 case class CSEffulgentAction(r : Region) extends BaseFactionAction(implicit g => "Sacrifice " + LuminousGlobule.styled(CS) + g.forNPowerWithTax(r, CS, 1) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
 
 // SB5 Effulgent Sacrifice retreat sweep (addendum): after the sacrifice and cultist/excrescence
-// cleanup resolve, every OTHER faction (game.setup.but(CS)) with units still in the region must
-// retreat all of them out. If 2+ other factions are present, CS chooses which faction goes next
+// cleanup resolve, every faction (including CS itself, game.setup) with units still in the region
+// must retreat all of them out. If 2+ factions are present, CS chooses which faction goes next
 // (skipped when only one remains); the chosen faction then picks its own units to retreat one at
 // a time, in its own chosen order, looping until it has none left in the region before moving on
 // to the next faction. Modelled on Howl's per-unit retreat (Battle.scala) and Corrupted Rending's
@@ -217,12 +217,12 @@ case class CSCosmicLandfallPlaceAction(self : Faction, r : Region, then : Forced
 
 
 // Corrupted Rending (Tulzscha's GOO ability, §1.8, 1 Power Action) — CS forces a battle between two
-// OTHER factions in a region that holds a Globule and units from 2+ non-CS factions. Flow, all as
-// part of CS's own action (CS is never a combatant): pick region → pick the two enemy factions →
+// factions (CS itself may be one of them) in a region that holds a Globule and units from 2+
+// factions. Flow, all as part of CS's own action: pick region → pick the two factions to battle →
 // each rolls 3 dice (Kill>Pain>Miss, ties reroll both) → the winner chooses Attacker or Defender →
 // a normal battle runs between them; afterward control returns to CS (csCorruptedRendingActor). The
 // two roll-receiver actions are whitelisted in isRollAction so undo can't rewind past a committed roll.
-case class CSCorruptedRendingMainAction(l : $[Region]) extends OptionFactionAction(CorruptedRending.styled(CS) + " — force a battle between two enemies") with MainQuestion with Soft { override def self = CS }
+case class CSCorruptedRendingMainAction(l : $[Region]) extends OptionFactionAction(CorruptedRending.styled(CS) + " — force a battle between at least 2 factions") with MainQuestion with Soft { override def self = CS }
 case class CSCorruptedRendingRegionAction(r : Region) extends BaseFactionAction(implicit g => CorruptedRending.styled(CS) + " — force a battle (1 Power) in", implicit g => r + CS.iced(r)) { override def self = CS }
 case class CSRendingPickFirstAction(r : Region, a : Faction) extends BaseFactionAction(CorruptedRending.styled(CS) + " — force a battle in " + r + ". Choose factions to participate in battle.", a.full) { override def self = CS }
 case class CSRendingPickSecondAction(r : Region, a : Faction, b : Faction) extends BaseFactionAction(CorruptedRending.styled(CS) + " — force a battle in " + r + ". Choose the second faction (to battle " + a.full + ").", b.full) { override def self = CS }
@@ -240,6 +240,12 @@ object CSExpansion extends Expansion {
     // units killed mid-battle but not yet removed (guide combat-count rule).
     private def globuleIn(r : Region)(implicit game : Game) : Boolean =
         CS.at(r).%(_.uclass == LuminousGlobule).not(Zeroed).any
+
+    // Corrupted Rending (Tulzscha's GOO ability) triggers on a Meteorite or a Globule, per
+    // creator correction; kept separate from globuleIn since Chromatic Perversion's Well
+    // conversion and Vermiculite Hypertrophy still require a Globule specifically.
+    private def meteorOrGlobuleIn(r : Region)(implicit game : Game) : Boolean =
+        CS.at(r).%(u => u.uclass == LuminousGlobule || u.uclass == Meteorite).not(Zeroed).any
 
     // Derived controller of an Excrescence per Chromatic Perversion (Section 1.5): if its region is
     // a Prismatic Well, the faction controlling that Well's Gate owns it; otherwise it is CS's own
@@ -265,9 +271,9 @@ object CSExpansion extends Expansion {
                     CS.log("Gate in", r, "became a", "Prismatic Well".styled(CS))
                 }
             }
-            // Reversion: a Well with no Globule (globule eliminated or moved away) reverts to a
-            // normal Gate. Per the creator, reversion is available in the Action and Doom phases
-            // but NOT during Gather Power (so Well income is not disturbed mid-calculation).
+            // Reversion: a Well with no Globule (eliminated or moved away) reverts to a normal
+            // Gate. Per the creator, reversion is available in the Action and Doom phases but
+            // NOT during Gather Power (so Well income is not disturbed mid-calculation).
             if (game.gatherPowerPhase.not)
                 game.csPrismaticWellRegions.foreach { r =>
                     if (globuleIn(r).not) {
@@ -382,9 +388,11 @@ object CSExpansion extends Expansion {
             }
 
             // Corrupted Rending (Tulzscha's GOO ability): only while Tulzscha is awake (on map) and
-            // CS can pay 1 Power; a valid region holds a Globule and units from 2+ non-CS factions.
+            // CS can pay 1 Power; a valid region holds a Globule or Meteorite and units from 2+
+            // factions (CS's own units there count, so CS may end up as one of the two factions
+            // battling).
             if (f.onMap(CSTulzscha).not(Zeroed).any && f.power >= 1) {
-                val rs = areas.%(r => globuleIn(r) && game.setup.but(f).%(e => e.at(r).not(Zeroed).any).num >= 2)
+                val rs = areas.%(r => meteorOrGlobuleIn(r) && game.setup.%(e => e.at(r).not(Zeroed).any).num >= 2)
                 if (rs.any)
                     + CSCorruptedRendingMainAction(rs)
             }
@@ -515,8 +523,8 @@ object CSExpansion extends Expansion {
                         }
                     }
                 }
-                // Every other faction with units still standing in r must now retreat them all out.
-                val others = game.setup.but(CS).%(e => e.at(r).not(Zeroed).any)
+                // Every faction (including CS itself) with units still standing in r must now retreat them all out.
+                val others = game.setup.%(e => e.at(r).not(Zeroed).any)
                 if (others.any)
                     Force(CSEffulgentRetreatFactionsAction(r, others))
                 else
@@ -641,27 +649,27 @@ object CSExpansion extends Expansion {
             CS.log("placed a free", Meteorite.styled(CS), "in", r, "(" + CosmicLandfall.styled(CS) + ")")
             Force(then)
 
-        // Corrupted Rending (§1.8) — CS forces a battle between two other factions.
+        // Corrupted Rending (§1.8) — CS forces a battle between at least 2 factions (CS included).
         case CSCorruptedRendingMainAction(l) =>
             Ask(CS).each(l)(r => CSCorruptedRendingRegionAction(r)).cancel
 
         case CSCorruptedRendingRegionAction(r) =>
-            // Re-validate (menu may be stale): Globule present + 2+ non-CS factions with units here.
-            val enemies = game.setup.but(CS).%(e => e.at(r).not(Zeroed).any)
-            if (globuleIn(r).not || enemies.num < 2 || CS.power < 1)
+            // Re-validate (menu may be stale): Globule or Meteorite present + 2+ factions with units here.
+            val candidates = game.setup.%(e => e.at(r).not(Zeroed).any)
+            if (meteorOrGlobuleIn(r).not || candidates.num < 2 || CS.power < 1)
                 EndAction(CS)
-            else if (enemies.num == 2)
-                // Only two enemy factions here — no choice to make; go straight to the battle.
-                Force(CSRendingPickSecondAction(r, enemies.head, enemies.last))
+            else if (candidates.num == 2)
+                // Only two factions here — no choice to make; go straight to the battle.
+                Force(CSRendingPickSecondAction(r, candidates.head, candidates.last))
             else
-                Ask(CS).each(enemies)(a => CSRendingPickFirstAction(r, a)).cancel
+                Ask(CS).each(candidates)(a => CSRendingPickFirstAction(r, a)).cancel
 
         case CSRendingPickFirstAction(r, a) =>
-            val enemies = game.setup.but(CS).%(e => e.at(r).not(Zeroed).any).%(_ != a)
-            if (enemies.none)
+            val candidates = game.setup.%(e => e.at(r).not(Zeroed).any).%(_ != a)
+            if (candidates.none)
                 EndAction(CS)
             else
-                Ask(CS).each(enemies)(b => CSRendingPickSecondAction(r, a, b)).cancel
+                Ask(CS).each(candidates)(b => CSRendingPickSecondAction(r, a, b)).cancel
 
         case CSRendingPickSecondAction(r, a, b) =>
             if (CS.power < 1 || a.at(r).not(Zeroed).none || b.at(r).not(Zeroed).none)

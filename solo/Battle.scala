@@ -2280,6 +2280,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     CS.at(arena).%(_.uclass == LuminousGlobule).not(Zeroed).any && eliminated.any) {
                     CS.oncePerAction :+= SpectralCollapse
                     val queue = $(CS) ++ $(attacker, defender).%(_ != CS)
+                    println("[CS-SPECTRAL-TRACE] arena=" + arena + " attacker=" + attacker + " defender=" + defender + " queue=" + queue.mkString(",") + " queueHead=" + queue.some.map(_.head))
                     if (queue.any)
                         return Ask(queue.head)
                             .add(CSSpectralCollapseUseAction(queue.head, arena, queue.tail))
@@ -2294,7 +2295,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     FB.oncePerAction :-= Carnage
 
                 // Colour Out of Space (CS) Insanity (§1.8 / Task 3.10.1): in any region with a
-                // Meteorite, surplus (unapplied) Kill results are redirected instead of wasted:
+                // Meteorite or a Globule, surplus (unapplied) Kill results are redirected instead of
+                // wasted:
                 //  - in a battle CS is NOT part of, each side's surplus Kills rebound onto that same
                 //    (rolling) faction's own surviving units;
                 //  - in a battle CS IS part of, the surplus rolled AGAINST CS (by CS's opponent) is
@@ -2305,7 +2307,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // csInsanityAtkConsumed / csInsanityDefConsumed, keyed to the faction that ROLLED them).
                 var csInsanityAtkConsumed = 0
                 var csInsanityDefConsumed = 0
-                if (factions.has(CS) && CS.can(Insanity) && CS.at(arena).%(_.uclass == Meteorite).any) {
+                if (factions.has(CS) && CS.can(Insanity) && CS.at(arena).%(u => u.uclass == Meteorite || u.uclass == LuminousGlobule).any) {
                     val atkKills = attackers.rolls.count(_ == Kill)
                     val defKills = defenders.rolls.count(_ == Kill)
                     val atkSurplus = max(0, atkKills - exempted.count(_.faction == defender))
