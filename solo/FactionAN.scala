@@ -17,6 +17,13 @@ case object Cathedral extends FactionUnitClass(AN, "Cathedral", Building, 4) {
     override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = false
     override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = false
     override def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = u.faction.can(HolyGround)
+    // A Cathedral is a BUILDING, not a combatant Unit, until Holy Ground is earned.
+    // (With Holy Ground it counts as a GOO Unit only in the Action Phase — but every
+    // battle happens in the Action Phase, so gating on HolyGround alone is correct here.)
+    // Without this override canBattle defaults to true, which let a pre-Holy-Ground
+    // Cathedral both enable an "attack" on its own and be pulled into battle as a
+    // phantom combatant. See also the BattleStart exemption in Battle.scala.
+    override def canBattle(u : UnitFigure)(implicit game : Game) : Boolean = u.faction.can(HolyGround)
 }
 
 // FACTION POWER — use .has(), NOT blocked by Moonbeast or Elder Thing
@@ -60,6 +67,18 @@ case object AN extends Faction { f =>
     override def requirements(options : $[GameOption]) = $(CathedralAA, CathedralOO, CathedralWW, CathedralNG, GiveWorstMonster, GiveBestMonster)
 
     def cathedralCost(r : Region)(implicit game : Game) : Int = 1 + game.board.connected(r).intersect(game.cathedrals).any.??(2)
+
+    // ── Cathedral = Building, not Unit (until Holy Ground) ──────────────────────
+    // Single source of truth for "does an AN Cathedral currently count as a Unit?".
+    // Per the Holy Ground card, a Cathedral only becomes a (GOO) Unit while Holy
+    // Ground is earned AND only during the Action Phase; otherwise it is a Building
+    // and must be ignored by anything that reasons about "units in an area" (battle
+    // participation, "area with No Units", unit-targeting effects, etc.).
+    def cathedralCountsAsUnit(implicit game : Game) : Boolean = AN.can(HolyGround) && game.inActionPhase
+    // True for any figure that counts as a Unit right now — i.e. everything except a
+    // Cathedral that is currently just a Building. Only AN has Building-type figures,
+    // so this is a no-op (always true) for every other faction's units.
+    def figureIsUnit(u : UnitFigure)(implicit game : Game) : Boolean = u.uclass != Cathedral || cathedralCountsAsUnit
 
     val allUnits =
         4.times(Cathedral) ++

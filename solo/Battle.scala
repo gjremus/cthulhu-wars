@@ -1136,6 +1136,32 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // The Ancients Holy Ground: a Cathedral is a BUILDING, not a Unit, until Holy
+                // Ground is earned (and even then only counts as a GOO Unit in the Action Phase,
+                // per the card). attacker/defender.forces above grab EVERY figure in the arena,
+                // which wrongly pulled Cathedrals in as phantom combatants for the original
+                // Ancients and for alt Ancients before Holy Ground. Exempt them from both sides
+                // here whenever they don't currently count as a Unit — mirroring the Mummify /
+                // Grasping Dead exemptions above — so a Building-state Cathedral is neither a
+                // combatant nor a casualty and simply stays in the area. Re-check for an empty
+                // side afterwards in case a side's only figure was a Cathedral.
+                if (AN.cathedralCountsAsUnit.not && sides.%(_.forces.%(_.uclass == Cathedral).any).any) {
+                    sides.foreach { s =>
+                        s.forces.%(_.uclass == Cathedral).foreach { u =>
+                            log(u.uclass.styled(u.faction), "in", arena, "is a Building and does not participate in Battle")
+                            exempt(u)
+                        }
+                    }
+                    if (attacker.forces.none) {
+                        log("No attackers left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                    if (defender.forces.none) {
+                        log("No defenders left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                }
+
                 // Albino Penguins: transferred penguins are now in the battle side's units list
                 // (transferred during LaughingstockPhase before BattleStart)
                 // so they're picked up naturally by attacker.at(arena) / defender.at(arena)

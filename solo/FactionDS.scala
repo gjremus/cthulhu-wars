@@ -198,7 +198,10 @@ object DSExpansion extends Expansion {
         case MainAction(f : DS.type) =>
             implicit val asking = Asking(f)
 
-            if (f.pool.%(_.uclass == Acolyte).any && areas.nex.%(r => game.factions.%(_.at(r).any).none && f.affords(1)(r)).any)
+            // Psychosis targets an Area with "No Units". An AN Cathedral that is still a
+            // Building (Holy Ground not earned) is NOT a Unit, so it must NOT block the offer.
+            // Mirror the placement-list filter below (AN.figureIsUnit).
+            if (f.pool.%(_.uclass == Acolyte).any && areas.nex.%(r => game.factions.%(_.at(r).%(u => AN.figureIsUnit(u)).any).none && f.affords(1)(r)).any)
                 + PsychosisAction(f)
 
             game.moves(f)
@@ -473,7 +476,9 @@ object DSExpansion extends Expansion {
 
         // PSYCHOSIS
         case PsychosisAction(self) =>
-            val empty = areas.nex.%(r => game.factions.%(_.at(r).any).none && self.affords(1)(r))
+            // "an Area that has No Units": a Building (an AN Cathedral not yet a Holy-Ground
+            // Unit) does NOT count as a unit, so an Area holding only a Cathedral is still empty.
+            val empty = areas.nex.%(r => game.factions.%(_.at(r).%(u => AN.figureIsUnit(u)).any).none && self.affords(1)(r))
             Ask(self).list(empty./(r => PsychosisPlaceAction(self, r))).cancel
 
         case PsychosisPlaceAction(self, r) =>
