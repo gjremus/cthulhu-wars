@@ -1307,8 +1307,9 @@ object CthulhuWarsSolo {
                     // above) so a Well-controlled Excrescence (Chromatic Perversion) shows the
                     // controller's color, same tint mechanism every cross-faction unit already uses.
                     case EffervescentExcrescence => DrawRect("cs-effervescent-excrescence", |(tint), x - 28, y - 75, 56, 75)
-                    // Luminous Globule (cost 4, terror-sized): 85h, width scaled
-                    case LuminousGlobule  => DrawRect("cs-luminous-globule", None, x - 16, y - 34, 33, 34)
+                    // Luminous Globule (cost 4, terror-sized): sized ~30% larger than the prior
+                    // 33x34 footprint; new art aspect ~1.19 (bottom-anchored so it grows upward).
+                    case LuminousGlobule  => DrawRect("cs-luminous-globule", None, x - 22, y - 37, 44, 37)
                     // Tulzscha GOO (faction unique): 155h, large
                     case CSTulzscha       => DrawRect("cs-tulzscha", None, x - 41, y - 155, 82, 155)
 
