@@ -1291,13 +1291,14 @@ object CthulhuWarsSolo {
                     case Cathedral        => DrawRect("an-cathedral", None, x - 39, y - 90, 78, 110)
                     case ChaosGate        => DrawRect("gate", |(Processing(|("#3C2E18"), None, |("#130E08"))), x - 38, y - 38, 76, 76)
                     // Colour Out of Space (CS): the well sprite is a pre-colored multi-hue asset
-                    // (no tint Processing). The source art is portrait (400x535), so we draw it at
-                    // 84x112 to preserve the aspect and position it so the swirls rise above the
-                    // gate anchor (y-89) and the front rim of the opening lands ~18px above the
-                    // anchor. The keeper Cultist (drawn on top, cropped 40% at the bottom) then
-                    // appears to stand down inside the opening. See the well render selection and
-                    // z-order sort below.
-                    case PrismaticWell    => DrawRect("cs-prismatic-well", None, x - 42, y - 89, 84, 112)
+                    // (no tint Processing, but a baked white outline like other units). The source
+                    // art is portrait (400x535); drawn at 105x140 so the grey base circle (~73% of
+                    // art width) renders ~76px wide — about a Gate's width. Positioned so the swirls
+                    // rise above the gate anchor (top y-110) and the front rim of the opening lands
+                    // ~18px above the anchor, so the keeper Cultist (drawn on top, cropped 40% at
+                    // the bottom) appears to stand down inside the opening. See the well render
+                    // selection and z-order sort below.
+                    case PrismaticWell    => DrawRect("cs-prismatic-well", None, x - 52, y - 110, 105, 140)
 
                     // Colour Out of Space (CS): unit sprites (scaled relative to Cultist 60h baseline)
                     // Meteorite (cost 1, small): 40h, width scaled proportionally
@@ -1307,9 +1308,11 @@ object CthulhuWarsSolo {
                     // above) so a Well-controlled Excrescence (Chromatic Perversion) shows the
                     // controller's color, same tint mechanism every cross-faction unit already uses.
                     case EffervescentExcrescence => DrawRect("cs-effervescent-excrescence", |(tint), x - 28, y - 75, 56, 75)
-                    // Luminous Globule (cost 4, terror-sized): sized ~30% larger than the prior
-                    // 33x34 footprint; new art aspect ~1.19 (bottom-anchored so it grows upward).
-                    case LuminousGlobule  => DrawRect("cs-luminous-globule", None, x - 22, y - 37, 44, 37)
+                    // Luminous Globule (cost 4, terror-sized): new art with a baked white outline,
+                    // canvas 674x578 (blob 606x510 + margin for the outline). Drawn so the blob core
+                    // renders ~44px wide (~30% larger than the prior 33x34), bottom-anchored so it
+                    // grows upward from the same ground point.
+                    case LuminousGlobule  => DrawRect("cs-luminous-globule", None, x - 24, y - 40, 49, 42)
                     // Tulzscha GOO (faction unique): 155h, large
                     case CSTulzscha       => DrawRect("cs-tulzscha", None, x - 41, y - 155, 82, 155)
 
