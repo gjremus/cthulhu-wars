@@ -1020,9 +1020,9 @@ object CthulhuWarsSolo {
                 }
             }
 
-            case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0, splitTint : |[Processing] = None)
+            case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0, splitTint : |[Processing] = None, cropBottomFrac : Double = 0.0)
 
-            case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int, parasiteOrig : |[Faction] = None) {
+            case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int, parasiteOrig : |[Faction] = None, cropBottomFrac : Double = 0.0) {
                 val defaultProcessing = Processing(None, None, None)
 
                 val tint = faction @@ {
@@ -1290,9 +1290,14 @@ object CthulhuWarsSolo {
                     case IceAgeToken      => DrawRect("ww-ice-age", None, x - 44, y - 67, 91, 75)
                     case Cathedral        => DrawRect("an-cathedral", None, x - 39, y - 90, 78, 110)
                     case ChaosGate        => DrawRect("gate", |(Processing(|("#3C2E18"), None, |("#130E08"))), x - 38, y - 38, 76, 76)
-                    // Colour Out of Space (CS): the well sprite is a pre-colored multi-hue asset,
-                    // so no tint Processing — same 76x76 gate footprint so a Cultist sits inside it.
-                    case PrismaticWell    => DrawRect("cs-prismatic-well", None, x - 38, y - 38, 76, 76)
+                    // Colour Out of Space (CS): the well sprite is a pre-colored multi-hue asset
+                    // (no tint Processing). The source art is portrait (400x535), so we draw it at
+                    // 84x112 to preserve the aspect and position it so the swirls rise above the
+                    // gate anchor (y-89) and the front rim of the opening lands ~18px above the
+                    // anchor. The keeper Cultist (drawn on top, cropped 40% at the bottom) then
+                    // appears to stand down inside the opening. See the well render selection and
+                    // z-order sort below.
+                    case PrismaticWell    => DrawRect("cs-prismatic-well", None, x - 42, y - 89, 84, 112)
 
                     // Colour Out of Space (CS): unit sprites (scaled relative to Cultist 60h baseline)
                     // Meteorite (cost 1, small): 40h, width scaled proportionally
@@ -1482,6 +1487,7 @@ object CthulhuWarsSolo {
                         r.copy(x = r.x + (r.width * 0.5 + r.cx) * (1 - k) ~, y = r.y + (r.height * 0.5 + r.cy) * (1 - k) ~, width = r.width * k ~, height = r.height * k ~, cx = r.cx * k ~, cy = r.cy * k ~)
                     }
                     .useIf(tags.has(Mummified))(_.copy(rotation = 90.0))
+                    .useIf(cropBottomFrac > 0.0)(_.copy(cropBottomFrac = cropBottomFrac))
 
                 def icon = {
                     // Guard: some units have no sprite prototype (proto == null, e.g. the
@@ -2012,7 +2018,13 @@ object CthulhuWarsSolo {
                     keeper match {
                         case Some(u) =>
                             val tags = u.state ++ game.mummifiedCultists.has(u.ref).$(Mummified)
-                            fixed +:= DrawItem(r, u.faction, u.uclass, u.health, tags, adjGatePx, adjGatePy)
+                            // Colour Out of Space (CS): a Cultist keeping a Prismatic Well is
+                            // cropped 40% at the bottom so its base is hidden behind the well's
+                            // front rim — it appears to stand down inside the opening. The crop is
+                            // a fraction of the Cultist's own drawn height, so it stays aligned
+                            // with the well's rim under library-map scaling. Any faction's Cultist.
+                            val wellCrop = (csWell && u.uclass.utype == Cultist).?(0.40).|(0.0)
+                            fixed +:= DrawItem(r, u.faction, u.uclass, u.health, tags, adjGatePx, adjGatePy, cropBottomFrac = wellCrop)
                         case _ =>
                     }
 
@@ -2539,7 +2551,7 @@ object CthulhuWarsSolo {
                     }
                 }
 
-                draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0))./(_.rect).%(r => r != null).foreach { d =>
+                draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate || d.unit == PrismaticWell).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0))./(_.rect).%(r => r != null).foreach { d =>
                     g.globalAlpha = d.alpha
                     val needsOutline = d.key == "custodian-icon" || d.key == "librarian-icon"
                     if (needsOutline) {
@@ -2582,6 +2594,15 @@ object CthulhuWarsSolo {
                         g.rotate(d.rotation * math.Pi / 180.0)
                         g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), -d.width / 2, -d.height / 2, d.width, d.height)
                         g.restore()
+                    } else if (d.cropBottomFrac > 0.0) {
+                        // Colour Out of Space (CS): a Cultist standing in a Prismatic Well is
+                        // clipped so its bottom fraction is hidden behind the well's front rim.
+                        g.save()
+                        g.beginPath()
+                        g.rect(d.x, d.y, d.width, (d.height * (1.0 - d.cropBottomFrac)).toInt)
+                        g.clip()
+                        g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
+                        g.restore()
                     } else
                         g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
                     if (needsOutline) {
@@ -2593,7 +2614,7 @@ object CthulhuWarsSolo {
                 }
 
 
-                draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0)).foreach { d =>
+                draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate || d.unit == PrismaticWell).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0)).foreach { d =>
                     if (d.icon.any)
                         g.drawImage(getAsset(d.icon.get.key), d.icon.get.x, d.icon.get.y)
                 }
@@ -4229,9 +4250,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 // Colour Out of Space (CS): Tulzscha's awaken kill-roll — undo cannot rewind past it.
                 case _ : CSTulzschaAwakenRollAction => true
                 case _ : CSSpectralCollapseRollAction => true
-                // Corrupted Rending attacker-selection rolls — undo cannot rewind past a committed roll.
-                case _ : CSRendingRollBAction => true
-                case _ : CSRendingCompareAction => true
                 case _ => false
             }
 
