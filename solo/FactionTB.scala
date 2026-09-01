@@ -997,8 +997,10 @@ object TBExpansion extends Expansion {
                 self.log(PsychicShriek.styled(TB) + ": rolled", totalRoll, "— retreat", count, "unit".s(count))
                 enemy.log("must retreat", count, "unit".s(count), "(" + PsychicShriek.styled(TB) + ")")
                 // Snapshot enemy's current occupied MAP areas (before retreat) — exclude off-map units (Sorcery, Slumber, etc.)
-                // Also exclude GOOs and Buildings (they cannot be forced to retreat per standard CW rules)
-                val onMapUnits = enemy.allInPlay.%(u => u.region.onMap && u.uclass.utype != GOO && u.uclass.utype != Building)
+                // Also exclude Buildings (immobile, cannot be forced to retreat per standard CW rules).
+                // GOOs ARE included per creator ruling (2026-09-01): all units can be targeted; matches the
+                // no-exclusion pattern used by CS Effulgent Sacrifice's forced retreat.
+                val onMapUnits = enemy.allInPlay.%(u => u.region.onMap && u.uclass.utype != Building)
                 val priorAreas = onMapUnits./(_.region).distinct
                 val enemyUnits = onMapUnits./(_.ref)
                 println(s"[PSYCH SHRIEK TRACE] Enemy units on map: ${onMapUnits.map(u => s"${u.uclass}@${u.region}").mkString(", ")}")
@@ -1076,10 +1078,11 @@ object TBExpansion extends Expansion {
 
         case TBPsychicShriekRetreatPickAction(self, enemy, u, dest, count, priorAreas, retreated, remaining) =>
             val unit = game.unit(u)
-            // Defense-in-depth: refuse to move GOOs or Buildings even if they were somehow recorded
-            // in an old game log before the 2026-07-17 filter fix
-            if (unit.uclass.utype == GOO || unit.uclass.utype == Building) {
-                println(s"[PSYCH SHRIEK DEFENSE] Refusing to retreat ${unit.uclass.utype} ${unit.uclass} (recorded in old game log before GOO/Building filter fix)")
+            // Defense-in-depth: refuse to move Buildings even if somehow recorded in an old game log
+            // before the 2026-07-17 filter fix (Buildings are immobile and cannot retreat).
+            // GOOs are no longer refused here — they retreat normally per the 2026-09-01 ruling.
+            if (unit.uclass.utype == Building) {
+                println(s"[PSYCH SHRIEK DEFENSE] Refusing to retreat ${unit.uclass.utype} ${unit.uclass} (recorded in old game log before Building filter fix)")
                 // Skip this unit and continue with remaining count
                 Force(TBPsychicShriekRetreatAction(self, enemy, count - 1, priorAreas, retreated :+ u, remaining.but(u)))
             } else {
