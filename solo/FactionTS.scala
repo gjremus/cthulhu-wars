@@ -412,7 +412,7 @@ object TSExpansion extends Expansion {
             // Moon), matching the area-scan below which already includes BB.moon.
             if (f.can(GraspingDead) && f.units.%(u => u.uclass == TombHerd && (u.region.onMap || u.region == BB.moon)).any && {
                 val allAreas = areas ++ game.factions.has(BB).??($(BB.moon))
-                allAreas.%(r => f.at(r, TombHerd).any && f.enemies.exists(_.at(r).any)).any
+                allAreas.%(r => f.at(r, TombHerd).any && f.enemies.exists(e => AN.unitsAt(e, r).any)).any
             } && (f.power >= 1 || game.deathsHead >= 2))
                 + GraspingDeadMainAction(f)
 
@@ -548,7 +548,7 @@ object TSExpansion extends Expansion {
 
         case GraspingDeadPayPowerAction(self) =>
             self.power -= 1
-            TSExpansion.graspingDeadRemaining = areas.%(r => self.at(r, TombHerd).any && self.enemies.exists(_.at(r).any))
+            TSExpansion.graspingDeadRemaining = areas.%(r => self.at(r, TombHerd).any && self.enemies.exists(e => AN.unitsAt(e, r).any))
             TSExpansion.graspingDeadFought = $()
             TSExpansion.graspingDeadActive = true
             Force(GraspingDeadChooseRegionAction(self))
@@ -556,7 +556,7 @@ object TSExpansion extends Expansion {
         case GraspingDeadPayDHAction(self) =>
             game.deathsHead -= 2
             self.log("spent 2 Death's Head for", GraspingDead)
-            TSExpansion.graspingDeadRemaining = areas.%(r => self.at(r, TombHerd).any && self.enemies.exists(_.at(r).any))
+            TSExpansion.graspingDeadRemaining = areas.%(r => self.at(r, TombHerd).any && self.enemies.exists(e => AN.unitsAt(e, r).any))
             TSExpansion.graspingDeadFought = $()
             TSExpansion.graspingDeadActive = true
             Force(GraspingDeadChooseRegionAction(self))
@@ -567,10 +567,10 @@ object TSExpansion extends Expansion {
             // graspingDeadRemaining at pay time). A Tomb-Herd pained into a NEW region
             // mid-action does NOT add a battle there. (Previously new eligible regions
             // were appended here.) Keep only start regions still valid (TombHerd + enemy).
-            val eligible = TSExpansion.graspingDeadRemaining.%(r => self.at(r, TombHerd).any && self.enemies.exists(_.at(r).any))
+            val eligible = TSExpansion.graspingDeadRemaining.%(r => self.at(r, TombHerd).any && self.enemies.exists(e => AN.unitsAt(e, r).any))
             if (eligible.any) {
                 TSExpansion.graspingDeadRemaining = eligible
-                val variants = eligible./~(r => self.enemies.%(_.at(r).any)./(f => r -> f))
+                val variants = eligible./~(r => self.enemies.%(e => AN.unitsAt(e, r).any)./(f => r -> f))
                 implicit val asking = Asking(self)
                 variants.foreach { case (r, f) => + GraspingDeadBattleAction(self, r, f) }
                 asking

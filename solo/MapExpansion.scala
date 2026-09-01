@@ -340,8 +340,11 @@ object LibraryExpansion extends Expansion {
 
         // ── CUSTODIAN AGONY DISTRIBUTION ──
         case CustodianAssignAgonyAction(self, r, remaining, assigned) =>
-            val present = factions.%(_.at(r).%(u => u.uclass.utype != MapUnit).any)
-            val totalUnitsPresent = present./~(_.at(r).%(u => u.uclass.utype != MapUnit)).num
+            // Custodian forcibly MOVES units to the Oubliette. An AN Cathedral can never be
+            // moved by any means (Building or Holy-Ground GOO alike), so it is excluded here
+            // regardless of phase/spellbook.
+            val present = factions.%(_.at(r).%(u => u.uclass.utype != MapUnit && u.uclass != Cathedral).any)
+            val totalUnitsPresent = present./~(_.at(r).%(u => u.uclass.utype != MapUnit && u.uclass != Cathedral)).num
 
             if (remaining <= 0 || totalUnitsPresent == 0)
                 Force(CustodianResolveAgonyAction(self, r, assigned))
@@ -359,7 +362,7 @@ object LibraryExpansion extends Expansion {
             next match {
                 case None => EndAction(self)
                 case Some(Offer(target, agony)) =>
-                    val unitsInRegion = target.at(r).%(u => u.uclass.utype != MapUnit)
+                    val unitsInRegion = target.at(r).%(u => u.uclass.utype != MapUnit && u.uclass != Cathedral)
                     if (unitsInRegion.none)
                         Force(CustodianResolveAgonyAction(self, r, assigned.agonyClear(target)))
                     else
@@ -389,8 +392,11 @@ object LibraryExpansion extends Expansion {
 
             val overdueHolders = factions.but(self).%(f =>
                 game.tomeOverdue.exists { case (tome, overdue) => overdue && game.tomeHolders.get(tome).flatten.has(f) })
+            // Librarian moves toward a tome-holder with UNITS on the map. A still-Building AN
+            // Cathedral is not a Unit (AN.figureIsUnit is Holy-Ground/Action-Phase-aware), so
+            // it does not attract the Librarian on its own.
             val validRegions = game.board.regions.%(_.glyph.onMap).%(r =>
-                overdueHolders.exists(_.at(r).%(u => u.uclass.utype != MapUnit).any))
+                overdueHolders.exists(_.at(r).%(u => u.uclass.utype != MapUnit && AN.figureIsUnit(u)).any))
 
             val stayActions = currentRegion./(r => LibrarianStayAction(self, r)).$
             val moveActions = validRegions.%(r => !currentRegion.has(r))./( r =>
@@ -670,13 +676,16 @@ object LibraryExpansion extends Expansion {
         // ── GUARDIAN UNDER THE LAKE — move enemy units between Archway regions ──
         case UseTomeGuardianMainAction(self) =>
             val arches = game.board.regions.%(game.board.archways.contains)
+            // Guardian forcibly MOVES enemy units between Archways. An AN Cathedral can never
+            // be moved by any means (Building or Holy-Ground GOO alike), so it is excluded from
+            // both the eligible-region scan and the actual relocation below.
             val regionsWithEnemies = arches.%(r =>
-                factions.but(self).%(_.at(r).%(u => u.uclass.utype != MapUnit).any).any)
+                factions.but(self).%(_.at(r).%(u => u.uclass.utype != MapUnit && u.uclass != Cathedral).any).any)
             Ask(self).each(regionsWithEnemies)(r =>
                 UseTomeGuardianRegionAction(self, r)).cancel
 
         case UseTomeGuardianRegionAction(self, source) =>
-            val enemies = factions.but(self).%(_.at(source).%(u => u.uclass.utype != MapUnit).any)
+            val enemies = factions.but(self).%(_.at(source).%(u => u.uclass.utype != MapUnit && u.uclass != Cathedral).any)
             if (enemies.num == 1)
                 Force(UseTomeGuardianRelocateAction(self, source, enemies.head))
             else
@@ -694,7 +703,7 @@ object LibraryExpansion extends Expansion {
             // Parallel-guide Fix 40: Library Guardian tome forcibly relocates enemy units.
             // This must NOT trigger FB Cyclopean Gaze.
             game.fbSuppressCGForPlacement = true
-            target.at(source).%(u => u.uclass.utype != MapUnit).foreach { u =>
+            target.at(source).%(u => u.uclass.utype != MapUnit && u.uclass != Cathedral).foreach { u =>
                 u.region = dest
                 u.onGate = false
             }

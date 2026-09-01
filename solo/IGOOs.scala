@@ -1463,7 +1463,11 @@ object IGOOsExpansion extends Expansion {
             bokrugOwner match {
                 case Some(owner) if owner.allInPlay.%(_.uclass == Bokrug).none =>
                     // Bokrug NOT on map — check for valid regions (no enemy units)
-                    val validRegions = areas.nex.%(r => owner.enemies.forall(_.at(r).%(_.uclass.utype != MapUnit).none))
+                    // Bokrug returns only to a region with no enemy UNITS. A still-Building AN
+                    // Cathedral is not a Unit (AN.figureIsUnit is phase/Holy-Ground-aware: it
+                    // only counts as a GOO Unit in the Action Phase, so during this Doom-Phase
+                    // return it never counts), so it does not block Bokrug.
+                    val validRegions = areas.nex.%(r => owner.enemies.forall(_.at(r).%(u => u.uclass.utype != MapUnit && AN.figureIsUnit(u)).none))
                     if (validRegions.any) {
                         log(Bokrug.styled(owner), "Ghosts of Ib".styled("nt") + ":", owner.full, "may return", Bokrug.styled(owner))
                         // [owner 2026-08-09] return is optional — offer Skip alongside the areas

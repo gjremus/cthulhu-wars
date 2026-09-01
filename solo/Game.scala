@@ -2894,7 +2894,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Guardian under the Lake: move enemy units between Archway regions
             if (tomeHolders.get(TomeGuardian).flatten.has(f) && tomeFaceUp.getOrElse(TomeGuardian, true) && f.power >= 1) {
                 val arches = board.regions.%(board.archways.contains)
-                if (arches.exists(r => factions.but(f).exists(_.at(r).%(u => u.uclass.utype != MapUnit).any)))
+                // A Cathedral can never be moved, so a region holding only enemy Cathedrals
+                // is not a valid Guardian target (mirrors the move handler in MapExpansion).
+                if (arches.exists(r => factions.but(f).exists(_.at(r).%(u => u.uclass.utype != MapUnit && u.uclass != Cathedral).any)))
                     + UseTomeGuardianMainAction(f)
             }
             // Larvae of the Outer Gods: spend 1 Power, gain 1 ES if any opponent has more Power
