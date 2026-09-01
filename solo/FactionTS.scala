@@ -281,7 +281,7 @@ object TSExpansion extends Expansion {
                 implicit val asking = Asking(f)
 
                 // Ritual options: Hecatomb DH combos only when all Tomb-Herds are on map (pool empty)
-                if (f.can(Hecatomb) && game.deathsHead > 0 && f.pool(TombHerd).none && f.gates.any && f.acted.not) {
+                if (f.can(Hecatomb) && game.deathsHead > 0 && f.pool(TombHerd).none && f.acted.not) {
                     val cost = f.can(Herald).?(5).|(game.ritualCost)
                     val minPower = max(0, cost - game.deathsHead)
                     val maxPower = min(cost, f.power)
