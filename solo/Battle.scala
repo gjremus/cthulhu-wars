@@ -2382,6 +2382,48 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // Colour Out of Space (CS) Insanity — Pain results (owner ruling 2026-09-01):
+                // the same "unapplied combat result in a Meteorite/Globule region" rule also
+                // covers Pains, not just Kills — Insanity's own overlay text says "extra,
+                // unapplied combat results", not "unapplied Kills". Mirrors the Kill block above
+                // exactly (same recipient rules, same eliminate-one-of-recipient's-own-units
+                // mechanic) but counts Pain rolls left with no living unit to land on, using
+                // each side's final Pained-unit count (captured here before the health reset
+                // below wipes it) as the "applied" side of the surplus math. Kept as its own
+                // block rather than folded into the Kill one so Firstborn's Augury accounting
+                // just below (which only ever tracked unapplied Kills) is untouched.
+                if (factions.has(CS) && CS.can(Insanity) && csInsanityMeteorOrGlobulePresent) {
+                    val atkPains = attackers.rolls.count(_ == Pain)
+                    val defPains = defenders.rolls.count(_ == Pain)
+                    val atkPainSurplus = max(0, atkPains - defender.forces.count(_.health == Pained))
+                    val defPainSurplus = max(0, defPains - attacker.forces.count(_.health == Pained))
+
+                    val painRedirects : $[(Int, Faction)] =
+                        if (sides.has(CS)) {
+                            if (CS == defender)
+                                $((atkPainSurplus, attacker))
+                            else
+                                $((defPainSurplus, attacker))
+                        } else
+                            $((atkPainSurplus, attacker), (defPainSurplus, defender))
+
+                    painRedirects.foreach { case (surplus, recipient) =>
+                        if (surplus > 0) {
+                            var remaining = surplus
+                            var applied = 0
+                            recipient.at(arena).%(_.uclass.utype != Building).sortBy(_.uclass.cost).foreach { v =>
+                                if (remaining > 0 && v.region == arena) {
+                                    game.eliminate(v)
+                                    remaining -= 1
+                                    applied += 1
+                                }
+                            }
+                            if (applied > 0)
+                                log(CS, Insanity.styled(CS) + ": redirected", applied, "unapplied Pain" + (applied > 1).?("s").|(""), "onto", recipient.full, "in", arena)
+                        }
+                    }
+                }
+
                 // Firstborn (FB) Augury: after battle ends, count Kill results that were not applied
                 // (e.g. more kills than enemy units) and store them on the Augury spellbook for later use.
                 // Round 5 bug fix: surplus kills must be computed PER SIDE SEPARATELY, then summed,
