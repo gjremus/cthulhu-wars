@@ -338,6 +338,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     var azathothReceivedKill : Boolean = false
     var azathothNeedsKillRoll : Boolean = false
 
+    // Colour Out of Space (CS) Insanity: whether a Meteorite/Globule was in the arena
+    // BEFORE this battle's kills are resolved. Captured at BattleStart because Insanity's
+    // check runs at BattleEnd, after EliminatePhase has already removed any Meteorite/Globule
+    // that was itself killed this battle — re-checking the board live at BattleEnd wrongly
+    // sees no trigger unit when the trigger unit was the one that died, silently skipping the
+    // whole power even though a Meteorite/Globule genuinely was present when the kills landed.
+    var csInsanityMeteorOrGlobulePresent : Boolean = false
+
     // Round 8 Bug 45: flag preventing the post-battle Cyclopean Gaze hook from
     // re-firing each time the battle re-enters PostBattlePhase. After CG completes,
     // it calls proceed() which resumes the battle from PostBattlePhase, which would
@@ -1091,6 +1099,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(BattleStart)
 
             case BattleStart =>
+                // Colour Out of Space (CS) Insanity: snapshot Meteorite/Globule presence now,
+                // before any kills are rolled/applied — see field comment on
+                // csInsanityMeteorOrGlobulePresent for why this can't be re-checked at BattleEnd.
+                if (factions.has(CS))
+                    csInsanityMeteorOrGlobulePresent = CS.at(arena).%(u => u.uclass == Meteorite || u.uclass == LuminousGlobule).any
+
                 if (attacker.hasAllSB.not)
                     attacker.acted = true
 
@@ -2333,7 +2347,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // csInsanityAtkConsumed / csInsanityDefConsumed, keyed to the faction that ROLLED them).
                 var csInsanityAtkConsumed = 0
                 var csInsanityDefConsumed = 0
-                if (factions.has(CS) && CS.can(Insanity) && CS.at(arena).%(u => u.uclass == Meteorite || u.uclass == LuminousGlobule).any) {
+                if (factions.has(CS) && CS.can(Insanity) && csInsanityMeteorOrGlobulePresent) {
                     val atkKills = attackers.rolls.count(_ == Kill)
                     val defKills = defenders.rolls.count(_ == Kill)
                     val atkSurplus = max(0, atkKills - exempted.count(_.faction == defender))
