@@ -219,16 +219,13 @@ case class CSCosmicLandfallPlaceAction(self : Faction, r : Region, then : Forced
 // Corrupted Rending (Tulzscha's GOO ability, §1.8, 1 Power Action) — CS forces a battle between two
 // factions (CS itself may be one of them) in a region that holds a Globule and units from 2+
 // factions. Flow, all as part of CS's own action: pick region → pick the two factions to battle →
-// each rolls 3 dice (Kill>Pain>Miss, ties reroll both) → the winner chooses Attacker or Defender →
-// a normal battle runs between them; afterward control returns to CS (csCorruptedRendingActor). The
-// two roll-receiver actions are whitelisted in isRollAction so undo can't rewind past a committed roll.
+// gated on at least one of the two having positive combat here → if only one does, that faction is
+// forced to be the attacker; if both do, CS chooses which is the attacker → a normal battle runs
+// between them; afterward control returns to CS (csCorruptedRendingActor).
 case class CSCorruptedRendingMainAction(l : $[Region]) extends OptionFactionAction(CorruptedRending.styled(CS) + " — force a battle between at least 2 factions") with MainQuestion with Soft { override def self = CS }
 case class CSCorruptedRendingRegionAction(r : Region) extends BaseFactionAction(implicit g => CorruptedRending.styled(CS) + " — force a battle (1 Power) in", implicit g => r + CS.iced(r)) { override def self = CS }
 case class CSRendingPickFirstAction(r : Region, a : Faction) extends BaseFactionAction(CorruptedRending.styled(CS) + " — force a battle in " + r + ". Choose factions to participate in battle.", a.full) { override def self = CS }
 case class CSRendingPickSecondAction(r : Region, a : Faction, b : Faction) extends BaseFactionAction(CorruptedRending.styled(CS) + " — force a battle in " + r + ". Choose the second faction (to battle " + a.full + ").", b.full) { override def self = CS }
-case class CSRendingRollAAction(r : Region, a : Faction, b : Faction) extends ForcedAction
-case class CSRendingRollBAction(r : Region, a : Faction, b : Faction, rollsA : $[BattleRoll]) extends ForcedAction
-case class CSRendingCompareAction(r : Region, a : Faction, b : Faction, rollsA : $[BattleRoll], rollsB : $[BattleRoll]) extends ForcedAction
 case class CSRendingLaunchAction(r : Region, attacker : Faction, defender : Faction) extends ForcedAction
 
 
@@ -635,12 +632,16 @@ object CSExpansion extends Expansion {
 
         // SB3 Cosmic Landfall (Task 3.10.3) — the interrupt, threaded from Game.scala's EndAction
         // tail. Consume the pending flag here (idempotent + replay-stable); if CS still controls the
-        // spellbook and has a Meteorite in pool, offer the (skippable) region menu covering any
-        // region on the board (not just empty ones). Every path resumes the game via Force(then).
+        // spellbook and has a Meteorite in pool, offer the (skippable) region menu restricted to
+        // EMPTY regions — a region with no UNITS (Cultist/Monster/Terror/GOO) of any faction.
+        // Buildings, tokens, map-markers, glyphs, and gates (even abandoned ones) do NOT count as
+        // occupation, so a region holding only those is still empty. Every path resumes via Force(then).
         case CSCosmicLandfallCheckAction(self, then) =>
             game.csCosmicLandfallPending = false
+            def emptyOfUnits(r : Region) =
+                game.setup.%(e => e.at(r).not(Zeroed).%(u => u.uclass.utype != Token && u.uclass.utype != Building && u.uclass.utype != MapUnit).any).none
             if (CS.can(CosmicLandfall) && CS.pool(Meteorite).any)
-                Ask(CS).each(areas)(r => CSCosmicLandfallPlaceAction(CS, r, then)).skip(then)
+                Ask(CS).each(areas.%(emptyOfUnits))(r => CSCosmicLandfallPlaceAction(CS, r, then)).skip(then)
             else
                 Force(then)
 
@@ -675,42 +676,34 @@ object CSExpansion extends Expansion {
             if (CS.power < 1 || a.at(r).not(Zeroed).none || b.at(r).not(Zeroed).none)
                 EndAction(CS)
             else {
-                CS.power -= 1
-                log(CthulhuWarsSolo.DottedLine)
-                CS.log("used", CorruptedRending.styled(CS), "to force a battle between", a.full, "and", b.full, "in", r)
-                Force(CSRendingRollAAction(r, a, b))
-            }
-
-        case CSRendingRollAAction(r, a, b) =>
-            RollBattle(a, CorruptedRending.name + " (attacker roll)", 3, rolls => CSRendingRollBAction(r, a, b, rolls))
-
-        case CSRendingRollBAction(r, a, b, rollsA) =>
-            a.log("rolled", rollsA.mkString(", "), "for", CorruptedRending.styled(CS))
-            RollBattle(b, CorruptedRending.name + " (attacker roll)", 3, rolls => CSRendingCompareAction(r, a, b, rollsA, rolls))
-
-        case CSRendingCompareAction(r, a, b, rollsA, rollsB) =>
-            b.log("rolled", rollsB.mkString(", "), "for", CorruptedRending.styled(CS))
-            // Best result each side rolled: Kill (3) beats Pain (2) beats Miss (1).
-            def best(rolls : $[BattleRoll]) : Int = rolls./(x => (x == Kill).?(3).|((x == Pain).?(2).|(1))).maxOr(1)
-            val sa = best(rollsA)
-            val sb = best(rollsB)
-            if (sa == sb) {
-                log(CorruptedRending.styled(CS) + ": tie —", a.full, "and", b.full, "reroll")
-                Force(CSRendingRollAAction(r, a, b))
-            }
-            else {
-                val winner = (sa > sb).?(a).|(b)
-                val loser  = (sa > sb).?(b).|(a)
-                CS.log(winner.full, "won the", CorruptedRending.styled(CS), "roll and chooses its side")
-                Ask(winner)
-                    .add(CSRendingLaunchAction(r, winner, loser).as("Be the Attacker vs " + loser.full))
-                    .add(CSRendingLaunchAction(r, loser, winner).as("Be the Defender vs " + loser.full))
+                val combatA = a.strength(a.at(r).not(Zeroed), b)
+                val combatB = b.strength(b.at(r).not(Zeroed), a)
+                // Gate: at least one of the two chosen factions must have positive combat here,
+                // or there is no legal attacker for this pair.
+                if (combatA <= 0 && combatB <= 0)
+                    EndAction(CS)
+                else {
+                    CS.power -= 1
+                    CS.acted = true
+                    log(CthulhuWarsSolo.DottedLine)
+                    CS.log("used", CorruptedRending.styled(CS), "to force a battle between", a.full, "and", b.full, "in", r)
+                    if (combatA <= 0)
+                        // a has no combat here — b is the only faction that can attack.
+                        Force(CSRendingLaunchAction(r, b, a))
+                    else if (combatB <= 0)
+                        // b has no combat here — a is the only faction that can attack.
+                        Force(CSRendingLaunchAction(r, a, b))
+                    else
+                        Ask(CS)
+                            .add(CSRendingLaunchAction(r, a, b).as(a.full)("Corrupted Rending: Choose Attacking Faction"))
+                            .add(CSRendingLaunchAction(r, b, a).as(b.full)("Corrupted Rending: Choose Attacking Faction"))
+                }
             }
 
         case CSRendingLaunchAction(r, attacker, defender) =>
-            // Re-validate the two factions still have units in the arena (rolls don't move units,
-            // so normally fine). Then run a standard battle between them, with control returning to
-            // CS at battle-end via csCorruptedRendingActor (Game/Battle terminus).
+            // Re-validate the two factions still have units in the arena (choosing the attacker
+            // doesn't move units, so normally fine). Then run a standard battle between them, with
+            // control returning to CS at battle-end via csCorruptedRendingActor (Game/Battle terminus).
             if (attacker.at(r).not(Zeroed).none || defender.at(r).not(Zeroed).none)
                 EndAction(CS)
             else {
