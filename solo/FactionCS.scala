@@ -573,17 +573,22 @@ object CSExpansion extends Expansion {
         // SB5 Effulgent Sacrifice — owner respec (0-cost cross-faction action, see class above).
         case CSEffulgentSacrificeAction(f, r) =>
             log(CthulhuWarsSolo.DottedLine)
-            // Eliminate ALL the acting faction's Cultists in the region.
-            f.at(r).%(_.uclass.utype == Cultist).not(Zeroed).foreach(game.eliminate)
-            // Eliminate the Well's Globule (a Prismatic Well always has a Globule).
-            CS.at(r).%(_.uclass == LuminousGlobule).not(Zeroed).foreach(game.eliminate)
-            f.log("sacrificed all its cultists and eliminated the", LuminousGlobule.styled(CS), "in", r, "(" + EffulgentSacrifice.styled(CS) + ")")
-            // Acting faction gains a Doom.
+            val cultists = f.at(r).%(_.uclass.utype == Cultist).not(Zeroed)
+            val globs    = CS.at(r).%(_.uclass == LuminousGlobule).not(Zeroed)
+            val sb = "(" + EffulgentSacrifice.styled(CS) + ")"
+            // Standard logging, one line per effect (only the action name is unique here).
+            // 1) Cultists eliminated (all of the acting faction's cultists in the region).
+            if (cultists.any)
+                f.log("eliminated", cultists.num, "Cultist" + (cultists.num > 1).??("s"), "in", r, sb)
+            cultists.foreach(game.eliminate)
+            // 2) Globule eliminated (a Prismatic Well always has a Globule).
+            globs.foreach { g => f.log("eliminated", g, "in", r, sb); game.eliminate(g) }
+            // 3) Doom awarded to the acting faction.
             f.doom += 1
-            f.log("gained", 1.doom, "(" + EffulgentSacrifice.styled(CS) + ")")
-            // CS gains an Elder Sign no matter who acts (so if CS itself acts, it gains both).
+            f.log("gained", 1.doom, sb)
+            // 4) Elder Sign awarded to CS no matter who acts (so if CS itself acts, it gains both).
             CS.takeES(1)
-            CS.log("gained an", "Elder Sign".styled("es"), "(" + EffulgentSacrifice.styled(CS) + ")")
+            CS.log("gained an", "Elder Sign".styled("es"), sb)
             EndAction(f)
 
         // SB6 Core Exposure (Task 3.10.6).
