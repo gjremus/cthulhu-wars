@@ -1313,8 +1313,10 @@ object CthulhuWarsSolo {
                     // renders ~44px wide (~30% larger than the prior 33x34), bottom-anchored so it
                     // grows upward from the same ground point.
                     case LuminousGlobule  => DrawRect("cs-luminous-globule", None, x - 24, y - 40, 49, 42)
-                    // Tulzscha GOO (faction unique): 155h, large
-                    case CSTulzscha       => DrawRect("cs-tulzscha", None, x - 41, y - 155, 82, 155)
+                    // Tulzscha GOO (faction unique): 155h, large. Art is a tall narrow figure
+                    // (canvas 278x548 incl. baked white outline); box aspect (79/155 = 0.51)
+                    // matches the art so it renders un-stretched, bottom-anchored on the gate point.
+                    case CSTulzscha       => DrawRect("cs-tulzscha", None, x - 39, y - 155, 79, 155)
 
                     case Ghast         => DrawRect("n-ghast", |(neutralTint), x - 17, y - 53, 35, 59)
                     case Gug           => DrawRect("n-gug", |(neutralTint), x - 36, y - 78, 73, 90)
