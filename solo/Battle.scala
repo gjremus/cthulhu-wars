@@ -385,6 +385,22 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // reset to Spared(Alive) before those phases run.
     var fbeDistributedDeathPrevented : $[UnitRef] = $
 
+    // Colour Out of Space (CS) Insanity — roll-time reflection (owner ruling 2026-09-01,
+    // replaces the old BattleEnd redirect blocks). In a region containing a CS Meteorite or
+    // Globule, any combat result a faction ROLLS that it cannot land on an enemy unit
+    // (because the enemy ran out of units able to take that result) reflects back onto that
+    // same rolling faction's OWN units — a surplus Kill eliminates one of its units, a surplus
+    // Pain forces one of its units to retreat. CS itself is IMMUNE: its own overflow is never
+    // reflected onto CS. Reflection is applied through the normal assignment path so reflected
+    // Kills flow into EliminatePhase and reflected Pains flow into the interactive retreat
+    // phase (owner picks the destination). The guard flags make each reflection run exactly
+    // once even if its phase re-enters. The Reflected counters feed Firstborn's Augury below so
+    // reflected (now-applied) Kills are not ALSO banked as "unapplied".
+    var csInsanityDidReflectKills : Boolean = false
+    var csInsanityDidReflectPains : Boolean = false
+    var csInsanityAtkKillsReflected : Int = 0
+    var csInsanityDefKillsReflected : Int = 0
+
     def exempt(u : UnitFigure) {
         exempted :+= u
         sides.foreach(_.forces :-= u)
@@ -826,6 +842,45 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log(f, "assigned pains with", Vengeance)
 
         return DelayedContinue(50, Ask(f, s.forces.%(u => canAssignPains(u) > 0).sortP./(u => AssignPainAction(f, pains - assigned, s, u))))
+    }
+
+    // CS Insanity: reflect each rolling side's UNASSIGNABLE results back onto its OWN units.
+    // isKill=true handles Kills (called from EliminatePhase, before the elimination loop);
+    // isKill=false handles Pains (called from MadnessPhase, before the retreat phase). Runs
+    // once per result-type per battle (guarded by the did-reflect flags). No-op unless CS is in
+    // the game with Insanity and a Meteorite/Globule was in the arena; CS's own overflow is
+    // never reflected. Which of the rolling faction's own units takes the reflected hit is auto
+    // (cheapest-first); reflected Pains then retreat via the normal interactive retreat phase.
+    def csInsanityReflect(isKill : Boolean) {
+        if (isKill) { if (csInsanityDidReflectKills) return; csInsanityDidReflectKills = true }
+        else        { if (csInsanityDidReflectPains) return; csInsanityDidReflectPains = true }
+
+        if (!(factions.has(CS) && CS.can(Insanity) && csInsanityMeteorOrGlobulePresent)) return
+
+        $(attacker, defender).foreach { roller =>
+            if (roller != CS) {
+                val rolled = roller.rolls.count(_ == (if (isKill) Kill else Pain))
+                val landed =
+                    if (isKill) roller.opponent.forces./(assignedKills).sum
+                    else        roller.opponent.forces./(assignedPains).sum
+                var overflow = max(0, rolled - landed)
+                var applied = 0
+                roller.forces.sortBy(_.uclass.cost).foreach { u =>
+                    while (overflow > 0 && (if (isKill) canAssignKills(u) else canAssignPains(u)) > 0) {
+                        if (isKill) assignKill(u) else assignPain(u)
+                        overflow -= 1
+                        applied += 1
+                    }
+                }
+                if (applied > 0) {
+                    log(CS, Insanity.styled(CS) + ": reflected", applied, "unassignable " + (if (isKill) "Kill" else "Pain") + (applied > 1).?("s").|(""), "onto", roller.full + "'s own units in", arena)
+                    if (isKill) {
+                        if (roller == attacker) csInsanityAtkKillsReflected += applied
+                        else                    csInsanityDefKillsReflected += applied
+                    }
+                }
+            }
+        }
     }
 
     def retreater(s : Faction) : Faction = {
@@ -1786,6 +1841,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 checkDaolothSpellbook()
 
                 val preCount = eliminated.num
+                // CS Insanity: overflow Kills each side rolled but could not land on the enemy
+                // now reflect onto that same rolling faction's own units (set Killed here so the
+                // loop just below eliminates them; counts as dice-caused elimination).
+                csInsanityReflect(true)
                 sides.foreach { s =>
                     s.forces.%(_.health == Killed).foreach(eliminate)
                 }
@@ -2034,6 +2093,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 sides.foreach { s =>
                     s.forces.foreach(u => u.remove(Harbinged))
                 }
+
+                // CS Insanity: overflow Pains each side rolled but could not land on the enemy
+                // now reflect onto that same rolling faction's own units (set Pained here, after
+                // Eternal/Harbinger saves are resolved, so they retreat via the normal retreat
+                // phase below — attacker retreats first, preserving recorded retreat order).
+                csInsanityReflect(false)
 
                 if (retreater(attacker) == retreater(defender) && sides.forall(_.units.exists(_.health == Pained))) {
                     val f = retreater(attacker)
@@ -2334,95 +2399,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 if (factions.has(FB))
                     FB.oncePerAction :-= Carnage
 
-                // Colour Out of Space (CS) Insanity (§1.8 / Task 3.10.1): in any region with a
-                // Meteorite or a Globule, surplus (unapplied) Kill results are redirected instead of
-                // wasted:
-                //  - in a battle CS is NOT part of, each side's surplus Kills rebound onto that same
-                //    (rolling) faction's own surviving units;
-                //  - in a battle CS IS part of, the surplus rolled AGAINST CS (by CS's opponent) is
-                //    applied to the attacking faction's units.
-                // This MUST run BEFORE Firstborn's Augury banked-kills handler below so that any Kills
-                // Insanity actually applies here are consumed and cannot ALSO be banked by Augury; only
-                // Kills still unapplied after Insanity's redirect flow into Augury (subtracted below via
-                // csInsanityAtkConsumed / csInsanityDefConsumed, keyed to the faction that ROLLED them).
-                var csInsanityAtkConsumed = 0
-                var csInsanityDefConsumed = 0
-                if (factions.has(CS) && CS.can(Insanity) && csInsanityMeteorOrGlobulePresent) {
-                    val atkKills = attackers.rolls.count(_ == Kill)
-                    val defKills = defenders.rolls.count(_ == Kill)
-                    val atkSurplus = max(0, atkKills - exempted.count(_.faction == defender))
-                    val defSurplus = max(0, defKills - exempted.count(_.faction == attacker))
-
-                    // (surplusKills, recipientFaction, rolledByAttacker) per the two Insanity rules.
-                    val redirects : $[(Int, Faction, Boolean)] =
-                        if (sides.has(CS)) {
-                            if (CS == defender)
-                                $((atkSurplus, attacker, true))   // attacker rolled against CS → hits the attacking faction
-                            else
-                                $((defSurplus, attacker, false))  // CS is attacker; defender rolled against CS → hits the attacking faction (CS)
-                        } else
-                            $((atkSurplus, attacker, true), (defSurplus, defender, false))  // each side's surplus rebounds onto itself
-
-                    redirects.foreach { case (surplus, recipient, byAttacker) =>
-                        if (surplus > 0) {
-                            var remaining = surplus
-                            var applied = 0
-                            recipient.at(arena).%(_.uclass.utype != Building).sortBy(_.uclass.cost).foreach { v =>
-                                if (remaining > 0 && v.region == arena) {
-                                    game.eliminate(v)
-                                    remaining -= 1
-                                    applied += 1
-                                }
-                            }
-                            if (applied > 0) {
-                                log(CS, Insanity.styled(CS) + ": redirected", applied, "unapplied Kill" + (applied > 1).?("s").|(""), "onto", recipient.full, "in", arena)
-                                if (byAttacker) csInsanityAtkConsumed += applied else csInsanityDefConsumed += applied
-                            }
-                        }
-                    }
-                }
-
-                // Colour Out of Space (CS) Insanity — Pain results (owner ruling 2026-09-01):
-                // the same "unapplied combat result in a Meteorite/Globule region" rule also
-                // covers Pains, not just Kills — Insanity's own overlay text says "extra,
-                // unapplied combat results", not "unapplied Kills". Mirrors the Kill block above
-                // exactly (same recipient rules, same eliminate-one-of-recipient's-own-units
-                // mechanic) but counts Pain rolls left with no living unit to land on, using
-                // each side's final Pained-unit count (captured here before the health reset
-                // below wipes it) as the "applied" side of the surplus math. Kept as its own
-                // block rather than folded into the Kill one so Firstborn's Augury accounting
-                // just below (which only ever tracked unapplied Kills) is untouched.
-                if (factions.has(CS) && CS.can(Insanity) && csInsanityMeteorOrGlobulePresent) {
-                    val atkPains = attackers.rolls.count(_ == Pain)
-                    val defPains = defenders.rolls.count(_ == Pain)
-                    val atkPainSurplus = max(0, atkPains - defender.forces.count(_.health == Pained))
-                    val defPainSurplus = max(0, defPains - attacker.forces.count(_.health == Pained))
-
-                    val painRedirects : $[(Int, Faction)] =
-                        if (sides.has(CS)) {
-                            if (CS == defender)
-                                $((atkPainSurplus, attacker))
-                            else
-                                $((defPainSurplus, attacker))
-                        } else
-                            $((atkPainSurplus, attacker), (defPainSurplus, defender))
-
-                    painRedirects.foreach { case (surplus, recipient) =>
-                        if (surplus > 0) {
-                            var remaining = surplus
-                            var applied = 0
-                            recipient.at(arena).%(_.uclass.utype != Building).sortBy(_.uclass.cost).foreach { v =>
-                                if (remaining > 0 && v.region == arena) {
-                                    game.eliminate(v)
-                                    remaining -= 1
-                                    applied += 1
-                                }
-                            }
-                            if (applied > 0)
-                                log(CS, Insanity.styled(CS) + ": redirected", applied, "unapplied Pain" + (applied > 1).?("s").|(""), "onto", recipient.full, "in", arena)
-                        }
-                    }
-                }
+                // NOTE: CS Insanity result-reflection now happens at RESOLUTION time, not here —
+                // Kills in EliminatePhase and Pains in MadnessPhase (see csInsanityReflect). The
+                // reflected-Kill counters (csInsanityAtkKillsReflected / csInsanityDefKillsReflected)
+                // are consumed by Firstborn's Augury just below so reflected (now-applied) Kills are
+                // not ALSO banked as "unapplied".
 
                 // Firstborn (FB) Augury: after battle ends, count Kill results that were not applied
                 // (e.g. more kills than enemy units) and store them on the Augury spellbook for later use.
@@ -2433,16 +2414,18 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // so counting `exempted` units by faction gives the true per-side kill/elimination total.
                 if (factions.has(FB) && FB.can(Augury) && sides.has(FB)) {
                     // Attacker side: kills rolled minus defender units actually killed/eliminated,
-                    // minus any of the attacker's surplus Kills already consumed by CS Insanity above.
+                    // minus any of the attacker's surplus Kills CS Insanity reflected onto the
+                    // attacker's own units at EliminatePhase (already applied, so not unapplied).
                     val attackerKillsRolled = attackers.rolls.count(_ == Kill)
                     val defenderUnitsKilled = exempted.count(_.faction == defender)
-                    val attackerSurplus = max(0, attackerKillsRolled - defenderUnitsKilled - csInsanityAtkConsumed)
+                    val attackerSurplus = max(0, attackerKillsRolled - defenderUnitsKilled - csInsanityAtkKillsReflected)
 
                     // Defender side: kills rolled minus attacker units actually killed/eliminated,
-                    // minus any of the defender's surplus Kills already consumed by CS Insanity above.
+                    // minus any of the defender's surplus Kills CS Insanity reflected onto the
+                    // defender's own units at EliminatePhase (already applied, so not unapplied).
                     val defenderKillsRolled = defenders.rolls.count(_ == Kill)
                     val attackerUnitsKilled = exempted.count(_.faction == attacker)
-                    val defenderSurplus = max(0, defenderKillsRolled - attackerUnitsKilled - csInsanityDefConsumed)
+                    val defenderSurplus = max(0, defenderKillsRolled - attackerUnitsKilled - csInsanityDefKillsReflected)
 
                     val unapplied = attackerSurplus + defenderSurplus
                     if (unapplied > 0) {
