@@ -385,21 +385,32 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // reset to Spared(Alive) before those phases run.
     var fbeDistributedDeathPrevented : $[UnitRef] = $
 
-    // Colour Out of Space (CS) Insanity — roll-time reflection (owner ruling 2026-09-01,
+    // Colour Out of Space (CS) Insanity — resolution-time reflection (owner ruling 2026-09-01,
     // replaces the old BattleEnd redirect blocks). In a region containing a CS Meteorite or
-    // Globule, any combat result a faction ROLLS that it cannot land on an enemy unit
-    // (because the enemy ran out of units able to take that result) reflects back onto that
-    // same rolling faction's OWN units — a surplus Kill eliminates one of its units, a surplus
-    // Pain forces one of its units to retreat. CS itself is IMMUNE: its own overflow is never
-    // reflected onto CS. Reflection is applied through the normal assignment path so reflected
-    // Kills flow into EliminatePhase and reflected Pains flow into the interactive retreat
-    // phase (owner picks the destination). The guard flags make each reflection run exactly
-    // once even if its phase re-enters. The Reflected counters feed Firstborn's Augury below so
-    // reflected (now-applied) Kills are not ALSO banked as "unapplied".
+    // Globule, any combat result a faction ROLLS that it cannot land on an enemy unit (because
+    // the enemy ran out of units able to take that result) reflects back onto that same rolling
+    // faction's OWN units — a surplus Kill eliminates one of its units, a surplus Pain forces
+    // one of its units to retreat. CS itself is IMMUNE: its own overflow is never reflected.
+    //
+    // REPLAY SAFETY: reflection is fully DERIVED (no interactive prompt, no new recorded
+    // action) so it stays in sync with games recorded before this rule existed. An earlier
+    // interactive design (owner picks the retreat destination) hard-crashed replay of any such
+    // game: it injected a retreat prompt mid-battle that the recorded stream had no action to
+    // answer. Instead: reflected Kills are auto-assigned onto the rolling faction's cheapest own
+    // units at EliminatePhase (eliminated by the existing loop). Reflected Pains are SELECTED at
+    // MadnessPhase (while health is still intact — before the retreat phase resets it) and their
+    // forced retreat is DEFERRED to PostBattlePhase, after the attacker's own recorded retreats,
+    // to a deterministic destination — so it neither disturbs recorded retreat destinations nor
+    // needs a prompt. Guard flags make each reflection run once even if its phase re-enters. The
+    // Reflected counters feed Firstborn's Augury below so reflected (now-applied) Kills are not
+    // ALSO banked as "unapplied".
     var csInsanityDidReflectKills : Boolean = false
     var csInsanityDidReflectPains : Boolean = false
     var csInsanityAtkKillsReflected : Int = 0
     var csInsanityDefKillsReflected : Int = 0
+    // Rolling faction's own units selected (at MadnessPhase) to be force-retreated by reflected
+    // surplus Pains; the actual retreat happens at PostBattlePhase (see above).
+    var csInsanityReflectedRetreatUnits : $[UnitFigure] = $
 
     def exempt(u : UnitFigure) {
         exempted :+= u
@@ -845,12 +856,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     // CS Insanity: reflect each rolling side's UNASSIGNABLE results back onto its OWN units.
-    // isKill=true handles Kills (called from EliminatePhase, before the elimination loop);
-    // isKill=false handles Pains (called from MadnessPhase, before the retreat phase). Runs
-    // once per result-type per battle (guarded by the did-reflect flags). No-op unless CS is in
-    // the game with Insanity and a Meteorite/Globule was in the arena; CS's own overflow is
-    // never reflected. Which of the rolling faction's own units takes the reflected hit is auto
-    // (cheapest-first); reflected Pains then retreat via the normal interactive retreat phase.
+    // isKill=true handles Kills (called from EliminatePhase, before the elimination loop): the
+    // rolling faction's cheapest own units are auto-killed and eliminated by the existing loop.
+    // isKill=false handles Pains (called from MadnessPhase): the rolling faction's cheapest own
+    // units are SELECTED here and queued in csInsanityReflectedRetreatUnits; their forced
+    // retreat is deferred to PostBattlePhase (see the instance-var comment for the replay-safety
+    // rationale — everything here is derived, no interactive prompt). Runs once per result-type
+    // per battle (guarded by the did-reflect flags). No-op unless CS is in the game with
+    // Insanity and a Meteorite/Globule was in the arena; CS's own overflow is never reflected.
     def csInsanityReflect(isKill : Boolean) {
         if (isKill) { if (csInsanityDidReflectKills) return; csInsanityDidReflectKills = true }
         else        { if (csInsanityDidReflectPains) return; csInsanityDidReflectPains = true }
@@ -864,19 +877,31 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     if (isKill) roller.opponent.forces./(assignedKills).sum
                     else        roller.opponent.forces./(assignedPains).sum
                 var overflow = max(0, rolled - landed)
-                var applied = 0
-                roller.forces.sortBy(_.uclass.cost).foreach { u =>
-                    while (overflow > 0 && (if (isKill) canAssignKills(u) else canAssignPains(u)) > 0) {
-                        if (isKill) assignKill(u) else assignPain(u)
-                        overflow -= 1
-                        applied += 1
+
+                if (isKill) {
+                    var applied = 0
+                    roller.forces.sortBy(_.uclass.cost).foreach { u =>
+                        while (overflow > 0 && canAssignKills(u) > 0) {
+                            assignKill(u)
+                            overflow -= 1
+                            applied += 1
+                        }
                     }
-                }
-                if (applied > 0) {
-                    log(CS, Insanity.styled(CS) + ": reflected", applied, "unassignable " + (if (isKill) "Kill" else "Pain") + (applied > 1).?("s").|(""), "onto", roller.full + "'s own units in", arena)
-                    if (isKill) {
+                    if (applied > 0) {
+                        log(CS, Insanity.styled(CS) + ": reflected", applied, "unassignable Kill" + (applied > 1).?("s").|(""), "onto", roller.full + "'s own units in", arena)
                         if (roller == attacker) csInsanityAtkKillsReflected += applied
                         else                    csInsanityDefKillsReflected += applied
+                    }
+                }
+                else {
+                    var remaining = overflow
+                    var selected : $[UnitFigure] = $
+                    roller.forces.%(u => canAssignPains(u) > 0).sortBy(_.uclass.cost).foreach { u =>
+                        if (remaining > 0) { selected :+= u; remaining -= 1 }
+                    }
+                    if (selected.any) {
+                        csInsanityReflectedRetreatUnits ++= selected
+                        log(CS, Insanity.styled(CS) + ": reflected", selected.num, "unassignable Pain" + (selected.num > 1).?("s").|(""), "onto", roller.full + "'s own units in", arena, "(forced to retreat)")
                     }
                 }
             }
@@ -2137,6 +2162,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     jump(PostBattlePhase)
 
             case PostBattlePhase =>
+                // CS Insanity: reflected surplus Pains now force the rolling faction's own
+                // selected units to retreat. Done HERE — after the attacker's own recorded
+                // retreats and BEFORE checkGatesLost (so any gate lost by the reflected retreat
+                // is counted) — and fully DERIVED (deterministic destination, no prompt) so it
+                // stays replay-safe for games recorded before this rule existed. Only units
+                // still alive in the arena are retreated; if a unit has nowhere to go it is
+                // eliminated, mirroring the normal "nowhere to retreat" rule.
+                if (csInsanityReflectedRetreatUnits.any) {
+                    csInsanityReflectedRetreatUnits.%(u => !eliminated.has(u) && u.region == arena && u.health != Killed).foreach { u =>
+                        val dests = arena.connectedForRetreat.%(r => u.faction.opponent.at(r).none)
+                        if (dests.any) {
+                            val r = dests.first
+                            retreat(u, r)
+                            log(Insanity.styled(CS) + ":", u.short, "forced to retreat to", r)
+                        }
+                        else {
+                            log(Insanity.styled(CS) + ":", u.short, "eliminated — nowhere to retreat")
+                            eliminate(u)
+                        }
+                    }
+                    csInsanityReflectedRetreatUnits = $
+                }
+
                 game.checkGatesLost()
 
                 sides.foreach { s =>
