@@ -880,15 +880,26 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
                 if (isKill) {
                     var applied = 0
+                    var hit : $[UnitFigure] = $
                     roller.forces.sortBy(_.uclass.cost).foreach { u =>
                         while (overflow > 0 && canAssignKills(u) > 0) {
                             assignKill(u)
                             overflow -= 1
                             applied += 1
+                            hit :+= u
                         }
                     }
                     if (applied > 0) {
                         log(CS, Insanity.styled(CS) + ": reflected", applied, "unassignable Kill" + (applied > 1).?("s").|(""), "onto", roller.full + "'s own units in", arena)
+                        // Explicit per-unit confirmation (mirrors the Pain path's retreat lines). The
+                        // actual removal happens in the elimination loop just below (health == Killed);
+                        // a unit only half-killed (DoubleHP) survives and is logged as wounded.
+                        hit.distinct.foreach { u =>
+                            if (u.health == Killed)
+                                log(Insanity.styled(CS) + ":", u.faction.full, u.short, "eliminated (reflected Kill)")
+                            else
+                                log(Insanity.styled(CS) + ":", u.faction.full, u.short, "wounded (reflected Kill)")
+                        }
                         if (roller == attacker) csInsanityAtkKillsReflected += applied
                         else                    csInsanityDefKillsReflected += applied
                     }
