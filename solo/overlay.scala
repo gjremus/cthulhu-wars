@@ -2347,7 +2347,7 @@ object Overlays {
             (Acolyte,                 6, "1", "0", ""),
             (Meteorite,               6, "1", "0", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, CosmicLandfall)}, ${reference(CS, CoreExposure)}</div>"""),
             (EffervescentExcrescence, 8, "2", "2", s"""<div class=p>Spellbook: ${reference(CS, VermiculiteHypertrophy)}</div>"""),
-            (LuminousGlobule,         6, "4", "—", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, VermiculiteHypertrophy)}, ${reference(CS, ChromaticPerversion)}, ${reference(CS, CoreExposure)}, ${reference(CS, EffulgentSacrifice)}</div>"""),
+            (LuminousGlobule,         6, "4", "—", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, VermiculiteHypertrophy)}, ${reference(CS, SpectralCollapse)}, ${reference(CS, CoreExposure)}, ${reference(CS, EffulgentSacrifice)}</div>"""),
             (CSTulzscha,              1, "5", calc(g => { implicit val gg : Game = g; 2 * CS.onMap(LuminousGlobule).not(Zeroed).num }), s"""
                 <div class=p>${cost(s"How to Awaken ${CSTulzscha.name}:")}</div>
                 <div class=p>${cost("1)")} Pay ${power(5)}.</div>
@@ -2385,7 +2385,7 @@ object Overlays {
         case $("CS", VermiculiteHypertrophy.name)      => spellbook(VermiculiteHypertrophy.name, "Action: Cost 2", "You may summon an excrescence without a gate, by a cultist with a globule. Sacrifice that cultist. Effervescent Excrescences now have 6 combat and cannot be moved by any means. Any pain assigned to an excrescence is changed to a kill.")
         case $("CS", CosmicLandfall.name)              => spellbook(CosmicLandfall.name, "Ongoing", "Any time a GOO is awakened for 4 power or more, place a meteorite for free in any empty region of your choice (a region with no units).")
         case $("CS", SpectralCollapse.name)            => spellbook(SpectralCollapse.name, "Post Battle", "If 1 or more units are killed or eliminated in any region with a globule, you, or either battle faction, may choose to eliminate the globule. If it is eliminated, roll a combat die. You collect 1 doom for pains, 1 ES for kills.")
-        case $("CS", EffulgentSacrifice.name)          => spellbook(EffulgentSacrifice.name, "Action: Cost 1", "Sacrifice a globule for an elder sign. Any cultists or excrescences in the region are eliminated. Their owners receive half their cost, rounded down. All other units in the region must then be retreat out by their owners, unrestricted by pain rules. You choose the faction order.")
+        case $("CS", EffulgentSacrifice.name)          => spellbook(EffulgentSacrifice.name, "Action: Cost 1", "Sacrifice a globule for an elder sign. Any cultists or excrescences in the region are eliminated. Their owners receive half their cost, rounded down. All other units in the region must then be retreated out by their owners, unrestricted by pain rules. You choose the faction order.")
         case $("CS", CoreExposure.name)                => spellbook(CoreExposure.name, "Action: Cost 1", "Summon a globule in a region with a cultist and a meteorite. The meteorite is eliminated. A gate is not required. Globules can now only be moved (for free) alongside a cultist. They cannot be moved by any other means, and do not participate in combat.")
 
         case _ => ""
