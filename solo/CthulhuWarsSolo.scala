@@ -4042,7 +4042,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     val mantleInPlay = displayGame.tbMantleInPlay
                     val mantleFigs : $[UnitFigure] = if (mantleInPlay) displayGame.factions./~(ff => ff.at(TB.mantle)) else $
                     val mantleGatePresent = displayGame.gates.has(TB.mantle)
-                    val mantleCount = mantleFigs.num + (if (mantleGatePresent) 1 else 0)
+                    val mantleDesecrated = displayGame.desecrated.has(TB.mantle)
+                    val mantleCount = mantleFigs.num + (if (mantleGatePresent) 1 else 0) + (if (mantleDesecrated) 1 else 0)
                     def mantleSpriteAssetId(u : UnitFigure) : String = {
                         val f = u.faction
                         u.uclass match {
@@ -4079,7 +4080,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         }
                         asset + "|" + display + "|" + onMapH
                     })
-                    val mantleList = (gateEntry ++ unitEntries).mkString(";")
+                    val desecrationEntry = if (mantleDesecrated) $("ys-desecration|Desecration Token|41") else $[String]()
+                    val mantleList = (gateEntry ++ desecrationEntry ++ unitEntries).mkString(";")
                     if (dom.document.getElementById("tb-mantle-hud-btn") == null)
                         renderMapHud()
                     dom.document.getElementById("tb-mantle-hud-btn").?.foreach { el =>
