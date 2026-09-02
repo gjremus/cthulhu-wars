@@ -2695,7 +2695,7 @@ object Overlays {
                             <td style="overflow-wrap:anywhere;">
                                 <div class="unit-desc">
                                     <div class="p"><span class=unit-name>${uc.name}${(n > 1).??(s"""<sup>(${n})</sup>""")}</div>
-                                    <div class="p"><span class=unit-type>${uc.utype.name.replace("GOO", "Great Old One")}</div>
+                                    <div class="p"><span class=unit-type>${if (uc == PrismaticWell) "Gate" else uc.utype.name.replace("GOO", "Great Old One")}</div>
                                 </div>
                             </td>
                             <td>
