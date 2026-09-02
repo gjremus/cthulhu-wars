@@ -179,6 +179,14 @@ case class CSEffulgentRetreatUnitAction(f : Faction, r : Region, remaining : $[F
 case class CSEffulgentRetreatUnitPickAction(f : Faction, u : UnitRef, r : Region, remaining : $[Faction]) extends ForcedAction
 case class CSEffulgentRetreatMoveAction(f : Faction, u : UnitRef, to : Region, r : Region, remaining : $[Faction]) extends ForcedAction
 
+// SB5 Effulgent Sacrifice — owner respec (0-cost cross-faction action). Once CS has earned the
+// Effulgent Sacrifice spellbook, ANY faction may take this on its own turn (offered from
+// Game.neutralSpellbooks), in a region holding a Prismatic Well controlled by a faction OTHER than
+// CS where the acting faction has at least one Cultist. Taking it eliminates ALL the acting
+// faction's Cultists in that region and the Well's Globule; the acting faction gains 1 Doom, and
+// CS gains an Elder Sign (so if CS itself acts, CS gains both). Turn-consuming, costs no power.
+case class CSEffulgentSacrificeAction(self : Faction, r : Region) extends OptionFactionAction(EffulgentSacrifice.styled(CS)) with MainQuestion with PowerNeutral
+
 // SB6 Core Exposure (Task 3.10.6): summon a Globule (no Gate) in a region with a Cultist and a
 // Meteorite; the Meteorite is eliminated. Cost 1 Power.
 case class CSCoreExposureMainAction(l : $[Region]) extends OptionFactionAction("Summon " + LuminousGlobule.styled(CS) + " at a " + Meteorite.styled(CS) + " (" + CoreExposure.styled(CS) + ")") with MainQuestion with Soft { override def self = CS }
@@ -360,13 +368,15 @@ object CSExpansion extends Expansion {
                     + CSVermiculiteMainAction(rs)
             }
 
-            // SB5 Effulgent Sacrifice: sacrifice a controlled Globule for an Elder Sign (Cost 1).
-            if (f.can(EffulgentSacrifice)) {
-                val rs = f.onMap(LuminousGlobule).not(Zeroed)./(_.region).distinct
-                    .%(r => f.affords(1)(r))
-                if (rs.any)
-                    + CSEffulgentMainAction(rs)
-            }
+            // SB5 Effulgent Sacrifice — RETIRED old version (kept, faction WIP). Superseded by the
+            // owner respec: a 0-cost action offered to ANY faction (from Game.neutralSpellbooks, see
+            // CSEffulgentSacrificeAction), so it is no longer offered from CS's own menu here.
+            // if (f.can(EffulgentSacrifice)) {
+            //     val rs = f.onMap(LuminousGlobule).not(Zeroed)./(_.region).distinct
+            //         .%(r => f.affords(1)(r))
+            //     if (rs.any)
+            //         + CSEffulgentMainAction(rs)
+            // }
 
             // SB6 Core Exposure: summon a Globule at a Cultist+Meteorite region, consuming the Meteorite.
             if (f.can(CoreExposure) && f.pool(LuminousGlobule).any) {
@@ -491,6 +501,8 @@ object CSExpansion extends Expansion {
                 SummonedAction(CS, EffervescentExcrescence, r, $)
             }
 
+        /* RETIRED old Effulgent Sacrifice handler (kept, faction WIP). Superseded by the owner
+           respec: see CSEffulgentSacrificeAction below and the offer in Game.neutralSpellbooks.
         // SB5 Effulgent Sacrifice (Task 3.10.5).
         case CSEffulgentMainAction(l) =>
             Ask(CS).each(l)(r => CSEffulgentAction(r)).cancel
@@ -556,6 +568,23 @@ object CSExpansion extends Expansion {
             u.onGate = false
             f.log("retreated", u.full, "from", r, "to", to, "(" + EffulgentSacrifice.styled(CS) + ")")
             Force(CSEffulgentRetreatUnitAction(f, r, remaining))
+        */
+
+        // SB5 Effulgent Sacrifice — owner respec (0-cost cross-faction action, see class above).
+        case CSEffulgentSacrificeAction(f, r) =>
+            log(CthulhuWarsSolo.DottedLine)
+            // Eliminate ALL the acting faction's Cultists in the region.
+            f.at(r).%(_.uclass.utype == Cultist).not(Zeroed).foreach(game.eliminate)
+            // Eliminate the Well's Globule (a Prismatic Well always has a Globule).
+            CS.at(r).%(_.uclass == LuminousGlobule).not(Zeroed).foreach(game.eliminate)
+            f.log("sacrificed all its cultists and eliminated the", LuminousGlobule.styled(CS), "in", r, "(" + EffulgentSacrifice.styled(CS) + ")")
+            // Acting faction gains a Doom.
+            f.doom += 1
+            f.log("gained", 1.doom, "(" + EffulgentSacrifice.styled(CS) + ")")
+            // CS gains an Elder Sign no matter who acts (so if CS itself acts, it gains both).
+            CS.takeES(1)
+            CS.log("gained an", "Elder Sign".styled("es"), "(" + EffulgentSacrifice.styled(CS) + ")")
+            EndAction(f)
 
         // SB6 Core Exposure (Task 3.10.6).
         case CSCoreExposureMainAction(l) =>

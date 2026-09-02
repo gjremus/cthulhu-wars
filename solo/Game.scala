@@ -2878,6 +2878,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             cursedTomesOwned.get(f).|(Nil).filter(!_._2).foreach { case (n, _) =>
                 + TSUseTomeAction(f, n)
             }
+
+        // Colour Out of Space (CS): Effulgent Sacrifice — once CS has earned the spellbook, ANY
+        // faction may take this 0-cost action on its own turn in a region holding a Prismatic Well
+        // controlled by a faction OTHER than CS where the acting faction has at least one Cultist.
+        if (factions.has(CS) && CS.has(EffulgentSacrifice))
+            csPrismaticWellRegions.foreach { r =>
+                if (factions.but(CS).exists(_.gates.has(r)) && f.at(r).%(_.uclass.utype == Cultist).not(Zeroed).any)
+                    + CSEffulgentSacrificeAction(f, r)
+            }
     }
 
     def libraryActions(f : Faction)(implicit w : AskWrapper) {

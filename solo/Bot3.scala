@@ -564,6 +564,13 @@ case class Bot3(faction : Faction) {
                 case TSUseTomeAction(_, n) =>
                     result ++= BotCursedTome.scoreUseTome(self, n)
 
+                case CSEffulgentSacrificeAction(_, _) =>
+                    // CS gains an Elder Sign + a Doom by self-sacrificing; worthwhile for CS.
+                    // For any other faction it means throwing away its own cultists purely to
+                    // feed CS an Elder Sign — only the 1 Doom is a (weak) upside, so avoid it.
+                    (self == CS) |=> 400 -> "effulgent sacrifice: CS gains doom + elder sign"
+                    (self != CS) |=> -400 -> "don't sacrifice own cultists to feed CS an elder sign"
+
                 case TSRemoveTomeAction(_, _) =>
                     true |=> 300 -> "remove face-down tome to avoid end-game doom penalty"
 
