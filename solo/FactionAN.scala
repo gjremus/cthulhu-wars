@@ -349,13 +349,13 @@ object ANExpansion extends Expansion {
 
         // DEMATERIALIZATION
         case DematerializationDoomAction(self) =>
-            // Moon counts as a normal region: may dematerialize a unit FROM the Moon.
-            val origins = areas.%(r => self.at(r).any) ++ (game.factions.has(BB) && self.at(BB.moon).any).??($(BB.moon))
+            // Moon and Mantle count as normal regions: may dematerialize a unit FROM either.
+            val origins = areas.%(r => self.at(r).any) ++ (game.factions.has(BB) && self.at(BB.moon).any).??($(BB.moon)) ++ (game.tbMantleInPlay && self.at(TB.mantle).any).??($(TB.mantle))
             Ask(self).each(origins)(r => DematerializationFromRegionAction(self, r)).cancel
 
         case DematerializationFromRegionAction(self, o) =>
-            // ...and TO the Moon (Moon is adjacent to all regions for arrival).
-            val destinations = areas.but(o) ++ (game.factions.has(BB) && o != BB.moon).??($(BB.moon))
+            // ...and TO the Moon or Mantle (both are adjacent to all regions for arrival).
+            val destinations = areas.but(o) ++ (game.factions.has(BB) && o != BB.moon).??($(BB.moon)) ++ (game.tbMantleInPlay && o != TB.mantle).??($(TB.mantle))
             Ask(self).each(destinations)(r => DematerializationToRegionAction(self, o, r)).cancel
 
         case DematerializationToRegionAction(self, o, d) =>
