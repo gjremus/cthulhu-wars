@@ -94,9 +94,9 @@ case object CS extends Faction { f =>
 
     val allUnits =
         1.times(CSTulzscha) ++
-        6.times(Meteorite) ++
-        8.times(EffervescentExcrescence) ++
-        6.times(LuminousGlobule) ++
+        4.times(Meteorite) ++
+        4.times(EffervescentExcrescence) ++
+        3.times(LuminousGlobule) ++
         6.times(Acolyte)
 
     // Tulzscha awakens for a fixed 5 Power (always, not variable) in a region that holds one
@@ -501,8 +501,16 @@ object CSExpansion extends Expansion {
                 SummonedAction(CS, EffervescentExcrescence, r, $)
             }
 
-        /* RETIRED old Effulgent Sacrifice handler (kept, faction WIP). Superseded by the owner
-           respec: see CSEffulgentSacrificeAction below and the offer in Game.neutralSpellbooks.
+        // LEGACY REPLAY ONLY: the owner respec superseded this whole flow with the
+        // 0-cost CSEffulgentSacrificeAction below (see Game.neutralSpellbooks for the
+        // current offer). Fresh play never produces these action classes anymore, but
+        // old saved games recorded before the respec still contain them, and replaying
+        // those histories crashed with an unhandled action (found 2026-09-02 while
+        // verifying an unrelated fix on "Catastrophe through Lunacy"). Restoring these
+        // handlers exactly as they worked pre-respec — same root-cause fix pattern as
+        // the Spectral Collapse load-freeze safety net — so old histories replay
+        // instead of crashing. Do not offer this flow from any menu; only the new
+        // CSEffulgentSacrificeAction is ever asked for going forward.
         // SB5 Effulgent Sacrifice (Task 3.10.5).
         case CSEffulgentMainAction(l) =>
             Ask(CS).each(l)(r => CSEffulgentAction(r)).cancel
@@ -568,7 +576,6 @@ object CSExpansion extends Expansion {
             u.onGate = false
             f.log("retreated", u.full, "from", r, "to", to, "(" + EffulgentSacrifice.styled(CS) + ")")
             Force(CSEffulgentRetreatUnitAction(f, r, remaining))
-        */
 
         // SB5 Effulgent Sacrifice — owner respec (0-cost cross-faction action, see class above).
         case CSEffulgentSacrificeAction(f, r) =>

@@ -411,6 +411,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // Rolling faction's own units selected (at MadnessPhase) to be force-retreated by reflected
     // surplus Pains; the actual retreat happens at PostBattlePhase (see above).
     var csInsanityReflectedRetreatUnits : $[UnitFigure] = $
+    // Vermiculite Hypertrophy converts a Pain landing on an Excrescence straight to a Kill, so
+    // the unit's health no longer reads as Pained and assignedPains() can't see it anymore. Track
+    // each conversion here so anything counting "how many Pains have already landed" still counts
+    // it — otherwise that same Pain result looks unassigned and gets asked for again.
+    var csVermiculitePainsConverted : Int = 0
 
     def exempt(u : UnitFigure) {
         exempted :+= u
@@ -534,6 +539,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // enforced separately in FactionCS's canMove/canBeMoved).
         if (unit.uclass == EffervescentExcrescence && CS.can(VermiculiteHypertrophy)) {
             log(EffervescentExcrescence.styled(CS), "assigned", Pain, "— converted to", Kill, "(" + VermiculiteHypertrophy.styled(CS) + ")")
+            csVermiculitePainsConverted += 1
             assignKill(unit)
             return
         }
@@ -836,7 +842,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             return BattleProceedAction(next)
 
         val pains = s.opponent.rolls.count(_ == Pain)
-        val assigned = s.forces./(assignedPains).sum
+        val assigned = s.forces./(assignedPains).sum + (s == CS).??(csVermiculitePainsConverted)
         val canAssign = s.forces./(canAssignPains).sum
 
         if (pains <= assigned)
@@ -875,7 +881,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 val rolled = roller.rolls.count(_ == (if (isKill) Kill else Pain))
                 val landed =
                     if (isKill) roller.opponent.forces./(assignedKills).sum
-                    else        roller.opponent.forces./(assignedPains).sum
+                    else        roller.opponent.forces./(assignedPains).sum + (roller.opponent == CS).??(csVermiculitePainsConverted)
                 var overflow = max(0, rolled - landed)
 
                 if (isKill) {

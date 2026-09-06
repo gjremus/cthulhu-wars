@@ -5651,6 +5651,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             log("[warn] battle action " + action.getClass.getSimpleName + " skipped — no active battle")
             StartContinue
 
+        // Defensive: same race as the PreBattleQuestion case above, but for the
+        // PostBattleQuestion side (CS Spectral Collapse decline chain, BB Predator,
+        // XSS Distant Thunderclap, FBE Distributed Death/Necromantic Spores, TB
+        // Autotomy). A queued decline further down a multi-faction chain can outlive
+        // the battle that owned it (e.g. replay/out-of-order continuation clears
+        // game.battle before this action runs). The faction-specific handler already
+        // did its state mutation (it returns UnknownContinue); only the battle-flow
+        // resume via proceed() is unreachable with no active battle, so just continue.
+        case action : PostBattleQuestion =>
+            log("[warn] battle action " + action.getClass.getSimpleName + " skipped — no active battle")
+            StartContinue
+
         // Defensive: FB Carnage/CG post-battle actions whose state mutation is
         // handled by FBExpansion (returns UnknownContinue) but whose battle-flow
         // resume (proceed()) requires an active battle. When game.battle is None
