@@ -2601,6 +2601,31 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             asking
 
+        // HB Fix 131 (2026-09-07): Fertility Cult's monster Summon is meant to be a
+        // fully unlimited action — same category as the post-6-spellbook unlimited
+        // Battle handled by game.battles(f) just below, which is already offered
+        // here (after the real action) as well as before it. Fertility's Summon was
+        // only ever offered by game.summons(f) via the PRE-acted branches of
+        // MainAction, so once a faction had taken its real action (f.acted), an
+        // unused Fertility Summon vanished from the menu instead of still being
+        // available to follow the real action. New case (not touching the existing
+        // f.acted branch below) so an unused Fertility Summon is still offered here.
+        case MainAction(f) if f.acted && f.can(Fertility) && f.oncePerRound.has(Fertility).not =>
+            implicit val asking = Asking(f)
+
+            game.summons(f)
+
+            game.controls(f)
+
+            if (f.hasAllSB)
+                game.battles(f)
+
+            game.reveals(f)
+
+            game.endTurn(f)(true)
+
+            asking
+
         case MainAction(f) if f.acted =>
             implicit val asking = Asking(f)
 
