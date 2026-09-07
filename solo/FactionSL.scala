@@ -238,9 +238,15 @@ object SLExpansion extends Expansion {
             if (game.slPermanentBorrowed.has(Tenebrosum)) {
                 game.dcLastActionForTenebrosum.foreach { case (a, cost, an) =>
                     val minCost = DCExpansion.tenebrosumMinSinCostPublic(f, a, cost, an)
-                    if (minCost > 0 && game.slSin >= minCost && !game.dcTenebrosumGuard
+                    val legal = DCExpansion.tenebrosumLegalToRepeatPublic(f, a, cost, an)
+                    // HB Fix (2026-09-07): dropped the "minCost > 0" floor that DC's own
+                    // equivalent offer (FactionDC.scala) never had — DC already treats
+                    // 0-cost actions as Tenebrosum-eligible (Fix 84, e.g. Dark Bargain),
+                    // so SL's borrowed copy was silently denying free repeats DC gets.
+                    println(s"[SL-TENEBROSUM-TRACE] action=$an recordedCost=$cost minCost=$minCost slSin=${game.slSin} guard=${game.dcTenebrosumGuard} usedThisTurn=${game.slTenebrosumUsedThisTurn} legal=$legal")
+                    if (game.slSin >= minCost && !game.dcTenebrosumGuard
                         && !game.slTenebrosumUsedThisTurn
-                        && DCExpansion.tenebrosumLegalToRepeatPublic(f, a, cost, an))
+                        && legal)
                         + DCTenebrosumMainAction(f, cost, an)
                 }
             }

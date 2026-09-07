@@ -2537,9 +2537,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // Firstborn (FB): FB cannot recruit High Priests, so filter them out of available cultists
         val availableCultists = if (f == FB) f.pool.cultists.%(_.uclass != HighPriest) else f.pool.cultists
         val recruitAreas = areas ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))
+        // HB Fix 130 (2026-09-07): under a DC/SL Tenebrosum repeat (dcTenebrosumGuard)
+        // the action is paid in Sin, not Power — mirrors the same bypass already
+        // applied to summons()/awakens() under Fix 113, extended here so a broadened
+        // Recruit repeat (DCTenebrosumRecruitChooserAction) can offer every cultist
+        // self actually has in its own pool, not just the recorded one.
         availableCultists./(_.uclass).distinct.reverse.foreach { uc =>
             val ucAreas = if (uc.utype == Cultist) recruitAreas.%!(_.is[MoonHold]) else recruitAreas
-            ucAreas.%(f.present).some.|(ucAreas).nex.%(r => f.affords(f.recruitCost(uc, r))(r)).some.foreach { l =>
+            ucAreas.%(f.present).some.|(ucAreas).nex.%(r => (if (dcTenebrosumGuard) (if (f == SL) slSin else dcSin) >= f.recruitCost(uc, r) else f.affords(f.recruitCost(uc, r))(r))).some.foreach { l =>
                 + RecruitMainAction(f, uc, l)
             }
         }
@@ -4432,6 +4437,32 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             asking
 
+        // HB Fix 131 (2026-09-07): Fertility Cult's monster Summon is meant to be a
+        // fully unlimited action — same category as the post-6-spellbook unlimited
+        // Battle handled by game.battles(f) just below, which is already offered
+        // here (after the real action) as well as before it. Fertility's Summon was
+        // only ever offered by game.summons(f) via the PRE-acted branches of
+        // MainAction, so once a faction had taken its real action (f.acted), an
+        // unused Fertility Summon vanished from the menu instead of still being
+        // available to follow the real action. New case (not touching the existing
+        // f.acted branch below) so an unused Fertility Summon is still offered here.
+        case MainAction(f) if f.acted && f.can(Fertility) && f.oncePerRound.has(Fertility).not =>
+            implicit val asking = Asking(f)
+
+            game.summons(f)
+
+            game.controls(f)
+
+            if (f.hasAllSB) {
+                game.battles(f)
+            }
+
+            game.reveals(f)
+
+            game.endTurn(f)(true)
+
+            asking
+
         case MainAction(f) if f.acted =>
             implicit val asking = Asking(f)
 
@@ -5284,9 +5315,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case RecruitAction(self, uc, r) =>
             val cost = self.recruitCost(uc, r)
             // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
-            // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
+            // the power debit. HB Fix 130 (2026-09-07): like Summon (Fix 117),
+            // the broadened Recruit chooser lets the player pick a DIFFERENT
+            // cultist class than the one DCTenebrosumRepeatAction pre-debited
+            // Sin for — so debit Sin HERE at the actual picked unit's cost
+            // instead, and set the log-prefix cost so the one-line log shows
+            // the real Sin spent.
             if (!dcTenebrosumGuard)
                 self.power -= cost
+            else {
+                if (self == SL) slSin -= cost else dcSin -= cost
+                dcTenebrosumPrefixCost = cost
+            }
             self.payTax(r)
             // Bloated Woman: check if unit is on a VelvetFanHold — pay BW owner instead
             val onCard = self.units.%(u => u.uclass == uc && u.region.is[VelvetFanHold])

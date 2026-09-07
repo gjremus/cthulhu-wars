@@ -186,6 +186,18 @@ case class DCTenebrosumSummonChooserAction(self : Faction)
     extends OptionFactionAction(("Summon").styled(self)) with MainQuestion with Soft
 case class DCTenebrosumAwakenChooserAction(self : Faction)
     extends OptionFactionAction(("Awaken").styled(self)) with MainQuestion with Soft
+// HB Fix 130 (2026-09-07): Tenebrosum broadened Recruit chooser. Per owner —
+// Sleeper reported it "does not have access to Tenebrosum actions, specifically
+// recruiting a cultist." Root cause: unlike Summon/Awaken (broadened in Fix 113),
+// Recruit's repeat stayed locked to the EXACT recorded cultist class (e.g. High
+// Priest). Sleeper's own roster has no High Priests at all, so whenever DC's last
+// recorded action was a High Priest recruit, Sleeper's structural legality check
+// (self.pool(uc).any) was permanently false for Sleeper even though Sleeper does
+// have its own Acolytes it could recruit instead. Broadened the same way Summon/
+// Awaken were: offer every recruitable cultist class self actually has in its own
+// pool, not just the one DC happened to recruit last.
+case class DCTenebrosumRecruitChooserAction(self : Faction)
+    extends OptionFactionAction(("Recruit").styled(self)) with MainQuestion with Soft
 
 // ── Reserved-Acolyte placement (conditional unlimited action — HB Fix 83) ──
 // HB Fix 83 (2026-06-07): Same-turn delivery via conditional UNLIMITED action.
@@ -774,7 +786,14 @@ object DCExpansion extends Expansion {
                     val isAwakenRepeat = recordedAction.isInstanceOf[AwakenAction] ||
                         recordedAction.isInstanceOf[IndependentGOOAction] ||
                         recordedAction.isInstanceOf[CthughaAwakenAction]
-                    val skipUpfront = isMoveRepeat || isSummonRepeat || isAwakenRepeat
+                    // HB Fix 130 (2026-09-07): same reasoning as Summon (Fix 117) —
+                    // the broadened Recruit chooser lets the player pick a
+                    // DIFFERENT cultist class than the one recorded, so the flat
+                    // upfront debit (the recorded unit's cost) would be wrong.
+                    // Skip it; the RecruitAction handler debits Sin at the picked
+                    // unit's actual recruitCost.
+                    val isRecruitRepeat = recordedAction.isInstanceOf[RecruitAction]
+                    val skipUpfront = isMoveRepeat || isSummonRepeat || isAwakenRepeat || isRecruitRepeat
                     if (self == SL) {
                         if (!skipUpfront) game.slSin -= cost
                         game.slTenebrosumUsedThisTurn = true
@@ -825,6 +844,10 @@ object DCExpansion extends Expansion {
                         if (isMoveRepeat) 1
                         else if (isSummonRepeat) 0
                         else if (isAwakenRepeat) 0
+                        // HB Fix 130 (2026-09-07): same as Summon/Awaken — the
+                        // RecruitAction handler overwrites this with the picked
+                        // unit's actual recruitCost before it logs.
+                        else if (isRecruitRepeat) 0
                         else cost
                     // Clear last-action so the SAME action isn't repeated as the "last" again
                     game.dcLastActionForTenebrosum = None
@@ -862,6 +885,18 @@ object DCExpansion extends Expansion {
             implicit val asking = Asking(self)
             game.awakens(self)
             game.tenebrosumIndependentAwakensOnly(self)
+            + CancelAction
+            asking
+
+        // ── Tenebrosum broadened Recruit chooser (HB Fix 130, 2026-09-07) ────
+        // Offer EVERY recruitable cultist self actually has in its own pool
+        // (not just the one just recruited). game.recruits bypasses affords
+        // under dcTenebrosumGuard (Sin gate instead), and RecruitAction skips
+        // the Power debit under the guard, debiting Sin at the picked unit's
+        // cost instead — same treatment as Summon/Awaken.
+        case DCTenebrosumRecruitChooserAction(self) =>
+            implicit val asking = Asking(self)
+            game.recruits(self)
             + CancelAction
             asking
 
@@ -1895,6 +1930,15 @@ object DCExpansion extends Expansion {
                 if (candidates.none) Int.MaxValue
                 else candidates./(uc => accessibleAreas./(r => self.summonCost(uc, r)).min).min
             }
+        // HB Fix 130 (2026-09-07): mirrors the Summon case above — the min
+        // Sin gate is the cheapest recruitable cultist self actually has, not
+        // the recorded cost of the specific unit DC (or SL) recruited last.
+        case _ : RecruitAction =>
+            val recruitAreas = areas.nex.%!(_.is[MoonHold])
+            val accessibleAreas = recruitAreas.%(self.present).some.|(recruitAreas)
+            val candidates = self.pool.cultists./(_.uclass).distinct
+            if (accessibleAreas.none || candidates.none) Int.MaxValue
+            else candidates./(uc => accessibleAreas./(r => self.recruitCost(uc, r)).min).min
         case _ : AwakenAction | _ : IndependentGOOAction | _ : CthughaAwakenAction =>
             val hasPoolGOO = self.pool.%(_.uclass.isGOO).any
             val heldIGOOs = self.loyaltyCards.of[IGOOLoyaltyCard]
@@ -1966,9 +2010,13 @@ object DCExpansion extends Expansion {
             // excluded (in recordTenebrosum). No power gate (Sin pays).
             case _ : BuildGateAction =>
                 areas.nex.%!(game.gates.has).%(r => self.at(r).%(_.canControlGate).any).any
-            // RECRUIT — pool has a cultist + at least one Area present/legal.
-            case RecruitAction(_, uc, _) =>
-                self.pool(uc).any && areas.%(self.present).some.|(areas).nex.any
+            // RECRUIT — HB Fix 130 (2026-09-07): broadened, same reasoning as
+            // the SUMMON/AWAKEN cases below — legal whenever self has ANY
+            // recruitable cultist in its own pool (not only the exact class
+            // DC/SL recruited last, which the other faction may never have —
+            // e.g. Sleeper has no High Priests at all).
+            case _ : RecruitAction =>
+                self.pool.cultists.any && areas.%(self.present).some.|(areas).nex.any
             // SUMMON — HB Fix 113 (2026-06-13): broadened repeat may bring out a
             // DIFFERENT unit, so the offer appears whenever ANY summonable unit
             // (faction monster or neutral loyalty-card monster in pool) has an
@@ -2049,9 +2097,11 @@ object DCExpansion extends Expansion {
         case _ : BuildGateAction          =>
             val l = areas.nex.%!(game.gates.has).%(r => self.at(r).%(_.canControlGate).any).some.|($)
             Force(BuildGateMainAction(self, l))
-        case RecruitAction(_, uc, _)      =>
-            val l = areas.%(self.present).some.|(areas).nex.some.|($)
-            Force(RecruitMainAction(self, uc, l))
+        // HB Fix 130 (2026-09-07): broadened, same as Summon/Awaken — see
+        // DCTenebrosumRecruitChooserAction for why the exact recorded uc is
+        // no longer forced.
+        case _ : RecruitAction            =>
+            Force(DCTenebrosumRecruitChooserAction(self))
         case _ : SummonAction             =>
             // HB Fix 113 (2026-06-13): per owner — a Sin-paid Summon repeat may
             // summon a DIFFERENT unit than the one just summoned (reverses the
