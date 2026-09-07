@@ -288,7 +288,11 @@ object CthulhuWarsSolo {
                         setTimeout(10000) { checkVersion() }
                 }
             }
-            if (loadedVersion != "")
+            // Arm the deploy-version auto-reload ONLY inside a started ONLINE game — i.e. a page
+            // loaded via a /play/<slug> (or #hash) faction link, which is the only way `hash` is
+            // non-empty. Menus (before a game starts), local games, and quick games all have
+            // hash == "" and must NEVER auto-reload out from under the player.
+            if (loadedVersion != "" && hash != "")
                 setTimeout(10000) { checkVersion() }
         }
 
