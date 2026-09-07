@@ -5849,7 +5849,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             }
 
             def glyphSrc(f : Faction) : String =
-                "webp/images/" + f.short.toLowerCase + "-glyph.webp"
+                // [2026-09-06] TI (The Invasion) has no dedicated glyph art yet
+                // (Layer-1 placeholder faction) -- reuse dc-glyph here too, same
+                // as the in-game board render at the "case TI => DrawRect(dc-glyph...)"
+                // placeholder, so the picker doesn't 404 a nonexistent ti-glyph.webp.
+                if (f == TI) "webp/images/dc-glyph.webp"
+                else "webp/images/" + f.short.toLowerCase + "-glyph.webp"
             // [2026-06-02] §3.13.3 / §3.13.4: BB-alt picker entry uses the
             // homebrew glyph (bb-glyph-hb) so users can tell the two BB rows
             // apart at a glance. Standard BB keeps the regular glyph. Other
