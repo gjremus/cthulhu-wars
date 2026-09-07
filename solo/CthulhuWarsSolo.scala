@@ -1183,8 +1183,8 @@ object CthulhuWarsSolo {
                         case TB => DrawRect("tb-glyph", None, x - 50, y - 50, 100, 100)
                         // Colour Out of Space (CS): faction glyph sprite
                         case CS => DrawRect("cs-glyph", None, x - 50, y - 50, 100, 100)
-                        // The Invasion (TI): LAYER 1 placeholder glyph (reuse dc-glyph tinted TI red)
-                        case TI => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
+                        // The Invasion (TI): faction glyph sprite
+                        case TI => DrawRect("ti-glyph", |(tint), x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
                         case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
@@ -1425,6 +1425,7 @@ object CthulhuWarsSolo {
                     // AwakenedAction(YgolonacDC) handler.
                     case StartingGlyph if faction == DC => DrawRect("dc-glyph", None, x - 33, y - 33, 66, 66)
                     case StartingGlyph if faction == FBE => DrawRect("fbe-glyph", None, x - 33, y - 33, 66, 66)
+                    case StartingGlyph if faction == TI => DrawRect("ti-glyph", None, x - 33, y - 33, 66, 66)
 
                     // Library map units — larger than monsters, smaller than GOOs
                     case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 52, y - 104, 104, 104)
@@ -5849,12 +5850,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             }
 
             def glyphSrc(f : Faction) : String =
-                // [2026-09-06] TI (The Invasion) has no dedicated glyph art yet
-                // (Layer-1 placeholder faction) -- reuse dc-glyph here too, same
-                // as the in-game board render at the "case TI => DrawRect(dc-glyph...)"
-                // placeholder, so the picker doesn't 404 a nonexistent ti-glyph.webp.
-                if (f == TI) "webp/images/dc-glyph.webp"
-                else "webp/images/" + f.short.toLowerCase + "-glyph.webp"
+                "webp/images/" + f.short.toLowerCase + "-glyph.webp"
             // [2026-06-02] §3.13.3 / §3.13.4: BB-alt picker entry uses the
             // homebrew glyph (bb-glyph-hb) so users can tell the two BB rows
             // apart at a glance. Standard BB keeps the regular glyph. Other
