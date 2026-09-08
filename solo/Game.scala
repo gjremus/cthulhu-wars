@@ -1639,10 +1639,37 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // marker). tiFuryOwner None = TI (default); Transference can move it to an enemy.
     var tiFuryFlipped : Boolean = false
     var tiFuryOwner : |[Faction] = None
+    // Transference (§2.12): the enemy that killed one of the Fury owner's units this
+    // Action, to whom ownership transfers at end of Action. Overwritten by each later
+    // qualifying kill so the LAST one in resolution order wins (the documented tie-break).
+    // Reset by new Game() and cleared once resolved in TIExpansion.afterAction().
+    var tiFuryTransferTo : |[Faction] = None
     // The opponent Portent-placement setup micro-phase (§2.5/§4.1) has completed —
     // set true once the per-player loop finishes so the base seating loop can proceed
     // to seat Opener of the Way last. Replay-safe (set inside the recorded flow).
     var tiPortentSetupDone : Boolean = false
+    // Sacrament of Flesh (§1.8): the number of Cultists on TI's Faction Sheet (its
+    // prison) snapshotted during the most recent Gather Power. Each such Cultist lets
+    // TI spare one Unit from the forced Doom-Phase removal below. Snapshotted in
+    // TIExpansion.triggers() while gatherPowerPhase is true (once per Gather Power).
+    var tiSacramentSpared : Int = 0
+    // Sacrament of Flesh has already resolved this Doom Phase (guards the re-entrant
+    // Force(DoomAction(TI)) that hands control back to the normal doom flow). Reset
+    // to false at the start of every Doom Phase.
+    var tiSacramentDoneThisDoom : Boolean = false
+    // Eclipse (§1.10, one-shot library spellbook): armed by playing the spellbook at
+    // any time before a Doom Phase. While armed, all OTHER factions (except Sleeper if
+    // it is copying Eternal Servitude) gain no Doom from their Unit-Controlled Gates at
+    // the next Doom Phase. Consumed (reset to false) at that Doom Phase after the gate
+    // income is awarded; the spellbook itself is separately marked used forever
+    // (TI.oncePerGame) so it can never be replayed.
+    var tiEclipseArmed : Boolean = false
+
+    // Eternal Servitude (§1.5): true only for the span of a single broke-TI turn, while
+    // TI is holding its temporary 2 Power. Set when TI's main menu grants the Power,
+    // cleared (and any leftover reclaimed) the instant the turn ends. Reset by new Game()
+    // so undo replay re-derives it deterministically. See tiEternalServitudeApplies.
+    var tiEternalServitudeGranted : Boolean = false
 
     // DS singleton vars must be reset here so undo replay (which creates a new Game) starts clean
     DS.chaosGateRegions = $
@@ -2311,6 +2338,63 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (!factions.has(TI)) 0
         else tiLordsShadowRegions.count(r => gates.has(r) && tiShadowController(r) == Some(f))
 
+    // The Invasion (TI) — Baphomet's Fury (§1.8/§2.12). The two-sided card is inactive
+    // until the Ritual Track Marker's VALUE first reaches 7, then flips to active and
+    // stays active permanently (a one-way historical flag — the live marker can later
+    // drop below 7 without reverting it). Called right after every ritualMarker advance.
+    // Guarded → never fires in a game without TI.
+    def tiCheckFuryFlip() : Unit = {
+        if (factions.has(TI) && !tiFuryFlipped && ritualTrack(ritualMarker) == 7) {
+            tiFuryFlipped = true
+            log(BaphometsFury.styled(TI) + " is now active (Ritual Track reached 7)")
+        }
+    }
+
+    // The Invasion (TI) — Unquenchable Thirst (§1.8/§3.4.2): TI pays 1 Doom instead of
+    // 1 Power to Attack or Capture in Baphomet's current Area. Mandatory, cannot be
+    // disabled. Baphomet's Area is evaluated FRESH at every payment (he can move), so
+    // this is a live check, never cached. Guarded → only ever true for TI.
+    def tiUnquenchable(self : Faction, r : Region) : Boolean =
+        factions.has(TI) && self == TI && TI.onMap(Baphomet).not(Zeroed).exists(_.region == r)
+
+    // Affordability of the 1-cost Attack/Capture with Unquenchable Thirst folded in: in
+    // Baphomet's Area the 1 is paid in Doom (so needs Doom, not Power), but the region's
+    // ice tax is still paid in Power. Everywhere else this is the normal affords(1).
+    def tiAffordsUnit1(self : Faction, r : Region) : Boolean =
+        if (tiUnquenchable(self, r)) self.doom >= 1 && self.power >= self.taxIn(r)
+        else self.affords(1)(r)
+
+    // The Invasion (TI) — Eternal Servitude (§1.5/§3.6): while TI has 0 Power, Baphomet
+    // is in play, and at least one other faction is still active (still holds Power), TI
+    // must keep taking its turns "as if holding 2 Power." Modeled as: (a) this predicate
+    // keeps TI's action-phase active flag set at 0 Power, so TI still gets its turn, and
+    // (b) TIEternalServitudeGrantAction (folded into TI's main menu) hands TI a REAL 2
+    // Power for that one turn, reclaimed to 0 the instant the turn ends (tiReclaimEternal
+    // -Servitude). Because the 2 Power never survives the turn, it cannot leak into Gather
+    // Power or the Doom Phase — where a Ritual of Annihilation is gated on real Power and
+    // therefore stays unaffordable, satisfying "cannot perform Rituals of Annihilation."
+    // Guarded → only ever true for TI.
+    def tiEternalServitudeApplies(self : Faction) : Boolean =
+        factions.has(TI) && self == TI && self.power == 0 && self.hibernating.not &&
+        TI.allInPlay.%(_.uclass == Baphomet).not(Zeroed).any &&
+        factions.but(TI).exists(_.power > 0)
+
+    // Drop any leftover Eternal-Servitude Power the instant TI's turn ends (§1.5). The
+    // grant is a per-turn floor, never real income, so nothing carries forward.
+    def tiReclaimEternalServitude(self : Faction) : Unit =
+        if (self == TI && tiEternalServitudeGranted) {
+            tiEternalServitudeGranted = false
+            if (TI.power > 0) TI.power = 0
+        }
+
+    // Baphomet's Fury (§1.8/§2.12) — Torment and Transference are live only once the
+    // card has flipped (tiFuryFlipped, one-way from Ritual Track hitting 7). Ownership
+    // starts with TI and can move to an enemy via Transference; tiFuryOwnerF resolves the
+    // current owner (None = TI). Both effects read the CURRENT owner, so a transferred
+    // card curses/aids whoever now holds it. Guarded → both inert in any game without TI.
+    def tiFuryActive : Boolean = factions.has(TI) && tiFuryFlipped
+    def tiFuryOwnerF : Faction = tiFuryOwner.getOrElse(TI)
+
     def checkGatesLost() {
         factions.foreach { f =>
             f.gates.foreach { r =>
@@ -2577,7 +2661,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // from tcho-tcho before BB's moon-battle fix and cd4b011 later rewrote
         // this line for the Mantle without restoring the BB.moon clause.)
         val battleAreas = areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ tbMantleInPlay.??($(TB.mantle))
-        battleAreas.%(f.affords(1)).diff(enough).%(r => factionlike.but(f).exists(f.canAttack(r))).some.foreach { r =>
+        battleAreas.%(r => tiAffordsUnit1(f, r)).diff(enough).%(r => factionlike.but(f).exists(f.canAttack(r))).some.foreach { r =>
             + AttackMainAction(f, r, nexed.any.?(EnergyNexus))
         }
     }
@@ -2595,7 +2679,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     def captures(f : Faction)(implicit w : AskWrapper) {
         val captureAreas = areas.nex ++ tbMantleInPlay.??($(TB.mantle)) ++ game.factions.has(BB).??($(BB.moon))
-        captureAreas.%(f.affords(1)).%(r => factionlike.but(f).%(f.canCapture(r)).any).some.foreach { l =>
+        captureAreas.%(r => tiAffordsUnit1(f, r)).%(r => factionlike.but(f).%(f.canCapture(r)).any).some.foreach { l =>
             + CaptureMainAction(f, l, None)
         }
         // Mind Parasite: separate capture action for parasitized cultists
@@ -3652,8 +3736,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // at the second one (§1.9/§3.12). The award itself (and "all other players
             // lose 1 Doom") is applied in TIExpansion.triggers() once this reaches 2, so
             // it routes through the normal Requirement→spellbook-offer flow. Guarded.
-            if (factions.has(TI))
+            if (factions.has(TI)) {
                 tiDoomPhaseCount += 1
+                // Sacrament of Flesh (§1.8): re-arm the forced removal for this Doom Phase.
+                tiSacramentDoneThisDoom = false
+            }
 
             // Library at Celaeno: distribute Silence Tokens at start of Doom Phase
             if (board.isLibraryMap) {
@@ -3689,8 +3776,21 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // is already in TI.gates and counted in `valid`. Guarded → 0 without TI.
                 val tiShadowDoom = tiShadowAdditionalGates(f)
 
-                f.doom += valid.num + tiShadowDoom
-                f.log("got", (valid.num + tiShadowDoom).doom)
+                // The Invasion (TI) — Eclipse (§1.10): while TI has this one-shot spellbook
+                // armed, every OTHER faction gains no Doom from its Unit-Controlled Gates
+                // this Doom Phase. The narrow carve-out (worth keeping so it isn't
+                // simplified away later): Sleeper is still paid IF it is copying Eternal
+                // Servitude specifically. Rituals and other non-gate Doom are separate code
+                // paths and are unaffected. Guarded → never fires in a game without TI.
+                val tiEclipsed = factions.has(TI) && tiEclipseArmed && f != TI &&
+                    !(f == SL && SL.has(EternalServitude))
+                val gateDoom = if (tiEclipsed) 0 else valid.num + tiShadowDoom
+
+                f.doom += gateDoom
+                if (tiEclipsed && (valid.num + tiShadowDoom) > 0)
+                    f.log("gained no Doom from Unit-Controlled Gates —", Eclipse.styled(TI))
+                else
+                    f.log("got", gateDoom.doom)
 
                 if (f.loyaltyCards.has(GnorriCard)) {
                     val gnorriCount = f.all(Gnorri).num
@@ -3723,6 +3823,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     }
                 }
             }
+
+            // The Invasion (TI) — Eclipse is consumed here: it only suppressed the gate
+            // income for the Doom Phase just awarded above. Disarm it now (the spellbook
+            // itself stays used-forever via TI.oncePerGame, set when it was played).
+            tiEclipseArmed = false
 
             log(CthulhuWarsSolo.DottedLine)
             showROAT()
@@ -4162,6 +4267,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (ritualTrack(ritualMarker) != 999)
                 ritualMarker += 1
 
+            tiCheckFuryFlip()   // The Invasion: flip Baphomet's Fury active on first 7
+
             showROAT()
 
             f.satisfy(PerformRitual, "Perform Ritual of Annihilation")
@@ -4217,6 +4324,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             notifyRoAReactors(self)
             if (ritualTrack(ritualMarker) != 999)
                 ritualMarker += 1
+            tiCheckFuryFlip()   // The Invasion: flip Baphomet's Fury active on first 7
             showROAT()
 
             // Requires Attention IS a Ritual of Annihilation, so — exactly like the standard
@@ -4678,6 +4786,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case EndTurnAction(f) =>
             f.acted = true
 
+            tiReclaimEternalServitude(f)
+
             NextPlayerAction(f)
 
         case NextPlayerAction(_) if queue.any || game.nexed.any || game.battleResumePhase.any =>
@@ -4695,7 +4805,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             round += 1
 
             factions.foreach { f =>
-                f.active = (f.power > 0) && f.hibernating.not
+                f.active = (f.power > 0 || tiEternalServitudeApplies(f)) && f.hibernating.not
                 if (f.name.contains("Firstborn"))
                     println(s"[FB-TRACE] round=$round set-active: power=${f.power} hibernating=${f.hibernating} -> active=${f.active}")
             }
@@ -4756,6 +4866,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             self.power = -1
 
             self.log("passed and forfeited", p.power)
+
+            tiReclaimEternalServitude(self)
 
             EndAction(self)
 
@@ -5126,8 +5238,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
             // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
-            if (effect.has(FromBelow).not && !dcTenebrosumGuard && !crusadeFreeBattle)
-                self.power -= 1
+            if (effect.has(FromBelow).not && !dcTenebrosumGuard && !crusadeFreeBattle) {
+                // The Invasion — Unquenchable Thirst (§1.8): in Baphomet's Area TI pays
+                // 1 Doom instead of 1 Power to Attack. Mandatory, cannot be disabled.
+                if (tiUnquenchable(self, r)) {
+                    self.doom -= 1
+                    self.log(UnquenchableThirst.styled(TI) + ": paid", 1.doom, "to Attack in", r)
+                } else
+                    self.power -= 1
+            }
 
             if (crusadeFreeBattle)
                 self.log(Crusade.styled(AN) + ": free battle (defender has equal or greater Power)")
@@ -5261,8 +5380,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case CaptureAction(self, r, f, effect) =>
             // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
             // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
-            if (effect.has(FromBelow).not && !dcTenebrosumGuard)
-                self.power -= 1
+            if (effect.has(FromBelow).not && !dcTenebrosumGuard) {
+                // The Invasion — Unquenchable Thirst (§1.8): in Baphomet's Area TI pays
+                // 1 Doom instead of 1 Power to Capture. Mandatory, cannot be disabled.
+                if (tiUnquenchable(self, r)) {
+                    self.doom -= 1
+                    self.log(UnquenchableThirst.styled(TI) + ": paid", 1.doom, "to Capture in", r)
+                } else
+                    self.power -= 1
+            }
 
             if (effect.has(FromBelow).not || self.all(Nyogtha)./(_.region).but(r).any)
                 self.payTax(r)

@@ -153,6 +153,36 @@ case class TIAwakenBaphometUnitAction(r : Region, uc : UnitClass) extends BaseFa
 // Spellbook Requirement 3 (§1.9): pay 4 Power and 1 Doom as your Action.
 case class TIPayPowerDoomMainAction() extends OptionFactionAction("Pay 4 Power and 1 Doom (Spellbook Requirement)") with MainQuestion with Soft { override def self = TI }
 
+// Sacrament of Flesh (Baphomet Doom Phase, §1.8): a MANDATORY Doom-Phase step —
+// permanently remove `toRemove` Faction Units you Control (1, or 2 with all 6
+// Spellbooks, each reduced by a spared Cultist), then gain `esGain` Elder Signs.
+// TISacramentResolveAction is the driver (recurses removal→removal→ES→continue);
+// TISacramentRemoveUnitAction is the per-unit pick (recorded — it mutates state).
+case class TISacramentResolveAction(toRemove : Int, esGain : Int) extends ForcedAction
+case class TISacramentRemoveUnitAction(r : Region, uc : UnitClass, toRemove : Int, esGain : Int)
+    extends OptionFactionAction(implicit g => "Permanently remove a " + uc.styled(TI) + " in " + r) with DoomQuestion { override def self = TI }
+
+// Hellgate (library Spellbook, Action cost 2, §1.10/§2.7): relocate any number of TI
+// units from ONE Area with a Lord's Shadow to ANOTHER Area with a Lord's Shadow. No
+// unit-type restriction (Baphomet himself is eligible). Modeled on the proven
+// Undimensioned multi-unit "move-any-number-then-Done" idiom: the source/destination
+// picks and the loop driver are Soft navigation; only TIHellgateMoveAction and the Done
+// mutate state (and are recorded). The 2 Power is paid once, on the first actual move.
+case class TIHellgateMainAction(sources : $[Region]) extends OptionFactionAction("Hellgate — relocate units between Lord's Shadows (2 Power)") with MainQuestion with Soft { override def self = TI }
+case class TIHellgateSourceAction(src : Region) extends BaseFactionAction(g => "Hellgate from " + src, implicit g => "" + src) with Soft { override def self = TI }
+case class TIHellgateDestAction(src : Region, dst : Region) extends BaseFactionAction(g => "Hellgate " + src + " to " + dst, implicit g => "" + dst) with Soft { override def self = TI }
+case class TIHellgateLoopAction(src : Region, dst : Region) extends ForcedAction with Soft
+case class TIHellgateMoveAction(src : Region, dst : Region, uc : UnitClass) extends BaseFactionAction(
+    g => "Hellgate move " + uc + " from " + src + " to " + dst,
+    implicit g => uc.styled(TI)) { override def self = TI }
+case class TIHellgateDoneAction() extends BaseFactionAction(None, "Done") { override def self = TI }
+
+// Eclipse (library Spellbook, Only Once, §1.10/§2.7): play at any time before the Doom
+// Phase; a FREE play (no "Action" cost on the card — it does not consume TI's turn), so
+// after arming it we re-present the main menu. It arms game.tiEclipseArmed for the next
+// Doom Phase and is marked used-forever (TI.oncePerGame) so it can never be replayed.
+case class TIEclipseMainAction() extends OptionFactionAction("Eclipse — deny enemies gate Doom next Doom Phase (one-shot)") with MainQuestion { override def self = TI }
+
 
 // ============================================================================
 // The Invasion (TI) EXPANSION — action dispatch, triggers, setup, main menu.
@@ -173,6 +203,14 @@ object TIExpansion extends Expansion {
     // all of which are idempotent — safe under undo/replay.
     override def triggers()(implicit game : Game) : Unit = {
         if (game.setup.has(TI).not) return
+
+        // Sacrament of Flesh (§1.8): snapshot the Cultists sitting on TI's Faction
+        // Sheet (its prison) during Gather Power — each spares one Unit from the
+        // forced Doom-Phase removal. gatherPowerPhase is true only inside the single
+        // Gather-Power triggers() call, so this captures the Gather-Power value and is
+        // never overwritten by the mid-action recomputes that also run triggers().
+        if (game.gatherPowerPhase)
+            game.tiSacramentSpared = game.factions./~(e => e.at(TI.prison)).%(_.uclass.utype == Cultist).num
 
         // Lord's Shadow control reconciliation (§1.2 rule 3). A Shadow is TI-controlled
         // by default (kept in TI.gates with no unit); if a Controlled Gate shares its
@@ -205,6 +243,25 @@ object TIExpansion extends Expansion {
         // SBR5/6: Lord's Shadows CREATED via Portend (the Setup one does not count).
         TI.satisfyIf(TICreateShadow1, "Create a Lord's Shadow",       game.tiLordsShadowCreated >= 1)
         TI.satisfyIf(TICreateShadow2, "Create another Lord's Shadow", game.tiLordsShadowCreated >= 2)
+    }
+
+    // Baphomet's Fury — Transference resolves "at the end of the current Action" (§2.12).
+    // afterAction() is exactly that seam. If a battle this Action queued a transfer, move
+    // ownership now; TI gains 1 Doom whenever ownership actually changes hands. Guarded to
+    // a TI game and self-clearing, so it is a no-op after it fires (and under replay it
+    // re-derives from the same queued state).
+    override def afterAction()(implicit game : Game) : Unit = {
+        if (game.setup.has(TI).not) return
+
+        game.tiFuryTransferTo.foreach { newOwner =>
+            val old = game.tiFuryOwnerF
+            if (newOwner != old) {
+                game.tiFuryOwner = (newOwner == TI).?(None : |[Faction]).|(|(newOwner))
+                TI.doom += 1
+                TI.log(BaphometsFury.styled(newOwner) + " passes to", newOwner.full, "(it killed the holder's unit) —", TI.full, "gains", 1.doom)
+            }
+        }
+        game.tiFuryTransferTo = None
     }
 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
@@ -280,6 +337,19 @@ object TIExpansion extends Expansion {
         case MainAction(f : TI.type) if f.acted =>
             UnknownContinue
 
+        // Eternal Servitude (§1.5/§3.6): a broke TI with Baphomet in play, while any other
+        // faction is still active, is handed a REAL 2 Power for this one turn so it can keep
+        // participating. Reclaimed to 0 the moment the turn ends (tiReclaimEternalServitude),
+        // so it never becomes income and never reaches the Doom Phase (where it would wrongly
+        // fund a Ritual of Annihilation, which Eternal Servitude forbids). The granted flag
+        // makes this fire exactly once per turn; afterwards the normal menu below runs with
+        // the 2 Power in hand.
+        case MainAction(f : TI.type) if f.acted.not && game.tiEternalServitudeApplies(f) && game.tiEternalServitudeGranted.not =>
+            game.tiEternalServitudeGranted = true
+            f.power += 2
+            f.log(EternalServitude.styled(TI) + " — 0 Power with", Baphomet.styled(TI), "in play; participates with", 2.power, "this turn")
+            Force(MainAction(TI))
+
         case MainAction(f : TI.type) =>
             implicit val asking = Asking(f)
 
@@ -313,6 +383,19 @@ object TIExpansion extends Expansion {
             // Spellbook Requirement 3 (§1.9): pay 4 Power and 1 Doom as your Action.
             if (f.needs(TIPayPowerDoom) && f.power >= 4 && f.doom >= 1)
                 + TIPayPowerDoomMainAction()
+
+            // Hellgate (§1.10): needs the earned spellbook, 2 Power, at least two Lord's
+            // Shadow Areas, and a source Shadow Area actually holding a TI unit to move.
+            if (f.can(Hellgate) && f.power >= 2 && game.tiLordsShadowRegions.num >= 2) {
+                val sources = game.tiLordsShadowRegions.%(r => f.at(r).not(Zeroed).any)
+                if (sources.any)
+                    + TIHellgateMainAction(sources)
+            }
+
+            // Eclipse (§1.10): one-shot, playable any time before the Doom Phase (offered
+            // during TI's action phase; it is free and does not consume the turn).
+            if (f.can(Eclipse) && game.doomPhase.not && game.tiEclipseArmed.not)
+                + TIEclipseMainAction()
 
             game.neutralSpellbooks(f)
             game.libraryActions(f)
@@ -400,6 +483,111 @@ object TIExpansion extends Expansion {
                 TI.satisfy(TIPayPowerDoom, "Pay 4 Power and 1 Doom as your Action")
             }
             EndAction(TI)
+
+        // ================================================================
+        // SACRAMENT OF FLESH (Baphomet Doom Phase, §1.8 / §2.4)
+        // ================================================================
+        // Mandatory at TI's Doom Phase while Baphomet is in play: permanently remove
+        // 1 Unit (2 with all 6 Spellbooks), reduced by 1 per Cultist that sat on TI's
+        // Faction Sheet during Gather Power (tiSacramentSpared), then gain 1 Elder Sign
+        // (2 with all 6 Spellbooks). We intercept DoomAction(TI) ONCE (guarded by the
+        // per-phase tiSacramentDoneThisDoom flag), resolve Sacrament, then Force
+        // DoomAction(TI) again — the guard is now false, so TIExpansion returns
+        // UnknownContinue and Game.scala's normal DoomAction(f) flow (rituals / reveals /
+        // high priests / hires / doomDone) runs. Elder Signs route through takeES so the
+        // 36-pool overflow-to-Doom (and future Infernolatreia) applies.
+        case DoomAction(f : TI.type) if !game.tiSacramentDoneThisDoom && f.onMap(Baphomet).not(Zeroed).any =>
+            game.tiSacramentDoneThisDoom = true
+            val base     = if (f.hasAllSB) 2 else 1
+            val toRemove = 0.max(base - game.tiSacramentSpared)
+            val esGain   = if (f.hasAllSB) 2 else 1
+            f.log(SacramentOfFlesh.styled(TI) + ": must remove", toRemove.toString.styled("kill"),
+                (toRemove == 1).?("Unit").|("Units"),
+                (game.tiSacramentSpared > 0).??("(spared " + game.tiSacramentSpared + " for captured Cultists) "),
+                "and gain", esGain.es)
+            Force(TISacramentResolveAction(toRemove, esGain))
+
+        case TISacramentResolveAction(toRemove, esGain) =>
+            val units = TI.allInPlay.%(_.region.onMapOrMoon).not(Zeroed)
+            if (toRemove <= 0 || units.none) {
+                if (esGain > 0) {
+                    TI.takeES(esGain)
+                    TI.log(SacramentOfFlesh.styled(TI) + ": gained", esGain.es)
+                }
+                Force(DoomAction(TI))
+            }
+            else {
+                implicit val asking = Asking(TI)
+                units./(u => (u.region, u.uclass)).distinct.foreach { case (r, uc) =>
+                    + TISacramentRemoveUnitAction(r, uc, toRemove, esGain)
+                }
+                asking   // MANDATORY — no cancel
+            }
+
+        case TISacramentRemoveUnitAction(r, uc, toRemove, esGain) =>
+            val victim = TI.at(r).%(_.uclass == uc).not(Zeroed).headOption
+            victim.foreach { u =>
+                // Permanent removal from the game (NOT returned to pool) — same primitive
+                // as the Awaken-Baphomet sacrifice and Quachil's Dust to Dust.
+                TI.units = TI.units.%(_.ref != u.ref)
+                TI.log(SacramentOfFlesh.styled(TI) + ": permanently removed a", uc.styled(TI), "in", r)
+            }
+            Force(TISacramentResolveAction(toRemove - 1, esGain))
+
+        // ================================================================
+        // HELLGATE (§1.10 / §2.7)
+        // ================================================================
+        case TIHellgateMainAction(sources) =>
+            Ask(TI).each(sources)(r => TIHellgateSourceAction(r)).cancel
+
+        case TIHellgateSourceAction(src) =>
+            // Destination is any OTHER Lord's Shadow Area.
+            val dests = game.tiLordsShadowRegions.but(src)
+            if (dests.none)
+                EndAction(TI)
+            else
+                Ask(TI).each(dests)(d => TIHellgateDestAction(src, d)).cancel
+
+        case TIHellgateDestAction(src, dst) =>
+            Force(TIHellgateLoopAction(src, dst))
+
+        // Loop driver: offer each still-unmoved TI unit type in the source Area (plus a
+        // Done once at least one move has happened). Mirrors Undimensioned's Moved-tag
+        // bookkeeping, so the first move pays the 2 Power and Done clears the tags.
+        case TIHellgateLoopAction(src, dst) =>
+            val movable = TI.at(src).not(Zeroed).not(Moved)./(_.uclass).distinct
+            val didMove = TI.units.tag(Moved).any
+            if (movable.none)
+                Then(TIHellgateDoneAction())
+            else if (didMove)
+                Ask(TI).add(TIHellgateDoneAction()).each(movable)(uc => TIHellgateMoveAction(src, dst, uc))
+            else
+                Ask(TI).each(movable)(uc => TIHellgateMoveAction(src, dst, uc)).cancel
+
+        case TIHellgateMoveAction(src, dst, uc) =>
+            if (TI.units.tag(Moved).none) {
+                TI.power -= 2
+                TI.log("units", Hellgate.styled(TI))
+            }
+            val u = TI.at(src, uc).not(Moved).first
+            u.region = dst
+            u.add(Moved)
+            TI.log(uc.styled(TI), "relocated from", src, "to", dst, "via", Hellgate.styled(TI))
+            Force(TIHellgateLoopAction(src, dst))
+
+        case TIHellgateDoneAction() =>
+            TI.units.foreach(_.remove(Moved))
+            EndAction(TI)
+
+        // ================================================================
+        // ECLIPSE (§1.10 / §2.7)
+        // ================================================================
+        case TIEclipseMainAction() =>
+            game.tiEclipseArmed = true
+            TI.oncePerGame :+= Eclipse   // used-forever: can(Eclipse) is now false
+            TI.log("plays", Eclipse.styled(TI), "— enemies gain no Doom from Unit-Controlled Gates next Doom Phase")
+            // Free play (no Action cost): return to the menu so TI can still act this turn.
+            Force(MainAction(TI))
 
         case _ => UnknownContinue
     }

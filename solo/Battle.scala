@@ -1887,6 +1887,33 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // now reflect onto that same rolling faction's own units (set Killed here so the
                 // loop just below eliminates them; counts as dice-caused elimination).
                 csInsanityReflect(true)
+
+                // Baphomet's Fury (§2.12), only once the card has flipped: when the current
+                // owner is fighting here, its kills against the opposing side convert to a
+                // Power drain on that enemy INSTEAD of killing the units — but only if the
+                // enemy can pay the whole total (sum of ceil(each unit's cost / 2)); otherwise
+                // the units die as normal (never partial). Not optional. Read (and heal) BEFORE
+                // the removal loop below so tormented units simply survive. In the same window
+                // we queue Transference: if the enemy killed any of the owner's own units,
+                // ownership moves to that enemy at end of Action (last qualifying battle wins).
+                if (game.tiFuryActive && sides.has(game.tiFuryOwnerF)) {
+                    val owner = game.tiFuryOwnerF
+                    val enemy = owner.opponent
+
+                    val doomed = enemy.forces.%(_.health == Killed)
+                    if (doomed.any) {
+                        val loss = doomed./(u => (u.uclass.cost + 1) / 2).sum
+                        if (enemy.power >= loss) {
+                            enemy.power -= loss
+                            doomed.foreach(_.health = Alive)
+                            log(BaphometsFury.styled(owner) + " Torment:", enemy.full, "loses", loss.power, "instead of losing", doomed.num, (doomed.num == 1).?("unit").|("units"))
+                        }
+                    }
+
+                    if (owner.forces.%(_.health == Killed).any)
+                        game.tiFuryTransferTo = |(enemy)
+                }
+
                 sides.foreach { s =>
                     s.forces.%(_.health == Killed).foreach(eliminate)
                 }
