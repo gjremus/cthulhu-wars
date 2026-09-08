@@ -701,7 +701,17 @@ object DCExpansion extends Expansion {
         // stale state and bail to a freshly rendered MainAction (which will
         // NOT offer Tenebrosum because the flag checks now correctly fail).
         case DCTenebrosumMainAction(self, cost, an) =>
-            if (game.dcTenebrosumGuard || game.dcTenebrosumUsedThisTurn || game.dcLastActionForTenebrosum.none) {
+            // HB Fix (2026-09-08): use the SELF faction's per-turn used-flag. SL
+            // (borrowing Tenebrosum via Ancient Sorcery) tracks its own uses in
+            // slTenebrosumUsedThisTurn; dcTenebrosumUsedThisTurn is DC's and is
+            // only reset at DC's OWN turn-start (PreMainAction, self==DC). If DC
+            // had used Tenebrosum earlier this round, that flag was still true
+            // during SL's turn — so SL's offer rendered (the offer site checks
+            // the correct slTenebrosumUsedThisTurn) but this handler bailed to
+            // Force(MainAction), producing the "click flashes back to the same
+            // menu" bug. Check the matching flag per self.
+            val usedThisTurn = if (self == SL) game.slTenebrosumUsedThisTurn else game.dcTenebrosumUsedThisTurn
+            if (game.dcTenebrosumGuard || usedThisTurn || game.dcLastActionForTenebrosum.none) {
                 // Stale menu — caller should never have been able to click. Clear
                 // any leftover one-shot prefix flag (paranoia) and re-render the
                 // main menu so the player sees the current legal options.
