@@ -1455,14 +1455,15 @@ object CthulhuWarsSolo {
                     case ShuddeMellHead    => DrawRect("tb-shudde-mell-head", None, x - 66, y - 158, 131, 158)
                     case ShuddeMellSegment => DrawRect("tb-shudde-mell-segment", None, x - 45, y - 40, 90, 40)
 
-                    // The Invasion (TI): LAYER 1 placeholder sprites (no art yet), all
-                    // tinted TI red. Demon Larvae = dc-acolyte, Gryllus = Ghast,
-                    // Fiend = Gug, Baphomet (GOO) = Ygolonac-sized. Swap to real
-                    // ti-*.webp assets when art lands.
-                    case DemonLarvae => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                    case Gryllus     => DrawRect("n-ghast", |(tint), x - 17, y - 53, 35, 59)
-                    case Fiend       => DrawRect("n-gug", |(tint), x - 36, y - 78, 73, 90)
-                    case Baphomet    => DrawRect("n-ygolonac", |(tint), x - 66, y - 158, 131, 175)
+                    // The Invasion (TI): REAL unit sprites extracted from the
+                    // implementation guide docx. The renders are already TI-red, so
+                    // tint is None (no re-tint). DrawRect boxes are sized to each
+                    // render's true cropped aspect ratio so the art does not stretch:
+                    //   Demon Larvae 0.604, Gryllus 0.739, Fiend 0.762, Baphomet 1.399.
+                    case DemonLarvae => DrawRect("ti-larvae",   None, x - 18, y - 54, 36, 60)
+                    case Gryllus     => DrawRect("ti-gryllus",  None, x - 22, y - 53, 44, 59)
+                    case Fiend       => DrawRect("ti-fiend",    None, x - 34, y - 78, 69, 90)
+                    case Baphomet    => DrawRect("ti-baphomet", None, x - 75, y - 90, 150, 107)
 
                     case _ => null
                 }
