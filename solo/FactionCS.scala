@@ -156,8 +156,8 @@ case class CSTulzschaAwakenRollAction(r : Region, rolls : $[BattleRoll]) extends
 
 // SB2 Vermiculite Hypertrophy (Task 3.10.2): a Cultist sharing a region with a Globule may summon
 // an Excrescence there WITHOUT a Gate, sacrificing that Cultist and paying the 2-Power Excrescence cost.
-case class CSVermiculiteMainAction(l : $[Region]) extends OptionFactionAction("Summon " + EffervescentExcrescence.styled(CS) + " at a " + Acolyte.styled(CS) + " (" + VermiculiteHypertrophy.styled(CS) + ")") with MainQuestion with Soft { override def self = CS }
-case class CSVermiculiteAction(r : Region) extends BaseFactionAction(implicit g => "Summon " + EffervescentExcrescence.styled(CS) + g.forNPowerWithTax(r, CS, EffervescentExcrescence.cost) + ", sacrificing a " + Acolyte.styled(CS) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
+case class CSVermiculiteMainAction(l : $[Region]) extends OptionFactionAction("Sacrifice a " + Acolyte.styled(CS) + " to summon an " + EffervescentExcrescence.styled(CS) + " without a Gate") with MainQuestion with Soft { override def self = CS }
+case class CSVermiculiteAction(r : Region) extends BaseFactionAction(implicit g => VermiculiteHypertrophy.styled(CS) + ": Summon " + EffervescentExcrescence.styled(CS) + g.forNPowerWithTax(r, CS, EffervescentExcrescence.cost) + ", sacrificing a " + Acolyte.styled(CS) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
 
 // SB5 Effulgent Sacrifice (Task 3.10.5): sacrifice a controlled Globule for an Elder Sign (Cost 1);
 // any Cultists or Excrescences in that region are eliminated, each owner refunded half cost (round
@@ -364,6 +364,7 @@ object CSExpansion extends Expansion {
                 val rs = f.onMap(LuminousGlobule).not(Zeroed)./(_.region).distinct
                     .%(r => f.at(r).%(_.uclass == Acolyte).not(Zeroed).any)
                     .%(r => f.affords(EffervescentExcrescence.cost)(r))
+                    .%(r => f.gates.has(r).not)
                 if (rs.any)
                     + CSVermiculiteMainAction(rs)
             }

@@ -2345,9 +2345,9 @@ object Overlays {
             "Globules transform all standard gates in their regions to prismatic wells. Prismatic wells give 3 power during gather power, and may only summon excrescences. Any excrescence in a region with a controlled well is owned by the controller of that well.",
             $(Insanity, VermiculiteHypertrophy, CosmicLandfall, SpectralCollapse, EffulgentSacrifice, CoreExposure), $(
             (Acolyte,                 6, "1", "0", ""),
-            (Meteorite,               6, "1", "0", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, CosmicLandfall)}, ${reference(CS, CoreExposure)}</div>"""),
-            (EffervescentExcrescence, 8, "2", "2", s"""<div class=p>Spellbook: ${reference(CS, VermiculiteHypertrophy)}</div>"""),
-            (LuminousGlobule,         6, "4", "—", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, VermiculiteHypertrophy)}, ${reference(CS, SpectralCollapse)}, ${reference(CS, CoreExposure)}, ${reference(CS, EffulgentSacrifice)}</div>"""),
+            (Meteorite,               4, "1", "0", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, CosmicLandfall)}, ${reference(CS, CoreExposure)}</div>"""),
+            (EffervescentExcrescence, 4, "2", "2", s"""<div class=p>Spellbook: ${reference(CS, VermiculiteHypertrophy)}</div>"""),
+            (LuminousGlobule,         3, "4", "—", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, VermiculiteHypertrophy)}, ${reference(CS, SpectralCollapse)}, ${reference(CS, CoreExposure)}, ${reference(CS, EffulgentSacrifice)}</div>"""),
             (CSTulzscha,              1, "5", calc(g => { implicit val gg : Game = g; 2 * CS.onMap(LuminousGlobule).not(Zeroed).num }), s"""
                 <div class=p>${cost(s"How to Awaken ${CSTulzscha.name}:")}</div>
                 <div class=p>${cost("1)")} Pay ${power(5)}.</div>

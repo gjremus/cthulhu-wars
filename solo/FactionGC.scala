@@ -266,9 +266,11 @@ object GCExpansion extends Expansion {
             }
 
         case SubmergeDoneAction(f, r) =>
-            val cthulu = f.at(GC.deep).one(Cthulhu)
-            val court = f.at(GC.deep).but(cthulu)
-            log(cthulu, "submerged in", r, court.any.??("with " + court.mkString(", ")))
+            if (f.at(GC.deep).%(_.uclass == Cthulhu).any) {
+                val cthulu = f.at(GC.deep).one(Cthulhu)
+                val court = f.at(GC.deep).but(cthulu)
+                log(cthulu, "submerged in", r, court.any.??("with " + court.mkString(", ")))
+            }
             EndAction(f)
 
         case UnsubmergeMainAction(f, l) =>
@@ -276,10 +278,12 @@ object GCExpansion extends Expansion {
 
         case UnsubmergeAction(f, r) =>
             f.payTax(r)
-            val cthulu = f.at(GC.deep).one(Cthulhu)
-            val court = f.at(GC.deep).but(cthulu)
-            f.at(GC.deep).foreach(_.region = r)
-            log(cthulu, "unsubmerged in", r, court.any.??("with " + court.mkString(", ")))
+            if (f.at(GC.deep).%(_.uclass == Cthulhu).any) {
+                val cthulu = f.at(GC.deep).one(Cthulhu)
+                val court = f.at(GC.deep).but(cthulu)
+                f.at(GC.deep).foreach(_.region = r)
+                log(cthulu, "unsubmerged in", r, court.any.??("with " + court.mkString(", ")))
+            }
             EndAction(f)
 
         // ...

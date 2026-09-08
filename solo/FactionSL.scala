@@ -159,7 +159,42 @@ object SLExpansion extends Expansion {
             UnknownContinue
 
         case MainAction(f : SL) if f.acted =>
-            UnknownContinue
+            // Post-acted: mirror DC's own post-acted Tenebrosum-repeat offer (FactionDC.scala,
+            // "case MainAction(f : DC.type) if f.acted =>"). Previously this branch was a bare
+            // UnknownContinue, deferring entirely to the generic post-acted fallback in
+            // Game.scala (controls/battles/reveals/endTurn) — which has no idea SL can borrow
+            // Tenebrosum, so the Sin-paid repeat never appeared once SL had already acted (only
+            // offered pre-act, when nothing has been recorded to repeat yet). Root cause: the
+            // repeat offer only existed in the pre-act branch above (line ~238), which fires too
+            // early to ever have anything recorded. Rebuilding the same generic post-acted menu
+            // here (not touching Game.scala's shared fallback) plus the repeat check fixes every
+            // Tenebrosum-eligible action (Recruit, Summon, Move, etc.), not just this one report.
+            val repeatOffer =
+                if (game.slPermanentBorrowed.has(Tenebrosum).not) None
+                else game.dcLastActionForTenebrosum.filter { case (a, cost, an) =>
+                    val minCost = DCExpansion.tenebrosumMinSinCostPublic(f, a, cost, an)
+                    val legal = DCExpansion.tenebrosumLegalToRepeatPublic(f, a, cost, an)
+                    game.slSin >= minCost && !game.dcTenebrosumGuard && !game.slTenebrosumUsedThisTurn && legal
+                }
+
+            if (repeatOffer.none)
+                UnknownContinue
+            else {
+                implicit val asking = Asking(f)
+
+                game.controls(f)
+
+                if (f.hasAllSB)
+                    game.battles(f)
+
+                repeatOffer.foreach { case (a, cost, an) => + DCTenebrosumMainAction(f, cost, an) }
+
+                game.reveals(f)
+
+                game.endTurn(f)(true)
+
+                asking
+            }
 
         case MainAction(f : SL) =>
             implicit val asking = Asking(f)

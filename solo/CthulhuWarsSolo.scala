@@ -903,6 +903,10 @@ object CthulhuWarsSolo {
             case object Crater extends FactionUnitClass(FB, "Crater", Token, 0)
             // Daemon Sultan (DS): Chaos Gate rendered as Token
             case object ChaosGate extends FactionUnitClass(DS, "Chaos Gate", Token, 0)
+            // The Invasion (TI): Lord's Shadow — a Gate-like object with no Controlling
+            // Unit by default — rendered as a distinctly-tinted Gate token so it reads
+            // differently from an ordinary Gate on the map.
+            case object LordsShadowGate extends FactionUnitClass(TI, "Lord's Shadow", Token, 3)
             // Colour Out of Space (CS): PrismaticWell (the corrupted-Gate render Token) now lives at
             // top level in FactionCS.scala so the faction overlay card can list it; still referenced
             // here for the map render.
@@ -1294,6 +1298,9 @@ object CthulhuWarsSolo {
                     case IceAgeToken      => DrawRect("ww-ice-age", None, x - 44, y - 67, 91, 75)
                     case Cathedral        => DrawRect("an-cathedral", None, x - 39, y - 90, 78, 110)
                     case ChaosGate        => DrawRect("gate", |(Processing(|("#3C2E18"), None, |("#130E08"))), x - 38, y - 38, 76, 76)
+                    // The Invasion (TI): Lord's Shadow — same "gate" art, tinted TI's faction
+                    // red so it's visually distinct from an ordinary un-tinted Gate.
+                    case LordsShadowGate  => DrawRect("gate", |(Processing(|("#94382b"), |("#333333"), None)), x - 38, y - 38, 76, 76)
                     // Colour Out of Space (CS): the well sprite is a pre-colored multi-hue asset
                     // (no tint Processing, but a baked white outline like other units). The source
                     // art is portrait (400x535); drawn at 105x140 so the grey base circle (~73% of
@@ -2020,14 +2027,21 @@ object CthulhuWarsSolo {
                     // it appears standing inside the well's body.
                     val csWell = game.csPrismaticWellRegions.has(r)
 
-                    if (gated && DS.chaosGateRegions.has(r).not && csWell.not)
+                    // The Invasion (TI): a Lord's Shadow Area renders its own distinct
+                    // token instead of the plain Gate art (see LordsShadowGate below).
+                    val tiShadow = game.tiLordsShadowRegions.has(r)
+
+                    if (gated && DS.chaosGateRegions.has(r).not && csWell.not && tiShadow.not)
                         fixed +:= DrawItem(r, null, Gate, Alive, $, adjGatePx, adjGatePy)
 
-                    if (gated && DS.chaosGateRegions.has(r).not && csWell)
+                    if (gated && DS.chaosGateRegions.has(r).not && csWell && tiShadow.not)
                         fixed +:= DrawItem(r, CS, PrismaticWell, Alive, $, adjGatePx, adjGatePy)
 
                     if (DS.chaosGateRegions.has(r))
                         fixed +:= DrawItem(r, DS, ChaosGate, Alive, $, adjGatePx, adjGatePy)
+
+                    if (tiShadow)
+                        fixed +:= DrawItem(r, TI, LordsShadowGate, Alive, $, adjGatePx, adjGatePy)
 
                     keeper match {
                         case Some(u) =>
@@ -2396,7 +2410,7 @@ object CthulhuWarsSolo {
                             val h = min(o.y + o.height, d.y + d.height) - max(o.y, d.y)
                             val s = (w > 0 && h > 0).?(w * h).|(0)
                             val base = s * (1.0 / (o.width * o.height) + 1.0 / (d.width * d.height))
-                            val isGate = oo.unit == Gate || oo.unit == ChaosGate
+                            val isGate = oo.unit == Gate || oo.unit == ChaosGate || oo.unit == LordsShadowGate
                             val gateWeight = if (isGate) 25.0 else 1.0
                             // Hard cliff: ANY non-zero overlap with the gate adds a 500.0
                             // flat penalty. Typical unit-on-unit overlap scores are < 5, so any
@@ -2438,7 +2452,7 @@ object CthulhuWarsSolo {
                         val dArea = d.width * d.height
                         var maxFrac = 0.0
                         (sticking ++ fixed).foreach { oo =>
-                            if (oo.unit != Gate && oo.unit != ChaosGate) {
+                            if (oo.unit != Gate && oo.unit != ChaosGate && oo.unit != LordsShadowGate) {
                                 val o = oo.rect
                                 if (o != null && o.width > 0 && o.height > 0) {
                                     val w = min(o.x + o.width, d.x + d.width) - max(o.x, d.x)
@@ -2565,7 +2579,7 @@ object CthulhuWarsSolo {
                     }
                 }
 
-                draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate || d.unit == PrismaticWell).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0))./(_.rect).%(r => r != null).foreach { d =>
+                draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate || d.unit == LordsShadowGate || d.unit == PrismaticWell).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0))./(_.rect).%(r => r != null).foreach { d =>
                     g.globalAlpha = d.alpha
                     val needsOutline = d.key == "custodian-icon" || d.key == "librarian-icon"
                     if (needsOutline) {
@@ -2628,7 +2642,7 @@ object CthulhuWarsSolo {
                 }
 
 
-                draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate || d.unit == PrismaticWell).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0)).foreach { d =>
+                draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate || d.unit == LordsShadowGate || d.unit == PrismaticWell).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0)).foreach { d =>
                     if (d.icon.any)
                         g.drawImage(getAsset(d.icon.get.key), d.icon.get.x, d.icon.get.y)
                 }
@@ -2708,6 +2722,52 @@ object CthulhuWarsSolo {
                         val textY = imgY + imgSize / 2
                         g.strokeText("to Mantle", gx, textY)
                         g.fillText("to Mantle", gx, textY)
+                    }
+                }
+
+                // The Invasion (TI): a small numbered badge on every Area holding 1+
+                // Portents, offset below the Area's gate anchor so it never sits on top
+                // of a Gate/Lord's Shadow render (Portents can never share an Area with one).
+                if (setup.seating.has(TI) && game.tiPortents.nonEmpty) {
+                    val badgeR = (16 * board.unitScale).toInt
+                    g.font = "bold " + (20 * board.unitScale).toInt + "px sans-serif"
+                    g.textAlign = "center"
+                    g.textBaseline = "middle"
+                    game.tiPortents.foreach { case (r, count) =>
+                        if (count > 0) {
+                            val (gx, gy) = gateXY(r)
+                            val by = gy + (45 * board.unitScale).toInt
+                            g.beginPath()
+                            g.arc(gx, by, badgeR, 0, 2 * math.Pi)
+                            g.fillStyle = "#94382b"
+                            g.fill()
+                            g.lineWidth = 2.0
+                            g.strokeStyle = "white"
+                            g.stroke()
+                            g.fillStyle = "white"
+                            g.fillText(count.toString, gx, by)
+                        }
+                    }
+                }
+
+                // The Invasion (TI): Unquenchable Thirst is mandatory and makes Attack/
+                // Capture cost 1 Doom instead of 1 Power in Baphomet's current Area
+                // (§1.8/§3.4.2) — a small label there so the substitution is visible
+                // before paying. Baphomet's Area is evaluated fresh every render since
+                // he can move.
+                if (setup.seating.has(TI)) {
+                    TI.onMap(Baphomet).not(Zeroed).starting.foreach { u =>
+                        val r = u.region
+                        val (gx, gy) = gateXY(r)
+                        val by = gy - (55 * board.unitScale).toInt
+                        g.font = "bold " + (14 * board.unitScale).toInt + "px sans-serif"
+                        g.textAlign = "center"
+                        g.textBaseline = "middle"
+                        g.lineWidth = 3.0
+                        g.strokeStyle = "rgba(0,0,0,0.85)"
+                        g.fillStyle = "#c9a4ff"
+                        g.strokeText("Doom, not Power", gx, by)
+                        g.fillText("Doom, not Power", gx, by)
                     }
                 }
             }
@@ -2875,7 +2935,17 @@ object CthulhuWarsSolo {
                     s""" <span onclick='event.stopPropagation(); onExternalClick("SilenceToken", true)' onpointerover='event.stopPropagation(); onExternalOver("SilenceToken", true)' onpointerout='event.stopPropagation(); onExternalOut("SilenceToken", true)' style='cursor:pointer'><img src='${Overlays.imageSource("silence-token")}' style='height:1.2em; vertical-align:middle;'/></span>"""
                 else ""
                 val name = div("name")("" + f + silenceTokenIcon)
-                val nameS = div("name")(f.short.styled(f) + silenceTokenIcon)
+                // CS's rainbow name uses a background-clip:text gradient (.cs in index.html),
+                // which fails to paint here specifically: this compact card name sits next to
+                // a sibling <canvas> (the faction glyph) in the same stacking context, and the
+                // existing translateZ(0) layer-promotion hack on .cs still doesn't make Chromium
+                // paint the clipped text in that layout (confirmed blank via direct element
+                // screenshot, even though the DOM/computed styles are all correct). Two solid-
+                // color spans always paint, so use those here instead of the fragile clip trick.
+                val shortNameStyled = if (f == CS)
+                    """<span style="color:#d070d0">C</span><span style="color:#b45cff">S</span>"""
+                else f.short.styled(f)
+                val nameS = div("name")(shortNameStyled + silenceTokenIcon)
                 // Tombstalker (TS): append Death's Head count to faction status panel
                 val dhStr = (f == TS).?(" | " + (game.deathsHead.toString + " Death's Head").styled(TS)).|("")
                 // Firstborn (FB): Round 8 Bug 75 — append Infernal Pact discount count
@@ -2960,9 +3030,15 @@ object CthulhuWarsSolo {
                         else ""
                     }
                 } else ""
-                val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr + dcSinStr + slSinStr + fbeDiceStr + fbeByagoonaStr)
-                val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr + dcSinMStr + slSinMStr + fbeDiceStr + fbeByagoonaStr)
-                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr + dcSinSStr + slSinSStr + fbeDiceStr + fbeByagoonaStr)
+                // The Invasion (TI): Baphomet's Fury is a transferable two-sided card —
+                // show which player currently holds it on their status panel (§1.8).
+                val tiFuryHolder = game.tiFuryActive && game.tiFuryOwnerF == f
+                val furyStr  = tiFuryHolder.?(" | " + "Baphomet's Fury".styled(TI)).|("")
+                val furyMStr = tiFuryHolder.?(" | " + "Fury".styled(TI)).|("")
+                val furySStr = tiFuryHolder.?(" " + "Fury".styled(TI)).|("")
+                val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr + dcSinStr + slSinStr + fbeDiceStr + fbeByagoonaStr + furyStr)
+                val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr + dcSinMStr + slSinMStr + fbeDiceStr + fbeByagoonaStr + furyMStr)
+                val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr + dcSinSStr + slSinSStr + fbeDiceStr + fbeByagoonaStr + furySStr)
                 // Firstborn (FB): read Infernal Pact discount and stored Augury kills for the faction panel display
                 val fbIPDiscount = if (f == FB) game.fbInfernalPactDiscount else 0
                 val fbAugury = if (f == FB) game.fbAuguryKills else 0
