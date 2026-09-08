@@ -1302,6 +1302,21 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // The Invasion (TI) Scavenge: "Only your Gryllusses participate on your side of
+                // any Battles." Exempt every non-Gryllus TI unit on TI's side of a Scavenge battle,
+                // mirroring the Grasping Dead exemption above — they add no strength and take no
+                // casualties, they simply remain in the region. TI is always the attacker of a
+                // Scavenge battle (it is TI's own action), so an emptied TI side means no battle.
+                if (effect == |(Scavenge)) {
+                    sides.%(f => f == TI).foreach { s =>
+                        s.forces.%(_.uclass != Gryllus).foreach { u => exempt(u) }
+                    }
+                    if (attackers.forces.none) {
+                        log("No Gryllusses left for Scavenge battle")
+                        return jump(PostBattlePhase)
+                    }
+                }
+
                 // Colour Out of Space (CS) Core Exposure: while CS controls this spellbook, its
                 // Luminous Globules "do not participate in combat" (faction card). Exempt them from
                 // both sides — like Mummify/Grasping Dead above — so they add no strength and take

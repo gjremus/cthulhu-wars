@@ -183,6 +183,37 @@ case class TIHellgateDoneAction() extends BaseFactionAction(None, "Done") { over
 // Doom Phase and is marked used-forever (TI.oncePerGame) so it can never be replayed.
 case class TIEclipseMainAction() extends OptionFactionAction("Eclipse — deny enemies gate Doom next Doom Phase (one-shot)") with MainQuestion { override def self = TI }
 
+// Scavenge (Gryllus-linked library Spellbook, Action cost 2, §1.10/§3.10.1): a two-step
+// Action.  STEP 1 — move any number of TI Gryllusses for FREE (each moves one adjacent Area,
+// standard movement; the 2 Power is the whole Action cost, not a per-move charge).  STEP 2 —
+// for each map Area that now holds a TI Gryllus, TI may resolve ONE free Battle OR ONE 1-Power
+// Capture — never both, and never more than one per Area.  "Only your Gryllusses participate on
+// your side of any Battles" is enforced by the effect==Scavenge exemption in Battle.scala
+// (mirrors Grasping Dead).  Modeled on Hellgate's proven move-any-number-then-Done idiom.
+//
+// The 2 Power and TI.acted are committed the instant TI selects Scavenge (like Eclipse, a
+// MainQuestion WITHOUT Soft records the action), so no paid-flag needs threading.  Chosen
+// Battles are enqueued directly into game.queue (FREE — bypassing AttackAction's 1-Power
+// charge) and proceeded once at Done; Captures resolve immediately and loop back.  The Soft
+// loop drivers re-derive on undo replay; only the mutating leaves are recorded.  The
+// one-Battle-or-Capture-per-Area rule is guarded by game.tiScavengeResolvedAreas (a queued
+// Battle leaves its target present, so "still has a target" alone can't mark an Area done).
+case class TIScavengeMainAction() extends OptionFactionAction("Scavenge — move Gryllusses, then Battle or Capture in their Areas (2 Power)") with MainQuestion { override def self = TI }
+case class TIScavengeMoveLoopAction() extends ForcedAction with Soft
+case class TIScavengeMoveSelectAction(from : Region) extends BaseFactionAction(
+    g => "Scavenge move Gryllus from " + from, implicit g => Gryllus.styled(TI) + " in " + from) with Soft { override def self = TI }
+case class TIScavengeMoveAction(from : Region, to : Region) extends BaseFactionAction(
+    g => "Scavenge move Gryllus from " + from + " to " + to, implicit g => "" + to) { override def self = TI }
+case class TIScavengeMoveDoneAction() extends BaseFactionAction(None, "Done moving — proceed to Battle/Capture") { override def self = TI }
+case class TIScavengeAreaLoopAction() extends ForcedAction with Soft
+case class TIScavengeBattleAction(r : Region, f : Faction) extends BaseFactionAction(
+    g => "Scavenge Battle " + f + " in " + r, implicit g => "Battle " + f.full + " in " + r) { override def self = TI }
+case class TIScavengeCaptureAction(r : Region, f : Faction) extends BaseFactionAction(
+    g => "Scavenge Capture in " + r, implicit g => "Capture in " + r + " (1 Power)") with Soft { override def self = TI }
+case class TIScavengeCaptureTargetAction(r : Region, f : Faction, ur : UnitRef) extends BaseFactionAction(
+    g => "Scavenge capture " + ur + " in " + r, implicit g => "" + ur.full) { override def self = TI }
+case class TIScavengeDoneAction() extends BaseFactionAction(None, "Done") { override def self = TI }
+
 
 // ============================================================================
 // The Invasion (TI) EXPANSION — action dispatch, triggers, setup, main menu.
@@ -397,6 +428,11 @@ object TIExpansion extends Expansion {
             if (f.can(Eclipse) && game.doomPhase.not && game.tiEclipseArmed.not)
                 + TIEclipseMainAction()
 
+            // Scavenge (§1.10/§3.10.1): needs the earned spellbook, 2 Power, and at least one
+            // Gryllus on the map to move/act with.
+            if (f.can(Scavenge) && f.power >= 2 && f.onMap(Gryllus).not(Zeroed).any)
+                + TIScavengeMainAction()
+
             game.neutralSpellbooks(f)
             game.libraryActions(f)
             game.highPriests(f)
@@ -588,6 +624,115 @@ object TIExpansion extends Expansion {
             TI.log("plays", Eclipse.styled(TI), "— enemies gain no Doom from Unit-Controlled Gates next Doom Phase")
             // Free play (no Action cost): return to the menu so TI can still act this turn.
             Force(MainAction(TI))
+
+        // ================================================================
+        // SCAVENGE (§1.10 / §3.10.1)
+        // ================================================================
+        // Commit the Action immediately (non-Soft MainQuestion, like Eclipse): pay the flat
+        // 2 Power, mark TI as having acted (battles only auto-set acted when TI lacks all
+        // Spellbooks, so set it explicitly here for the capture-only / no-battle case), and
+        // clear the per-Action resolved-Areas guard. Then enter the free Gryllus move loop.
+        case TIScavengeMainAction() =>
+            TI.power -= 2
+            TI.acted = true
+            game.tiScavengeResolvedAreas = $
+            TI.log("uses", Scavenge.styled(TI) + " — paid", 2.power)
+            Force(TIScavengeMoveLoopAction())
+
+        // STEP 1 — free Gryllus move loop (Hellgate-style Soft driver). Offer, per Area still
+        // holding an unmoved Gryllus, a "move a Gryllus from here" pick, plus a Done that
+        // always ends the move step (zero moves is allowed — the Action is already committed).
+        case TIScavengeMoveLoopAction() =>
+            val moveAreas = TI.onMap(Gryllus).not(Zeroed).not(Moved)./(_.region).distinct
+            if (moveAreas.none)
+                Then(TIScavengeMoveDoneAction())
+            else
+                Ask(TI)
+                    .add(TIScavengeMoveDoneAction())
+                    .each(moveAreas)(r => TIScavengeMoveSelectAction(r))
+
+        case TIScavengeMoveSelectAction(from) =>
+            val dests = game.board.connected(from)
+            if (dests.none)
+                Force(TIScavengeMoveLoopAction())
+            else
+                Ask(TI).each(dests)(to => TIScavengeMoveAction(from, to)).cancel
+
+        case TIScavengeMoveAction(from, to) =>
+            val u = TI.at(from, Gryllus).not(Zeroed).not(Moved).first
+            u.region = to
+            u.add(Moved)
+            u.onGate = false
+            TI.log(Scavenge.styled(TI) + ": moved a", Gryllus.styled(TI), "from", from, "to", to)
+            Force(TIScavengeMoveLoopAction())
+
+        // Transition to STEP 2: clear the Moved tags used to drive the move loop (they play no
+        // part in the Battle/Capture step and must not leak past this Action).
+        case TIScavengeMoveDoneAction() =>
+            TI.units.%(_.uclass == Gryllus).foreach(_.remove(Moved))
+            Force(TIScavengeAreaLoopAction())
+
+        // STEP 2 — per-Area Battle/Capture loop (Soft driver). For each Gryllus Area not yet
+        // resolved, offer a free Battle against each attackable enemy and (if TI has >= 1 Power)
+        // a 1-Power Capture against each capturable enemy; plus a Done. When no Area offers any
+        // legal Battle or Capture, finish automatically.
+        case TIScavengeAreaLoopAction() =>
+            val remaining = TI.onMap(Gryllus).not(Zeroed)./(_.region).distinct.diff(game.tiScavengeResolvedAreas)
+            val ee = game.factionlike.but(TI)
+            val battleVariants = remaining./~(r => ee.%(_.present(r)).%(TI.canAttack(r))./(e => (r, e)))
+            val captureVariants = (TI.power >= 1).?(remaining./~(r => ee.%(_.present(r)).%(TI.canCapture(r))./(e => (r, e)))).|($)
+            if (battleVariants.none && captureVariants.none)
+                Then(TIScavengeDoneAction())
+            else
+                Ask(TI)
+                    .each(battleVariants)((r, e) => TIScavengeBattleAction(r, e))
+                    .each(captureVariants)((r, e) => TIScavengeCaptureAction(r, e))
+                    .add(TIScavengeDoneAction())
+
+        // Free Battle: enqueue it directly (no AttackAction 1-Power charge). The
+        // effect==Scavenge exemption in Battle.scala restricts TI's side to Gryllusses only.
+        // Battles accumulate in the queue and all proceed at Done (mirrors the Nyogtha
+        // From Below multi-battle chain).
+        case TIScavengeBattleAction(r, f) =>
+            game.tiScavengeResolvedAreas :+= r
+            game.queue = game.queue :+ new Battle(r, TI, f, |(Scavenge))
+            TI.log("battled", f, "in", r, "with", Scavenge.styled(TI))
+            Force(TIScavengeAreaLoopAction())
+
+        // 1-Power Capture: Soft navigation to the target pick (the mutating leaf is
+        // TIScavengeCaptureTargetAction). Mirrors the stock CaptureAction target filtering
+        // (canBeCaptured, clings), but excludes the exotic Mind-Parasite-Cultist case to avoid
+        // the unparasitize sub-flow — a Scavenge Capture of a parasitized acolyte is not offered.
+        case TIScavengeCaptureAction(r, f) =>
+            val l = f.at(r).cultists.%(u => u.uclass.canBeCaptured(u)).%(_.uclass != MindParasiteCultist).sortBy(u => u.uclass.cost * 10 + u.onGate.??(5))
+            if (l.none)
+                Force(TIScavengeAreaLoopAction())
+            else {
+                val ll = f.clings.?(l.take(1)).|(l)
+                Ask(TI).each(ll)(u => TIScavengeCaptureTargetAction(r, f, u.ref)).cancel
+            }
+
+        case TIScavengeCaptureTargetAction(r, f, ur) =>
+            TI.power -= 1
+            game.tiScavengeResolvedAreas :+= r
+            val victim = game.unit(ur)
+            game.eliminate(victim)
+            victim.region = TI.prison
+            TI.log("captured", victim, "in", r, "with", Scavenge.styled(TI))
+            TI.satisfy(CaptureCultist, "Capture Cultist")
+            if (game.factions.has(FB))
+                game.fbCyclopeanGazeActionRegions :+= r
+            // Requirement 4 (Captured Cultists from 2+ factions) is state-derived in triggers().
+            Force(TIScavengeAreaLoopAction())
+
+        // Done: run any enqueued free Battles (they drain sequentially), else just end the
+        // Action. TI.acted was already set at commit, so the turn ends after the battles.
+        case TIScavengeDoneAction() =>
+            game.tiScavengeResolvedAreas = $
+            if (game.queue.any)
+                ProceedBattlesAction
+            else
+                EndAction(TI)
 
         case _ => UnknownContinue
     }

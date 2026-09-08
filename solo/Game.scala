@@ -1671,6 +1671,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // so undo replay re-derives it deterministically. See tiEternalServitudeApplies.
     var tiEternalServitudeGranted : Boolean = false
 
+    // Scavenge (§1.10 / §3.10.1): Areas already resolved (Battle enqueued or Capture taken)
+    // during the CURRENT Scavenge Action, so the per-Area follow-up loop offers each Gryllus
+    // Area at most once ("not more than one Battle or Capture per Area"). Set only by the
+    // recorded leaf actions (TIScavengeBattleAction/TIScavengeCaptureTargetAction), so undo
+    // replay re-derives the same set; cleared when the Scavenge Action ends and reset by
+    // new Game(). Needed because a queued-but-not-yet-proceeded Scavenge Battle leaves the
+    // enemy target present, so "still has a target" alone cannot tell the loop an Area is done.
+    var tiScavengeResolvedAreas : $[Region] = $
+
     // DS singleton vars must be reset here so undo replay (which creates a new Game) starts clean
     DS.chaosGateRegions = $
     DS.azathothTrack = 0
