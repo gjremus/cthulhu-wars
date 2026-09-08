@@ -1298,9 +1298,10 @@ object CthulhuWarsSolo {
                     case IceAgeToken      => DrawRect("ww-ice-age", None, x - 44, y - 67, 91, 75)
                     case Cathedral        => DrawRect("an-cathedral", None, x - 39, y - 90, 78, 110)
                     case ChaosGate        => DrawRect("gate", |(Processing(|("#3C2E18"), None, |("#130E08"))), x - 38, y - 38, 76, 76)
-                    // The Invasion (TI): Lord's Shadow — same "gate" art, tinted TI's faction
-                    // red so it's visually distinct from an ordinary un-tinted Gate.
-                    case LordsShadowGate  => DrawRect("gate", |(Processing(|("#94382b"), |("#333333"), None)), x - 38, y - 38, 76, 76)
+                    // The Invasion (TI): Lord's Shadow — dedicated round-token art extracted
+                    // from the implementation guide docx (image1). Already TI-red, so tint is
+                    // None (no re-tint). Square render (417x417, aspect 1.0) → square 76x76 box.
+                    case LordsShadowGate  => DrawRect("ti-lords-shadow", None, x - 38, y - 38, 76, 76)
                     // Colour Out of Space (CS): the well sprite is a pre-colored multi-hue asset
                     // (no tint Processing, but a baked white outline like other units). The source
                     // art is portrait (400x535); drawn at 105x140 so the grey base circle (~73% of

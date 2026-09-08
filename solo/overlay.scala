@@ -2409,6 +2409,49 @@ object Overlays {
         ), setup = true)
     }
 
+    // The Invasion (TI) — Baphomet's Fury owner-aware two-sided card overlay
+    // (§1.8/§2.12). Shows BOTH real card faces extracted from the implementation
+    // guide docx: the inactive front (goat-skull side, "no effect until the Ritual
+    // Track hits 7") and the active back (Torment + Transference rules). The live
+    // side and current owner are read from Overlays.currentGame — before the Ritual
+    // Track first reaches 7 the card is inactive (front up, owned by The Invasion);
+    // once flipped it is active and can move to an enemy via Transference. The
+    // face-up side is highlighted and the current owner named in their faction color.
+    def tiFuryOverlay() : String = {
+        val fury : (Boolean, Faction) = Overlays.currentGame match {
+            case Some(g) if g.factions.has(TI) => (g.tiFuryFlipped, g.tiFuryOwnerF)
+            case _                             => (false, TI)
+        }
+        val flipped = fury._1
+        val owner   = fury._2
+        def cardCol(id : String, label : String, active : Boolean) = {
+            val border = if (active) "3px solid #ff6a3d" else "3px solid transparent"
+            val glow   = if (active) "box-shadow:0 0 14px #ff6a3d;" else ""
+            val op     = if (active) "1" else "0.5"
+            val tag    = if (active) "<div class=p style='color:#ff6a3d;font-weight:bold;margin-top:0.4ex'>&#9654; FACE UP</div>"
+                         else        "<div class=p style='opacity:0.55;margin-top:0.4ex'>face down</div>"
+            s"""<td style="width:50%;text-align:center;vertical-align:top;padding:0 1ex;">
+                    <div class=p style="font-weight:bold;opacity:${op}">${label}</div>
+                    <img class="img" src=${imageSource(id)} style="max-width:100%;height:auto;border:${border};${glow}border-radius:6px;opacity:${op}" />
+                    ${tag}
+                </td>"""
+        }
+        val status =
+            if (flipped) s"""<b>Status:</b> ACTIVE (the Ritual Track has reached 7) — currently owned by ${owner.full}."""
+            else         s"""<b>Status:</b> INACTIVE — flips permanently the first time the Ritual Track Marker reaches 7."""
+        s"""
+            <div class="h1 black-border" style="margin-right:-3ex;margin-left:-3ex;"><span class="ability-color inline-block">${BaphometsFury.name}</span> <span class="cost-color inline-block">(Baphomet, two-sided card)</span></div>
+            <div class="white-border">
+                <div class=p>${status}</div>
+                <table style="width:100%;border-collapse:collapse;margin:0.6ex 0"><tr>
+                    ${cardCol("info:ti-fury-front", "Front (inactive)", !flipped)}
+                    ${cardCol("info:ti-fury-back",  "Back (active)",     flipped)}
+                </tr></table>
+                <div class=p><b>Torment (Ongoing):</b> When you would Kill or Eliminate enemy Unit(s) (except via Capture), the enemy instead loses Power for each Unit lost, equal to half the original cost of the Unit rounded up. If the enemy cannot pay the total Power loss, this has no effect. This is not optional.</div>
+                <div class=p><b>Transference (Ongoing):</b> When an enemy Faction Kills or Eliminates one of your Units (not via Capture), transfer ownership of Baphomet's Fury to that enemy at the end of the current Action. When it changes ownership, The Invasion gains 1 Doom. Not optional.</div>
+            </div>"""
+    }
+
     // The Invasion (TI) — overlay dispatch helper (extracted from the giant `info`
     // match so that method stays under the JVM 64KB method-size limit). Handles the
     // faction info card, the 6 spellbook-requirement panels, and the spellbook /
@@ -2434,7 +2477,7 @@ object Overlays {
         case $("TI", Larvae.name)             => spellbook(Larvae.name, "Demon Larvae Ongoing", "Your Larvae cannot Build or Control Gates but count as Acolytes for all other purposes. This is not optional.")
         case $("TI", UnquenchableThirst.name) => spellbook(UnquenchableThirst.name, "Baphomet Ongoing", "Pay 1 Doom (instead of Power) to Attack or Capture in Baphomet's Area. This is not optional and cannot be disabled or removed by other effects.")
         case $("TI", SacramentOfFlesh.name)   => spellbook(SacramentOfFlesh.name, "Baphomet, Doom Phase", "If Baphomet is in play, you must: (1) Permanently remove a Faction Unit you Control from the game (or 2 Units if you have all 6 Spellbooks). Spare 1 Unit for each Cultist that was on your Faction Card during Gather Power. (2) Gain 1 Elder Sign (or 2 if you have all 6 Spellbooks).")
-        case $("TI", BaphometsFury.name)      => spellbook(BaphometsFury.name, "Baphomet, two-sided card", "Front (inactive): no effect until the Ritual Track Marker hits the first '7', then flip. Back (active) — Torment (Ongoing): When you would Kill or Eliminate enemy Unit(s) (except via Capture), the enemy instead loses Power for each Unit lost, equal to half the original cost of the Unit rounded up. If the enemy cannot pay the total Power loss, this has no effect. — Transference (Ongoing): When an enemy Faction Kills or Eliminates one of your Units (not via Capture), transfer ownership of Baphomet's Fury to that enemy at the end of the current Action. When it changes ownership, The Invasion gains 1 Doom. Not optional.")
+        case $("TI", BaphometsFury.name)      => tiFuryOverlay()
 
         // Library spellbooks (guide §1.10).
         case $("TI", Scavenge.name)       => spellbook(Scavenge.name, "Action: Cost 2", "Move any number of your Gryllusses. Then, as part of the same Action, all of your Gryllusses may either Battle in their Area(s) for free or Capture in their Area(s) by paying 1 Power each (but not more than one Battle or Capture per Area). Only your Gryllusses participate on your side of any Battles.")
