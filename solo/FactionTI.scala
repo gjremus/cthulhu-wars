@@ -214,6 +214,33 @@ case class TIScavengeCaptureTargetAction(r : Region, f : Faction, ur : UnitRef) 
     g => "Scavenge capture " + ur + " in " + r, implicit g => "" + ur.full) { override def self = TI }
 case class TIScavengeDoneAction() extends BaseFactionAction(None, "Done") { override def self = TI }
 
+// Entropy Siphon (Fiend-linked library Spellbook, Ongoing, §1.10/§3.10.6). Part 1
+// (Fiends can Control Gates) lives on Fiend.canControlGate above. Part 2 is this
+// end-of-Doom-Phase penalty: enemies collectively decide how to lose a combined
+// 4 Power per Fiend-Controlled Gate; every full 4 Power short of that total costs
+// EVERY player with more Doom than TI 1 Doom. Built as a per-enemy allocation
+// micro-phase mirroring the opponent Portent-placement micro-phase (§4.1): each
+// enemy, in turn order, is asked (Hard) how much Power to contribute toward the
+// running remaining total — 0 is always an allowed choice (declining to pay pushes
+// the shortfall onto the Doom penalty, which only bites players ahead of TI, so the
+// "collective decision" tension is preserved). Whoever controls that enemy answers,
+// exactly as the already-shipped Portent micro-phase relies on the same Ask dispatch
+// (there is no human/bot predicate in this engine to branch on, so this guide-literal
+// menu is the consistent choice). A "Fiend-Controlled Gate" is a TI-controlled Gate
+// whose controller is a Fiend — a TI.gates Area that is NOT a Lord's Shadow Area
+// (those are Shadow-controlled, tiLordsShadowRegions) and holds a live TI Fiend.
+// All transient state is carried in the action parameters (queue / remaining / then),
+// so undo replay reconstructs it deterministically. then = the end-of-Doom-Phase
+// continuation into the Action Phase. NOTE (owner review): the guide's exact
+// "Fiend-Controlled Gate" scope and menu-vs-deterministic allocation were resolved
+// here with the most guide-faithful reading available under autonomous operation.
+case class TIEntropySiphonStartAction(then : ForcedAction) extends ForcedAction
+case class TIEntropySiphonAllocAction(queue : $[Faction], remaining : Int, then : ForcedAction) extends ForcedAction
+case class TIEntropySiphonPayAction(who : Faction, amount : Int, queue : $[Faction], remaining : Int, then : ForcedAction)
+    extends BaseFactionAction(
+        g => "Entropy Siphon: " + who + " loses " + amount + " Power",
+        implicit g => "Lose " + amount.power) { override def self = who }
+
 
 // ============================================================================
 // The Invasion (TI) EXPANSION — action dispatch, triggers, setup, main menu.
@@ -733,6 +760,54 @@ object TIExpansion extends Expansion {
                 ProceedBattlesAction
             else
                 EndAction(TI)
+
+        // Entropy Siphon Part 2 (§1.10/§3.10.6): the end-of-Doom-Phase enemy Power-loss
+        // penalty. See the action-class declarations above for the full design rationale.
+        case TIEntropySiphonStartAction(then) =>
+            // Fiend-Controlled Gates: TI.gates Areas that are NOT Lord's Shadow Areas
+            // (those are Shadow-controlled) and hold a live TI Fiend. Guarded so this
+            // only ever fires in a TI game that actually holds Entropy Siphon.
+            val fiendGates : $[Region] =
+                if (game.factions.has(TI).not || TI.has(EntropySiphon).not) $
+                else TI.gates.diff(game.tiLordsShadowRegions).%(r => TI.at(r, Fiend).not(Zeroed).any)
+            val total = fiendGates.num * 4
+            if (total <= 0)
+                Force(then)
+            else {
+                TI.log(EntropySiphon.styled(TI) + ": enemies must collectively lose", total.power,
+                    "for", fiendGates.num.toString.styled(TI), "Fiend-Controlled " + (fiendGates.num == 1).?("Gate").|("Gates"))
+                Force(TIEntropySiphonAllocAction(game.factions.but(TI), total, then))
+            }
+
+        case TIEntropySiphonAllocAction(queue, remaining, then) =>
+            if (queue.none || remaining <= 0) {
+                // Whatever the enemies failed to lose converts to Doom loss: 1 Doom per
+                // full 4 Power short, charged to every player with more Doom than TI
+                // (clamped so it never drops a player below 0 Doom).
+                val doomLoss = remaining / 4
+                if (doomLoss > 0)
+                    game.factions.but(TI).%(_.doom > TI.doom).foreach { e =>
+                        val d = doomLoss.min(e.doom)
+                        e.doom -= d
+                        e.log("lost", d.doom, "—", EntropySiphon.styled(TI), "(enemies left", remaining.power, "unpaid)")
+                    }
+                Force(then)
+            }
+            else {
+                val who = queue.head
+                val cap = who.power.min(remaining)
+                if (cap <= 0)
+                    Force(TIEntropySiphonAllocAction(queue.tail, remaining, then))   // auto-skip: no Power to give
+                else
+                    Ask(who).each((0 to cap).toList)(n => TIEntropySiphonPayAction(who, n, queue, remaining, then))
+            }
+
+        case TIEntropySiphonPayAction(who, amount, queue, remaining, then) =>
+            if (amount > 0) {
+                who.power -= amount
+                who.log("lost", amount.power, "toward", EntropySiphon.styled(TI))
+            }
+            Force(TIEntropySiphonAllocAction(queue.tail, remaining - amount, then))
 
         case _ => UnknownContinue
     }

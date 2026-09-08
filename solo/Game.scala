@@ -4191,9 +4191,20 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                 factions.foreach(_.borrowed = $)
 
+                // The Invasion (TI) — Entropy Siphon (§1.10/§3.10.6): at the very end of the
+                // Doom Phase (after gate Doom, moonbeast return and Bokrug), enemies collectively
+                // lose 4 Power per Fiend-Controlled Gate, with any shortfall converting to Doom
+                // for players ahead of TI. The start action no-ops (falls straight through to the
+                // Action Phase) whenever TI is absent, lacks the Spellbook, or controls no
+                // Fiend-Controlled Gate, so routing through it is always safe. Guarded here too so
+                // no TIEntropySiphonStartAction is even recorded in a game without TI holding it.
+                val afterDoom : ForcedAction =
+                    if (factions.has(TI) && TI.has(EntropySiphon)) TIEntropySiphonStartAction(CheckSpellbooksAction(ActionPhaseAction))
+                    else CheckSpellbooksAction(ActionPhaseAction)
+
                 // Bokrug: Ghosts of Ib + Doom that Came to Sarnath fire after moonbeast return (only if Bokrug is in game)
                 val bokrugOwner = factions.find(_.loyaltyCards.has(BokrugCard))
-                val postMoonbeast = bokrugOwner./(owner => GhostsOfIbPlaceAction(owner, DoomSarnathMainAction(owner, CheckSpellbooksAction(ActionPhaseAction)))).|(CheckSpellbooksAction(ActionPhaseAction))
+                val postMoonbeast = bokrugOwner./(owner => GhostsOfIbPlaceAction(owner, DoomSarnathMainAction(owner, afterDoom))).|(afterDoom)
 
                 // Moonbeast: return moonbeasts from spellbooks to map after ALL doom turns
                 // Exclude moonbeasts placed THIS doom phase — they return next doom phase
