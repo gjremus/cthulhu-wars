@@ -1006,6 +1006,12 @@ class Player(private val f : Faction)(implicit game : Game) {
         if (total + count > 36) {
             f.log("got", (total + count - 36).doom, "instead of", (total + count - 36).es)
             f.doom += (total + count - 36)
+            // The Invasion (TI): Baphomet's Combat = 4 + Doom earned from Elder Signs
+            // this Action Phase (§1.8). Elder Signs that overflow the 36-pool convert to
+            // Doom — that is Doom earned from Elder Signs — so accumulate it for TI
+            // within the Action Phase (the counter resets each Action Phase).
+            if (f == TI && game.inActionPhase)
+                game.tiElderSignDoomThisActionPhase += (total + count - 36)
             count = 36 - total
         }
 
@@ -1601,6 +1607,42 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // forced battle and consumed at the battle terminus (Battle.scala), redirects that return.
     // None in every ordinary battle, so non-CS games and CS's own real battles are unaffected.
     var csCorruptedRendingActor : |[Faction] = None
+
+    // ========================================================================
+    // The Invasion (TI) — persistent faction state (guide §2.13 / §3.15).
+    // HARD RULE: faction state lives on Game so undo/replay works — `new Game()`
+    // resets these and replaying the recorded action log rebuilds them. Every
+    // mutation below flows through a recorded Action handler or a deterministic
+    // triggers()/afterAction() recompute, never an un-recorded side mutation.
+    // All TI-reading engine hooks are guarded by `factions.has(TI)` so a game
+    // without The Invasion is provably unaffected.
+    // ========================================================================
+    // Areas that currently contain a Lord's Shadow (the gate-like object, §1.2).
+    // The Shadow persists here until destroyed; TI-default control is reflected by
+    // ALSO keeping the region in TI.gates (see tiShadowController + triggers()).
+    var tiLordsShadowRegions : $[Region] = $
+    // Portent token count per Area (1..3; a 4th converts to a Lord's Shadow + Fiend, §1.7).
+    var tiPortents : Map[Region, Int] = Map()
+    // Count of Lord's Shadows CREATED via Portend's 4th-Portent conversion. The
+    // Setup-placed Shadow does NOT count (creator-confirmed §3.12) — this drives
+    // Spellbook Requirements 5 and 6 only.
+    var tiLordsShadowCreated : Int = 0
+    // Doom TI has earned from Elder Signs during the current Action Phase. Baphomet's
+    // Combat = 4 + this (guide §1.8/§2.12); recomputed live at battle time, reset at
+    // the start of each Action Phase.
+    var tiElderSignDoomThisActionPhase : Int = 0
+    // Number of Doom Phases elapsed. Spellbook Requirement 2 auto-awards at the end
+    // of the SECOND Doom Phase (guide §1.9/§3.12).
+    var tiDoomPhaseCount : Int = 0
+    // Baphomet's Fury (two-sided card, §1.8): flips permanently the first time the
+    // Ritual Track Marker hits 7 (one-way historical flag, distinct from the live
+    // marker). tiFuryOwner None = TI (default); Transference can move it to an enemy.
+    var tiFuryFlipped : Boolean = false
+    var tiFuryOwner : |[Faction] = None
+    // The opponent Portent-placement setup micro-phase (§2.5/§4.1) has completed —
+    // set true once the per-player loop finishes so the base seating loop can proceed
+    // to seat Opener of the Way last. Replay-safe (set inside the recorded flow).
+    var tiPortentSetupDone : Boolean = false
 
     // DS singleton vars must be reset here so undo replay (which creates a new Game) starts clean
     DS.chaosGateRegions = $
@@ -2245,6 +2287,30 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         log("Ritual of Annihilation".styled("doom"), "track", ritualTrack.zipWithIndex./{ case (v, n) => (n == ritualMarker).?(("[" + vv(v) + "]").styled("str")).|("[".styled("xxxhighlight") + vv(v) + "]".styled("xxxhighlight")) }.mkString("-".styled("highlight")))
     }
 
+    // The Invasion (TI) Lord's Shadow control (guide §1.2 / §2.2). A Shadow is
+    // Controlled by TI by DEFAULT with no Controlling Unit, UNLESS a Controlled
+    // Gate shares its Area — then that Gate's controller Controls the Shadow "as an
+    // additional Gate." Yog-Sothoth counts as that Gate only if he is the only
+    // non-Shadow Gate present. Returns the controlling faction, or None if r has no
+    // Shadow / TI is not in the game. `gates.has(r)` marks a real BUILT gate (Shadows
+    // are never added to game.gates), so it never self-references TI's default control.
+    def tiShadowController(r : Region) : |[Faction] =
+        if (!factions.has(TI) || !tiLordsShadowRegions.has(r)) None
+        else {
+            val builtGate = if (gates.has(r)) factions.find(e => e.at(r).%(_.onGate).any) else None
+            val yog       = factions.find(e => e.unitGate.exists(_.region == r))
+            builtGate.orElse(yog).orElse(Some(TI))
+        }
+
+    // Income the Lord's Shadow grants a faction AS AN ADDITIONAL GATE — i.e. only
+    // in the "a Controlled Gate shares the Shadow's Area" case (§1.2 rule 3). The
+    // default-TI-control case is NOT counted here; that Shadow lives in TI.gates and
+    // is already counted by the normal f.gates.num income path. Guarded so non-TI
+    // games get 0. Used additively in both the Doom-Phase and Gather-Power calcs.
+    def tiShadowAdditionalGates(f : Faction) : Int =
+        if (!factions.has(TI)) 0
+        else tiLordsShadowRegions.count(r => gates.has(r) && tiShadowController(r) == Some(f))
+
     def checkGatesLost() {
         factions.foreach { f =>
             f.gates.foreach { r =>
@@ -2259,7 +2325,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // faction. (The previous SBR4 exemption wrongly kept such Gates controlled,
                 // over-counting TB's Gather Power; owner-reported 2026-08-04.)
                 val bbMoonExempt = f == BB && r == BB.moon
-                if (!bbMoonExempt && f.at(r).%(_.onGate).none) {
+                // The Invasion (TI) Lord's Shadow: TI-default-controlled Shadows have
+                // NO Controlling Unit by design (§1.2), so the normal "no onGate unit →
+                // abandon the gate" rule must not drop them. triggers() removes r from
+                // TI.gates itself if a Controlled Gate in the Area takes the Shadow over,
+                // so any Shadow region still in TI.gates here is legitimately TI-default-
+                // controlled and must survive. Exempt only TI, only Shadow regions.
+                val tiShadowExempt = f == TI && tiLordsShadowRegions.has(r)
+                if (!bbMoonExempt && !tiShadowExempt && f.at(r).%(_.onGate).none) {
                     f.gates :-= r
                     f.log("lost control of the gate in", r)
                 }
@@ -3288,7 +3361,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val bbCats = if (f == BB) f.allInPlay.%(u => u.uclass.utype == Monster).num else 0
                 val bbHP = if (f == BB && options.has(HighPriests)) 1 else 0
 
-                f.power = hibernate + ownGates * 2 + csWellGates + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship + fbHPBonus + tbTentacleAreas + bbCats + bbHP
+                // The Invasion (TI): a Lord's Shadow held as an ADDITIONAL gate (a
+                // Controlled Gate shares its Area, §1.2) yields 2 Power like a gate, on
+                // top of that Area's own gate already in ownGates. Default-TI-controlled
+                // Shadows are in TI.gates and already counted in ownGates. Guarded → 0.
+                val tiShadowPower = tiShadowAdditionalGates(f) * 2
+
+                f.power = hibernate + ownGates * 2 + csWellGates + tiShadowPower + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship + fbHPBonus + tbTentacleAreas + bbCats + bbHP
                 f.hibernating = false
 
                 val fromHibernate = (hibernate > 0).?(hibernate.styled("region") + (wasHibernating.?(" hibernate").|(" carried over")))
@@ -3569,6 +3648,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             fbeActionInProgress = false
             fbeSelfConsumingDeaths = $
 
+            // The Invasion (TI): count Doom Phases so Spellbook Requirement 2 can fire
+            // at the second one (§1.9/§3.12). The award itself (and "all other players
+            // lose 1 Doom") is applied in TIExpansion.triggers() once this reaches 2, so
+            // it routes through the normal Requirement→spellbook-offer flow. Guarded.
+            if (factions.has(TI))
+                tiDoomPhaseCount += 1
+
             // Library at Celaeno: distribute Silence Tokens at start of Doom Phase
             if (board.isLibraryMap) {
                 factions.foreach { f =>
@@ -3597,8 +3683,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val gates = f.gates ++ (if (yogDoomSuppressed) $ else f.unitGate./(_.region))
                 val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
 
-                f.doom += valid.num
-                f.log("got", valid.num.doom)
+                // The Invasion (TI): a Lord's Shadow controlled by a faction AS AN
+                // ADDITIONAL gate (a Controlled Gate shares its Area, §1.2) grants +1
+                // Doom on top of that Area's own gate. The default-TI-controlled Shadow
+                // is already in TI.gates and counted in `valid`. Guarded → 0 without TI.
+                val tiShadowDoom = tiShadowAdditionalGates(f)
+
+                f.doom += valid.num + tiShadowDoom
+                f.log("got", (valid.num + tiShadowDoom).doom)
 
                 if (f.loyaltyCards.has(GnorriCard)) {
                     val gnorriCount = f.all(Gnorri).num
@@ -3648,6 +3740,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             doomPhase = false
             endActionPhasePrompts = false
+            // The Invasion (TI): Baphomet's Combat = 4 + Doom earned from Elder Signs
+            // THIS Action Phase (§1.8/§2.12). Reset the running counter at the start of
+            // every Action Phase; it is re-accumulated within the phase (see takeES).
+            tiElderSignDoomThisActionPhase = 0
             fbGhatoLastMoveOrigin = None
             fbeSelfConsumingDeaths = $
             fbeActionInProgress = true
@@ -3812,6 +3908,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // TT tribe spellbook filtering: only offer the 6 active library books (3 shared + 3 tribal)
                 if (f == TT && TTExpansion.ttActiveLibrary.any)
                     bs = bs.%(b => TTExpansion.ttActiveLibrary.has(b) || neutralSpellbooks.has(b))
+                // The Invasion (TI): Scavenge and Entropy Siphon are unit-linked (§1.10 /
+                // §3.10, creator-confirmed §2.8). Fulfilling any Requirement still lets TI
+                // pick any other book, but Scavenge is selectable only once a Gryllus is in
+                // play, and Entropy Siphon only once a Fiend is in play. Acquisition is NOT
+                // automatic on having the unit — the Requirement must be fulfilled as normal.
+                if (f == TI) {
+                    if (TI.all(Gryllus).none) bs = bs.%!(_ == Scavenge)
+                    if (TI.all(Fiend).none)   bs = bs.%!(_ == EntropySiphon)
+                }
                 // OW lost-2nd-spellbook fix: attach an OutOfTurnRefresh so that if an
                 // out-of-turn power (e.g. OW Dragon Ascending) is taken between two owed
                 // spellbook awards, returning via OutOfTurnReturn re-enters CheckSpellbooks
