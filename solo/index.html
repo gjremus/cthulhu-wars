@@ -257,6 +257,12 @@
                 background-clip: text;
                 -webkit-text-fill-color: transparent;
                 color: #d070d0; /* fallback if background-clip:text is unsupported */
+                /* Forces its own compositing layer so the gradient-clipped text still
+                   paints when a sibling <canvas> shares the same stacking context (the
+                   faction-card glyph canvas) — without this, Chromium can skip painting
+                   the clipped text entirely in that layout. */
+                -webkit-transform: translateZ(0);
+                transform: translateZ(0);
             }
 
             .ti {
@@ -1329,8 +1335,8 @@
 
         <!-- Colour Out of Space (CS) info-card / tooltip images (Layer-1 placeholders) -->
         <img class="asset" id="info:cs-background" src="webp/info/cs-background.webp" />
-        <!-- The Invasion (TI): LAYER 1 placeholder card background (reuse CS art until ti-background.webp lands) -->
-        <img class="asset" id="info:ti-background" src="webp/info/cs-background.webp" />
+        <!-- The Invasion (TI): official faction-card background from necronomicon.app (the-invasion/bg-board.jpg) -->
+        <img class="asset" id="info:ti-background" src="webp/info/ti-background.webp" />
         <img class="asset" id="info:cs-acolyte" src="webp/info/cs-acolyte.svg" />
         <img class="asset" id="info:cs-tulzscha" src="webp/info/cs-tulzscha.svg" />
         <img class="asset" id="info:cs-meteorite" src="webp/info/cs-meteorite.svg" />
