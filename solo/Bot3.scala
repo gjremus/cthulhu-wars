@@ -875,6 +875,30 @@ case class Bot3(faction : Faction) {
                     (u.is(Acolyte) && !u.region.ownGate)   |=>  1000 -> "lose off-gate acolyte to eye opens"
                     true                                   |=>     0 -> "default eye opens cultist choice"
 
+                // ────────────────────────────────────────────────────────────
+                // The Invasion (TI): the two cross-faction prompts asked of
+                // TI's ENEMIES (self = the enemy, never TI). Mirrors the
+                // canonical version added to BotX.scala's GameEvaluation.
+                // fbPromptedEvals for the same reason the FB block above is
+                // duplicated here — Bot3 doesn't extend GameEvaluation.
+                // See BotTI.scala's file header for the full rationale.
+                // ────────────────────────────────────────────────────────────
+                case TIBloodOfferingOfferAction(who, ur, i, _, drawn, _) =>
+                    val u = game.unit(ur)
+                    val esValue = drawn(i).value
+                    u.gateKeeper                           |=> -3000 -> "don't offer our gate keeper to TI's Blood Offering"
+                    true                                   |=> (esValue * 150 - u.uclass.cost * 200) -> "trade a Cultist for Doom via Blood Offering"
+
+                case TIBloodOfferingDeclineAction(who, _, _, _) =>
+                    true                                   |=>   100 -> "decline TI's Blood Offering: baseline, beats a bad offer"
+
+                case TIEntropySiphonPayAction(who, amount, _, remaining, _) =>
+                    val aheadOfTI = who.doom > TI.doom
+                    (amount == 0 && !aheadOfTI)             |=>  1000 -> "not ahead of TI on doom - the doom penalty can't reach us"
+                    (amount == 0 && aheadOfTI)              |=>  -200 -> "ahead of TI on doom - some contribution avoids a doom penalty"
+                    (amount > 0 && aheadOfTI)                |=> (200 - amount * 40) -> "pay a little to avoid entropy siphon's doom penalty"
+                    (amount > 0 && !aheadOfTI)               |=>  -500 -> "no need to pay - not at risk of the doom penalty"
+
                 // ── Library at Celaeno ──
                 case SpendOnCustodianAction(_) =>
                     true |=> 800 -> "activate custodian"

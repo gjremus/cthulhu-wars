@@ -665,6 +665,46 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
                 if (u.cultist && !u.region.ownGate)     add(  500, "give up off-gate cultist to Proselytize")
                 add(0, "default Proselytize drag choice")
 
+            // ────────────────────────────────────────────────────────────
+            // The Invasion (TI): score the two cross-faction prompts that get
+            // asked of TI's ENEMIES (self = the enemy being asked, never TI
+            // itself — the engine routes these through that enemy's OWN bot,
+            // so BotTI.scala can never see them; see BotTI.scala's file
+            // header). Mirrors the DC Proselytize precedent immediately above
+            // — a faction's own action reaching into another faction's bot.
+            //
+            //   1. TIBloodOfferingOfferAction / TIBloodOfferingDeclineAction —
+            //      offer one of OUR eligible Cultists to TI for a share of an
+            //      Elder Sign's Doom. A real trade: we gain Doom now, TI gains
+            //      a captured Cultist (progress toward its own Requirement 4)
+            //      and might use it against a rival, not us. Only worth it
+            //      when the ES value is meaningfully bigger than the Cultist
+            //      we're giving up, and never worth handing over a gatekeeper.
+            //   2. TIEntropySiphonPayAction — how much Power to contribute
+            //      toward the collective enemy Power-loss pool. 0 is always
+            //      legal (the shortfall becomes a Doom penalty instead, which
+            //      only bites players AHEAD of TI on Doom) — so pay only if
+            //      we are currently ahead of TI on Doom (otherwise the Doom
+            //      penalty can't touch us) and only what little Power we can
+            //      spare, since 0 has no downside for a player behind TI.
+            // ────────────────────────────────────────────────────────────
+            case TIBloodOfferingOfferAction(who, ur, i, _, drawn, _) =>
+                val u = game.unit(ur)
+                val esValue = drawn(i).value
+                if (u.gateKeeper)                       add(-3000, "don't offer our gate keeper to TI's Blood Offering")
+                if (u.uclass.utype != Cultist)           add(-100000, "only Cultists are eligible for Blood Offering")
+                add(esValue * 150 - u.uclass.cost * 200, "trade a Cultist for Doom via Blood Offering")
+
+            case TIBloodOfferingDeclineAction(who, _, _, _) =>
+                add(100, "decline TI's Blood Offering: baseline, beats a bad offer")
+
+            case TIEntropySiphonPayAction(who, amount, _, remaining, _) =>
+                val aheadOfTI = who.doom > TI.doom
+                if (amount == 0 && !aheadOfTI)          add(1000, "not ahead of TI on doom - the doom penalty can't reach us")
+                if (amount == 0 && aheadOfTI)           add(-200, "ahead of TI on doom - some contribution avoids a doom penalty")
+                if (amount > 0 && aheadOfTI)            add(200 - amount * 40, "pay a little to avoid entropy siphon's doom penalty")
+                if (amount > 0 && !aheadOfTI)           add(-500, "no need to pay - not at risk of the doom penalty")
+
             case _ =>
         }
 

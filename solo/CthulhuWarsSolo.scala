@@ -793,8 +793,8 @@ object CthulhuWarsSolo {
                                         case TB => BotTB    .ask(actions, 0.2)(game)
                                         // Colour Out of Space (CS): bot dispatch (Easy)
                                         case CS => BotCS    .ask(actions, 0.2)(game)
-                                        // The Invasion (TI): generic Bot3 (LAYER 1 — dedicated BotTI deferred)
-                                        case TI => Bot3(TI) .ask(actions, 0.2)(game)
+                                        // The Invasion (TI): bot dispatch (Easy)
+                                        case TI => BotTI    .ask(actions, 0.2)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -825,8 +825,8 @@ object CthulhuWarsSolo {
                                         case TB => BotTB    .ask(actions, 0.03)(game)
                                         // Colour Out of Space (CS): bot dispatch (Normal)
                                         case CS => BotCS    .ask(actions, 0.03)(game)
-                                        // The Invasion (TI): generic Bot3 (LAYER 1 — dedicated BotTI deferred)
-                                        case TI => Bot3(TI) .ask(actions, 0.03)(game)
+                                        // The Invasion (TI): bot dispatch (Normal)
+                                        case TI => BotTI    .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -861,8 +861,8 @@ object CthulhuWarsSolo {
                                         case TB => BotTB    .ask(as, 0.03)(game)
                                         // Colour Out of Space (CS): bot dispatch (AllVsHuman)
                                         case CS => BotCS    .ask(as, 0.03)(game)
-                                        // The Invasion (TI): generic Bot3 (LAYER 1 — dedicated BotTI deferred)
-                                        case TI => Bot3(TI) .ask(as, 0.03)(game)
+                                        // The Invasion (TI): bot dispatch (AllVsHuman)
+                                        case TI => BotTI    .ask(as, 0.03)(game)
                                     })
 
 
@@ -4829,7 +4829,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                 // Tombstalker (TS), BG, and BB: use Bot3 evaluation for debug action sorting
                                 // NOTE: only fires in Debug difficulty mode, not during normal bot play
-                                val sorted = if (f == BG || f == TS || f == BB || f == TI)
+                                val sorted = if (f == BG || f == TS || f == BB)
                                     Bot3(f).eval(aa)(g).sortBy(-_.evaluations.map(_.weight).sum)
                                 else
                                 if (f == null) {
@@ -4855,8 +4855,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         case XSS => BotXSS
                                         case TB => BotTB
                                         case CS => BotCS
-                                        // The Invasion (TI): handled by the Bot3 branch above (f == TI),
-                                        // like BG/TS/BB, since Bot3 has a different eval/compare shape.
+                                        // The Invasion (TI): debug action-sort dispatch, mirrors CS/TB.
+                                        case TI => BotTI
                                     })
                                     bot.eval(g, aa).sortWith(bot.compare)
                                 }
