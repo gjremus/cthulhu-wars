@@ -2935,17 +2935,37 @@ object CthulhuWarsSolo {
                 val silenceTokenIcon = if (stCount > 0)
                     s""" <span onclick='event.stopPropagation(); onExternalClick("SilenceToken", true)' onpointerover='event.stopPropagation(); onExternalOver("SilenceToken", true)' onpointerout='event.stopPropagation(); onExternalOut("SilenceToken", true)' style='cursor:pointer'><img src='${Overlays.imageSource("silence-token")}' style='height:1.2em; vertical-align:middle;'/></span>"""
                 else ""
-                val name = div("name")("" + f + silenceTokenIcon)
                 // CS's rainbow name uses a background-clip:text gradient (.cs in index.html),
                 // which fails to paint here specifically: this compact card name sits next to
                 // a sibling <canvas> (the faction glyph) in the same stacking context, and the
                 // existing translateZ(0) layer-promotion hack on .cs still doesn't make Chromium
                 // paint the clipped text in that layout (confirmed blank via direct element
-                // screenshot, even though the DOM/computed styles are all correct). Two solid-
-                // color spans always paint, so use those here instead of the fragile clip trick.
-                val shortNameStyled = if (f == CS)
-                    """<span style="color:#d070d0">C</span><span style="color:#b45cff">S</span>"""
-                else f.short.styled(f)
+                // screenshot, even though the DOM/computed styles are all correct). Solid-color
+                // spans always paint, so build CS's rainbow text out of those instead of the
+                // fragile clip trick — this must cover any length of text (the short "CS" case
+                // was already patched this way, but the full "Colour Out of Space" name shares
+                // the exact same bug and was still falling through to the broken gradient).
+                def csRainbowSpan(text : String) : String = {
+                    val stops = Seq((0.00, 0xd0, 0x70, 0xd0), (0.14, 0xb4, 0x5c, 0xff), (0.30, 0x6a, 0x7b, 0xff),
+                                     (0.46, 0x3f, 0xc8, 0xd0), (0.60, 0x4f, 0xd0, 0x6b), (0.74, 0xff, 0xd2, 0x3f),
+                                     (0.88, 0xff, 0x8c, 0x42), (1.00, 0xff, 0x5f, 0xa2))
+                    def colorAt(t : Double) : String = {
+                        val (lo, hi) = stops.zip(stops.drop(1)).find { case ((p0, _, _, _), (p1, _, _, _)) => t >= p0 && t <= p1 }.getOrElse((stops.head, stops.head))
+                        val (p0, r0, g0, b0) = lo
+                        val (p1, r1, g1, b1) = hi
+                        val span = if (p1 > p0) (t - p0) / (p1 - p0) else 0.0
+                        def mix(a : Int, b : Int) = math.round(a + (b - a) * span).toInt
+                        "#%02x%02x%02x".format(mix(r0, r1), mix(g0, g1), mix(b0, b1))
+                    }
+                    val n = text.length
+                    text.zipWithIndex.map { case (ch, i) =>
+                        val t = if (n <= 1) 0.0 else i.toDouble / (n - 1)
+                        s"""<span style="color:${colorAt(t)}">$ch</span>"""
+                    }.mkString("")
+                }
+                val nameStyled = if (f == CS) s"""<span class="inline-block">${csRainbowSpan(f.name)}</span>""" else "" + f
+                val name = div("name")(nameStyled + silenceTokenIcon)
+                val shortNameStyled = if (f == CS) csRainbowSpan(f.short) else f.short.styled(f)
                 val nameS = div("name")(shortNameStyled + silenceTokenIcon)
                 // Tombstalker (TS): append Death's Head count to faction status panel
                 val dhStr = (f == TS).?(" | " + (game.deathsHead.toString + " Death's Head").styled(TS)).|("")

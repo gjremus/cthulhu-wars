@@ -31,14 +31,17 @@ import html._
 //   * All six Spellbook Requirements (§1.9) as triggers()/action satisfies, and
 //     the Scavenge/Entropy-Siphon acquisition gating (Game.scala CheckSpellbooks).
 //   * Entropy Siphon's "Fiends can Control Gates" flag (§1.10).
+//   * Blood Offering (§1.10/§3.10.5) — draw+reveal 4 ES, per-enemy (turn-order, no
+//     timer — creator ruling 2026-09-08 "Option A") offer-a-Cultist micro-phase,
+//     TI accepts at most one offer and Captures for free; face-down until Gather Power.
 //
 // DEFERRED to LAYER 3 (documented, each a distinct piece, mostly Battle.scala /
 // cross-faction / payment-layer surface): Sacrament of Flesh forced Doom-Phase
 // removal; Unquenchable Thirst (Doom-for-Power in Baphomet's Area); Eternal
 // Servitude virtual-Power; Baphomet's Fury (Torment + Transference); the active
-// EFFECTS of Scavenge, Eclipse, Infernolatreia, Hellgate, Blood Offering, and
-// Entropy Siphon's enemy Power-loss allocation; the Lord's-Shadow-destroyed /
-// Portent-Area-destroyed Elder-Sign rewards; and the distinct Lord's Shadow glyph.
+// EFFECTS of Scavenge, Eclipse, Infernolatreia, and Hellgate; Entropy Siphon's
+// enemy Power-loss allocation; the Lord's-Shadow-destroyed / Portent-Area-destroyed
+// Elder-Sign rewards; and the distinct Lord's Shadow glyph.
 // ============================================================================
 
 
@@ -214,6 +217,41 @@ case class TIScavengeCaptureTargetAction(r : Region, f : Faction, ur : UnitRef) 
     g => "Scavenge capture " + ur + " in " + r, implicit g => "" + ur.full) { override def self = TI }
 case class TIScavengeDoneAction() extends BaseFactionAction(None, "Done") { override def self = TI }
 
+// Blood Offering (library Spellbook, Action cost 0, §1.10/§3.10.5): draw and reveal 4
+// Elder Signs, then give each enemy — in turn order, no timer (creator ruling
+// 2026-09-08, "Option A," replacing the card's real-time 2-minute window for this
+// synchronous engine) — one chance to offer a single eligible Cultist from play for
+// the Doom of one of the 4 revealed Elder Signs. TI then accepts AT MOST ONE offer
+// (or none — "may accept," never forced) and Captures that Cultist for free (no Power
+// cost; the "payment" is the enemy's Cultist and the enemy's Doom gain). All Elder
+// Signs not used that way (the other 3, or all 4 if TI declines every offer) simply
+// return to the pool — they were never added to any faction's es/revealed track, so
+// no further bookkeeping is needed for them. Flips face-down (TI.oncePerGame) until
+// the next Gather Power Phase, mirroring the existing Nuclear Chaos face-down/face-up
+// idiom (see the ActionPhaseAction case in Game.scala), except reset at Gather Power
+// instead of at the start of the Action Phase — see TIExpansion.triggers() below.
+//
+// "Eligible Cultist" (the guide leaves this undefined beyond "a Cultist from play"):
+// mirrors Scavenge's own capture-target filter (canBeCaptured, excluding
+// MindParasiteCultist) — but unlike Scavenge/the stock CaptureAction, does NOT apply
+// the GateDiplomacy "clings" restriction or the GOO-blocks-capture Area rule, since
+// here the enemy is voluntarily offering one of ITS OWN units (a self-sacrifice), not
+// being forcibly captured out of a protected Area — those protections don't apply.
+// Modeled on Entropy Siphon's own per-enemy allocation micro-phase immediately below
+// (same "queue in game.factions.but(TI) turn order" idiom).
+case class TIBloodOfferingMainAction() extends OptionFactionAction("Blood Offering — draw 4 Elder Signs, let enemies offer a Cultist (0 Power)") with MainQuestion { override def self = TI }
+case class TIBloodOfferingDrawAction(drawn : $[ElderSign], remaining : Int) extends ForcedAction
+case class TIBloodOfferingOfferLoopAction(queue : $[Faction], drawn : $[ElderSign], offers : $[(Faction, UnitRef, Int)]) extends ForcedAction
+case class TIBloodOfferingOfferAction(who : Faction, ur : UnitRef, i : Int, queue : $[Faction], drawn : $[ElderSign], offers : $[(Faction, UnitRef, Int)]) extends BaseFactionAction(
+    g => "Blood Offering: " + who + " offers " + ur + " for " + drawn(i).short,
+    implicit g => "Offer " + ur.full + " for " + drawn(i).short) { override def self = who }
+case class TIBloodOfferingDeclineAction(who : Faction, queue : $[Faction], drawn : $[ElderSign], offers : $[(Faction, UnitRef, Int)]) extends BaseFactionAction(None, "Decline") { override def self = who }
+case class TIBloodOfferingResolveAction(drawn : $[ElderSign], offers : $[(Faction, UnitRef, Int)]) extends ForcedAction
+case class TIBloodOfferingAcceptAction(who : Faction, ur : UnitRef, i : Int, drawn : $[ElderSign]) extends BaseFactionAction(
+    g => "Blood Offering: accepted " + who + "'s offer of " + ur,
+    implicit g => "Accept " + ur.full + " from " + who.full + " for " + drawn(i).short) { override def self = TI }
+case class TIBloodOfferingDeclineAllAction(offers : $[(Faction, UnitRef, Int)]) extends BaseFactionAction(None, "Decline all offers") { override def self = TI }
+
 // Entropy Siphon (Fiend-linked library Spellbook, Ongoing, §1.10/§3.10.6). Part 1
 // (Fiends can Control Gates) lives on Fiend.canControlGate above. Part 2 is this
 // end-of-Doom-Phase penalty: enemies collectively decide how to lose a combined
@@ -267,8 +305,15 @@ object TIExpansion extends Expansion {
         // forced Doom-Phase removal. gatherPowerPhase is true only inside the single
         // Gather-Power triggers() call, so this captures the Gather-Power value and is
         // never overwritten by the mid-action recomputes that also run triggers().
-        if (game.gatherPowerPhase)
+        if (game.gatherPowerPhase) {
             game.tiSacramentSpared = game.factions./~(e => e.at(TI.prison)).%(_.uclass.utype == Cultist).num
+
+            // Blood Offering (§1.10/§3.10.5): flip back face-up at the Gather Power
+            // Phase — the card's "flip this face down until the Gather Power Phase"
+            // text, mirroring Nuclear Chaos's identical face-down/face-up idiom (which
+            // resets at ActionPhaseAction instead — see Game.scala).
+            TI.oncePerGame = TI.oncePerGame.but(BloodOffering)
+        }
 
         // Lord's Shadow control reconciliation (§1.2 rule 3). A Shadow is TI-controlled
         // by default (kept in TI.gates with no unit); if a Controlled Gate shares its
@@ -459,6 +504,14 @@ object TIExpansion extends Expansion {
             // Gryllus on the map to move/act with.
             if (f.can(Scavenge) && f.power >= 2 && f.onMap(Gryllus).not(Zeroed).any)
                 + TIScavengeMainAction()
+
+            // Blood Offering (§1.10/§3.10.5): free (0 Power) Action — draw & reveal 4
+            // Elder Signs, then let each enemy (turn order) optionally offer one
+            // eligible Cultist for one of them; TI may accept at most one offer (or
+            // none) and Captures that Cultist for free. Flips face-down (TI.oncePerGame)
+            // until the next Gather Power Phase (see triggers() above).
+            if (f.can(BloodOffering))
+                + TIBloodOfferingMainAction()
 
             game.neutralSpellbooks(f)
             game.libraryActions(f)
@@ -760,6 +813,95 @@ object TIExpansion extends Expansion {
                 ProceedBattlesAction
             else
                 EndAction(TI)
+
+        // ================================================================
+        // BLOOD OFFERING (§1.10 / §3.10.5)
+        // ================================================================
+        // Commit the Action immediately (flat 0 Power, like Eclipse/Scavenge — a
+        // MainQuestion WITHOUT Soft records the action) and flip the card face-down
+        // (TI.oncePerGame) before entering the 4-Elder-Sign draw loop.
+        case TIBloodOfferingMainAction() =>
+            TI.acted = true
+            TI.oncePerGame :+= BloodOffering
+            TI.log("plays", BloodOffering.styled(TI) + " — draws 4", "Elder Signs".styled("es"))
+            Force(TIBloodOfferingDrawAction($, 4))
+
+        // Draw loop: one real Elder-Sign draw at a time via the same DrawES physical-
+        // companion seam every other ES gain in the engine uses (Game.CheckSpellbooksAction),
+        // weighted by what is not already accounted for — every faction's held/revealed
+        // ES, PLUS this card's own already-drawn-but-not-yet-returned tokens (so the 4
+        // draws within a single Blood Offering never double-count each other). x == 0
+        // means the shared 36-token pool is exhausted — stop early with whatever was
+        // drawn so far rather than loop forever or crash on drawn(i).
+        case TIBloodOfferingDrawAction(drawn, remaining) if remaining <= 0 =>
+            TI.log(BloodOffering.styled(TI), "revealed", drawn./(_.short).mkString(" "))
+            Force(TIBloodOfferingOfferLoopAction(game.factions.but(TI), drawn, $))
+
+        case TIBloodOfferingDrawAction(drawn, remaining) =>
+            val known = game.factions./~(f => f.es ++ f.revealed) ++ drawn
+            DrawES("Blood Offering draws an Elder Sign",
+                18 - known.count(_.value == 1), 12 - known.count(_.value == 2), 6 - known.count(_.value == 3),
+                (x, _) => if (x == 0) TIBloodOfferingDrawAction(drawn, 0) else TIBloodOfferingDrawAction(drawn :+ ElderSign(x), remaining - 1))
+
+        // Per-enemy offer loop (mirrors Entropy Siphon's own per-enemy allocation
+        // micro-phase immediately below): each enemy in turn order (game.factions.but(TI))
+        // may offer ONE of its eligible Cultists for ONE of the 4 revealed Elder Signs, or
+        // Decline; enemies with no eligible Cultist (or if none were drawn) are auto-
+        // skipped. Creator ruling (2026-09-08, "Option A"): synchronous, no timer, turn
+        // order — replacing the card's real-time 2-minute window for this engine.
+        case TIBloodOfferingOfferLoopAction(queue, drawn, offers) =>
+            if (queue.none)
+                Force(TIBloodOfferingResolveAction(drawn, offers))
+            else {
+                val who = queue.head
+                val eligible = who.cultists.%(u => u.uclass.canBeCaptured(u)).%(_.uclass != MindParasiteCultist)
+                if (eligible.none || drawn.none)
+                    Force(TIBloodOfferingOfferLoopAction(queue.tail, drawn, offers))
+                else {
+                    val variants = eligible.sortBy(u => u.uclass.cost * 10 + u.onGate.??(5))./~(u => drawn.indices./(i => (u.ref, i)))
+                    Ask(who)
+                        .each(variants)((ur, i) => TIBloodOfferingOfferAction(who, ur, i, queue.tail, drawn, offers))
+                        .add(TIBloodOfferingDeclineAction(who, queue.tail, drawn, offers))
+                }
+            }
+
+        case TIBloodOfferingOfferAction(who, ur, i, queue, drawn, offers) =>
+            who.log("offers", game.unit(ur), "for", drawn(i).short, "—", BloodOffering.styled(TI))
+            Force(TIBloodOfferingOfferLoopAction(queue, drawn, offers :+ (who, ur, i)))
+
+        case TIBloodOfferingDeclineAction(who, queue, drawn, offers) =>
+            Force(TIBloodOfferingOfferLoopAction(queue, drawn, offers))
+
+        // TI's final choice: accept AT MOST ONE offer (never forced — "may accept," per
+        // the card), Capturing that Cultist for free and awarding the matching Elder
+        // Sign's Doom to the offering enemy. Every Elder Sign not used this way (the
+        // other 3, or all 4 if TI declines) simply returns to the pool — they were never
+        // added to any faction's es/revealed track, so no further bookkeeping is needed.
+        case TIBloodOfferingResolveAction(drawn, offers) =>
+            if (offers.none) {
+                TI.log(BloodOffering.styled(TI) + ": no enemy offered a Cultist — all Elder Signs return to the pool")
+                EndAction(TI)
+            }
+            else
+                Ask(TI).each(offers)(o => TIBloodOfferingAcceptAction(o._1, o._2, o._3, drawn)).add(TIBloodOfferingDeclineAllAction(offers))
+
+        case TIBloodOfferingAcceptAction(who, ur, i, drawn) =>
+            val es = drawn(i)
+            who.doom += es.value
+            who.log("gains", es.value.doom, "—", BloodOffering.styled(TI), "(offer accepted)")
+            val victim = game.unit(ur)
+            val r = victim.region
+            game.eliminate(victim)
+            victim.region = TI.prison
+            TI.log("captures", victim, "in", r, "via", BloodOffering.styled(TI) + " — remaining Elder Signs return to the pool")
+            TI.satisfy(CaptureCultist, "Capture Cultist")
+            if (game.factions.has(FB))
+                game.fbCyclopeanGazeActionRegions :+= r
+            EndAction(TI)
+
+        case TIBloodOfferingDeclineAllAction(offers) =>
+            TI.log(BloodOffering.styled(TI) + ": declined all offers — Elder Signs return to the pool")
+            EndAction(TI)
 
         // Entropy Siphon Part 2 (§1.10/§3.10.6): the end-of-Doom-Phase enemy Power-loss
         // penalty. See the action-class declarations above for the full design rationale.

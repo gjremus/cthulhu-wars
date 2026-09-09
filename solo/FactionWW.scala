@@ -178,8 +178,17 @@ object WWExpansion extends Expansion {
             EndAction(self)
 
         case AwakenedAction(self, Ithaqua, r, cost) =>
-            if (game.gates.has(r)) {
+            if (game.gates.has(r) || game.tiLordsShadowRegions.has(r)) {
+                // The Invasion (TI): a Lord's Shadow or Portent Area in `r` is tracked
+                // separately from the bare global gate list (game.gates never includes
+                // Lord's Shadow regions — see FactionTI.scala's creation sites), so check
+                // and record both before the region's state is cleared below.
+                val wasLordsShadow = game.tiLordsShadowRegions.has(r)
+                val wasPortent = game.tiPortents.contains(r) && TI.gates.has(r)
+
                 game.gates :-= r
+                game.tiLordsShadowRegions :-= r
+                game.tiPortents = game.tiPortents - r
 
                 factions.foreach { e =>
                     e.gates :-= r
@@ -187,6 +196,17 @@ object WWExpansion extends Expansion {
                 }
 
                 self.log("destroyed gate in", r)
+
+                if (game.factions.has(TI)) {
+                    if (wasLordsShadow) {
+                        TI.takeES(2)
+                        TI.log("lost a", "Lord's Shadow".styled(TI), "in", r, "to", Ithaqua.styled(self) + " — gained", 2.es)
+                    }
+                    else if (wasPortent) {
+                        TI.takeES(1)
+                        TI.log("lost a", "Portent".styled(TI), "in", r, "to", Ithaqua.styled(self) + " — gained", 1.es)
+                    }
+                }
             }
             else {
                 val u = factions./~(_.unitGate).%(_.region == r).only
