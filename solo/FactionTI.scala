@@ -34,14 +34,22 @@ import html._
 //   * Blood Offering (§1.10/§3.10.5) — draw+reveal 4 ES, per-enemy (turn-order, no
 //     timer — creator ruling 2026-09-08 "Option A") offer-a-Cultist micro-phase,
 //     TI accepts at most one offer and Captures for free; face-down until Gather Power.
+//   * Lord's-Shadow-destroyed (2 ES) / Portent-Area-destroyed (1 ES) rewards, on
+//     the enemy destruction path (see FactionFB.scala's Crater handling).
+//   * Infernolatreia (§1.10, Ongoing) — whenever TI would gain 1+ Elder Signs, TI
+//     may instead draw and look at (Lord's Shadow count + 1) real cards from the
+//     shared pool and keep only the amount originally owed, returning the rest.
+//     Hooked once, centrally, at Game.scala's CheckSpellbooksAction ES-resolution
+//     seam (every real TI ES gain already funnels there via Faction.takeES), so
+//     no individual call site needed touching. See the TIInfernolatreiaMainAction
+//     declaration below for the full mechanic and edge-case notes.
 //
 // DEFERRED to LAYER 3 (documented, each a distinct piece, mostly Battle.scala /
 // cross-faction / payment-layer surface): Sacrament of Flesh forced Doom-Phase
 // removal; Unquenchable Thirst (Doom-for-Power in Baphomet's Area); Eternal
 // Servitude virtual-Power; Baphomet's Fury (Torment + Transference); the active
-// EFFECTS of Scavenge, Eclipse, Infernolatreia, and Hellgate; Entropy Siphon's
-// enemy Power-loss allocation; the Lord's-Shadow-destroyed / Portent-Area-destroyed
-// Elder-Sign rewards; and the distinct Lord's Shadow glyph.
+// EFFECTS of Scavenge, Eclipse, and Hellgate; Entropy Siphon's enemy Power-loss
+// allocation; and the distinct Lord's Shadow glyph.
 // ============================================================================
 
 
@@ -251,6 +259,52 @@ case class TIBloodOfferingAcceptAction(who : Faction, ur : UnitRef, i : Int, dra
     g => "Blood Offering: accepted " + who + "'s offer of " + ur,
     implicit g => "Accept " + ur.full + " from " + who.full + " for " + drawn(i).short) { override def self = TI }
 case class TIBloodOfferingDeclineAllAction(offers : $[(Faction, UnitRef, Int)]) extends BaseFactionAction(None, "Decline all offers") { override def self = TI }
+
+// Infernolatreia (library Spellbook, Ongoing, §1.10) — see overlay.scala's spellbook
+// description for the exact player-facing wording. Hooked centrally at the one
+// existing seam where the engine resolves any faction's owed-but-undetermined
+// Elder Sign(s) into real drawn values (Game.scala's CheckSpellbooksAction,
+// `if (fe.any)` branch) rather than at each of TI's ES-gain call sites — every one
+// of them (Sacrament of Flesh, Lord's Shadow / Portent-Area destruction rewards,
+// any future Ritual-based ES gain) already funnels through Faction.takeES, which
+// just enqueues that many "undetermined value" placeholder tokens; the actual pool
+// draw happens later, right here, one token at a time, in the unmodified engine.
+// Blood Offering's revealed cards never reach takeES for TI's own gain (an enemy
+// who accepts an offer gains the Doom — TI does not gain an ES there), so this
+// never double-dips with Blood Offering; no special-case carve-out needed.
+//
+// "May instead" — optional. Declining takes the ordinary single-card blind draw,
+// unchanged. Accepting draws (current Lord's Shadow count + 1) real cards from the
+// shared pool via the same DrawES seam Blood Offering already uses, reveals them to
+// TI only (no public log of the specific values drawn — this is "look at," not
+// Blood Offering's public "reveal," and no enemy is ever given an action tied to
+// these cards), then TI keeps exactly the amount originally owed; the rest are
+// simply never committed to any faction's es/revealed track — same "returns to the
+// pool untouched" bookkeeping Blood Offering's own leftover cards use.
+//
+// Edge cases:
+//   * If TI holds fewer Lord's Shadows than the amount owed, the draw is naturally
+//     capped at what the ability actually offers (Lord's Shadow count + 1); TI
+//     keeps everything drawn (no real choice) and whatever remains owed simply
+//     stays as ordinary undetermined tokens for the very next pass through this
+//     same resolution seam — Infernolatreia just can't cover that large a gain in
+//     one draw, so it applies partially rather than guessing at an unwritten
+//     house rule.
+//   * A genuine dry pool (the shared 36-Elder-Sign supply fully spoken for) is
+//     handled exactly like the plain blind draw already handles it (see
+//     ElderSignAction's v == 0 branch below): convert whatever can never be drawn
+//     to Doom right now, so this can never loop forever waiting on cards that no
+//     longer exist.
+case class TIInfernolatreiaMainAction(n : Int, next : ForcedAction) extends ForcedAction
+case class TIInfernolatreiaAcceptAction(n : Int, next : ForcedAction) extends BaseFactionAction(
+    g => "Infernolatreia — draw and look at " + (g.tiLordsShadowRegions.num + 1) + " Elder Sign(s), then keep " + n + " and return the rest?",
+    "Draw and look".styled(TI)) { override def self = TI }
+case class TIInfernolatreiaDeclineAction(n : Int, next : ForcedAction) extends BaseFactionAction(None, "Draw blind (decline Infernolatreia)") { override def self = TI }
+case class TIInfernolatreiaDrawAction(n : Int, toDraw : Int, drawn : $[ElderSign], dry : Boolean, next : ForcedAction) extends ForcedAction
+case class TIInfernolatreiaChooseLoopAction(remaining : Int, candidates : $[ElderSign], kept : $[ElderSign], next : ForcedAction) extends ForcedAction
+case class TIInfernolatreiaKeepOneAction(i : Int, remaining : Int, candidates : $[ElderSign], kept : $[ElderSign], next : ForcedAction) extends BaseFactionAction(
+    g => "Infernolatreia — keep " + remaining + " more of: " + candidates./(_.short).mkString(" "),
+    g => "Keep " + candidates(i).short) { override def self = TI }
 
 // Entropy Siphon (Fiend-linked library Spellbook, Ongoing, §1.10/§3.10.6). Part 1
 // (Fiends can Control Gates) lives on Fiend.canControlGate above. Part 2 is this
@@ -950,6 +1004,68 @@ object TIExpansion extends Expansion {
                 who.log("lost", amount.power, "toward", EntropySiphon.styled(TI))
             }
             Force(TIEntropySiphonAllocAction(queue.tail, remaining - amount, then))
+
+        // ================================================================
+        // INFERNOLATREIA (§1.10) — see the class-declarations comment above.
+        // ================================================================
+        case TIInfernolatreiaMainAction(n, next) =>
+            Ask(TI).add(TIInfernolatreiaAcceptAction(n, next)).add(TIInfernolatreiaDeclineAction(n, next))
+
+        case TIInfernolatreiaAcceptAction(n, next) =>
+            val toDraw = game.tiLordsShadowRegions.num + 1
+            TI.log("plays", Infernolatreia.styled(TI) + " — draws and looks at", toDraw.es, "before keeping", n.es)
+            Force(TIInfernolatreiaDrawAction(n, toDraw, $, false, next))
+
+        case TIInfernolatreiaDeclineAction(n, next) =>
+            TI.log(Infernolatreia.styled(TI) + ": declined — draws blind as normal")
+            val es = game.factions./~(f => f.es ++ f.revealed)
+            DrawES("" + TI + " gets " + n.es, 18 - es.%(_.value == 1).num, 12 - es.%(_.value == 2).num, 6 - es.%(_.value == 3).num,
+                (x, public) => ElderSignAction(TI, n, x, public, next))
+
+        case TIInfernolatreiaDrawAction(n, toDraw, drawn, dry, next) if toDraw <= 0 =>
+            if (dry) {
+                // Shared pool is fully spoken for — mirror ElderSignAction's own
+                // dry-pool fallback: convert every still-outstanding owed Elder
+                // Sign to Doom right now so this can never loop forever.
+                val stillOwed = TI.es.%(_.value == 0).num
+                val shortfall = stillOwed - drawn.num
+                TI.es = TI.es.%(_.value > 0) ++ drawn
+                TI.doom += shortfall
+                if (game.inActionPhase)
+                    game.tiElderSignDoomThisActionPhase += shortfall
+                TI.log(Infernolatreia.styled(TI), "looked at", drawn.any.?(drawn./(_.short).mkString(" ")).|("nothing") + " — no more Elder Signs left in the pool; kept them and got", shortfall.doom, "instead")
+                CheckSpellbooksAction(next)
+            }
+            else if (drawn.num <= n) {
+                // Lord's Shadow count capped the draw at or below the amount owed —
+                // no real choice, keep everything drawn; any still-unresolved amount
+                // stays as ordinary undetermined tokens for the next pass through
+                // CheckSpellbooksAction's normal resolution.
+                TI.es = TI.es.%(_.value > 0) ++ TI.es.%(_.value == 0).drop(drawn.num) ++ drawn
+                TI.log(Infernolatreia.styled(TI), "looked at and kept", drawn.any.?(drawn./(_.short).mkString(" ")).|("nothing"))
+                CheckSpellbooksAction(next)
+            }
+            else
+                Force(TIInfernolatreiaChooseLoopAction(n, drawn, $, next))
+
+        case TIInfernolatreiaDrawAction(n, toDraw, drawn, dry, next) =>
+            val known = game.factions./~(f => f.es ++ f.revealed) ++ drawn
+            DrawES(Infernolatreia.styled(TI) + " draws an Elder Sign",
+                18 - known.count(_.value == 1), 12 - known.count(_.value == 2), 6 - known.count(_.value == 3),
+                (x, _) => if (x == 0) TIInfernolatreiaDrawAction(n, 0, drawn, true, next) else TIInfernolatreiaDrawAction(n, toDraw - 1, drawn :+ ElderSign(x), false, next))
+
+        case TIInfernolatreiaChooseLoopAction(remaining, candidates, kept, next) if remaining <= 0 =>
+            TI.es = TI.es.%(_.value > 0) ++ TI.es.%(_.value == 0).drop(kept.num) ++ kept
+            TI.log(Infernolatreia.styled(TI) + ": kept", kept./(_.short).mkString(" "), candidates.any.??("— returned " + candidates.num.es + " to the pool"))
+            CheckSpellbooksAction(next)
+
+        case TIInfernolatreiaChooseLoopAction(remaining, candidates, kept, next) =>
+            Ask(TI).each(candidates.indices)(i => TIInfernolatreiaKeepOneAction(i, remaining, candidates, kept, next))
+
+        case TIInfernolatreiaKeepOneAction(i, remaining, candidates, kept, next) =>
+            val chosen = candidates(i)
+            val rest = candidates.zipWithIndex.filter(_._2 != i).map(_._1)
+            Force(TIInfernolatreiaChooseLoopAction(remaining - 1, rest, kept :+ chosen, next))
 
         case _ => UnknownContinue
     }

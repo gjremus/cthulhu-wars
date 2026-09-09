@@ -4043,7 +4043,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val n = f.es.%(_.value == 0).num
                 val es = factions./~(f => f.es ++ f.revealed)
 
-                DrawES("" + f + " gets " + n.es, 18 - es.%(_.value == 1).num, 12 - es.%(_.value == 2).num, 6 - es.%(_.value == 3).num, (x, public) => ElderSignAction(f, n, x, public, next))
+                // The Invasion (TI): Infernolatreia (Ongoing, §1.10) — before resolving
+                // TI's next plain blind draw for Elder Sign(s) it is owed, offer TI the
+                // option to instead draw-and-look-at (Lord's Shadow count + 1) real
+                // cards and keep only the amount originally owed (see FactionTI.scala's
+                // TIInfernolatreiaMainAction and its handlers for the full mechanic and
+                // design notes). Optional ("may instead") — declining falls through to
+                // the exact same plain blind draw below, unchanged.
+                if (f == TI && TI.has(Infernolatreia) && n > 0)
+                    TIInfernolatreiaMainAction(n, next)
+                else
+                    DrawES("" + f + " gets " + n.es, 18 - es.%(_.value == 1).num, 12 - es.%(_.value == 2).num, 6 - es.%(_.value == 3).num, (x, public) => ElderSignAction(f, n, x, public, next))
             }
             else {
                 Then(next)
