@@ -2212,7 +2212,7 @@ object Overlays {
 
     def ref(spellbook : Spellbook) = s"""<span class=ability-color>${spellbook.name}</span>"""
 
-    def reference(f : Faction, spellbook : Spellbook) = s"""<span class="ability-color pointer" onclick="onExternalClick('${f.short}', '${spellbook.name}')">${spellbook.name}</span>"""
+    def reference(f : Faction, spellbook : Spellbook) = s"""<span class="ability-color pointer" onclick="onExternalClick('${f.short}', '${spellbook.name.replace("'", "\\'")}')">${spellbook.name}</span>"""
 
     def anFactionOverlay(altSB : Boolean) = {
         // Dematerialization is AN's Unique Ability (Ongoing) — same in BOTH the standard
