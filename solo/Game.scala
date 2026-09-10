@@ -4075,8 +4075,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 self.log("Fecund".styled("nt") + ": placed", Acolyte.styled(self), "in", r, "with", Satyr.styled(self))
             }
 
-            // BG Fertility Cult: unlimited action (return to main menu after summon)
-            if (self.name == "BG" && self.oncePerRound.has(Fertility)) {
+            // BG Fertility Cult: unlimited action (return to main menu after summon).
+            // Row 13 root cause (2026-09-07): this compared self.name to "BG", but
+            // Faction.name is the display string ("Black Goat"), never the short
+            // code, so the comparison was always false and every Fertility summon
+            // fell through to EndAction — silently ending BG's turn and hiding the
+            // rest of the menu even when Fertility was used BEFORE the real action.
+            // Fixed to compare the faction object itself.
+            if (self == BG && self.oncePerRound.has(Fertility)) {
                 triggers()
                 Force(MainAction(self))
             }
