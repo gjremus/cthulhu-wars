@@ -2430,12 +2430,9 @@ object Overlays {
             val border = if (active) "3px solid #ff6a3d" else "3px solid transparent"
             val glow   = if (active) "box-shadow:0 0 14px #ff6a3d;" else ""
             val op     = if (active) "1" else "0.5"
-            val tag    = if (active) "<div class=p style='color:#ff6a3d;font-weight:bold;margin-top:0.4ex'>&#9654; FACE UP</div>"
-                         else        "<div class=p style='opacity:0.55;margin-top:0.4ex'>face down</div>"
             s"""<td style="width:50%;text-align:center;vertical-align:top;padding:0 1ex;">
                     <div class=p style="font-weight:bold;opacity:${op}">${label}</div>
                     <img class="img" src=${imageSource(id)} style="max-width:100%;height:auto;border:${border};${glow}border-radius:6px;opacity:${op}" />
-                    ${tag}
                 </td>"""
         }
         val status =
