@@ -1303,7 +1303,9 @@ object CthulhuWarsSolo {
                     // None (no re-tint). Square render (417x417, aspect 1.0). Sized to match
                     // Baphomet's height (TI's own Great Old One, 107h below) per owner request
                     // to make the Lord's Shadow read as GOO-sized rather than Gate-sized (76).
-                    case LordsShadowGate  => DrawRect("ti-lords-shadow", None, x - 53, y - 53, 107, 107)
+                    // Grounded like a Unit (feet at the area anchor, y), not centered like a
+                    // Gate — the top can overlap into an adjacent area, same as a tall unit.
+                    case LordsShadowGate  => DrawRect("ti-lords-shadow", None, x - 53, y - 107, 107, 107)
                     // Colour Out of Space (CS): the well sprite is a pre-colored multi-hue asset
                     // (no tint Processing, but a baked white outline like other units). The source
                     // art is portrait (400x535); drawn at 105x140 so the grey base circle (~73% of
