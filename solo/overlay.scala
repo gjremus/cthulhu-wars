@@ -373,7 +373,7 @@ object Overlays {
                 <div class=p>${cost("Cost:")} 2 with ${reference(BG, ThousandYoung)}.</div>
                 <div class=p>Spellbook: ${reference(BG, RedSign)}</div>"""
             ),
-            (ShubNiggurath, 1, "8", "?", s"""
+            (ShubNiggurath, 1, "8", calc(g => { implicit val gg : Game = g; BG.gates.num + BG.cultists.num + BG.all(DarkYoung).num * BG.can(RedSign).??(1) }), s"""
                 <div class=p>${cost(s"How to Awaken ${ShubNiggurath.name}:")}</div>
                 <div class=p>${cost("1)")} You must have a Controlled Gate, and at least 2 Cultists on the Map &mdash; they can be in any Area(s).</div>
                 <div class=p>${cost("2)")} Pay ${power(8)}.</div>
@@ -414,7 +414,7 @@ object Overlays {
                 <div class=p>${ref(Desecrate)} ${cost("(Action: Cost 2):")} If the King is in an Area with no Desecration Token, roll 1 die and compare to your total units in the Area (including the King). On a roll equal or less than your unit total, place a Desecration Token in the Area. If you succeed or fail, place a Monster or Cultist with a cost of 2 or less in the Area.</div>
                 <div class=p>Spellbook: ${reference(YS, ScreamingDead)}</div>"""
             ),
-            (Hastur, 1, "10", "?", s"""
+            (Hastur, 1, "10", calc(g => { implicit val gg : Game = g; g.ritualCost }), s"""
                 <div class=p>${cost(s"How to Awaken ${Hastur.name}:")}</div>
                 <div class=p>${cost("1)")} You must have a Controlled Gate and the King in Yellow in the same area.</div>
                 <div class=p>${cost("2)")} Pay ${power(10)}. ${Hastur.name} appears in the King's Area.</div>
