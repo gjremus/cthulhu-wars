@@ -2405,7 +2405,9 @@ object Overlays {
                 <div class=p>${cost("1)")} Permanently remove your Faction Unit in an Area from the game.</div>
                 <div class=p>${cost("2)")} Baphomet appears in that Area.</div>
                 <div class=p>${combat} 4 plus the total Doom you have earned from Elder Signs this Action Phase.</div>
-                <div class=p>${reference(TI, UnquenchableThirst)}, ${reference(TI, SacramentOfFlesh)}, ${reference(TI, BaphometsFury)}</div>""")
+                <div class=p>${reference(TI, UnquenchableThirst)}</div>
+                <div class=p>${reference(TI, SacramentOfFlesh)}</div>
+                <div class=p>${reference(TI, BaphometsFury)}</div>""")
         ), setup = true)
     }
 
