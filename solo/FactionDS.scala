@@ -223,7 +223,7 @@ object DSExpansion extends Expansion {
                 + ChaosGateSBAction(f)
 
             if (f.can(AnimateMatter) && DS.chaosGateRegions.any) {
-                val allStarts = game.factions.%(fac => game.starting.contains(fac))./(fac => game.starting(fac))
+                val allStarts = game.factions.%(fac => fac != f && game.starting.contains(fac))./(fac => game.starting(fac))
                 val validGates = DS.chaosGateRegions.distinct.%(cgr =>
                     DS.gates.has(cgr) &&
                     DS.at(cgr).%(_.onGate).any &&
@@ -512,7 +512,7 @@ object DSExpansion extends Expansion {
 
         // ANIMATE MATTER
         case AnimateMatterAction(self) =>
-            val allStarts = game.factions.%(fac => game.starting.contains(fac))./(fac => game.starting(fac))
+            val allStarts = game.factions.%(fac => fac != self && game.starting.contains(fac))./(fac => game.starting(fac))
             val validGates = DS.chaosGateRegions.distinct.%(cgr =>
                 DS.gates.has(cgr) &&
                 DS.at(cgr).%(_.onGate).any &&
@@ -528,7 +528,7 @@ object DSExpansion extends Expansion {
             }
 
         case AnimateMatterFromAction(self, from) =>
-            val allStarts = game.factions.%(fac => game.starting.contains(fac))./(fac => game.starting(fac))
+            val allStarts = game.factions.%(fac => fac != self && game.starting.contains(fac))./(fac => game.starting(fac))
             val otherChaosGates = DS.chaosGateRegions.%(r => r != from)
             val dests = game.board.connected(from).%(r => allStarts.has(r).not).%(r => otherChaosGates.has(r).not).%(r => self.affords(1)(r))
             Ask(self).list(dests./(r => AnimateMatterMoveAction(self, from, r))).cancel

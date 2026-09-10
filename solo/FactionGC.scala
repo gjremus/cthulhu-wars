@@ -274,9 +274,11 @@ object GCExpansion extends Expansion {
             }
 
         case SubmergeDoneAction(f, r) =>
-            val cthulu = f.at(GC.deep).one(Cthulhu)
-            val court = f.at(GC.deep).but(cthulu)
-            log(cthulu, "submerged in", r, court.any.??("with " + court.mkString(", ")))
+            if (f.at(GC.deep).%(_.uclass == Cthulhu).any) {
+                val cthulu = f.at(GC.deep).one(Cthulhu)
+                val court = f.at(GC.deep).but(cthulu)
+                log(cthulu, "submerged in", r, court.any.??("with " + court.mkString(", ")))
+            }
             EndAction(f)
 
         case UnsubmergeMainAction(f, l) =>
@@ -284,19 +286,21 @@ object GCExpansion extends Expansion {
 
         case UnsubmergeAction(f, r) =>
             f.payTax(r)
-            val cthulu = f.at(GC.deep).one(Cthulhu)
-            val court = f.at(GC.deep).but(cthulu)
-            // BB Bullet 50 (v2.4.29): set the GC-unsubmerge transient flag
-            // while Cthulhu and his court are surfaced to the destination.
-            // This grants the Moon-entry place() guard (Game.scala) an
-            // exception when r == BB.moon. The direct u.region = r
-            // assignments below bypass place(), so the flag is primarily
-            // defense-in-depth for any future place() route through this
-            // action.
-            game.gcInUnsubmerge = true
-            f.at(GC.deep).foreach(_.region = r)
-            game.gcInUnsubmerge = false
-            log(cthulu, "unsubmerged in", r, court.any.??("with " + court.mkString(", ")))
+            if (f.at(GC.deep).%(_.uclass == Cthulhu).any) {
+                val cthulu = f.at(GC.deep).one(Cthulhu)
+                val court = f.at(GC.deep).but(cthulu)
+                // BB Bullet 50 (v2.4.29): set the GC-unsubmerge transient flag
+                // while Cthulhu and his court are surfaced to the destination.
+                // This grants the Moon-entry place() guard (Game.scala) an
+                // exception when r == BB.moon. The direct u.region = r
+                // assignments below bypass place(), so the flag is primarily
+                // defense-in-depth for any future place() route through this
+                // action.
+                game.gcInUnsubmerge = true
+                f.at(GC.deep).foreach(_.region = r)
+                game.gcInUnsubmerge = false
+                log(cthulu, "unsubmerged in", r, court.any.??("with " + court.mkString(", ")))
+            }
             EndAction(f)
 
         // ...

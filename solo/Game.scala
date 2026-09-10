@@ -4720,8 +4720,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 self.log("Fecund".styled("nt") + ": placed", satyrFecundUC.styled(self), "in", r, "with", Satyr.styled(self))
             }
 
-            // BG Fertility Cult: unlimited action (return to main menu after summon)
-            if (self.name == "BG" && self.oncePerRound.contains(Fertility)) {
+            // BG Fertility Cult: unlimited action (return to main menu after summon).
+            // Fixed 2026-09-07 (row 13): self.name is the display string ("Black
+            // Goat"), never the short code, so this was always false and every
+            // Fertility summon fell through to EndAction, ending BG's turn early.
+            if (self == BG && self.oncePerRound.contains(Fertility)) {
                 triggers()
                 Force(MainAction(self))
             }
