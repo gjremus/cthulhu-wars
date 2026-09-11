@@ -186,6 +186,17 @@ abstract class NeutralTerrorLoyaltyCard(val icon : UnitClass, val unit : UnitCla
     override val power = powerCost
 }
 
+// Dunwich Horror — the Whateley Clan. Shared neutral Cultist/Terror cards that are
+// recruited in the Doom Phase by paying Power (not Doom), and that can change hands
+// between owners. doom = 0 keeps them out of the ordinary doom-cost hire step; the
+// Whateley recruit flow is handled separately.
+abstract class WhateleyLoyaltyCard(val icon : UnitClass, val unit : UnitClass, powerCost : Int, val combat : Int) extends LoyaltyCard {
+    override val doom = 0
+    override val power = powerCost
+    override val cost = powerCost
+    val quantity = 1
+}
+
 
 sealed trait UnitType {
     def name = toString
@@ -1168,6 +1179,8 @@ case object NeutralSpellbooks extends GameOption
 case object NeutralMonsters extends GameOption
 case object NeutralTerrors extends GameOption
 case object IGOOs extends GameOption
+// Dunwich Horror — new "Neutral Cultists (Whateley Clan)" category toggle.
+case object WhateleyClan extends GameOption
 
 case object IceAgeAffectsLethargy extends GameOption
 case object Opener4P10Gates extends GameOption
@@ -1240,6 +1253,15 @@ case object UseBloatedWoman extends LoyaltyCardGameOption(BloatedWomanCard) with
 case object UseAtlachNacha extends LoyaltyCardGameOption(AtlachNachaCard) with IGOOOption
 case object UseBokrug extends LoyaltyCardGameOption(BokrugCard) with IGOOOption
 case object UseGlaakiIGOO extends LoyaltyCardGameOption(GlaakiIGOOCard) with IGOOOption
+// Dunwich Horror — Dire Yog-Sothoth is an Independent Great Old One.
+case object UseDireYogSothoth extends LoyaltyCardGameOption(DireYogSothothCard) with IGOOOption
+
+// Dunwich Horror — the four Whateley Clan cards (own category).
+sealed trait WhateleyClanOption extends LoyaltyCardGameOption
+case object UseLaviniaWhateley extends LoyaltyCardGameOption(LaviniaWhateleyCard) with WhateleyClanOption
+case object UseWilburWhateley extends LoyaltyCardGameOption(WilburWhateleyCard) with WhateleyClanOption
+case object UseWizardWhateley extends LoyaltyCardGameOption(WizardWhateleyCard) with WhateleyClanOption
+case object UseJuniorWhateley extends LoyaltyCardGameOption(JuniorWhateleyCard) with WhateleyClanOption
 
 case class PlayerCount(n : Int) extends GameOption
 
@@ -1253,6 +1275,7 @@ object GameOptions {
         NeutralMonsters,
         NeutralTerrors,
         IGOOs,
+        WhateleyClan,
         IceAgeAffectsLethargy,
         Opener4P10Gates,
         OpenerCheapMutants,
@@ -1310,6 +1333,11 @@ object GameOptions {
         UseAtlachNacha,
         UseBokrug,
         UseGlaakiIGOO,
+        UseDireYogSothoth,
+        UseLaviniaWhateley,
+        UseWilburWhateley,
+        UseWizardWhateley,
+        UseJuniorWhateley,
         PlayerCount(3),
         PlayerCount(4),
         PlayerCount(5),
@@ -2901,6 +2929,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             .%(igoo => !(igoo == GlaakiIGOOCard && factions.has(TS)))
             .%(igoo => igoo != AzathothIGOOCard)
             .%(igoo => igoo != CthughaCard)
+            .%(igoo => igoo != DireYogSothothCard)  // Dunwich: custom awaken only
             .%(igoo => {
                 val cost = igooCost(f, igoo)
                 f.awakenIGOORegions.%(f.canAwakenIGOO).%(r => dcTenebrosumGuard || f.affords(cost)(r)).any
@@ -3032,6 +3061,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             .%(igoo => !(igoo == GlaakiIGOOCard && factions.has(TS)))
             .%(igoo => igoo != AzathothIGOOCard)
             .%(igoo => igoo != CthughaCard)
+            .%(igoo => igoo != DireYogSothothCard)  // Dunwich: custom awaken only
             .%(igoo => {
                 val cost = igooCost(f, igoo)
                 f.awakenIGOORegions.%(f.canAwakenIGOO).%(r => dcTenebrosumGuard || f.affords(cost)(r)).any

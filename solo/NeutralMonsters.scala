@@ -20,6 +20,39 @@ case object VoonithIcon extends UnitClass(Voonith.name + " Icon", Token, 0)
 
 trait NeutralMonster
 
+// ── DUNWICH HORROR — THE WHATELEY CLAN ──
+// Shared neutral units recruited in the Doom Phase by paying Power, and which can change
+// hands. They are never offered by the ordinary recruit/summon menus (canBeRecruited /
+// canBeSummoned forced false); acquisition is only through the Whateley recruit flow.
+trait WhateleyClanUnit
+
+case object LaviniaWhateley extends UnitClass("Lavinia Whateley", Cultist, 2) with WhateleyClanUnit {
+    override def canBeRecruited(f : Faction)(implicit game : Game) = false
+    override def canBeSummoned(f : Faction)(implicit game : Game) = false
+}
+case object WilburWhateley extends UnitClass("Wilbur Whateley", Cultist, 3) with WhateleyClanUnit {
+    override def canBeRecruited(f : Faction)(implicit game : Game) = false
+    override def canBeSummoned(f : Faction)(implicit game : Game) = false
+}
+case object WizardWhateley extends UnitClass("Wizard Whateley", Cultist, 2) with WhateleyClanUnit {
+    override def canBeRecruited(f : Faction)(implicit game : Game) = false
+    override def canBeSummoned(f : Faction)(implicit game : Game) = false
+}
+case object JuniorWhateley extends UnitClass("Junior Whateley", Terror, 4) with WhateleyClanUnit {
+    override def canBeRecruited(f : Faction)(implicit game : Game) = false
+    override def canBeSummoned(f : Faction)(implicit game : Game) = false
+}
+
+case object LaviniaWhateleyIcon extends UnitClass(LaviniaWhateley.name + " Icon", Token, 0)
+case object WilburWhateleyIcon extends UnitClass(WilburWhateley.name + " Icon", Token, 0)
+case object WizardWhateleyIcon extends UnitClass(WizardWhateley.name + " Icon", Token, 0)
+case object JuniorWhateleyIcon extends UnitClass(JuniorWhateley.name + " Icon", Token, 0)
+
+case object LaviniaWhateleyCard extends WhateleyLoyaltyCard(LaviniaWhateleyIcon, LaviniaWhateley, powerCost = 2, combat = 0)
+case object WilburWhateleyCard extends WhateleyLoyaltyCard(WilburWhateleyIcon, WilburWhateley, powerCost = 3, combat = 0)
+case object WizardWhateleyCard extends WhateleyLoyaltyCard(WizardWhateleyIcon, WizardWhateley, powerCost = 2, combat = 0)
+case object JuniorWhateleyCard extends WhateleyLoyaltyCard(JuniorWhateleyIcon, JuniorWhateley, powerCost = 4, combat = 4)
+
 case object Ghast extends UnitClass("Ghast", Monster, 2) with NeutralMonster { override val priority = 1001 }
 case object Gug extends UnitClass("Gug", Monster, 1) with NeutralMonster {
     override def canCapture(u : UnitFigure)(implicit game : Game) = false

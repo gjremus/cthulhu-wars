@@ -1384,6 +1384,13 @@ object CthulhuWarsSolo {
                     case Bokrug            => DrawRect("n-bokrug", |(neutralTint), x - 55, y - 115, 110, 125)
                     case GlaakiIGOO        => DrawRect("n-glaaki-igoo", |(neutralTint), x - 55, y - 115, 110, 125)
 
+                    // Dunwich Horror — Whateley Clan + Dire Yog-Sothoth
+                    case LaviniaWhateley   => DrawRect("n-lavinia-whateley-dunwich", |(neutralTint), x - 13, y - 53, 26, 60)
+                    case WilburWhateley    => DrawRect("n-wilbur-whateley", |(neutralTint), x - 16, y - 57, 32, 64)
+                    case WizardWhateley    => DrawRect("n-wizard-whateley", |(neutralTint), x - 29, y - 49, 59, 55)
+                    case JuniorWhateley    => DrawRect("n-junior-whateley", |(neutralTint), x - 48, y - 100, 97, 112)
+                    case DireYogSothoth    => DrawRect("n-dire-yog-sothoth", |(neutralTint), x - 66, y - 138, 132, 150)
+
                     case GhastIcon        => DrawRect("ghast-icon", None, x - 17, y - 55, 50, 50)
                     case GugIcon          => DrawRect("gug-icon", None, x - 17, y - 55, 50, 50)
                     case ShantakIcon      => DrawRect("shantak-icon", None, x - 17, y - 55, 50, 50)
@@ -1425,6 +1432,12 @@ object CthulhuWarsSolo {
                     case AtlachNachaIcon         => DrawRect("atlach-nacha-icon", None, x - 17, y - 55, 50, 50)
                     case BokrugIcon              => DrawRect("bokrug-icon", None, x - 17, y - 55, 50, 50)
                     case GlaakiIGOOIcon          => DrawRect("glaaki-igoo-icon", None, x - 17, y - 55, 50, 50)
+                    // Dunwich Horror icons
+                    case LaviniaWhateleyIcon     => DrawRect("lavinia-whateley-icon", None, x - 17, y - 55, 50, 50)
+                    case WilburWhateleyIcon      => DrawRect("wilbur-whateley-icon", None, x - 17, y - 55, 50, 50)
+                    case WizardWhateleyIcon      => DrawRect("wizard-whateley-icon", None, x - 17, y - 55, 50, 50)
+                    case JuniorWhateleyIcon      => DrawRect("junior-whateley-icon", None, x - 17, y - 55, 50, 50)
+                    case DireYogSothothIcon      => DrawRect("dire-yog-sothoth-icon", None, x - 17, y - 55, 50, 50)
 
                     // Round 8 Bug 53: dedicated 66x66 render for the on-map starting glyph of
                     // dynamic-start factions (FB, TS). Dispatches by faction. Smaller than the
@@ -5071,6 +5084,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, ByatisCard, UseByatis, setup.options.has(IGOOs)) ++
                     useWith(setup, CthughaCard, UseCthugha, setup.options.has(IGOOs)) ++
                     useWith(setup, DaolothCard, UseDaoloth, setup.options.has(IGOOs)) ++
+                    useWith(setup, DireYogSothothCard, UseDireYogSothoth, setup.options.has(IGOOs)) ++
                     useWith(setup, FatherDagonCard, UseFatherDagon, setup.options.has(IGOOs)) ++
                     useWith(setup, GhatanotoaIGOOCard, UseGhatanotoaIGOO, setup.options.has(IGOOs)) ++
                     useWith(setup, GlaakiIGOOCard, UseGlaakiIGOO, setup.options.has(IGOOs)) ++
@@ -5080,6 +5094,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, TulzschaCard, UseTulzscha, setup.options.has(IGOOs)) ++
                     useWith(setup, YgolonacCard, UseYgolonac, setup.options.has(IGOOs)) ++
                     useWith(setup, YigCard, UseYig, setup.options.has(IGOOs)) ++
+                    // Dunwich Horror — Neutral Cultists (Whateley Clan), alphabetical
+                    $("Variants" -> ("Neutral".styled("neutral") + " cultists — Whateley Clan (" + setup.get(WhateleyClan).?("yes").|("no").hl + ")")) ++
+                    useWith(setup, JuniorWhateleyCard, UseJuniorWhateley, setup.options.has(WhateleyClan)) ++
+                    useWith(setup, LaviniaWhateleyCard, UseLaviniaWhateley, setup.options.has(WhateleyClan)) ++
+                    useWith(setup, WilburWhateleyCard, UseWilburWhateley, setup.options.has(WhateleyClan)) ++
+                    useWith(setup, WizardWhateleyCard, UseWizardWhateley, setup.options.has(WhateleyClan)) ++
                     (factions.has(SL) && factions.has(WW))
                         .$("Variants" -> ("" + IceAge + " affects " + Lethargy + " (" + setup.get(IceAgeAffectsLethargy).?("yes").|("no").hl + ")")) ++
                     (factions.has(OW) && factions.num == 4)
@@ -5185,7 +5205,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             setup.toggle(IGOOs)
 
                             if (setup.options.has(IGOOs))
-                                setup.options ++= $(UseAbhoth, UseAtlachNacha, UseAzathothIGOO, UseBokrug, UseByatis, UseCthugha, UseDaoloth, UseFatherDagon, UseGhatanotoaIGOO, UseGlaakiIGOO, UseMotherHydra, UseNyogtha, UseBloatedWoman, UseTulzscha, UseYgolonac, UseYig)
+                                setup.options ++= $(UseAbhoth, UseAtlachNacha, UseAzathothIGOO, UseBokrug, UseByatis, UseCthugha, UseDaoloth, UseDireYogSothoth, UseFatherDagon, UseGhatanotoaIGOO, UseGlaakiIGOO, UseMotherHydra, UseNyogtha, UseBloatedWoman, UseTulzscha, UseYgolonac, UseYig)
                             else
                                 setup.options = setup.options.notOf[IGOOOption]
 
@@ -5200,6 +5220,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1; if (n == 0) { setup.toggle(UseByatis); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseCthugha); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseDaoloth); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseDireYogSothoth); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseFatherDagon); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGhatanotoaIGOO); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGlaakiIGOO); setupQuestions() }
@@ -5209,6 +5230,22 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1; if (n == 0) { setup.toggle(UseTulzscha); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseYgolonac); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseYig); setupQuestions() }
+                        }
+                        n -= 1
+                        if (n == 0) {
+                            setup.toggle(WhateleyClan)
+                            if (setup.options.has(WhateleyClan))
+                                setup.options ++= $(UseJuniorWhateley, UseLaviniaWhateley, UseWilburWhateley, UseWizardWhateley)
+                            else
+                                setup.options = setup.options.notOf[WhateleyClanOption]
+                            setupQuestions()
+                        }
+                        if (setup.options.has(WhateleyClan)) {
+                            // Whateley Clan (alphabetical): Junior, Lavinia, Wilbur, Wizard
+                            n -= 1; if (n == 0) { setup.toggle(UseJuniorWhateley); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseLaviniaWhateley); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseWilburWhateley); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseWizardWhateley); setupQuestions() }
                         }
                         if (factions.has(SL) && factions.has(WW)) {
                             n -= 1
@@ -5417,6 +5454,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, ByatisCard, UseByatis, setup.options.has(IGOOs)) ++
                     useWith(setup, CthughaCard, UseCthugha, setup.options.has(IGOOs)) ++
                     useWith(setup, DaolothCard, UseDaoloth, setup.options.has(IGOOs)) ++
+                    useWith(setup, DireYogSothothCard, UseDireYogSothoth, setup.options.has(IGOOs)) ++
                     useWith(setup, FatherDagonCard, UseFatherDagon, setup.options.has(IGOOs)) ++
                     useWith(setup, GhatanotoaIGOOCard, UseGhatanotoaIGOO, setup.options.has(IGOOs)) ++
                     useWith(setup, GlaakiIGOOCard, UseGlaakiIGOO, setup.options.has(IGOOs)) ++
@@ -5426,6 +5464,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, TulzschaCard, UseTulzscha, setup.options.has(IGOOs)) ++
                     useWith(setup, YgolonacCard, UseYgolonac, setup.options.has(IGOOs)) ++
                     useWith(setup, YigCard, UseYig, setup.options.has(IGOOs)) ++
+                    // Dunwich Horror — Neutral Cultists (Whateley Clan), alphabetical
+                    $("Variants" -> ("Neutral".styled("neutral") + " cultists — Whateley Clan (" + setup.get(WhateleyClan).?("yes").|("no").hl + ")")) ++
+                    useWith(setup, JuniorWhateleyCard, UseJuniorWhateley, setup.options.has(WhateleyClan)) ++
+                    useWith(setup, LaviniaWhateleyCard, UseLaviniaWhateley, setup.options.has(WhateleyClan)) ++
+                    useWith(setup, WilburWhateleyCard, UseWilburWhateley, setup.options.has(WhateleyClan)) ++
+                    useWith(setup, WizardWhateleyCard, UseWizardWhateley, setup.options.has(WhateleyClan)) ++
                     (factions.has(SL) && factions.has(WW))
                         .$("Variants" -> ("" + IceAge + " affects " + Lethargy + " (" + setup.get(IceAgeAffectsLethargy).?("yes").|("no").hl + ")")) ++
                     (factions.has(OW) && factions.num == 4)
@@ -5534,7 +5578,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             setup.toggle(IGOOs)
 
                             if (setup.options.has(IGOOs))
-                                setup.options ++= $(UseAbhoth, UseAtlachNacha, UseAzathothIGOO, UseBokrug, UseByatis, UseCthugha, UseDaoloth, UseFatherDagon, UseGhatanotoaIGOO, UseGlaakiIGOO, UseMotherHydra, UseNyogtha, UseBloatedWoman, UseTulzscha, UseYgolonac, UseYig)
+                                setup.options ++= $(UseAbhoth, UseAtlachNacha, UseAzathothIGOO, UseBokrug, UseByatis, UseCthugha, UseDaoloth, UseDireYogSothoth, UseFatherDagon, UseGhatanotoaIGOO, UseGlaakiIGOO, UseMotherHydra, UseNyogtha, UseBloatedWoman, UseTulzscha, UseYgolonac, UseYig)
                             else
                                 setup.options = setup.options.notOf[IGOOOption]
 
@@ -5549,6 +5593,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1; if (n == 0) { setup.toggle(UseByatis); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseCthugha); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseDaoloth); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseDireYogSothoth); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseFatherDagon); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGhatanotoaIGOO); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGlaakiIGOO); setupQuestions() }
@@ -5558,6 +5603,22 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1; if (n == 0) { setup.toggle(UseTulzscha); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseYgolonac); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseYig); setupQuestions() }
+                        }
+                        n -= 1
+                        if (n == 0) {
+                            setup.toggle(WhateleyClan)
+                            if (setup.options.has(WhateleyClan))
+                                setup.options ++= $(UseJuniorWhateley, UseLaviniaWhateley, UseWilburWhateley, UseWizardWhateley)
+                            else
+                                setup.options = setup.options.notOf[WhateleyClanOption]
+                            setupQuestions()
+                        }
+                        if (setup.options.has(WhateleyClan)) {
+                            // Whateley Clan (alphabetical): Junior, Lavinia, Wilbur, Wizard
+                            n -= 1; if (n == 0) { setup.toggle(UseJuniorWhateley); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseLaviniaWhateley); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseWilburWhateley); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseWizardWhateley); setupQuestions() }
                         }
                         if (factions.has(SL) && factions.has(WW)) {
                             n -= 1
@@ -5769,7 +5830,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             )
             val randIGOOPool : $[GameOption] = $(
                 UseAbhoth, UseAtlachNacha, UseAzathothIGOO, UseBokrug, UseByatis,
-                UseCthugha, UseDaoloth, UseFatherDagon, UseGhatanotoaIGOO,
+                UseCthugha, UseDaoloth, UseDireYogSothoth, UseFatherDagon, UseGhatanotoaIGOO,
                 UseGlaakiIGOO, UseMotherHydra, UseNyogtha, UseBloatedWoman,
                 UseTulzscha, UseYgolonac, UseYig
             )

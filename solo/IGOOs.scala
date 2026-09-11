@@ -88,6 +88,13 @@ case object GlaakiIGOOCard extends IGOOLoyaltyCard(GlaakiIGOOIcon, GlaakiIGOO, p
 case object GlaakiIGOOIcon extends UnitClass("Gla'aki (IGOO) Icon", Token, 0)
 case object GlaakiIGOO extends UnitClass("Gla'aki", GOO, 6) with IGOO  // combat = 0 (Tomb Herd provides power, not combat)
 
+// ── DUNWICH HORROR — DIRE YOG-SOTHOTH (Independent Great Old One) ──
+// Awaken cost 6 (via Opener of the Way) or 10 - unit cost (all other factions).
+// Combat = number of enemy-Controlled faction Great Old Ones in play (computed live).
+case object DireYogSothothCard extends IGOOLoyaltyCard(DireYogSothothIcon, DireYogSothoth, power = 6, combat = 0)
+case object DireYogSothothIcon extends UnitClass("Dire Yog-Sothoth Icon", Token, 0)
+case object DireYogSothoth extends UnitClass("Dire Yog-Sothoth", GOO, 6) with IGOO  // combat = enemy faction GOOs in play
+
 case object Filth extends UnitClass("Filth", Monster, 1) {
     override def canMove(u : UnitFigure)(implicit game : Game) = false
     override def canBattle(u : UnitFigure)(implicit game : Game) = false
@@ -788,6 +795,7 @@ object IGOOsExpansion extends Expansion {
                 .%(igoo => game.dcTenebrosumGuard || game.igooCost(self, igoo) <= self.power)
                 .%(igoo => igoo != AzathothIGOOCard)
                 .%(igoo => igoo != CthughaCard)
+                .%(igoo => igoo != DireYogSothothCard)  // Dunwich: custom awaken only
                 .%(igoo => {
                     val cost = game.igooCost(self, igoo)
                     self.awakenIGOORegions.%(self.canAwakenIGOO).%(r => game.dcTenebrosumGuard || self.affords(cost)(r)).any
