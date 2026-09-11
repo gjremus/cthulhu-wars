@@ -3344,6 +3344,12 @@ object CthulhuWarsSolo {
                     // Bloated Woman iGOO: overlay count of units held on the Velvet Fan
                     else if (lc == BloatedWomanCard && factions./~(ff => ff.at(VelvetFanHold(f))).num > 0)
                         img + s"""<span style='position:absolute;bottom:0.25vh;bottom:0.25dvh;right:${right/12.0}vh;right:${right/12.0}dvh;height:5vh;height:5dvh;width:5vh;width:5dvh;display:flex;align-items:center;justify-content:center;transform:scale(0.8);transform-origin:bottom right;font:bold 3.6vh "Bohemian Typewriter",monospace;color:#ff3333;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;pointer-events:none;'>${factions./~(ff => ff.at(VelvetFanHold(f))).num}</span>"""
+                    // Wilbur Whateley: overlay stored-Gate count (Yr and Nhnngr) on the silhouette icon
+                    else if (lc == WilburWhateleyCard && game.wilburStoredGates > 0)
+                        img + s"""<span style='position:absolute;bottom:0.25vh;bottom:0.25dvh;right:${right/12.0}vh;right:${right/12.0}dvh;height:5vh;height:5dvh;width:5vh;width:5dvh;display:flex;align-items:center;justify-content:center;transform:scale(0.8);transform-origin:bottom right;font:bold 3.6vh "Bohemian Typewriter",monospace;color:#ff3333;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;pointer-events:none;'>${game.wilburStoredGates}</span>"""
+                    // Junior Whateley: overlay growth-token count on the silhouette icon
+                    else if (lc == JuniorWhateleyCard && game.juniorTokens > 0)
+                        img + s"""<span style='position:absolute;bottom:0.25vh;bottom:0.25dvh;right:${right/12.0}vh;right:${right/12.0}dvh;height:5vh;height:5dvh;width:5vh;width:5dvh;display:flex;align-items:center;justify-content:center;transform:scale(0.8);transform-origin:bottom right;font:bold 3.6vh "Bohemian Typewriter",monospace;color:#ff3333;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;pointer-events:none;'>${game.juniorTokens}</span>"""
                     else
                         img
                 }.mkString("")
@@ -5834,9 +5840,14 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 UseGlaakiIGOO, UseMotherHydra, UseNyogtha, UseBloatedWoman,
                 UseTulzscha, UseYgolonac, UseYig
             )
+            // Dunwich Horror — Neutral Cultists (Whateley Clan), alphabetical.
+            val randWhateleyPool : $[GameOption] = $(
+                UseJuniorWhateley, UseLaviniaWhateley, UseWilburWhateley, UseWizardWhateley
+            )
             var randMonsters = false
             var randTerrors = false
             var randIGOOs = false
+            var randWhateleys = false
             // [2026-06-03] Auto-populate count fields based on player count
             // (pn). Previously hard-coded as 4/2/4 regardless of pn, which the
             // user noticed for pn=3 (got 4/4/2 — first two categories at 4,
@@ -5852,6 +5863,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             var randMonsterCount = math.max(1, pn)
             var randTerrorCount = math.max(1, pn)
             var randIGOOCount = math.max(1, pn)
+            var randWhateleyCount = math.max(1, pn)
 
             // [2026-05-23] Per user: HIDE the other screen sections (map halves,
             // faction status panels, game log) for the duration of the alt
@@ -6256,6 +6268,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 renderRandRow("iGOOs", randIGOOPool.num,
                     () => randIGOOs, v => randIGOOs = v,
                     () => randIGOOCount, v => randIGOOCount = v)
+                renderRandRow("Neutral Cultists (Whateley Clan)", randWhateleyPool.num,
+                    () => randWhateleys, v => randWhateleys = v,
+                    () => randWhateleyCount, v => randWhateleyCount = v)
 
                 // Randomize-order row
                 val rndRow = dom.document.createElement("div").asInstanceOf[html.Div]
@@ -6398,6 +6413,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             val picks = scala.util.Random.shuffle(randIGOOPool.toList).take(randIGOOCount)
                             setup.options = (setup.options.notOf[IGOOOption]).but(IGOOs)
                             setup.options ++= (IGOOs +: picks)
+                        }
+                        if (randWhateleys && randWhateleyCount > 0) {
+                            val picks = scala.util.Random.shuffle(randWhateleyPool.toList).take(randWhateleyCount)
+                            setup.options = (setup.options.notOf[WhateleyClanOption]).but(WhateleyClan)
+                            setup.options ++= (WhateleyClan +: picks)
                         }
                         // [2026-07-23] §3.13.5: apply the OW / SL / DS alt-entry
                         // option bundles. BB/AN alts are handled by their own
