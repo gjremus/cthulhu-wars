@@ -245,6 +245,16 @@ case class DemandSacrificePreBattleAction(self : Faction) extends OptionFactionA
 case class DemandSacrificeProvideESAction(self : Faction) extends ForcedAction
 case class DemandSacrificeKillsArePainsAction(self : Faction) extends ForcedAction
 
+// Dunwich: Wizard Whateley "Magician" (Pre-Battle). If Wizard is in the battle, his controller
+// may muster one Great Old One / neutral Monster/Terror/Cultist / Clan member "as if the Doom
+// Phase" (so Lavinia's half-cost discount applies), placed straight into the battle so it fights.
+// MagicianMainAction is the skippable entry (Soft sub-menu); the leaf MagicianMusterAction
+// claims any needed card, pays the (Lavinia-adjusted) cost, and drops the unit into the arena.
+case class MagicianMainAction(self : Faction) extends OptionFactionAction("Magician".styled("nt") + " — muster a neutral unit") with PreBattleQuestion with Soft
+case class MagicianMusterAction(self : Faction, uc : UnitClass, card : |[LoyaltyCard], power : Int, doom : Int) extends BaseFactionAction(
+    implicit g => "Muster " + uc.styled(self) + card./(c => g.factions.find(_.loyaltyCards.has(c))./(o => " (take from " + o.full + ")").|("")).|(""),
+    implicit g => $((power > 0).??(power.power), (doom > 0).??(doom.doom)).but("").some./(_.mkString(" and ")).|("free"))
+
 // Energy Nexus as standard pre-battle (variant option)
 case class EnergyNexusPreBattleAction(self : Faction) extends OptionFactionAction(EnergyNexus) with PreBattleQuestion
 
@@ -356,6 +366,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // factions whose Hound has already joined, so the offer is shown at most once.
     var houndPreBattleMoveArmed : $[Faction] = $
     var houndJoinedThisBattle : $[Faction] = $
+    // Dunwich: factions that have already used Wizard "Magician" this battle (one muster per battle).
+    var magicianMusteredThisBattle : $[Faction] = $
     // Post-battle Chronophage: powers that move a unit MID-battle (e.g. Necrophagy) arm this;
     // the Hound teleport offer fires after the battle is fully resolved (at BattleEnd).
     var houndPostBattleMoveArmed : $[Faction] = $
@@ -629,6 +641,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             HoundOfTindalosGates.has(arena) &&
             s.allInPlay.%(u => u.uclass == HoundOfTindalos && u.region != arena && HoundOfTindalosGates.has(u.region)).any)
             options :+= HoundJoinBattleAction(s)
+
+        // Dunwich: Wizard Whateley "Magician" — if a controlled Wizard is in this battle and the
+        // owner hasn't yet mustered this battle, offer the muster entry (one use per battle).
+        if (s.loyaltyCards.has(WizardWhateleyCard) && s.forces(WizardWhateley).any && !magicianMusteredThisBattle.has(s) && game.magicianMusterOffers(s).any)
+            options :+= MagicianMainAction(s)
 
         // Energy Nexus pre-battle variant: handled after all other pre-battle powers (see PreBattleDoneAction)
 
@@ -1234,6 +1251,30 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     sides.foreach { s =>
                         s.forces.%(u => game.mummifiedCultists.has(u.ref)).foreach { u =>
                             log(u.uclass.styled(u.faction), "in", arena, "is Mummified and does not participate in Battle")
+                            exempt(u)
+                        }
+                    }
+                    if (attacker.forces.none) {
+                        log("No attackers left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                    if (defender.forces.none) {
+                        log("No defenders left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                }
+
+                // Dunwich Lavinia "Bride of the Old Ones": if she shared an Area with any GOO
+                // at the start of the Action (game.laviniaBrideActive snapshot), she is immune
+                // to Kills, Pains, and Eliminations for the whole Action. Reuse the CC
+                // Invisibility idiom — exempt() drops her from both sides' forces so no combat
+                // or casualty path can touch her; the miniature stays in the arena. The flag is
+                // read fresh at each BattleStart, so every battle within a multi-battle action
+                // (e.g. From Below) is protected.
+                if (game.laviniaBrideActive) {
+                    sides.foreach { s =>
+                        s.forces.%(_.uclass == LaviniaWhateley).foreach { u =>
+                            log(LaviniaWhateley.styled(u.faction), "in", arena, "is protected by", "Bride of the Old Ones".styled("nt"), "and does not participate in Battle")
                             exempt(u)
                         }
                     }
@@ -3119,6 +3160,35 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         // SEEK AND DESTROY
+        // Dunwich: Wizard "Magician" — open the combined muster menu (all costs already reflect
+        // Lavinia's Doom-Phase halving when she is controlled).
+        case MagicianMainAction(self) =>
+            Ask(self).group("Magician".styled("nt") + " — muster (as if the Doom Phase)")
+                .list(game.magicianMusterOffers(self)./{ case (uc, card, power, doom) => MagicianMusterAction(self, uc, card, power, doom) })
+                .cancel
+
+        case MagicianMusterAction(self, uc, card, power, doom) =>
+            self.power -= power
+            self.doom -= doom
+            // Claim any acquired Loyalty Card (a Whateley may be taken from a rival's card).
+            val prior = card./~(c => game.factions.find(_.loyaltyCards.has(c)))
+            card.foreach { c =>
+                game.factions.foreach(o => o.loyaltyCards :-= c)
+                game.loyaltyCards :-= c
+                self.loyaltyCards :+= c
+            }
+            magicianMusteredThisBattle = (magicianMusteredThisBattle :+ self).distinct
+            // Bring a Pool copy (creating one for an iGOO / freshly-claimed card) into the arena so
+            // it joins the current battle. Strength is recomputed from forces at PreRoll.
+            if (self.pool.%(_.uclass == uc).none)
+                self.units :+= new UnitFigure(self, uc, self.units.%(_.uclass == uc).num + 1, self.reserve)
+            val u = self.pool.%(_.uclass == uc).head
+            u.region = arena
+            self.forces :+= u
+            val paid = $((power > 0).??(power.power), (doom > 0).??(doom.doom)).but("").some./(_.mkString(" and ")).|("no cost")
+            log(self, "Magician".styled("nt") + ": mustered", uc.styled(self), "into the battle for", paid, prior./(o => "(card taken from " + o.full + ")").|(""))
+            proceed()
+
         case SeekAndDestroyPreBattleAction(self) =>
             val us = self.all(HuntingHorror).%(_.region != arena)
             Ask(self).each(us)(u => SeekAndDestroyAction(self, u.uclass, u.region)).cancel

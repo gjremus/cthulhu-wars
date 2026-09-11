@@ -201,6 +201,31 @@ case class ServitorAssignFactionAction(self : Faction, target : Faction) extends
 // Servitor of the Outer Gods: place servitor at gate (tracks original purchaser for DoomAction return)
 case class ServitorPlaceAction(self : Faction, target : Faction, r : Region) extends BaseFactionAction(implicit g => target.full + " places " + ServitorUnit.styled(target) + " in", implicit g => r + target.iced(r))
 
+// ── DUNWICH HORROR — WHATELEY CLAN RECRUIT (Doom Phase) ──
+// A separate Doom-Phase group (beside the neutral-loyalty-card hire): each faction may
+// recruit one Whateley per Doom Phase by paying its Power cost. A Whateley already owned
+// by another faction can be taken away — the Loyalty Card (and anything banked on it,
+// e.g. Wilbur's Gates, Junior's tokens) moves to the new owner while the miniature stays
+// exactly where it is on the Map. WhateleyRecruitMainAction is Soft (a sub-menu); the
+// leaf WhateleyRecruitAction / WhateleyPlaceAction are Hard (they mutate ownership/board).
+case class WhateleyRecruitMainAction(self : Faction) extends OptionFactionAction(implicit g => "Recruit " + "Whateley Clan".styled("nt")) with DoomQuestion with Soft with PowerNeutral
+case class WhateleyRecruitAction(self : Faction, card : WhateleyLoyaltyCard) extends BaseFactionAction(implicit g => "Recruit " + card.short, implicit g => g.whateleyRecruitLabel(self, card))
+case class WhateleyPlaceAction(self : Faction, card : WhateleyLoyaltyCard, r : Region) extends BaseFactionAction(implicit g => card.unit.styled(self) + " placed in", implicit g => r + self.iced(r))
+
+// Dunwich: Wilbur Whateley "Open the Way" — a cost-0 Action. Spend a Gate banked on Wilbur's
+// card to place a Gate in any gate-less Area (normal gate rules). Main is Soft (a sub-menu);
+// the leaf place action is Hard (it mutates the board and ends the acting faction's action).
+case class WilburOpenTheWayMainAction(self : Faction) extends OptionFactionAction(implicit g => "Open the Way".styled("nt") + " (" + g.wilburStoredGates.toString + " stored)") with MainQuestion with Soft with PowerNeutral
+case class WilburOpenTheWayAction(self : Faction, r : Region) extends BaseFactionAction(implicit g => "Open the Way".styled("nt") + ": place a Gate in", implicit g => r + self.iced(r))
+
+// Dunwich: Junior Whateley "Transmogrification" — a cost-0 Action. Roll a d6; on a roll <=
+// the number of banked tokens, trade Junior for any Great Old One not on the map (ignoring all
+// Awakening requirements and cost). One token is always discarded. The roll is recorded through
+// RollD6 -> JuniorTransmogRollAction so an undo cannot re-roll for a better result.
+case class JuniorTransmogrifyMainAction(self : Faction) extends OptionFactionAction(implicit g => "Transmogrification".styled("nt") + " (" + g.juniorTokens.toString + " token" + (g.juniorTokens == 1).?("").|("s") + ")") with MainQuestion with Soft with PowerNeutral
+case class JuniorTransmogRollAction(self : Faction, r : Region, roll : Int) extends ForcedAction
+case class JuniorTransmogPickAction(self : Faction, r : Region, goo : UnitClass, owner : Faction) extends BaseFactionAction(implicit g => "Transmogrify into " + goo.styled(owner), implicit g => (owner != self).??("stays under " + owner.full + " control"))
+
 case class ShantakCarryCultistAction(self : Faction, o : Region, ur : UnitRef, r : Region) extends ForcedAction
 // Chronophage teleport: `then` is the calling power's own continuation (the move
 // phase's MoveContinueAction for ordinary moves, or the power's terminus otherwise).
@@ -359,6 +384,100 @@ object NeutralMonstersExpansion extends Expansion {
                     CheckSpellbooksAction(DoomAction(self))
                 }
             }
+
+        // ── DUNWICH WHATELEY CLAN RECRUIT ──
+        case WhateleyRecruitMainAction(self) =>
+            val avail = game.whateleyCardsAvailable(self)
+                .%(c => self.power >= game.laviniaCost(self, c.cost, true))
+                .sortBy(_.unit.name)
+            Ask(self).group("Recruit " + "Whateley Clan".styled("nt"))
+                .list(avail./(c => WhateleyRecruitAction(self, c)))
+                .cancel
+
+        case WhateleyRecruitAction(self, card) =>
+            val cost = game.laviniaCost(self, card.cost, true)
+            val prior = factions.find(_.loyaltyCards.has(card))
+
+            self.power -= cost
+            factions.foreach(o => o.loyaltyCards :-= card)   // take from any prior owner
+            game.loyaltyCards :-= card                        // or from the unclaimed pool
+            self.loyaltyCards :+= card                        // card (+ banked tokens/gates) moves
+            self.whateleyRecruited = true
+
+            prior match {
+                case Some(o) => self.log("recruited", card.short, "for", cost.power, "(taken from", o.full + ")")
+                case None    => self.log("recruited", card.short, "for", cost.power)
+            }
+
+            // If the miniature is already on the Map, it stays put — only control changes,
+            // so reparent the existing figure to the new owner. Otherwise place it fresh.
+            val existing = prior./~(_.units.find(u => u.uclass == card.unit && u.region.inPlay))
+            existing match {
+                case Some(u) =>
+                    val r = u.region
+                    u.faction.units :-= u
+                    self.units :+= new UnitFigure(self, card.unit, self.units.%(_.uclass == card.unit).num + 1, r)
+                    self.log(card.unit.styled(self), "changed control in", r)
+                    CheckSpellbooksAction(DoomAction(self))
+                case None =>
+                    self.units :+= new UnitFigure(self, card.unit, self.units.%(_.uclass == card.unit).num + 1, self.reserve)
+                    Ask(self).group("Place " + card.unit.styled(self))
+                        .each(areas ++ game.factions.has(BB).??($(BB.moon)))(r => WhateleyPlaceAction(self, card, r))
+            }
+
+        case WhateleyPlaceAction(self, card, r) =>
+            self.place(card.unit, r)
+            self.log("placed", card.unit.styled(self), "in", r)
+            CheckSpellbooksAction(DoomAction(self))
+
+        // Dunwich: Wilbur "Open the Way" — pick a gate-less Area, then place a banked Gate.
+        case WilburOpenTheWayMainAction(self) =>
+            val legal = areas.nex.%!(game.gates.has)
+            Ask(self).group("Open the Way".styled("nt") + " — place a Gate")
+                .each(legal)(r => WilburOpenTheWayAction(self, r))
+                .cancel
+
+        case WilburOpenTheWayAction(self, r) =>
+            game.wilburStoredGates -= 1
+            game.gates :+= r
+            self.log("used", "Open the Way".styled("nt") + ": placed a Gate in", r, "(" + game.wilburStoredGates.toString + " stored)")
+            EndAction(self)
+
+        // Dunwich: Junior "Transmogrification" — roll immediately through the recorded RollD6.
+        case JuniorTransmogrifyMainAction(self) =>
+            val junior = self.units.find(u => u.uclass == JuniorWhateley && u.region.inPlay).get
+            RollD6(_ => "Transmogrification".styled("nt") + " — roll a die (" + game.juniorTokens.toString + " token" + (game.juniorTokens == 1).?("").|("s") + " banked)", roll => JuniorTransmogRollAction(self, junior.region, roll))
+
+        case JuniorTransmogRollAction(self, r, roll) =>
+            val tokens = game.juniorTokens
+            val success = roll <= tokens
+            game.juniorTokens -= 1   // one token is always discarded, win or lose
+            self.log("used", "Transmogrification".styled("nt") + ": rolled", ("[" + roll.toString + "]"), "vs", tokens.toString, "token" + (tokens == 1).?("").|("s") + " —", success.?("success".styled("power")).|("failure".styled("kill")))
+            if (success) {
+                // Eliminate Junior back to his owner's Pool; the chosen GOO takes his place.
+                self.units.find(u => u.uclass == JuniorWhateley && u.region == r).foreach { j =>
+                    j.region = self.reserve
+                    j.state = $
+                }
+                Ask(self).group("Transmogrification".styled("nt") + " — choose a Great Old One")
+                    .list(game.transmogGreatOldOnes(self)./{ case (goo, owner) => JuniorTransmogPickAction(self, r, goo, owner) })
+                    .cancel
+            }
+            else
+                EndAction(self)
+
+        case JuniorTransmogPickAction(self, r, goo, owner) =>
+            // Ignore all awakening requirements and cost: drop the figure straight into Junior's
+            // old region under its home faction (a rival keeps control of its own Great Old One).
+            if (owner.pool(goo).any)
+                owner.place(goo, r)
+            else
+                owner.units :+= new UnitFigure(owner, goo, owner.units.%(_.uclass == goo).num + 1, r)
+            if (owner == self)
+                self.log("transmogrified", JuniorWhateley.styled(self), "into", goo.styled(owner), "in", r)
+            else
+                self.log("transmogrified", JuniorWhateley.styled(self), "into", goo.styled(owner), "in", r, "(under", owner.full + "'s control)")
+            EndAction(self)
 
         case LoyaltyCardSummonAction(self, uc, r) =>
             self.place(uc, r)

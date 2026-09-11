@@ -497,6 +497,12 @@ object DSExpansion extends Expansion {
                 self.payTax(r)
                 self.place(Acolyte, r)
                 self.log("used", Psychosis.styled(self), "placing an Acolyte in", r)
+                // Dunwich: Wizard Whateley "Clan Patriarch" — a 0-cost Cultist placed in a region
+                // where you control a Wizard yields +1 Power (the discount cannot go below 0 cost).
+                if (self.loyaltyCards.has(WizardWhateleyCard) && self.units.exists(w => w.uclass == WizardWhateley && w.region == r)) {
+                    self.power += 1
+                    self.log("Clan Patriarch".styled("nt") + ": gained", 1.power, "for a 0-cost Cultist")
+                }
                 EndAction(self)
             }
 

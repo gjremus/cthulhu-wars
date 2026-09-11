@@ -192,6 +192,13 @@ case object GlaakiGreenDecay extends NeutralSpellbook("Green Decay")
 // SPELLBOOK — use .can(), CAN be blocked by Moonbeast
 case object NuclearChaos extends NeutralSpellbook("Nuclear Chaos")
 
+// Dire Yog-Sothoth (Dunwich): It Walks Unseen — after you Move any other Unit(s),
+// you may also Move Dire Yog-Sothoth for free (a standalone move; it need NOT move
+// alongside the other units — modeled on the Hound of Tindalos Chronophage).
+// Req: owner's Great Old One shares an Area with two enemy Great Old Ones.
+// SPELLBOOK — use .can(), CAN be blocked by Moonbeast
+case object ItWalksUnseen extends NeutralSpellbook("It Walks Unseen")
+
 
 trait NeutralFaction extends Faction
 
@@ -289,6 +296,30 @@ case class CthughaAwakenAction(self : Faction, r : Region, replacedGOO : UnitCla
     implicit g => "Replace with " + "Cthugha".styled(self),
     implicit g => replacedGOO.styled(self) + " in " + r + " — " + (if (cost >= 0) cost + " " + "Power".styled("power") else "Gain " + (-cost) + " " + "Power".styled("power"))
 )
+
+// ── DIRE YOG-SOTHOTH (Dunwich) awaken routes ──
+// Route 1 — Opener of the Way: requires a Spawn of Yog-Sothoth on the map; pay 6 Power,
+// replace the Spawn with Dire Yog-Sothoth. Also satisfies OW's "Awaken Yog-Sothoth"
+// requirement (once), and each other player gains 1 Elder Sign.
+case class AwakenDireYogViaSpawnAction(self : Faction, cost : Int) extends BaseFactionAction(
+    implicit g => "Replace " + SpawnOW.styled(self) + " with " + DireYogSothoth.styled(self),
+    implicit g => cost + " " + "Power".styled("power") + " — Opener of the Way")
+// Route 2 — All other factions: replace your most expensive Monster or Terror; cost = 10
+// minus that unit's cost (may be negative → gain Power, like Cthugha).
+case class AwakenDireYogGenericAction(self : Faction, r : Region, victim : UnitClass, cost : Int) extends BaseFactionAction(
+    implicit g => "Replace with " + DireYogSothoth.styled(self),
+    implicit g => victim.styled(self) + " in " + r + " — " + (if (cost >= 0) cost + " " + "Power".styled("power") else "Gain " + (-cost) + " " + "Power".styled("power")))
+
+// To Rule Them All (Action: Cost 4) — Dire Yog-Sothoth captures an enemy Great Old One,
+// reusing the Capture Cultist prison economy (held on the captor's card, returned in
+// Gather Power for +1 Power).
+case class ToRuleThemAllMainAction(self : Faction) extends OptionFactionAction(implicit g => DireYogSothoth.styled(self) + " — " + "To Rule Them All".styled("nt") + " (" + "4 Power".styled("power") + ")") with MainQuestion with Soft
+case class ToRuleCaptureAction(self : Faction, goo : UnitRef) extends BaseFactionAction(implicit g => "Capture " + goo.uclass.styled(goo.faction), implicit g => goo.uclass.styled(goo.faction) + " in " + goo.region)
+
+// It Walks Unseen — free standalone move of Dire Yog after any Move (armed from
+// MovedAction, offered with .skip(next); modeled on the Hound of Tindalos Chronophage).
+case class DireYogAfterMoveAction(self : Faction, then : ForcedAction) extends ForcedAction
+case class DireYogFreeMoveAction(self : Faction, dyRef : UnitRef, r : Region, then : ForcedAction) extends ForcedAction
 
 case class AzathothAwakenMainAction(self : Faction) extends OptionFactionAction(g => {
     val qm = Overlays.imageSource("question-mark")
@@ -561,6 +592,20 @@ object IGOOsExpansion extends Expansion {
                 }
             }
         }
+
+        // Dire Yog-Sothoth (Dunwich): It Walks Unseen — SBR is state-derived: one of the
+        // owner's Great Old Ones shares an Area with two enemy Great Old Ones. (When OW
+        // owns Dire Yog, one qualifying board state can satisfy BOTH this and OW's own
+        // "Yog shares a region with an enemy GOO" SBR — both simply satisfy here.)
+        factions.foreach { f =>
+            if (f.loyaltyCards.has(DireYogSothothCard) && f.upgrades.has(ItWalksUnseen).not) {
+                val earned = areas.nex.exists(r => f.at(r).goos.any && f.enemies./(_.at(r).goos.num).sum >= 2)
+                if (earned) {
+                    f.upgrades :+= ItWalksUnseen
+                    f.log("gained", ItWalksUnseen.styled(f), "for", DireYogSothoth.styled(f))
+                }
+            }
+        }
     }
 
     override def eliminate(u : UnitFigure)(implicit game : Game) {
@@ -690,6 +735,13 @@ object IGOOsExpansion extends Expansion {
                 f.loyaltyCards :-= GlaakiIGOOCard
                 game.loyaltyCards :+= GlaakiIGOOCard
 
+            // Dire Yog-Sothoth (Dunwich): return card to pool, revoke It Walks Unseen.
+            case DireYogSothoth =>
+                f.units :-= u
+                f.upgrades :-= ItWalksUnseen
+                f.loyaltyCards :-= DireYogSothothCard
+                game.loyaltyCards :+= DireYogSothothCard
+
             case _ =>
         }
 
@@ -786,6 +838,106 @@ object IGOOsExpansion extends Expansion {
             EndAction(self)
             }
 
+        // ── DIRE YOG-SOTHOTH (Dunwich) awaken routes ──
+        // Route 1 — Opener of the Way: replace a Spawn of Yog-Sothoth, pay 6 Power.
+        // Satisfies OW's "Awaken Yog-Sothoth" requirement (once; satisfy() is itself a
+        // no-op once fulfilled, so a later real-Yog awaken never re-earns it). Each
+        // other player gains 1 Elder Sign.
+        case AwakenDireYogViaSpawnAction(self, cost) =>
+            val spawns = self.allInPlay.%(_.uclass == SpawnOW)
+            if (spawns.none) {
+                self.log("cannot awaken", DireYogSothoth.name.styled("nt"), "— no", SpawnOW.styled(self), "on the map")
+                EndAction(self)
+            } else {
+                val s = spawns.head
+                val r = s.region
+                self.loyaltyCards :+= DireYogSothothCard
+                game.loyaltyCards :-= DireYogSothothCard
+                self.power -= cost
+                game.eliminate(s)
+                self.units :+= new UnitFigure(self, DireYogSothoth, 1, r)
+                self.log("awakened", DireYogSothoth.name.styled("nt"), "in", r, "for", cost.power, "— Opener of the Way (replacing", SpawnOW.styled(self) + ")")
+                if (self.needs(AwakenYogSothoth))
+                    self.satisfy(AwakenYogSothoth, "Awaken Yog-Sothoth")
+                factions.but(self).foreach { e =>
+                    e.takeES(1)
+                    e.log("gained", 1.es, "from", DireYogSothoth.name.styled("nt") + " (Opener of the Way)")
+                }
+                if (self.has(Immortal)) {
+                    self.log("gained", 1.es, "as", Immortal)
+                    self.takeES(1)
+                }
+                EndAction(self)
+            }
+
+        // Route 2 — All other factions: replace your most expensive Monster or Terror,
+        // cost = 10 - that unit's cost (may be negative → gain Power, like Cthugha).
+        case AwakenDireYogGenericAction(self, r, victimClass, cost) =>
+            val victims = self.at(r).%(_.uclass == victimClass)
+            if (victims.none) {
+                self.log("cannot awaken", DireYogSothoth.name.styled("nt"), "— no", victimClass.styled(self), "in", r)
+                EndAction(self)
+            } else {
+                val victim = victims.head
+                self.loyaltyCards :+= DireYogSothothCard
+                game.loyaltyCards :-= DireYogSothothCard
+                self.power -= cost
+                game.eliminate(victim)
+                self.units :+= new UnitFigure(self, DireYogSothoth, 1, r)
+                self.log("awakened", DireYogSothoth.name.styled("nt"), "in", r, (if (cost >= 0) "for" else "gaining"), (if (cost >= 0) cost else -cost).power, "(replacing", victimClass.styled(self) + ")")
+                if (self.has(Immortal)) {
+                    self.log("gained", 1.es, "as", Immortal)
+                    self.takeES(1)
+                }
+                EndAction(self)
+            }
+
+        // ── TO RULE THEM ALL (Dire Yog-Sothoth, Action: Cost 4) ──
+        // Capture an enemy Great Old One sharing Dire Yog's Area, reusing the Capture
+        // Cultist prison economy: the GOO sits in the captor's prison (shown on the
+        // faction card), returned in Gather Power for +1 Power via the existing path.
+        case ToRuleThemAllMainAction(self) =>
+            val dyRegions = areas.nex.%(r => self.at(r).%(_.uclass == DireYogSothoth).any)
+            val targets = dyRegions./~(r => self.enemies./~(_.at(r).goos))
+            Ask(self).each(targets)(g => ToRuleCaptureAction(self, g.ref)).cancel
+
+        case ToRuleCaptureAction(self, gooRef) =>
+            val goo = game.unit(gooRef)
+            val r = goo.region
+            self.power -= 4
+            goo.region = self.prison
+            goo.onGate = false
+            self.log("used", "To Rule Them All".styled("nt") + ":", DireYogSothoth.styled(self), "captured", goo.uclass.styled(goo.faction), "in", r)
+            EndAction(self)
+
+        // ── IT WALKS UNSEEN (Dire Yog-Sothoth spellbook): free rider move ──
+        // The triggering MovedAction case lives AFTER the Daoloth/Nyogtha MovedAction
+        // handlers below (so it does not shadow them); these two continuation handlers
+        // are order-independent (distinct action types).
+        case DireYogAfterMoveAction(self, then) =>
+            val dys = self.allInPlay.%(_.uclass == DireYogSothoth)
+            if (self.can(ItWalksUnseen) && dys.any) {
+                val dy = dys.head
+                val dests = game.board.connected(dy.region)
+                if (dests.any)
+                    Ask(self)
+                        .each(dests)(d => DireYogFreeMoveAction(self, dy.ref, d, then).as("Move to", d)(ItWalksUnseen.styled(self) + " — move " + DireYogSothoth.styled(self) + " for free"))
+                        .skip(then)
+                else
+                    Force(then)
+            } else
+                Force(then)
+
+        case DireYogFreeMoveAction(self, dyRef, d, then) =>
+            val dy = game.unit(dyRef)
+            val o = dy.region
+            dy.region = d
+            dy.onGate = false
+            dy.add(Moved)
+            dy.add(MovedForFree)
+            self.log(DireYogSothoth.styled(self), ItWalksUnseen.styled(self) + ": moved from", o, "to", d, "for free")
+            Force(then)
+
         case AwakenIGOOMainAction(self) =>
             // [2026-05-23] Unified iGOO awaken sub-menu. Standard iGOOs go
             // through IndependentGOOMainAction; Azathoth and Cthugha — which
@@ -844,7 +996,31 @@ object IGOOsExpansion extends Expansion {
                     $(IGOOEntry("Bokrug", IndependentGOOMainAction(self, BokrugCard, gates)))
                 }).|($)
 
-            val sorted = (standardEntries ++ cthughaEntry ++ azathothEntry ++ bokrugEntry).sortBy(_.name)
+            // ── DIRE YOG-SOTHOTH (Dunwich): two custom awaken routes ──
+            // The card lives in the shared pool until awakened. Both routes are offered
+            // only when it is still unclaimed. Tenebrosum (Sin-paid) repeats are NOT
+            // offered for Dire Yog (its cost can go negative and would need Sin
+            // accounting) — gated on !dcTenebrosumGuard, matching the availability
+            // check in Game.independents / tenebrosumIndependentAwakensOnly.
+            val direYogAvailable = game.loyaltyCards.has(DireYogSothothCard) && !game.dcTenebrosumGuard
+            // Route 1 — Opener of the Way: a Spawn of Yog-Sothoth on the map, pay 6.
+            val direYogSpawnEntry : $[IGOOEntry] =
+                (direYogAvailable && self.allInPlay.%(_.uclass == SpawnOW).any && self.power >= 6)
+                    .?($(IGOOEntry("Dire Yog-Sothoth", AwakenDireYogViaSpawnAction(self, 6)))).|($)
+            // Route 2 — All other factions: a GOO in play + your most expensive Monster
+            // or Terror; cost = 10 - that unit's cost (may be negative → gain Power).
+            val direYogGenericEntry : $[IGOOEntry] = {
+                val victims = self.allInPlay.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror)
+                if (direYogAvailable && self.allInPlay.goos.any && victims.any) {
+                    val victim = victims.sortBy(-_.uclass.cost).head
+                    val cost = 10 - victim.uclass.cost
+                    if (self.power >= cost)
+                        $(IGOOEntry("Dire Yog-Sothoth", AwakenDireYogGenericAction(self, victim.region, victim.uclass, cost)))
+                    else $
+                } else $
+            }
+
+            val sorted = (standardEntries ++ cthughaEntry ++ azathothEntry ++ bokrugEntry ++ direYogSpawnEntry ++ direYogGenericEntry).sortBy(_.name)
 
             if (sorted.none)
                 Force(MainAction(self))
@@ -968,6 +1144,16 @@ object IGOOsExpansion extends Expansion {
                 MoveContinueAction(self, true)
             } else
                 self.all(Nyogtha).but(u).not(Moved).%(_.region.onMapOrMoon).single./(n => MoveSelectAction(self, n, n.region, 0)).|(MoveContinueAction(self, true))
+
+        // Dire Yog-Sothoth (Dunwich) It Walks Unseen: after the owner Moves any OTHER
+        // unit, offer a free standalone Dire Yog move (need NOT move alongside — modeled
+        // on the Hound of Tindalos Chronophage). Placed after the Daoloth/Nyogtha
+        // MovedAction cases so it never shadows them.
+        // NOTE: NeutralMonstersExpansion (Hound) is dispatched before IGOOsExpansion, so
+        // if the same faction owns BOTH the Hound card and this spellbook, the Hound's
+        // MovedAction handler wins for that move and this rider is skipped — accepted corner.
+        case MovedAction(self, u, o, r) if u.uclass != DireYogSothoth && self.can(ItWalksUnseen) && self.allInPlay.%(_.uclass == DireYogSothoth).any =>
+            Force(DireYogAfterMoveAction(self, MoveContinueAction(self, true)))
 
         case NightmareWebMainAction(self, regions) =>
             Ask(self).each(regions)(r => NightmareWebAction(self, r)).cancel

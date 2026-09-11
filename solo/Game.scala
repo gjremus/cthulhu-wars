@@ -403,7 +403,15 @@ trait Faction { f =>
     def library : $[Spellbook]
     def requirements(options : $[GameOption]) : $[Requirement]
     def canRecruitHP : Boolean = true
-    def recruitCost(u : UnitClass, r : Region)(implicit game : Game) = u.cost
+    // Dunwich: Wizard Whateley "Clan Patriarch" — recruiting a Cultist (or a cultist-equivalent:
+    // a Bubastis Earth Cat, or a BG Dark Young under the Red Sign) in a region where THIS faction
+    // controls a Wizard costs 1 less Power. Threaded into recruitCost so it drives both the menu
+    // label and the payment; a 0-cost cultist path (DS Psychosis) is handled at its own site.
+    def clanPatriarchDelta(u : UnitClass, r : Region)(implicit game : Game) : Int = {
+        val cultistLike = u.utype == Cultist || u == EarthCat || (u == DarkYoung && f.can(RedSign))
+        if (cultistLike && f.loyaltyCards.has(WizardWhateleyCard) && f.units.exists(w => w.uclass == WizardWhateley && w.region == r)) -1 else 0
+    }
+    def recruitCost(u : UnitClass, r : Region)(implicit game : Game) = u.cost + clanPatriarchDelta(u, r)
     def summonCost(u : UnitClass, r : Region)(implicit game : Game) = u.cost
     def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = None
     def gooValue(u : UnitClass)(implicit game : Game) : Int = u.cost
@@ -466,7 +474,9 @@ trait Faction { f =>
         // Gla'aki IGOO: combat 0
         units(GlaakiIGOO).not(Zeroed).num * 0 +
         // Azathoth IGOO: = glyph position
-        units(AzathothIGOO).not(Zeroed).num * game.azathothGlyphPosition
+        units(AzathothIGOO).not(Zeroed).num * game.azathothGlyphPosition +
+        // Dunwich — Dire Yog-Sothoth: = number of enemy-controlled faction Great Old Ones in play
+        units(DireYogSothoth).not(Zeroed).num * game.factions.but(f)./(_.factionGOOs.num).sum
 }
 
 // Elder Thing Mind Control: suppress GOO special abilities when Elder Thing shares area
@@ -928,6 +938,12 @@ class Player(private val f : Faction)(implicit game : Game) {
     var revealed : $[ElderSign] = $
     var loyaltyCards : $[LoyaltyCard] = $
     var hired : Boolean = false
+    // Dunwich Horror — one Whateley Clan recruit per faction per Doom Phase (reset in
+    // DoomDoneAction alongside `hired`).
+    var whateleyRecruited : Boolean = false
+    // Dunwich Horror — guards Junior Whateley "Growth" so his controller banks exactly one
+    // token per Doom Phase (reset in DoomDoneAction alongside `hired`).
+    var juniorGrowthDone : Boolean = false
 
     var battled : $[Region] = $
     var acted : Boolean = false
@@ -1777,6 +1793,21 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var bbAilurophobiaDone : Boolean = false
     var bbSyzygyDone       : Boolean = false
 
+    // Dunwich Horror — Lavinia "Bride of the Old Ones" snapshot. Recomputed at the
+    // per-action boundary (AfterAction, beside the oncePerAction reset): true while any
+    // in-play Lavinia shares an Area with a Great Old One at the start of the Action.
+    // Read at BattleStart (and by the non-battle eliminate guard) to keep her immune to
+    // Kills, Pains, and Eliminations for the whole Action.
+    var laviniaBrideActive : Boolean = false
+
+    // Dunwich: Wilbur Whateley "Yr and Nhnngr" banks a Gate on his Loyalty Card each time
+    // his controller resolves a Ritual of Annihilation; "Open the Way" later spends a banked
+    // Gate as a cost-0 action to place a Gate in a gate-less Area.
+    var wilburStoredGates : Int = 0
+    // Dunwich: Junior Whateley "Growth" banks a token each Doom Phase while he is in play;
+    // "Transmogrification" spends the banked tokens on a d6 to trade Junior for any Great Old One.
+    var juniorTokens : Int = 0
+
     // Faceless Blight (FBE) state (§1.6 / §2.4 / §3.6) — kept on Game.scala for
     // undo/replay safety (mirrors the DC dcSin pattern), NOT on FBEExpansion.
     //  • fbeCardDice : Faction-Card dice pool, stored as pip values 1-6. The combat
@@ -2247,6 +2278,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def abandonedGates = gates.%(g => factions.exists(_.gates.has(g)).not)
 
     def eliminate(u : UnitFigure) {
+        // Dunwich Lavinia "Bride of the Old Ones": while protected (shared an Area with a
+        // GOO at the start of the Action), she cannot be Eliminated. Battles already exempt
+        // her at BattleStart; this guards the rare non-battle elimination path.
+        if (u.uclass == LaviniaWhateley && laviniaBrideActive)
+            return
+
         val f = u.faction
 
         u.add(Eliminated)
@@ -2879,6 +2916,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (wellRegions.any)
                 + CSWellSummonMainAction(f, wellRegions)
         }
+
+        // Dunwich: Wilbur Whateley "Open the Way" — a cost-0 action. Spend one Gate banked on
+        // Wilbur's card to place a Gate in any gate-less Area (normal placement rules: no Area
+        // may hold two Gates). Offered while a banked Gate remains and a gate-less Area exists.
+        if (!servitorBlocking && f.loyaltyCards.has(WilburWhateleyCard) && wilburStoredGates > 0 && areas.nex.%!(gates.has).any)
+            + WilburOpenTheWayMainAction(f)
+
+        // Dunwich: Junior Whateley "Transmogrification" — a cost-0 action. Roll a d6; on a roll
+        // <= banked tokens, trade Junior for any Great Old One not on the map. One token is always
+        // discarded. Offered while Junior is in play and at least one token is banked.
+        if (!servitorBlocking && f.loyaltyCards.has(JuniorWhateleyCard) && juniorTokens > 0 && f.units.exists(u => u.uclass == JuniorWhateley && u.region.inPlay))
+            + JuniorTransmogrifyMainAction(f)
     }
 
     def awakens(f : Faction)(implicit w : AskWrapper) {
@@ -2911,6 +2960,85 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val gooCost = factionGOOs.headOption./~(uc => f.allGates.onMap.headOption./~(r => f.awakenCost(uc, r))).|(factionGOOs.headOption./(uc => f.gooValue(uc)).|(0))
             6 - gooCost
         case _ => igoo.power
+    }
+
+    // Dunwich Horror — Lavinia "Mother of Monsters". A faction controls Lavinia iff it
+    // holds her Loyalty Card. Her discount halves (rounded up) the Power/Doom of any
+    // acquisition that resolves as-if-Doom-Phase — a real Doom-Phase recruit/hire, or a
+    // Wizard "Magician" muster. It never touches ordinary action-phase costs.
+    def controlsLavinia(f : Faction) : Boolean = f.loyaltyCards.has(LaviniaWhateleyCard)
+    def laviniaCost(f : Faction, base : Int, asIfDoomPhase : Boolean) : Int =
+        if (asIfDoomPhase && controlsLavinia(f)) (base + 1) / 2 else base
+
+    // Dunwich Horror — the Whateley Clan cards f can recruit right now: the four cards
+    // NOT currently held by f, whether still unclaimed (game pool) or held by another
+    // faction (which can be taken away, the miniature staying put).
+    def whateleyCardsAvailable(f : Faction) : $[WhateleyLoyaltyCard] = {
+        val pool = loyaltyCards.of[WhateleyLoyaltyCard]
+        val others = factions.but(f)./~(_.loyaltyCards.of[WhateleyLoyaltyCard])
+        (pool ++ others).distinct
+    }
+
+    // Dunwich Horror — dynamic recruit-menu label: "Lavinia Whateley for 2 Power", or
+    // "… for 1 Power (take from Crawling Chaos)" when another faction currently owns it.
+    // Cost reflects Lavinia's Doom-Phase halving when f controls her.
+    def whateleyRecruitLabel(f : Faction, card : WhateleyLoyaltyCard) : String = {
+        val cost = laviniaCost(f, card.cost, true)
+        val prior = factions.find(_.loyaltyCards.has(card))
+        card.unit.styled(f) + " for " + cost.power + prior./(o => " (take from " + o.full + ")").|("")
+    }
+
+    // Dunwich Horror — Junior "Transmogrification" targets: every Great Old One (faction GOO or
+    // neutral iGOO) that is NOT currently on the map, paired with the faction it would enter play
+    // under. A faction GOO always enters under its home faction (so a rival's GOO stays under that
+    // rival's Control); a neutral iGOO enters under its current card-holder, or under `f` if the
+    // card is still unclaimed. De-duplicated by unit class (Ghatanothoa/Gla'aki can appear as both
+    // a faction GOO and an iGOO card).
+    def transmogGreatOldOnes(f : Faction) : $[(UnitClass, Faction)] = {
+        val onMap = factions./~(_.units).%(_.region.inPlay)./(_.uclass).distinct
+        val factionGOOs = factions./~(f2 => f2.pool.%(_.uclass.isGOO)./(u => (u.uclass, f2)))
+        val igooCards = (loyaltyCards.of[IGOOLoyaltyCard] ++ factions./~(_.loyaltyCards.of[IGOOLoyaltyCard])).distinct
+        val igoos = igooCards./(c => (c.unit, factions.find(_.loyaltyCards.has(c)).|(f)))
+        (factionGOOs ++ igoos).%((uc : UnitClass, fac : Faction) => onMap.has(uc).not).distinctBy(_._1).sortBy(_._1.name)
+    }
+
+    // Dunwich Horror — Wizard "Magician" muster options. Each tuple is (unit, card-to-claim, Power,
+    // Doom): the card is Some(...) when the muster also acquires a Loyalty Card (an iGOO to awaken,
+    // an unclaimed neutral card, or a Whateley card that may be taken from a rival), or None when
+    // the unit is simply summoned from a card `f` already holds. Costs are the normal Doom-Phase
+    // costs, already halved (rounded up) when `f` controls Lavinia. Only affordable options appear.
+    def magicianMusterOffers(f : Faction) : $[(UnitClass, |[LoyaltyCard], Int, Int)] = {
+        val onMap = factions./~(_.units).%(_.region.inPlay)./(_.uclass).distinct
+
+        // 1) Awaken an unclaimed Independent Great Old One (the one path Lavinia discounts an iGOO).
+        val igoos = loyaltyCards.of[IGOOLoyaltyCard]
+            .%(c => !(c == GhatanotoaIGOOCard && factions.has(FB)))
+            .%(c => !(c == GlaakiIGOOCard && factions.has(TS)))
+            .%(c => c != DireYogSothothCard)   // Dunwich: Dire Yog-Sothoth has custom awaken routes; not musterable via Magician
+            .%(c => onMap.has(c.unit).not)
+            ./(c => (c.unit, (Some(c) : |[LoyaltyCard]), laviniaCost(f, igooCost(f, c), true), 0))
+            .%(t => t._3 <= f.power)
+
+        // 2) Summon a neutral unit whose card `f` already holds but that is not on the map.
+        val held = f.loyaltyCards.%(c => c.is[NeutralMonsterLoyaltyCard] || c.is[NeutralTerrorLoyaltyCard] || c.is[WhateleyLoyaltyCard])
+            .%(c => f.pool.%(_.uclass == c.unit).any)
+            ./(c => (c.unit, (None : |[LoyaltyCard]), laviniaCost(f, c.unit.cost, true), 0))
+            .%(t => t._3 <= f.power)
+
+        // 3) Take an unclaimed neutral Monster/Terror Loyalty Card (Doom-, and for Terrors Power-, paid).
+        val neutralCards = (loyaltyCards.of[NeutralMonsterLoyaltyCard] ++ loyaltyCards.of[NeutralTerrorLoyaltyCard])
+            ./(c => (c.unit, (Some(c) : |[LoyaltyCard]), laviniaCost(f, c.power, true), laviniaCost(f, c.doom, true)))
+            .%(t => t._3 <= f.power && t._4 <= f.doom)
+
+        // 4) Take a Whateley Clan card — even one held by a rival (Power-paid, like a Doom-Phase
+        // recruit). Restricted to Whateleys NOT already on the Map: Magician musters a NEW unit into
+        // the battle, so an in-play Whateley (whose card can still be taken in the Doom Phase) is
+        // excluded here to avoid reparenting a figure that may be fighting on the other side.
+        val whateleys = whateleyCardsAvailable(f).%(c => onMap.has(c.unit).not)
+            ./(c => (c.unit, (Some(c) : |[LoyaltyCard]), laviniaCost(f, c.cost, true), 0))
+            .%(t => t._3 <= f.power)
+
+        (igoos ++ held ++ neutralCards ++ whateleys).distinctBy(_._1).sortBy(_._1.name)
     }
 
     def independents(f : Faction)(implicit w : AskWrapper) {
@@ -2950,8 +3078,27 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val azathothAvailable = loyaltyCards.has(AzathothIGOOCard) && f.power >= 8 &&
             f.allGates.onMapOrMoon.%(r => f.at(r).goos.any).any
 
-        if (availableStandardIGOOs.any || cthughaAvailable || azathothAvailable)
+        // Dire Yog-Sothoth (Dunwich): custom awaken routes (built inside AwakenIGOOMainAction).
+        // Route 1 (Opener of the Way): a Spawn of Yog-Sothoth on the map + 6 Power. Route 2
+        // (all others): a GOO in play + a Monster/Terror to replace; cost = 10 - unit.cost
+        // (may be ≤ 0 → always affordable). Not offered under a Tenebrosum (Sin-paid) repeat.
+        val direYogAvailable = loyaltyCards.has(DireYogSothothCard) && !dcTenebrosumGuard && {
+            val route1 = f.allInPlay.%(_.uclass == SpawnOW).any && f.power >= 6
+            val route2 = f.allInPlay.goos.any && {
+                val victims = f.allInPlay.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror)
+                victims.any && f.power >= (10 - victims./(_.uclass.cost).max)
+            }
+            route1 || route2
+        }
+
+        if (availableStandardIGOOs.any || cthughaAvailable || azathothAvailable || direYogAvailable)
             + AwakenIGOOMainAction(f)
+
+        // Dire Yog-Sothoth (Dunwich): To Rule Them All (Action: Cost 4) — capture an enemy
+        // GOO sharing Dire Yog's Area (Capture Cultist economy).
+        if (f.allInPlay.%(_.uclass == DireYogSothoth).any && f.power >= 4 &&
+            areas.nex.exists(r => f.at(r).%(_.uclass == DireYogSothoth).any && f.enemies./~(_.at(r).goos).any))
+            + ToRuleThemAllMainAction(f)
 
         // Round 8 Bug 40: also check facedown state for IGOO spellbooks
         if (f.has(NightmareWeb) && !f.oncePerGame.has(NightmareWeb) && f.pool(Nyogtha).any) {
@@ -3246,6 +3393,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def hires(f : Faction)(implicit w : AskWrapper) {
         if (f.hired.not && game.loyaltyCards.%(_.doom > 0).exists(c => f.doom >= c.doom && f.power >= c.power))
             + LoyaltyCardDoomAction(f)
+    }
+
+    // Dunwich Horror — Whateley Clan recruit (Doom Phase, once per faction per phase). A
+    // separate group from the neutral-card hire because a Whateley can be taken from
+    // another owner. Offered only when at least one available Whateley is affordable at
+    // its current (possibly Lavinia-halved) Power cost.
+    def recruitsWhateley(f : Faction)(implicit w : AskWrapper) {
+        if (f.whateleyRecruited.not && whateleyCardsAvailable(f).exists(c => f.power >= laviniaCost(f, c.cost, true)))
+            + WhateleyRecruitMainAction(f)
     }
 
     def doomDone(f : Faction, blockDone : Boolean = false)(implicit w : AskWrapper) {
@@ -4201,6 +4357,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case DoomAction(f) =>
             implicit val asking = Asking(f)
 
+            // Dunwich: Junior Whateley "Growth" — his controller banks one token per Doom Phase
+            // while he is in play. Guarded so re-entry of DoomAction does not double-bank.
+            if (f.juniorGrowthDone.not && f.loyaltyCards.has(JuniorWhateleyCard) && f.units.exists(u => u.uclass == JuniorWhateley && u.region.inPlay)) {
+                f.juniorGrowthDone = true
+                game.juniorTokens += 1
+                f.log("Growth".styled("nt") + ":", "banked a token on", JuniorWhateley.styled(f), "(" + game.juniorTokens.toString + " total)")
+            }
+
             game.rituals(f)
 
             game.reveals(f)
@@ -4208,6 +4372,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             game.highPriests(f)
 
             game.hires(f)
+
+            game.recruitsWhateley(f)
 
             game.doomDone(f)
 
@@ -4227,6 +4393,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             f.acted = false
             f.hired = false
+            f.whateleyRecruited = false
+            f.juniorGrowthDone = false
 
             val order = if (doomOrder.any) doomOrder else factions
             val doomIdx = order.indexOf(f)
@@ -4317,6 +4485,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             f.log("performed the ritual and gained", doom.doom, (es > 0).??("and " + es.es))
 
             f.takeES(es)
+
+            // Dunwich: Wilbur Whateley "Yr and Nhnngr" — his controller banks a Gate on his
+            // Loyalty Card each time they resolve a Ritual of Annihilation while Wilbur is in play.
+            if (f.loyaltyCards.has(WilburWhateleyCard) && f.units.exists(u => u.uclass == WilburWhateley && u.region.inPlay)) {
+                game.wilburStoredGates += 1
+                f.log("Yr and Nhnngr".styled("nt") + ":", "banked a Gate on", WilburWhateley.styled(f), "(" + game.wilburStoredGates.toString + " stored)")
+            }
 
             // TT Tablets of the Gods: when TT rituals, gain bonus ES (1 per gate with any HP), then eliminate all HPs
             if (factions.has(TT) && f == TT && f.can(TabletsOfTheGods)) {
@@ -4825,6 +5000,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             expansions.foreach(_.afterAction())
 
             factions.foreach(_.oncePerAction = $)
+
+            // Dunwich Lavinia "Bride of the Old Ones": recompute the per-action protection
+            // snapshot at this boundary so the NEXT action reads whether Lavinia shares an
+            // Area with any Great Old One at its start. Only scan when Lavinia is enabled.
+            if (options.contains(UseLaviniaWhateley))
+                laviniaBrideActive = factions./~(_.units).%(u => u.uclass == LaviniaWhateley && u.region.inPlay)
+                    .exists(u => factions.exists(_.at(u.region).goos.any))
 
             triggers()
 

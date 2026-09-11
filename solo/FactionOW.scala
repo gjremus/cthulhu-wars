@@ -69,7 +69,7 @@ case object OW extends Faction { f =>
     }
 
     override def recruitCost(u : UnitClass, r : Region)(implicit game : Game) =
-        if (u == Mutant && game.options.has(OpenerCheapMutants)) mutantCost(r) else u.cost
+        if (u == Mutant && game.options.has(OpenerCheapMutants)) mutantCost(r) else u.cost + clanPatriarchDelta(u, r)
 
     override def summonCost(u : UnitClass, r : Region)(implicit game : Game) =
         if (u == Mutant && game.options.has(OpenerCheapMutants)) mutantCost(r) else u.cost
