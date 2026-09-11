@@ -384,34 +384,16 @@ object FBExpansion extends Expansion {
             // Find all gates in this region (normal gates, chaos gates, etc.)
             val gatesHere = game.factions.%(f => f.gates.has(r))
 
-            // The Invasion (TI): TI.gates already includes Lord's Shadow regions
-            // (see FactionTI.scala's creation sites), so Crater can already
-            // detect/destroy a Lord's Shadow as a normal gate above. Record it
-            // (and any Portent Area) before mutating, then clean up the
-            // TI-specific state and award the Elder Sign(s) the faction guide
-            // specifies for an enemy destroying one.
-            val wasLordsShadow = gatesHere.has(TI) && game.tiLordsShadowRegions.has(r)
-            val wasPortent = gatesHere.has(TI) && game.tiPortents.contains(r)
+            // The Invasion (TI): the canonical hook grants the destruction reward for a
+            // Lord's Shadow / Portent Area and cleans up TI's tracking sets. It must run
+            // BEFORE the gates are stripped below (its Portent branch still needs to see
+            // that TI held the gate here). See Game.tiGateDestroyed.
+            game.tiGateDestroyed(r, "Crater".styled(FB))
 
             gatesHere.foreach { f =>
                 // Don't destroy Yog-Sothoth gate (handled separately if ever relevant)
                 f.gates = f.gates.but(r)
                 f.log("Gate in", r, "destroyed by", "Crater".styled(FB))
-            }
-
-            if (wasLordsShadow) {
-                game.tiLordsShadowRegions = game.tiLordsShadowRegions.but(r)
-                if (game.factions.has(TI)) {
-                    TI.takeES(2)
-                    TI.log("lost a", "Lord's Shadow".styled(TI), "in", r, "to", "Crater".styled(FB), "— gained", 2.es)
-                }
-            }
-            else if (wasPortent) {
-                game.tiPortents = game.tiPortents - r
-                if (game.factions.has(TI)) {
-                    TI.takeES(1)
-                    TI.log("lost a", "Portent".styled(TI), "in", r, "to", "Crater".styled(FB), "— gained", 1.es)
-                }
             }
         }
     }
@@ -442,11 +424,10 @@ object FBExpansion extends Expansion {
         if (game.fbCraters.has(r)) {
             val gatesHere = game.factions.%(f => f.gates.has(r))
 
-            // The Invasion (TI): same Lord's Shadow / Portent Area check and
-            // cleanup as destroyGatesInCraterRegions above — see the comment
-            // there for why TI.gates already covers Lord's Shadow regions.
-            val wasLordsShadow = gatesHere.has(TI) && game.tiLordsShadowRegions.has(r)
-            val wasPortent = gatesHere.has(TI) && game.tiPortents.contains(r)
+            // The Invasion (TI): the canonical hook grants the destruction reward and
+            // cleans up TI's tracking sets — see Game.tiGateDestroyed. It must run BEFORE
+            // the gates are stripped below.
+            game.tiGateDestroyed(r, "Crater".styled(FB))
 
             gatesHere.foreach { f =>
                 f.gates = f.gates.but(r)
@@ -460,21 +441,6 @@ object FBExpansion extends Expansion {
             // nobody can be "on" it.
             game.factions.foreach { f =>
                 f.at(r).%(_.onGate).foreach(_.onGate = false)
-            }
-
-            if (wasLordsShadow) {
-                game.tiLordsShadowRegions = game.tiLordsShadowRegions.but(r)
-                if (game.factions.has(TI)) {
-                    TI.takeES(2)
-                    TI.log("lost a", "Lord's Shadow".styled(TI), "in", r, "to", "Crater".styled(FB), "— gained", 2.es)
-                }
-            }
-            else if (wasPortent) {
-                game.tiPortents = game.tiPortents - r
-                if (game.factions.has(TI)) {
-                    TI.takeES(1)
-                    TI.log("lost a", "Portent".styled(TI), "in", r, "to", "Crater".styled(FB), "— gained", 1.es)
-                }
             }
         }
     }

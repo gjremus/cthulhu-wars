@@ -2347,6 +2347,29 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (!factions.has(TI)) 0
         else tiLordsShadowRegions.count(r => gates.has(r) && tiShadowController(r) == Some(f))
 
+    // The Invasion (TI) — the single canonical hook a gate-destroyer calls to grant TI
+    // the §1.10 destruction reward (2 Elder Signs when a destroyed gate was a Lord's
+    // Shadow, 1 when it was a Portent Area) and to clean up TI's own tracking sets. It
+    // reads TI's tracking sets — NOT the gate lists — so a caller MUST call it BEFORE it
+    // strips the region from game.gates / f.gates (the Portent branch still needs to see
+    // that TI held the gate there). No-op in a game without TI. `byLabel` is the pre-styled
+    // name of the destroying effect, e.g. "Crater".styled(FB) or Ithaqua.styled(self).
+    // FUTURE gate-destroyers: call this and the reward is automatic — never re-inline it.
+    def tiGateDestroyed(r : Region, byLabel : String) : Unit = {
+        if (factions.has(TI)) {
+            if (tiLordsShadowRegions.has(r)) {
+                tiLordsShadowRegions :-= r
+                TI.takeES(2)
+                TI.log("lost a", "Lord's Shadow".styled(TI), "in", r, "to", byLabel, "— gained", 2.es)
+            }
+            else if (tiPortents.contains(r) && TI.gates.has(r)) {
+                tiPortents = tiPortents - r
+                TI.takeES(1)
+                TI.log("lost a", "Portent".styled(TI), "in", r, "to", byLabel, "— gained", 1.es)
+            }
+        }
+    }
+
     // The Invasion (TI) — Baphomet's Fury (§1.8/§2.12). The two-sided card is inactive
     // until the Ritual Track Marker's VALUE first reaches 7, then flips to active and
     // stays active permanently (a one-way historical flag — the live marker can later
