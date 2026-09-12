@@ -158,6 +158,8 @@ object OWExpansion extends Expansion {
 
             game.hires(f)
 
+            game.recruitsWhateley(f)
+
             game.doomDone(f)
 
             asking

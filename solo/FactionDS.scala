@@ -175,6 +175,8 @@ object DSExpansion extends Expansion {
 
             game.hires(f)
 
+            game.recruitsWhateley(f)
+
             if (f.needs(PowerDoomOffer) && f.enemies.any)
                 + PowerDoomOfferAction(f)
 

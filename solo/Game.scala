@@ -1597,7 +1597,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case TI => $(TIExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
-        (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any).$(NeutralMonstersExpansion) ++
+        (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any || options.of[WhateleyClanOption].any).$(NeutralMonstersExpansion) ++
         options.of[IGOOOption].any.$(IGOOsExpansion) ++
         board.isLibraryMap.$(LibraryExpansion) ++
         $(this)

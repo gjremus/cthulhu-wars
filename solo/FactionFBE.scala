@@ -438,6 +438,8 @@ object FBEExpansion extends Expansion {
 
             game.hires(f)
 
+            game.recruitsWhateley(f)
+
             // Succor — offer once per Doom phase if acquired and FBE has any unit
             // (Moon units count — Succor eliminates units, allowed on the Moon).
             if (f.can(Succor) && f.units.%(u => u.region.onMap || u.region == BB.moon).any && !f.oncePerAction.has(Succor))

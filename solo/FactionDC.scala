@@ -925,6 +925,7 @@ object DCExpansion extends Expansion {
             game.reveals(f)
             game.highPriests(f)
             game.hires(f)
+            game.recruitsWhateley(f)
             game.doomDone(f)
             asking
 

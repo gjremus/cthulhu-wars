@@ -606,6 +606,8 @@ object FBExpansion extends Expansion {
 
             game.hires(f)
 
+            game.recruitsWhateley(f)
+
             game.doomDone(f)
 
             if (ipBoost > 0)

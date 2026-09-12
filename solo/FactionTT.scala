@@ -384,6 +384,8 @@ object TTExpansion extends Expansion {
             game.highPriests(f)
             game.hires(f)
 
+            game.recruitsWhateley(f)
+
             // Doom-phase awaken: if TT has gate + HP in play and Ubbo not yet awakened, offer 0-cost awaken
             if (f.pool(UbboSathla).any && f.gates.any && f.all(HighPriest).onMap.any)
                 + TTAwakenUbboDoomMainAction(f)
