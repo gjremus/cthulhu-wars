@@ -65,15 +65,18 @@ elif [ -n "$(find "$HB_ROOT/solo" \( -name '*.scala' -o -name '*.sbt' -o -name '
 fi
 
 if $NEED_BUILD; then
-    echo "==> [build] sbt fullOptJS (Homebrew) with 4G heap ..."
+    echo "==> [build] sbt fullOptJS (Homebrew) with 8G heap + G1GC ..."
     export JAVA_HOME=/Users/gremus/.local/jdk/zulu21.50.19-ca-jdk21.0.11-macosx_aarch64/Contents/Home
-    export PATH="$JAVA_HOME/bin:$PATH"
-    export SBT_OPTS="-Xmx4g -Xss8m"
+    export PATH="$JAVA_HOME/bin:$HOME/.local/bin:$PATH"
+    # HB carries every homebrew faction, so its bundle is the largest of the five
+    # builds. 4G OOMs during Closure optimization (GC death-spiral that looks like a
+    # hang and can leave a STALE main.js). 8G + G1GC links it cleanly in ~30s.
+    export SBT_OPTS="-Xms2g -Xmx8g -XX:+UseG1GC -XX:ReservedCodeCacheSize=256m -Xss8m"
     # Delete the old bundle so its continued existence can't masquerade as a
     # successful build (a mid-build OOM would otherwise leave the stale file).
     rm -f "$MAIN_JS"
     BUILD_LOG="$(mktemp -t hb-build.XXXXXX).log"
-    if ! ( cd "$HB_ROOT/solo" && sbt -J-Xmx4g fullOptJS ) >"$BUILD_LOG" 2>&1; then
+    if ! ( cd "$HB_ROOT/solo" && sbt fullOptJS ) >"$BUILD_LOG" 2>&1; then
         echo "ERROR: sbt exited non-zero. Tail:"; tail -30 "$BUILD_LOG"; exit 1
     fi
     if grep -q "OutOfMemoryError" "$BUILD_LOG"; then

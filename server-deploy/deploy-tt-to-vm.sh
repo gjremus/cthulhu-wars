@@ -39,9 +39,20 @@ fi
 MAIN_JS="$TT_ROOT/solo/target/scala-2.13/cthulhu-wars-solo-hrf-opt/main.js"
 if $DO_BUILD || [ ! -f "$MAIN_JS" ]; then
     echo "==> [build] sbt fullOptJS (TchoTcho) ..."
-    export JAVA_HOME=/tmp/zulu-jdk/zulu21.50.19-ca-jdk21.0.11-macosx_aarch64/Contents/Home
+    # Use the PERSISTENT Zulu JDK (the old /tmp/zulu-jdk path is wiped on reboot,
+    # and bare `java` is a Salesforce shim that breaks sbt — either silently
+    # uploads a STALE main.js). Pin the real JDK and FAIL LOUD.
+    export JAVA_HOME="/Users/gremus/.local/jdk/zulu21.50.19-ca-jdk21.0.11-macosx_aarch64/Contents/Home"
     export PATH="$JAVA_HOME/bin:$HOME/.local/bin:$PATH"
-    (cd "$TT_ROOT/solo" && sbt fullOptJS 2>&1 | tail -5)
+    # sbt's default 1GB heap OOMs during Closure optimization on the larger bundles,
+    # which manifests as a GC death-spiral that looks like a hang and can silently
+    # leave a STALE main.js. Give the linker plenty of heap + G1GC.
+    export SBT_OPTS="-Xms2g -Xmx8g -XX:+UseG1GC -XX:ReservedCodeCacheSize=256m"
+    _before=$(stat -f '%m' "$MAIN_JS" 2>/dev/null || echo 0)
+    ( cd "$TT_ROOT/solo" && sbt fullOptJS ); _rc=$?
+    if [ $_rc -ne 0 ]; then echo "ERROR: sbt fullOptJS failed (rc=$_rc) — aborting deploy."; exit 1; fi
+    _after=$(stat -f '%m' "$MAIN_JS" 2>/dev/null || echo 0)
+    if [ "$_before" = "$_after" ]; then echo "ERROR: main.js NOT regenerated (stale). Aborting."; exit 1; fi
 fi
 if [ ! -f "$MAIN_JS" ]; then
     echo "ERROR: $MAIN_JS still missing after build."
