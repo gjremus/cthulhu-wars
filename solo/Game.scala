@@ -1123,6 +1123,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var ritualHistoryCeremony : $[Boolean] = $
     var battle : |[Battle] = None
     var nexed : $[Region] = $
+    var battleResumePhase : |[String] = None  // Energy Nexus: resume battle at this phase after SL turn
     var queue : $[Battle] = $
     var anyIceAge : Boolean = false
     var lastDaolothRegion : |[Region] = None
@@ -1559,6 +1560,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
         }
 
+        println(s"[FATAL-TRACE] unknown continue on: ${action.getClass.getSimpleName}. battle=${battle.isDefined}${battle./(b => " arena=" + b.arena + " effect=" + b.effect + " attacker=" + b.attacker + " defender=" + b.defender).|("")}. queue=${queue.map(q => q.attacker + "/" + q.effect).mkString(",")}. nexed=${nexed.mkString(",")}. expansions=${expansions.map(_.getClass.getSimpleName).mkString(",")}")
         throw new Error("unknown continue on " + action)
     }
 
@@ -3033,6 +3035,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             ProceedBattlesAction
 
         case ProceedBattlesAction =>
+            // NOTE: this build has no nextReplayActionHint mechanism (never backported from
+            // later builds), so the Grasping-Dead-chain Energy Nexus exemption used on the
+            // other 4 builds can't be made replay-safe here the same way — it would desync
+            // replay of any already-recorded game the same way it did on MNU (see row 23 /
+            // [[project_ts_graspingdead_sl_energynexus_row21]]). Left at the original
+            // acted-gate only until nextReplayActionHint is ported to this build.
             factions.%(f => game.nexed.none && f.has(EnergyNexus) && queue.exists(b => f.at(b.arena)(Wizard).any) && f.acted.not).foreach { f =>
                 game.nexed = queue.%(_.attacker == queue.first.attacker)./(_.arena).%(r => f.at(r)(Wizard).any)
                 f.log("interrupted battle", queue.exists(_.effect.has(EnergyNexus)).??("again"), "with", EnergyNexus)

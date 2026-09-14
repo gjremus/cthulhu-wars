@@ -134,6 +134,7 @@ case class NecrophagyAction(self : Faction, ur : UnitRef, r : Region) extends Fo
 case class DemandSacrificePreBattleAction(self : Faction) extends OptionFactionAction(DemandSacrifice) with PreBattleQuestion
 case class DemandSacrificeProvideESAction(self : Faction) extends ForcedAction
 case class DemandSacrificeKillsArePainsAction(self : Faction) extends ForcedAction
+case class EnergyNexusPreBattleAction(self : Faction) extends OptionFactionAction(EnergyNexus) with PreBattleQuestion
 
 // WW
 case class HowlPreBattleAction(self : Faction) extends OptionFactionAction(Howl) with PreBattleQuestion
@@ -349,6 +350,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s.has(DemandSacrifice) && s.tag(DemandSacrifice).not && s.opponent.tag(KillsArePains).not)
             if (game.options.has(DemandTsathoggua).?(s.forces(Tsathoggua).any).|(s.has(Tsathoggua)))
                 options :+= DemandSacrificePreBattleAction(s)
+
+        // Energy Nexus pre-battle: Sleeper may interrupt this battle to take a full turn.
+        // Fires before EVERY battle, evaluated PER REGION at the moment this arena's
+        // pre-battle menu is built, so a Wizard present here — including one pained into a
+        // not-yet-fought Grasping Dead region — offers the interrupt. Presented as an explicit
+        // menu option alongside Demand Sacrifice; selecting it routes to a full SL turn and the
+        // battle resumes at PreRoll (see the EnergyNexusPreBattleAction handler).
+        if (s.has(EnergyNexus) && s.at(arena)(Wizard).any)
+            options :+= EnergyNexusPreBattleAction(s)
 
         // Round 8 Bug 40: also check facedown state for IGOO spellbooks
         if (s.has(CosmicUnity) && !s.oncePerGame.has(CosmicUnity) && s.tag(CosmicUnity).not && s.forces(Daoloth).any && s.opponent.forces.goos.any)
@@ -1153,6 +1163,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case PreBattleDoneAction(self, bf) =>
             jump(bf)
+
+        case EnergyNexusPreBattleAction(self) =>
+            // Sleeper interrupts THIS battle (per region, before every battle incl. each
+            // Grasping Dead region) to take a full turn; the battle then resumes at PreRoll.
+            game.nexed = $(arena)
+            game.battleResumePhase = |("PreRoll")
+            self.log("used", EnergyNexus, "in", arena)
+            Force(PreMainAction(self))
 
         // ROLL
         case BattleRollAction(f, rolls, next) =>
