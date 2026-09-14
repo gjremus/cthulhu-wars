@@ -180,6 +180,12 @@ case class LaughingstockDoneAction(self : Faction) extends BaseFactionAction("La
 case class LaughingstockSideAction(self : Faction, side : Faction) extends BaseFactionAction("Laughingstock".styled("nt") + " — choose side", implicit g => "Fight for " + side.full)
 case class PreBattleDoneAction(self : Faction, next : BattlePhase) extends OptionFactionAction("Done") with PreBattleQuestion
 case class BattleProceedAction(next : BattlePhase) extends ForcedAction
+// Records, ONCE per battle at the start of kill assignment, that this battle
+// assigns Kills/Pains attacker-first (standard CW order). Only emitted during
+// live play and when replaying a log that already contains it; a pre-existing
+// log recorded under the older defender-first flow contains no such action and
+// is replayed defender-first, so old games stay byte-identical on replay.
+case class BattleAssignOrderAction(attackerFirst : Boolean) extends ForcedAction
 
 case class BattleRollAction(f : Faction, rolls : $[BattleRoll], next : BattlePhase) extends ForcedAction
 
@@ -847,6 +853,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         proceed()
     }
 
+    // Kill/Pain assignment order for THIS battle. Standard CW is attacker-first.
+    // Decided exactly once, at the AssignDefenderKills entry, via a recorded
+    // BattleAssignOrderAction so that games recorded under the older defender-first
+    // flow (which carry no such marker) keep replaying defender-first unchanged.
+    var assignOrderDecided : Boolean = false
+    var assignAttackerFirst : Boolean = false
+
     def proceed() : Continue = {
         phase match {
             case AzathothCombatDiePhase =>
@@ -1133,10 +1146,31 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     jump(AssignDefenderKills)
 
             case AssignDefenderKills =>
-                assignKills(defender, AssignAttackerKills)
+                // Decide the per-battle assignment order ONCE, here at the first kill
+                // phase. Standard CW assigns kills/pains attacker-first. To stay
+                // replay-safe, we branch on the replay hint: live play (no hint) and a
+                // log that already contains the order marker replay attacker-first (and
+                // (re)emit the marker); a pre-existing log with no marker at this point
+                // replays defender-first and emits nothing, so old games are unchanged.
+                if (!assignOrderDecided) {
+                    assignOrderDecided = true
+                    game.nextReplayActionHint match {
+                        case None =>
+                            assignAttackerFirst = true
+                            return BattleAssignOrderAction(true)
+                        case Some(h) if h.startsWith("BattleAssignOrderAction") =>
+                            assignAttackerFirst = true
+                            return BattleAssignOrderAction(true)
+                        case Some(_) =>
+                            assignAttackerFirst = false
+                    }
+                }
+                val kf = if (assignAttackerFirst) attacker else defender
+                assignKills(kf, AssignAttackerKills)
 
             case AssignAttackerKills =>
-                assignKills(attacker, AllKillsAssignedPhase)
+                val kf = if (assignAttackerFirst) defender else attacker
+                assignKills(kf, AllKillsAssignedPhase)
 
             case AllKillsAssignedPhase =>
                 sides.foreach { s =>
@@ -1484,10 +1518,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(AssignDefenderPains)
 
             case AssignDefenderPains =>
-                assignPains(defender, AssignAttackerPains)
+                val painFirst = if (assignAttackerFirst) attacker else defender
+                assignPains(painFirst, AssignAttackerPains)
 
             case AssignAttackerPains =>
-                assignPains(attacker, AllPainsAssignedPhase)
+                val painFirst = if (assignAttackerFirst) attacker else defender
+                val painSecond = if (painFirst == attacker) defender else attacker
+                assignPains(painSecond, AllPainsAssignedPhase)
 
             case AllPainsAssignedPhase =>
                 sides.foreach { s =>
@@ -2046,6 +2083,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case BattleProceedAction(bf) =>
             jump(bf)
+
+        case BattleAssignOrderAction(af) =>
+            assignOrderDecided = true
+            assignAttackerFirst = af
+            jump(AssignDefenderKills)
 
         case PreBattleDoneAction(self, bf) =>
             // Energy Nexus Pre-Battle variant: fires after all other pre-battle powers
