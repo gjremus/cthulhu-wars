@@ -647,7 +647,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s.loyaltyCards.has(WizardWhateleyCard) && s.forces(WizardWhateley).any && !magicianMusteredThisBattle.has(s) && game.magicianMusterOffers(s).any)
             options :+= MagicianMainAction(s)
 
-        // Energy Nexus pre-battle variant: handled after all other pre-battle powers (see PreBattleDoneAction)
+        // Energy Nexus pre-battle: Sleeper may interrupt this battle to take a full turn.
+        // Fires before EVERY battle, evaluated PER REGION at the moment this arena's
+        // pre-battle menu is built, so a Wizard present here — including one pained into a
+        // not-yet-fought Grasping Dead region — offers the interrupt. Presented as an explicit
+        // menu option alongside Demand Sacrifice; selecting it routes to a full SL turn and the
+        // battle resumes at PreRoll (see the EnergyNexusPreBattleAction handler). The batch-time
+        // queue interrupt (Game.ProceedBattlesAction) still pre-empts arenas it covers by jumping
+        // straight to PreRoll, so this option only surfaces for arenas that interrupt missed.
+        if ((s.can(EnergyNexus) || s.can(EnergyNexusPB)) && s.at(arena)(Wizard).any && game.nexed.none)
+            options :+= EnergyNexusPreBattleAction(s)
 
         // Fiendish Spawn (DS alternate) — pre-battle, requires Avatar Antithesis in battle + larva in pool
         if (s.can(FiendishSpawn) && s.tag(FiendishSpawn).not && s.forces(AvatarAntithesis).any && (s.pool(LarvaThesis) ++ s.pool(LarvaAntithesis) ++ s.pool(LarvaSynthesis)).any)
@@ -2934,9 +2943,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Gives SL a full turn, then battle resumes at PreRoll (skipping pre-battle)
             sides.foreach { f =>
                 val side = if (f == attacker) attackers else defenders
-                if (f.can(EnergyNexusPB) && side.tag(EnergyNexusPB).not && side.forces(Wizard).any && !f.oncePerTurn.has(EnergyNexusPB)) {
+                if (f.can(EnergyNexusPB) && side.tag(EnergyNexusPB).not && side.forces(Wizard).any) {
                     side.add(EnergyNexusPB)
-                    f.oncePerTurn :+= EnergyNexusPB
                     game.nexed = $(arena)
                     game.battleResumePhase = |("PreRoll")
                     f.log("used", EnergyNexus, "in", arena)
@@ -2944,6 +2952,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 }
             }
             jump(bf)
+
+        case EnergyNexusPreBattleAction(self) =>
+            // Sleeper interrupts THIS battle (per region, before every battle incl. each
+            // Grasping Dead region) to take a full turn; the battle then resumes at PreRoll.
+            // Mirrors the EnergyNexusPB auto-fire in PreBattleDoneAction, but triggered by an
+            // explicit menu choice so it surfaces at each arena's pre-battle rather than only
+            // at the batch-start queue interrupt.
+            game.nexed = $(arena)
+            game.battleResumePhase = |("PreRoll")
+            self.log("used", EnergyNexus, "in", arena)
+            Force(PreMainAction(self))
 
         // ROLL
         case BattleRollAction(f, rolls, next) =>
