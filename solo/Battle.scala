@@ -1605,15 +1605,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     jump(AssignDefenderKills)
 
             case AssignDefenderKills =>
-                // ATTACKER-FIRST (standard Cthulhu Wars): the attacker assigns/resolves its
-                // casualties BEFORE the defender — for kills here and pains below. Replay-safety:
-                // the BattlePhase case objects and the recorded BattleProceedAction transition
-                // sequence are UNCHANGED; only WHICH faction each phase asks is swapped. The
-                // AssignKillAction/AssignPainAction handlers are phase-agnostic (they apply to the
-                // exact recorded unit, then proceed()), so games recorded under the previous
-                // defender-first order still replay to the same end state.
-                // TB Autotomy must fire immediately before TB (as attacker) applies its kills,
-                // so it now lives in this (attacker-assigning) phase rather than the second one.
+                assignKills(defender, AssignAttackerKills)
+
+            case AssignAttackerKills =>
+                // Autotomy fires in Unlimited Battles immediately before TB applies kills,
+                // provided a Segment is anywhere in play and at least 1 kill is rolled against TB.
+                // TB.hasAllSB is the Unlimited Battle condition (pre-action or post-action).
                 if (attacker == TB && TB.hasAllSB && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
                     val opponentRolledKill = defenders.rolls.has(Kill)
                     val segmentsExist = TB.all(ShuddeMellSegment).any
@@ -1622,11 +1619,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
                     }
                 }
-                assignKills(attacker, AssignAttackerKills)
-
-            case AssignAttackerKills =>
-                // ATTACKER-FIRST: the defender assigns its kills second (see AssignDefenderKills).
-                assignKills(defender, AllKillsAssignedPhase)
+                assignKills(attacker, AllKillsAssignedPhase)
 
             case AllKillsAssignedPhase =>
                 // Faceless Blight (FBE) — Changeling Adherents SBR (§3.12.1): a total
@@ -2131,32 +2124,26 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(AssignDefenderPains)
 
             case AssignDefenderPains =>
-                // ATTACKER-FIRST (standard Cthulhu Wars): the attacker assigns pains BEFORE
-                // the defender, matching the kill-assignment order above. Replay-safe for the
-                // same reason (phase objects + BattleProceedAction sequence unchanged; only the
-                // asked faction swaps; AssignPainAction is phase-agnostic).
-                // Xyrious Storm Precipitation (§1.5): XSS assigns pains FIRST regardless of
-                // role, fully cancelled by CC Madness. Under attacker-first, XSS-as-attacker is
-                // ALREADY first by default; the only case needing an override is XSS-as-DEFENDER,
-                // which we hoist to go first here.
+                // Xyrious Storm Precipitation (§1.5): XSS assigns pains FIRST regardless
+                // of Attacker/Defender role. Fully cancelled by CC Madness.
                 val precipitationActive = factions.has(XSS) && sides.has(XSS) &&
                     XSS.abilities.has(Precipitation) &&
                     !factions.exists(f => f != XSS && f.can(Madness))
-                if (precipitationActive && defender == XSS) {
-                    // XSS is Defender but gets to assign pains first via Precipitation
-                    assignPains(defender, AssignAttackerPains)
-                } else
+                if (precipitationActive && attacker == XSS) {
+                    // XSS is Attacker but gets to assign pains first via Precipitation
                     assignPains(attacker, AssignAttackerPains)
+                } else
+                    assignPains(defender, AssignAttackerPains)
 
             case AssignAttackerPains =>
                 val precipitationActive = factions.has(XSS) && sides.has(XSS) &&
                     XSS.abilities.has(Precipitation) &&
                     !factions.exists(f => f != XSS && f.can(Madness))
-                if (precipitationActive && defender == XSS) {
-                    // XSS (Defender) already went first via Precipitation; now Attacker assigns
-                    assignPains(attacker, AllPainsAssignedPhase)
-                } else
+                if (precipitationActive && attacker == XSS) {
+                    // XSS (Attacker) already went first; now Defender assigns
                     assignPains(defender, AllPainsAssignedPhase)
+                } else
+                    assignPains(attacker, AllPainsAssignedPhase)
 
             case AllPainsAssignedPhase =>
                 sides.foreach { s =>
