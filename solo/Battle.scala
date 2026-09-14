@@ -189,6 +189,12 @@ case class LaughingstockDoneAction(self : Faction) extends BaseFactionAction("La
 case class LaughingstockSideAction(self : Faction, side : Faction) extends BaseFactionAction("Laughingstock".styled("nt") + " — choose side", implicit g => "Fight for " + side.full)
 case class PreBattleDoneAction(self : Faction, next : BattlePhase) extends OptionFactionAction("Done") with PreBattleQuestion
 case class BattleProceedAction(next : BattlePhase) extends ForcedAction
+// Records, ONCE per battle at the start of kill assignment, that this battle
+// assigns Kills/Pains attacker-first (standard CW order). Only emitted during
+// live play and when replaying a log that already contains it; a pre-existing
+// log recorded under the older defender-first flow contains no such action and
+// is replayed defender-first, so old games stay byte-identical on replay.
+case class BattleAssignOrderAction(attackerFirst : Boolean) extends ForcedAction
 
 case class BattleRollAction(f : Faction, rolls : $[BattleRoll], next : BattlePhase) extends ForcedAction
 case class AzathothDaemonSultanKillRollAction(self : Faction, roll : Int) extends ForcedAction
@@ -389,6 +395,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // (Post-Kill-assignment, §3.14.3) is not re-presented when AllKillsAssignedPhase
     // is re-entered after the player chooses N.
     var fbeDistributedDeathOffered : Boolean = false
+
+    // Kill/Pain assignment order for THIS battle. Standard CW is attacker-first.
+    // Decided exactly once, at the AssignDefenderKills entry, via a recorded
+    // BattleAssignOrderAction so that games recorded under the older defender-first
+    // flow (which carry no such marker) keep replaying defender-first unchanged.
+    var assignOrderDecided : Boolean = false
+    var assignAttackerFirst : Boolean = false
 
     // Faceless Blight (FBE): Units whose assigned Kill was cancelled by Distributed
     // Death this Battle. The Kill was still APPLIED (only its effect was prevented),
@@ -823,17 +836,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         val assigned = s.forces./(assignedKills).sum
         val canAssign = s.forces./(canAssignKills).sum
 
-        if (s == TB) {
-            println(s"[ASSIGNKILLS-TB-TRACE] kills=${kills} assigned=${assigned} canAssign=${canAssign} tbAutotomyUsed=${tbAutotomyUsed} tbAutotomyOffered=${tbAutotomyOffered}")
-            println(s"[ASSIGNKILLS-TB-TRACE] forces=${s.forces./(u => s"${u.ref}(${u.health},canKill=${canAssignKills(u)})").mkString(",")}")
-            println(s"[ASSIGNKILLS-TB-TRACE] opponentRolls=${s.opponent.rolls}")
-        }
-
         if (kills <= assigned)
             return BattleProceedAction(next)
 
         if (kills >= assigned + canAssign) {
-            if (s == TB) println(s"[ASSIGNKILLS-TB-TRACE] AUTO-ASSIGNING all kills (kills >= assigned + canAssign)")
             s.forces.foreach(u => 1.to(canAssignKills(u)).foreach(_ => assignKill(u)))
             if (azathothNeedsKillRoll) {
                 azathothNeedsKillRoll = false
@@ -1605,13 +1611,27 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     jump(AssignDefenderKills)
 
             case AssignDefenderKills =>
-                assignKills(defender, AssignAttackerKills)
-
-            case AssignAttackerKills =>
-                // Autotomy fires in Unlimited Battles immediately before TB applies kills,
-                // provided a Segment is anywhere in play and at least 1 kill is rolled against TB.
-                // TB.hasAllSB is the Unlimited Battle condition (pre-action or post-action).
-                if (attacker == TB && TB.hasAllSB && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
+                // Decide the per-battle assignment order ONCE, here at the first kill
+                // phase. Standard CW assigns kills/pains attacker-first. To stay
+                // replay-safe, we branch on the replay hint: live play (no hint) and a
+                // log that already contains the order marker replay attacker-first (and
+                // (re)emit the marker); a pre-existing log with no marker at this point
+                // replays defender-first and emits nothing, so old games are unchanged.
+                if (!assignOrderDecided) {
+                    assignOrderDecided = true
+                    game.nextReplayActionHint match {
+                        case None =>
+                            assignAttackerFirst = true
+                            return BattleAssignOrderAction(true)
+                        case Some(h) if h.startsWith("BattleAssignOrderAction") =>
+                            assignAttackerFirst = true
+                            return BattleAssignOrderAction(true)
+                        case Some(_) =>
+                            assignAttackerFirst = false
+                    }
+                }
+                val kf = if (assignAttackerFirst) attacker else defender
+                if (kf == attacker && attacker == TB && TB.hasAllSB && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
                     val opponentRolledKill = defenders.rolls.has(Kill)
                     val segmentsExist = TB.all(ShuddeMellSegment).any
                     if (opponentRolledKill && segmentsExist) {
@@ -1619,7 +1639,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
                     }
                 }
-                assignKills(attacker, AllKillsAssignedPhase)
+                assignKills(kf, AssignAttackerKills)
+
+            case AssignAttackerKills =>
+                // Second kill phase — assigns the side that did NOT go first.
+                // Autotomy fires in Unlimited Battles immediately before TB applies kills,
+                // provided a Segment is anywhere in play and at least 1 kill is rolled against TB.
+                // TB.hasAllSB is the Unlimited Battle condition (pre-action or post-action).
+                val kf = if (assignAttackerFirst) defender else attacker
+                if (kf == attacker && attacker == TB && TB.hasAllSB && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
+                    val opponentRolledKill = defenders.rolls.has(Kill)
+                    val segmentsExist = TB.all(ShuddeMellSegment).any
+                    if (opponentRolledKill && segmentsExist) {
+                        tbAutotomyOffered = true
+                        return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
+                    }
+                }
+                assignKills(kf, AllKillsAssignedPhase)
 
             case AllKillsAssignedPhase =>
                 // Faceless Blight (FBE) — Changeling Adherents SBR (§3.12.1): a total
@@ -2124,26 +2160,24 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(AssignDefenderPains)
 
             case AssignDefenderPains =>
-                // Xyrious Storm Precipitation (§1.5): XSS assigns pains FIRST regardless
-                // of Attacker/Defender role. Fully cancelled by CC Madness.
+                // Standard CW assigns pains attacker-first (per-battle order set at the
+                // kill phase). Xyrious Storm Precipitation (§1.5): XSS assigns pains FIRST
+                // regardless of Attacker/Defender role; fully cancelled by CC Madness.
+                // With defender-first (old replay) this formula reproduces the prior
+                // behavior exactly, including XSS-as-defender going first by default.
                 val precipitationActive = factions.has(XSS) && sides.has(XSS) &&
                     XSS.abilities.has(Precipitation) &&
                     !factions.exists(f => f != XSS && f.can(Madness))
-                if (precipitationActive && attacker == XSS) {
-                    // XSS is Attacker but gets to assign pains first via Precipitation
-                    assignPains(attacker, AssignAttackerPains)
-                } else
-                    assignPains(defender, AssignAttackerPains)
+                val painFirst = if (precipitationActive) XSS else if (assignAttackerFirst) attacker else defender
+                assignPains(painFirst, AssignAttackerPains)
 
             case AssignAttackerPains =>
                 val precipitationActive = factions.has(XSS) && sides.has(XSS) &&
                     XSS.abilities.has(Precipitation) &&
                     !factions.exists(f => f != XSS && f.can(Madness))
-                if (precipitationActive && attacker == XSS) {
-                    // XSS (Attacker) already went first; now Defender assigns
-                    assignPains(defender, AllPainsAssignedPhase)
-                } else
-                    assignPains(attacker, AllPainsAssignedPhase)
+                val painFirst = if (precipitationActive) XSS else if (assignAttackerFirst) attacker else defender
+                val painSecond = if (painFirst == attacker) defender else attacker
+                assignPains(painSecond, AllPainsAssignedPhase)
 
             case AllPainsAssignedPhase =>
                 sides.foreach { s =>
@@ -2937,6 +2971,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case BattleProceedAction(bf) =>
             jump(bf)
+
+        case BattleAssignOrderAction(af) =>
+            assignOrderDecided = true
+            assignAttackerFirst = af
+            jump(AssignDefenderKills)
 
         case PreBattleDoneAction(self, bf) =>
             // Energy Nexus Pre-Battle variant: fires after all other pre-battle powers
