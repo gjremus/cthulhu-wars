@@ -2176,6 +2176,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
         }
 
+        println(s"[FATAL-TRACE] unknown continue on: ${action.getClass.getSimpleName}. battle=${battle.isDefined}${battle./(b => " arena=" + b.arena + " effect=" + b.effect + " attacker=" + b.attacker + " defender=" + b.defender).|("")}. queue=${queue.map(q => q.attacker + "/" + q.effect).mkString(",")}. nexed=${nexed.mkString(",")}. expansions=${expansions.map(_.getClass.getSimpleName).mkString(",")}")
         throw new Error("unknown continue on " + action)
     }
 
@@ -4386,7 +4387,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             ProceedBattlesAction
 
         case ProceedBattlesAction =>
-            factions.%(f => game.nexed.none && f.can(EnergyNexus) && queue.exists(b => f.at(b.arena)(Wizard).any) && f.acted.not).foreach { f =>
+            // REPLAY SAFETY: letting Energy Nexus interrupt here even though the faction
+            // already acted (Grasping Dead chain exemption) can retroactively change what a
+            // game already recorded before this exemption existed. If replay's next hint is
+            // an ordinary battle-continuation action, the old game actually continued straight
+            // into battle instead — honor that recorded path rather than newly diverting into
+            // an Energy Nexus interrupt (desyncs replay otherwise: "unknown continue on ...").
+            val graspingDeadNexusBlockedByReplay = game.nextReplayActionHint.exists(h =>
+                h.startsWith("PreBattleDoneAction") || h.startsWith("BattleRollAction") || h.startsWith("CthughaCombatChoose"))
+            factions.%(f => game.nexed.none && f.can(EnergyNexus) && queue.exists(b => f.at(b.arena)(Wizard).any) && (f.acted.not || (queue.exists(_.effect.has(GraspingDead)) && !graspingDeadNexusBlockedByReplay))).foreach { f =>
                 game.nexed = queue.%(_.attacker == queue.first.attacker)./(_.arena).%(r => f.at(r)(Wizard).any)
                 f.log("interrupted battle", queue.exists(_.effect.has(EnergyNexus)).??("again"), "with", EnergyNexus)
                 return Force(PreMainAction(f))
