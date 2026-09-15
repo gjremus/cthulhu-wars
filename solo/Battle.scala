@@ -2203,6 +2203,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     // Clear stale Retreated flags from all units (fix for phantom retreat display)
                     game.factions.foreach(_.units.foreach(_.remove(Retreated)))
                     f.log("used", EnergyNexus, "in", arena)
+                    // Re-queue THIS battle and clear game.battle so that when Sleeper's interrupt
+                    // turn ends, the battle is pulled back off the queue via ProceedBattlesAction,
+                    // which clears game.nexed. BB's ProceedBattlesAction clears nexed ONLY on the
+                    // queue-pull path (it has no nexed.any&&battle.any branch), and NextPlayerAction
+                    // resumes only when queue.any — so without re-queuing, nexed stayed set and the
+                    // NEXT player's turn prompt rendered as "Energy Nexus" (a Sleeper-only power
+                    // leaking onto e.g. Firstborn).
+                    game.queue = $(game.battle.get) ++ game.queue
+                    game.battle = None
                     return Force(PreMainAction(f))
                 }
             }
@@ -2214,9 +2223,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Mirrors the EnergyNexusPB auto-fire in PreBattleDoneAction, but triggered by an
             // explicit menu choice so it surfaces at each arena's pre-battle rather than only
             // at the batch-start queue interrupt.
+            // Re-queue THIS battle and clear game.battle exactly as the auto-fire path does, so
+            // that when Sleeper's interrupt turn ends the battle is pulled back off the queue via
+            // ProceedBattlesAction, which clears game.nexed. Without this, nexed stayed set after
+            // the turn and the NEXT player's turn prompt rendered as "Energy Nexus" (a Sleeper-only
+            // power leaking onto e.g. Firstborn).
             game.nexed = $(arena)
             game.battleResumePhase = |("PreRoll")
             self.log("used", EnergyNexus, "in", arena)
+            game.queue = $(game.battle.get) ++ game.queue
+            game.battle = None
             Force(PreMainAction(self))
 
         // ROLL
