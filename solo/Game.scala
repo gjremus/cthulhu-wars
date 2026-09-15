@@ -3041,13 +3041,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             ProceedBattlesAction
 
         case ProceedBattlesAction =>
-            // NOTE: this build has no nextReplayActionHint mechanism (never backported from
-            // later builds), so the Grasping-Dead-chain Energy Nexus exemption used on the
-            // other 4 builds can't be made replay-safe here the same way — it would desync
-            // replay of any already-recorded game the same way it did on MNU (see row 23 /
-            // [[project_ts_graspingdead_sl_energynexus_row21]]). Left at the original
-            // acted-gate only until nextReplayActionHint is ported to this build.
-            factions.%(f => game.nexed.none && f.has(EnergyNexus) && queue.exists(b => f.at(b.arena)(Wizard).any) && f.acted.not).foreach { f =>
+            // REPLAY SAFETY: letting Energy Nexus interrupt here even though the faction
+            // already acted (Grasping Dead chain exemption) can retroactively change what a
+            // game already recorded before this exemption existed. If replay's next hint is
+            // an ordinary battle-continuation action, the old game actually continued straight
+            // into battle instead — honor that recorded path rather than newly diverting into
+            // an Energy Nexus interrupt (desyncs replay otherwise: "unknown continue on ...").
+            val graspingDeadNexusBlockedByReplay = game.nextReplayActionHint.exists(h =>
+                h.startsWith("PreBattleDoneAction") || h.startsWith("BattleRollAction") || h.startsWith("CthughaCombatChoose"))
+            factions.%(f => game.nexed.none && f.can(EnergyNexus) && queue.exists(b => f.at(b.arena)(Wizard).any) && (f.acted.not || (queue.exists(_.effect.has(GraspingDead)) && !graspingDeadNexusBlockedByReplay))).foreach { f =>
                 game.nexed = queue.%(_.attacker == queue.first.attacker)./(_.arena).%(r => f.at(r)(Wizard).any)
                 f.log("interrupted battle", queue.exists(_.effect.has(EnergyNexus)).??("again"), "with", EnergyNexus)
                 return Force(PreMainAction(f))
