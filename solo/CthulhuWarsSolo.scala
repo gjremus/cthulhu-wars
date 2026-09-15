@@ -3417,7 +3417,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     }
 
                                     if (a.isVoid.not) {
+                                        game.nextReplayActionHint = if (n + 1 < recorded.num) Some(serializer.write(recorded(n + 1))) else None
                                         val (l, c) = game.perform(a.unwrap)
+                                        game.nextReplayActionHint = None
 
                                         l.foreach(s => log(s, showUndo(actions.num)))
 
@@ -3473,7 +3475,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 if (a.isRecorded)
                                     actions +:= a
 
+                                game.nextReplayActionHint = if (recorded.any && hash == "" && localReplay.not && recorded.num > actions.num) Some(recorded(actions.num).replace("&gt;", ">")) else None
                                 val (l, c) = g.perform(a.unwrap)
+                                game.nextReplayActionHint = None
 
                                 l.foreach { s =>
                                     queue :+= UILog(s)

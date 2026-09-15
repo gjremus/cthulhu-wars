@@ -86,6 +86,12 @@ trait PreBattleQuestion extends FactionAction {
 case class BattleDoneAction(self : Faction) extends ForcedAction
 case class PreBattleDoneAction(self : Faction, next : BattlePhase) extends OptionFactionAction("Done") with PreBattleQuestion
 case class BattleProceedAction(next : BattlePhase) extends ForcedAction
+// Records, ONCE per battle at the start of kill assignment, that this battle
+// assigns Kills/Pains attacker-first (standard CW order). Only emitted during
+// live play and when replaying a log that already contains it; a pre-existing
+// log recorded under the older defender-first flow contains no such action and
+// is replayed defender-first, so old games stay byte-identical on replay.
+case class BattleAssignOrderAction(attackerFirst : Boolean) extends ForcedAction
 
 case class BattleRollAction(f : Faction, rolls : $[BattleRoll], next : BattlePhase) extends ForcedAction
 
@@ -203,6 +209,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     val sides = $(attacker, defender)
 
     var phase : BattlePhase = AzathothCombatDiePhase
+
+    // Kill/Pain assignment order for THIS battle. Standard CW is attacker-first.
+    // Decided exactly once, at the AssignDefenderKills entry, via a recorded
+    // BattleAssignOrderAction so that games recorded under the older defender-first
+    // flow (which carry no such marker) keep replaying defender-first unchanged.
+    var assignOrderDecided : Boolean = false
+    var assignAttackerFirst : Boolean = false
 
     var exempted : $[UnitFigure] = $
 
@@ -727,10 +740,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     jump(AssignDefenderKills)
 
             case AssignDefenderKills =>
-                assignKills(defender, AssignAttackerKills)
+                // Decide the per-battle assignment order ONCE, here at the first kill
+                // phase. Standard CW assigns kills/pains attacker-first. To stay
+                // replay-safe, branch on the replay hint: live play (no hint) and a log
+                // that already contains the order marker replay attacker-first (and
+                // (re)emit the marker); a pre-existing log with no marker at this point
+                // replays defender-first and emits nothing, so old games are unchanged.
+                if (!assignOrderDecided) {
+                    assignOrderDecided = true
+                    game.nextReplayActionHint match {
+                        case None =>
+                            assignAttackerFirst = true
+                            return BattleAssignOrderAction(true)
+                        case Some(h) if h.startsWith("BattleAssignOrderAction") =>
+                            assignAttackerFirst = true
+                            return BattleAssignOrderAction(true)
+                        case Some(_) =>
+                            assignAttackerFirst = false
+                    }
+                }
+                assignKills(if (assignAttackerFirst) attacker else defender, AssignAttackerKills)
 
             case AssignAttackerKills =>
-                assignKills(attacker, AllKillsAssignedPhase)
+                assignKills(if (assignAttackerFirst) defender else attacker, AllKillsAssignedPhase)
 
             case AllKillsAssignedPhase =>
                 sides.foreach { s =>
@@ -897,10 +929,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(AssignDefenderPains)
 
             case AssignDefenderPains =>
-                assignPains(defender, AssignAttackerPains)
+                assignPains(if (assignAttackerFirst) attacker else defender, AssignAttackerPains)
 
             case AssignAttackerPains =>
-                assignPains(attacker, AllPainsAssignedPhase)
+                assignPains(if (assignAttackerFirst) defender else attacker, AllPainsAssignedPhase)
 
             case AllPainsAssignedPhase =>
                 sides.foreach { s =>
@@ -1160,6 +1192,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         case BattleProceedAction(bf) =>
             jump(bf)
+
+        case BattleAssignOrderAction(af) =>
+            assignOrderDecided = true
+            assignAttackerFirst = af
+            jump(AssignDefenderKills)
 
         case PreBattleDoneAction(self, bf) =>
             jump(bf)

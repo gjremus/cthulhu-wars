@@ -1507,6 +1507,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     var continue : Continue = StartContinue
 
+    // Replay hint: during replay/replay-forward this holds the serialized NEXT
+    // recorded action (or None at the live head / end of log). Battle assignment
+    // order reads it to stay replay-safe: a log with no order marker at the kill
+    // phase replays defender-first (old behavior), live/marker logs go attacker-first.
+    var nextReplayActionHint : |[String] = None
+
     def perform(action : Action) : ($[String], Continue) = {
         val c = performContinue(action)
 
