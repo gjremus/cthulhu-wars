@@ -4398,6 +4398,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             factions.%(f => game.nexed.none && f.can(EnergyNexus) && queue.exists(b => f.at(b.arena)(Wizard).any) && (f.acted.not || (queue.exists(_.effect.has(GraspingDead)) && !graspingDeadNexusBlockedByReplay))).foreach { f =>
                 game.nexed = queue.%(_.attacker == queue.first.attacker)./(_.arena).%(r => f.at(r)(Wizard).any)
                 f.log("interrupted battle", queue.exists(_.effect.has(EnergyNexus)).??("again"), "with", EnergyNexus)
+                // Energy Nexus grants ONE action. Reset acted so the Grasping Dead exemption
+                // (which fires this interrupt even when acted=true) reaches the FULL MainAction
+                // menu; the action taken flips acted back to true, landing on the terminator.
+                f.acted = false
                 return Force(PreMainAction(f))
             }
 
