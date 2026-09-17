@@ -2101,9 +2101,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Mirrors the EnergyNexusPB auto-fire in PreBattleDoneAction, but triggered by an
             // explicit menu choice so it surfaces at each arena's pre-battle rather than only
             // at the batch-start queue interrupt.
+            // Re-queue THIS battle and clear game.battle exactly as the auto-fire path does, so
+            // that when Sleeper's interrupt turn ends the battle is pulled back off the queue via
+            // ProceedBattlesAction, which clears game.nexed. Without this, nexed stayed set after
+            // the turn and the NEXT player's turn prompt rendered as "Energy Nexus" (a Sleeper-only
+            // power leaking onto e.g. Firstborn).
             game.nexed = $(arena)
             game.battleResumePhase = |("PreRoll")
             self.log("used", EnergyNexus, "in", arena)
+            game.queue = $(game.battle.get) ++ game.queue
+            game.battle = None
+            // Energy Nexus grants ONE action originating in the arena. Reset acted so Sleeper
+            // reaches its FULL MainAction menu even when it already acted this round (e.g. a
+            // Grasping Dead chain battle). The single action taken flips acted back to true via
+            // EndAction, so MainAction then lands on the Sleeper terminator branch (controls +
+            // Skip) — Sleeper cannot take a second action. Without this reset, an already-acted
+            // Sleeper went straight to the terminator and Energy Nexus did nothing.
+            self.acted = false
             Force(PreMainAction(self))
 
         // ROLL
