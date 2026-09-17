@@ -2122,6 +2122,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             self.log("used", EnergyNexus, "in", arena)
             game.queue = $(game.battle.get) ++ game.queue
             game.battle = None
+            // Energy Nexus grants ONE action originating in the arena. Reset acted so Sleeper
+            // reaches its FULL MainAction menu even when it already acted this round (e.g. a
+            // Grasping Dead chain battle). The single action taken flips acted back to true via
+            // EndAction, so MainAction then lands on the Sleeper terminator branch (controls +
+            // Skip) — Sleeper cannot take a second action. Without this reset, an already-acted
+            // Sleeper went straight to the terminator and Energy Nexus did nothing.
+            self.acted = false
             Force(PreMainAction(self))
 
         // ROLL
