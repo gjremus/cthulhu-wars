@@ -117,16 +117,28 @@ object SLExpansion extends Expansion {
             asking
 
         // ACTIONS
-        // Energy Nexus (Sleeper): when armed (game.nexed.any), Sleeper may take one action
-        // that originates in the arena EVEN IF it has already acted this round. This must fall
-        // through to the FULL action menu below — the old acted+nexed branch here offered only
-        // gate control + Skip, so choosing Energy Nexus in a round where Sleeper had already
-        // acted (e.g. a second Grasping Dead battle in a chain) did nothing. The full menu's
-        // battles(f) is already nexed-aware, and Lethargy/Psychosis self-suppress on nexed.
+        // Energy Nexus TERMINATOR (Sleeper): reached AFTER Sleeper has taken its single
+        // Energy Nexus action (EndAction flips acted back to true) while the nexus is still
+        // armed (game.nexed.any). Energy Nexus grants EXACTLY ONE action that originates in
+        // the arena, so here we offer only control of a just-captured gate + Skip; Skip runs
+        // NextPlayerAction, which proceeds back to the interrupted battle (ProceedBattlesAction
+        // pulls it off the queue and clears game.nexed). The one action itself is offered by the
+        // FULL branch below: the Energy Nexus trigger (EnergyNexusPreBattleAction handler and the
+        // ProceedBattlesAction batch interrupt) resets acted=false so Sleeper reaches the FULL
+        // menu even in a round where it had already acted (e.g. a Grasping Dead chain battle).
+        case MainAction(f : SL) if f.acted && game.nexed.any =>
+            implicit val asking = Asking(f)
+
+            game.controls(f)
+
+            + NextPlayerAction(f).as("Skip")
+
+            asking
+
         case MainAction(f : SL) if f.active.not =>
             UnknownContinue
 
-        case MainAction(f : SL) if f.acted && game.nexed.none =>
+        case MainAction(f : SL) if f.acted =>
             UnknownContinue
 
         case MainAction(f : SL) =>
