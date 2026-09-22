@@ -196,6 +196,15 @@ case class BattleProceedAction(next : BattlePhase) extends ForcedAction
 // is replayed defender-first, so old games stay byte-identical on replay.
 case class BattleAssignOrderAction(attackerFirst : Boolean) extends ForcedAction
 
+// CS Insanity fold markers (replay-safe): emitted only on live/new play so a replay can
+// tell a fold-era battle (marker present) from a pre-fold recording (marker absent). The
+// kill marker fires at AssignDefenderKills (before any kill lands); the pain marker fires
+// at NecrophagyPhase (right after Necrophagy, before pain assignment). When present, each
+// side's unassignable overflow is folded into that side's normal assign pool so the roller
+// assigns it to units of its choice; when absent, the legacy auto-reflect path runs instead.
+case class CSInsanityKillFoldAction(self : Faction) extends ForcedAction
+case class CSInsanityPainFoldAction(self : Faction) extends ForcedAction
+
 case class BattleRollAction(f : Faction, rolls : $[BattleRoll], next : BattlePhase) extends ForcedAction
 case class AzathothDaemonSultanKillRollAction(self : Faction, roll : Int) extends ForcedAction
 
@@ -434,8 +443,24 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     var csInsanityAtkKillsReflected : Int = 0
     var csInsanityDefKillsReflected : Int = 0
     // Rolling faction's own units selected (at MadnessPhase) to be force-retreated by reflected
-    // surplus Pains; the actual retreat happens at PostBattlePhase (see above).
+    // surplus Pains; the actual retreat happens at PostBattlePhase (see above). Only populated on
+    // the LEGACY (pre-fold, un-armed) path — empty when the fold is armed.
     var csInsanityReflectedRetreatUnits : $[UnitFigure] = $
+    // Fold path (current design): each rolling side's unassignable overflow is added to that same
+    // side's normal assignKills/assignPains pool, so the roller assigns it to units of its choice
+    // (reflected Kills eliminate normally at EliminatePhase; reflected Pains retreat via the normal
+    // retreat phase). Armed only for fold-era battles (marker present / live), keeping pre-fold
+    // recordings on the legacy auto-reflect path for byte-identical replay. Decided-once per side.
+    var csInsanityKillFoldDecided : Boolean = false
+    var csInsanityKillFoldArmed : Boolean = false
+    var csInsanityPainFoldDecided : Boolean = false
+    var csInsanityPainFoldArmed : Boolean = false
+    var csInsanityFoldAtkKills : Int = 0
+    var csInsanityFoldDefKills : Int = 0
+    var csInsanityFoldAtkPains : Int = 0
+    var csInsanityFoldDefPains : Int = 0
+    def csInsanityFoldedKills(s : Faction) : Int = if (s == attacker) csInsanityFoldAtkKills else if (s == defender) csInsanityFoldDefKills else 0
+    def csInsanityFoldedPains(s : Faction) : Int = if (s == attacker) csInsanityFoldAtkPains else if (s == defender) csInsanityFoldDefPains else 0
     // Vermiculite Hypertrophy converts a Pain landing on an Excrescence straight to a Kill, so
     // the unit's health no longer reads as Pained and assignedPains() can't see it anymore. Track
     // each conversion here so anything counting "how many Pains have already landed" still counts
@@ -566,6 +591,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log(EffervescentExcrescence.styled(CS), "assigned", Pain, "— converted to", Kill, "(" + VermiculiteHypertrophy.styled(CS) + ")")
             csVermiculitePainsConverted += 1
             assignKill(unit)
+            // Pains are assigned in AssignDefenderPains/AssignAttackerPains, which run AFTER
+            // EliminatePhase's one-time removal sweep (see BattlePhase order above) — so a Pain
+            // converted to a Kill here would never actually be removed from the map. Eliminate
+            // it immediately via the same eliminate() every other Kill uses at EliminatePhase.
+            if (unit.health == Killed) eliminate(unit)
             return
         }
          unit.health = unit.health match {
@@ -832,7 +862,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             s
 
     def assignKills(s : Faction, next : BattlePhase) : Continue = {
-        val kills = s.opponent.rolls.count(_ == Kill)
+        // CS Insanity fold: when armed, add this side's own unassignable Kill overflow to its pool
+        // so it assigns those reflected Kills to units of its choice (eliminated normally below).
+        val kills = s.opponent.rolls.count(_ == Kill) + csInsanityKillFoldArmed.??(csInsanityFoldedKills(s))
         val assigned = s.forces./(assignedKills).sum
         val canAssign = s.forces./(canAssignKills).sum
 
@@ -873,7 +905,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s == TB && tbAutotomyUsed)
             return BattleProceedAction(next)
 
-        val pains = s.opponent.rolls.count(_ == Pain)
+        // CS Insanity fold: when armed, add this side's own unassignable Pain overflow to its pool
+        // so it assigns those reflected Pains to units of its choice (retreat via normal phase).
+        val pains = s.opponent.rolls.count(_ == Pain) + csInsanityPainFoldArmed.??(csInsanityFoldedPains(s))
         val assigned = s.forces./(assignedPains).sum + (s == CS).??(csVermiculitePainsConverted)
         val canAssign = s.forces./(canAssignPains).sum
 
@@ -891,6 +925,38 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log(f, "assigned pains with", Vengeance)
 
         return DelayedContinue(50, Ask(f, s.forces.%(u => canAssignPains(u) > 0).sortP./(u => AssignPainAction(f, pains - assigned, s, u))))
+    }
+
+    // CS Insanity FOLD (current design): compute each rolling side's unassignable overflow BEFORE
+    // assignment (Kills before AssignDefenderKills; Pains at NecrophagyPhase) using the opponent's
+    // remaining CAPACITY, and stash it per side. assignKills/assignPains then add the stashed value
+    // to that same side's pool, so the roller assigns its own overflow to units of its choice via
+    // the normal AssignKill/AssignPainAction prompts. capacity == eventual "landed" whenever the
+    // opponent saturates (which it does once rolled >= capacity), so overflow == the legacy
+    // rolled-landed count. No-op unless CS is in the game with Insanity and a Meteorite/Globule was
+    // in the arena; CS's own overflow is never reflected.
+    def csInsanityComputeFold(isKill : Boolean) {
+        if (!(factions.has(CS) && CS.can(Insanity) && csInsanityMeteorOrGlobulePresent)) return
+
+        $(attacker, defender).foreach { roller =>
+            if (roller != CS) {
+                val rolled = roller.rolls.count(_ == (if (isKill) Kill else Pain))
+                val capacity =
+                    if (isKill) roller.opponent.forces./(canAssignKills).sum
+                    else        roller.opponent.forces./(canAssignPains).sum + (roller.opponent == CS).??(csVermiculitePainsConverted)
+                val overflow = max(0, rolled - capacity)
+
+                if (isKill) {
+                    if (roller == attacker) csInsanityFoldAtkKills = overflow else csInsanityFoldDefKills = overflow
+                    // Firstborn Augury (BattleEnd) subtracts these so overflow Kills that now land on
+                    // the roller's OWN units are not also banked as "unapplied" surplus.
+                    if (roller == attacker) csInsanityAtkKillsReflected = overflow else csInsanityDefKillsReflected = overflow
+                }
+                else {
+                    if (roller == attacker) csInsanityFoldAtkPains = overflow else csInsanityFoldDefPains = overflow
+                }
+            }
+        }
     }
 
     // CS Insanity: reflect each rolling side's UNASSIGNABLE results back onto its OWN units.
@@ -1630,6 +1696,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             assignAttackerFirst = false
                     }
                 }
+                // CS Insanity kill fold: arm once, before any Kill lands. Live (None) or a
+                // fold-era recording (marker next) folds each side's own Kill overflow into its
+                // assignKills pool; a pre-fold recording (any other next action) stays on the
+                // legacy EliminatePhase auto-reflect. The marker's handler does the compute so it
+                // runs on both live and replay; emit it only when CS Insanity actually applies.
+                if (!csInsanityKillFoldDecided && factions.has(CS) && CS.can(Insanity) && csInsanityMeteorOrGlobulePresent) {
+                    csInsanityKillFoldDecided = true
+                    game.nextReplayActionHint match {
+                        case None                                                 => return CSInsanityKillFoldAction(CS)
+                        case Some(h) if h.startsWith("CSInsanityKillFoldAction")  => return CSInsanityKillFoldAction(CS)
+                        case Some(_)                                              => // pre-fold recording: legacy path
+                    }
+                }
                 val kf = if (assignAttackerFirst) attacker else defender
                 if (kf == attacker && attacker == TB && TB.hasAllSB && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
                     val opponentRolledKill = defenders.rolls.has(Kill)
@@ -1986,8 +2065,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 val preCount = eliminated.num
                 // CS Insanity: overflow Kills each side rolled but could not land on the enemy
                 // now reflect onto that same rolling faction's own units (set Killed here so the
-                // loop just below eliminates them; counts as dice-caused elimination).
-                csInsanityReflect(true)
+                // loop just below eliminates them; counts as dice-caused elimination). LEGACY path
+                // only — when the fold is armed those overflow Kills were already added to the
+                // roller's assignKills pool and set Killed there, so skip to avoid double-reflect.
+                if (!csInsanityKillFoldArmed)
+                    csInsanityReflect(true)
 
                 // Baphomet's Fury (§2.12), only once the card has flipped: when the current
                 // owner is fighting here, its kills against the opposing side convert to a
@@ -2098,6 +2180,22 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     return Ask(f)
                         .each(f.all(Ghoul).diff(attacker.forces).diff(defender.forces).diff(exempted))(u => NecrophagyAction(f, u, u.region).as(u, "from", u.region)(Necrophagy, "to", arena))
                         .done(BattleDoneAction(f))
+                }
+
+                // CS Insanity pain fold: arm once, right after Necrophagy and before pain
+                // assignment. Live (None) or a fold-era recording (marker next) folds each side's
+                // own Pain overflow into its assignPains pool so the roller assigns those reflected
+                // Pains to units of its choice (retreat normally); a pre-fold recording (any other
+                // next action) stays on the legacy MadnessPhase auto-reflect. The marker's handler
+                // does the compute so it runs on both live and replay. Placed before the XSS block
+                // so a fold-era CS game emits the marker first; XSS games (no CS) skip this entirely.
+                if (!csInsanityPainFoldDecided && factions.has(CS) && CS.can(Insanity) && csInsanityMeteorOrGlobulePresent) {
+                    csInsanityPainFoldDecided = true
+                    game.nextReplayActionHint match {
+                        case None                                                 => return CSInsanityPainFoldAction(CS)
+                        case Some(h) if h.startsWith("CSInsanityPainFoldAction")  => return CSInsanityPainFoldAction(CS)
+                        case Some(_)                                              => // pre-fold recording: legacy path
+                    }
                 }
 
                 // Xyrious Storm (XSS) — Distant Thunderclap (§3.4.3):
@@ -2265,8 +2363,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // CS Insanity: overflow Pains each side rolled but could not land on the enemy
                 // now reflect onto that same rolling faction's own units (set Pained here, after
                 // Eternal/Harbinger saves are resolved, so they retreat via the normal retreat
-                // phase below — attacker retreats first, preserving recorded retreat order).
-                csInsanityReflect(false)
+                // phase below — attacker retreats first, preserving recorded retreat order). LEGACY
+                // path only — when the fold is armed those overflow Pains were already added to the
+                // roller's assignPains pool (player-assigned) and retreat via that same phase, so
+                // skip to avoid double-reflect.
+                if (!csInsanityPainFoldArmed)
+                    csInsanityReflect(false)
 
                 if (retreater(attacker) == retreater(defender) && sides.forall(_.units.exists(_.health == Pained))) {
                     val f = retreater(attacker)
@@ -2976,6 +3078,20 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             assignOrderDecided = true
             assignAttackerFirst = af
             jump(AssignDefenderKills)
+
+        case CSInsanityKillFoldAction(self) =>
+            // Arm + compute here so it runs identically on live and replay, then re-enter the
+            // phase (now decided) to fold the overflow into the normal Kill assignment.
+            csInsanityKillFoldDecided = true
+            csInsanityKillFoldArmed = true
+            csInsanityComputeFold(true)
+            jump(AssignDefenderKills)
+
+        case CSInsanityPainFoldAction(self) =>
+            csInsanityPainFoldDecided = true
+            csInsanityPainFoldArmed = true
+            csInsanityComputeFold(false)
+            jump(NecrophagyPhase)
 
         case PreBattleDoneAction(self, bf) =>
             // Energy Nexus Pre-Battle variant: fires after all other pre-battle powers
