@@ -1711,9 +1711,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Pain overflow has its own trigger at Necrophagy. Emit only when Insanity applies.
                 if (!csInsanityKillFoldDecided && factions.has(CS) && CS.can(Insanity) && csInsanityMeteorOrGlobulePresent) {
                     csInsanityKillFoldDecided = true
+                    // Emit via Then(...) — NOT a bare return. A bare `return <ForcedAction>` is
+                    // implicitly wrapped as Force (implicits.scala:actionToForce), which the engine
+                    // resolves internally and NEVER records to the server. That made the marker
+                    // invisible to other clients and to reload: on replay the hint at this point was
+                    // the next real action (not the marker), so it fell to the legacy path and the
+                    // reflected results were lost. Then(...) routes through UIPerform → the marker is
+                    // written to the log, so it replays deterministically for everyone.
                     game.nextReplayActionHint match {
-                        case None                                                 => return CSInsanityKillFoldAction(CS)
-                        case Some(h) if h.startsWith("CSInsanityKillFoldAction")  => return CSInsanityKillFoldAction(CS)
+                        case None                                                 => return Then(CSInsanityKillFoldAction(CS))
+                        case Some(h) if h.startsWith("CSInsanityKillFoldAction")  => return Then(CSInsanityKillFoldAction(CS))
                         case Some(_)                                              => // pre-fold recording: legacy path
                     }
                 }
@@ -2198,9 +2205,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // block so a fold-era CS game emits the marker first; XSS games (no CS) skip this.
                 if (!csInsanityPainFoldDecided && factions.has(CS) && CS.can(Insanity) && csInsanityMeteorOrGlobulePresent) {
                     csInsanityPainFoldDecided = true
+                    // Emit via Then(...) so the marker is recorded to the server (see the matching
+                    // note on the kill-fold arm). A bare return would be an unrecorded Force, which
+                    // is exactly the "soft, not hard" bug: it showed locally but never persisted, so
+                    // other clients / reload lost the reflected pains and DC's assignment was skipped.
                     game.nextReplayActionHint match {
-                        case None                                                 => return CSInsanityPainFoldAction(CS)
-                        case Some(h) if h.startsWith("CSInsanityPainFoldAction")  => return CSInsanityPainFoldAction(CS)
+                        case None                                                 => return Then(CSInsanityPainFoldAction(CS))
+                        case Some(h) if h.startsWith("CSInsanityPainFoldAction")  => return Then(CSInsanityPainFoldAction(CS))
                         case Some(_)                                              => // pre-fold recording: legacy path
                     }
                 }
