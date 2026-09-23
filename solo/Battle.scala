@@ -1161,10 +1161,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     game.nextReplayActionHint match {
                         case None =>
                             assignAttackerFirst = true
-                            return BattleAssignOrderAction(true)
+                            return Then(BattleAssignOrderAction(true))
                         case Some(h) if h.startsWith("BattleAssignOrderAction") =>
                             assignAttackerFirst = true
-                            return BattleAssignOrderAction(true)
+                            return Then(BattleAssignOrderAction(true))
                         case Some(_) =>
                             assignAttackerFirst = false
                     }
