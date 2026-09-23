@@ -1693,13 +1693,21 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // replays defender-first and emits nothing, so old games are unchanged.
                 if (!assignOrderDecided) {
                     assignOrderDecided = true
+                    // Emit via Then(...), NOT a bare return. A bare `return <ForcedAction>` is
+                    // implicitly Force-wrapped (implicits.scala:actionToForce), resolved internally
+                    // and NEVER recorded to the server — so the order marker never reached the log.
+                    // On reload/other-client the hint here was then the next real action (a kill),
+                    // failing the startsWith check → Some(_) → defender-first, wrongly prompting the
+                    // defender to assign first. Then(...) routes through UIPerform so the marker is
+                    // written and the battle replays attacker-first for everyone. Old games (no
+                    // marker) still hit Some(_) → defender-first, so their replay is unchanged.
                     game.nextReplayActionHint match {
                         case None =>
                             assignAttackerFirst = true
-                            return BattleAssignOrderAction(true)
+                            return Then(BattleAssignOrderAction(true))
                         case Some(h) if h.startsWith("BattleAssignOrderAction") =>
                             assignAttackerFirst = true
-                            return BattleAssignOrderAction(true)
+                            return Then(BattleAssignOrderAction(true))
                         case Some(_) =>
                             assignAttackerFirst = false
                     }
