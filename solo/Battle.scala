@@ -914,7 +914,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (pains <= assigned)
             return BattleProceedAction(next)
 
-        if (pains >= assigned + canAssign) {
+        // CS Insanity: when reflected Pains have been folded into this side's own pool, always
+        // route through the interactive prompt (below) even if the pool now meets or exceeds its
+        // remaining unit capacity — the player must place its own reflected Pains by hand rather
+        // than have them silently auto-applied. The auto-apply branch still runs once no assignable
+        // unit remains (canAssign == 0), so the sequence terminates cleanly with any true excess lost.
+        // CS-gated: no effect on any non-reflection pain assignment.
+        val csReflectInteractive = csInsanityPainFoldArmed && csInsanityFoldedPains(s) > 0 && canAssign > 0
+
+        if (pains >= assigned + canAssign && !csReflectInteractive) {
             s.forces.foreach(u => 1.to(canAssignPains(u)).foreach(_ => assignPain(u)))
             return DelayedContinue(100, Then(BattleProceedAction(next)))
         }
@@ -1696,11 +1704,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             assignAttackerFirst = false
                     }
                 }
-                // CS Insanity kill fold: arm once, before any Kill lands. Live (None) or a
-                // fold-era recording (marker next) folds each side's own Kill overflow into its
-                // assignKills pool; a pre-fold recording (any other next action) stays on the
-                // legacy EliminatePhase auto-reflect. The marker's handler does the compute so it
-                // runs on both live and replay; emit it only when CS Insanity actually applies.
+                // CS Insanity kill fold: arm here, right after the roll and before any Kill lands.
+                // The marker's handler computes Kill overflow and folds it into normal player-driven
+                // Kill assignment. Live (None) or a fold-era recording (marker next) arms; a pre-fold
+                // recording (any other next action) stays on the legacy EliminatePhase auto-reflect.
+                // Pain overflow has its own trigger at Necrophagy. Emit only when Insanity applies.
                 if (!csInsanityKillFoldDecided && factions.has(CS) && CS.can(Insanity) && csInsanityMeteorOrGlobulePresent) {
                     csInsanityKillFoldDecided = true
                     game.nextReplayActionHint match {
@@ -2182,13 +2190,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         .done(BattleDoneAction(f))
                 }
 
-                // CS Insanity pain fold: arm once, right after Necrophagy and before pain
-                // assignment. Live (None) or a fold-era recording (marker next) folds each side's
-                // own Pain overflow into its assignPains pool so the roller assigns those reflected
-                // Pains to units of its choice (retreat normally); a pre-fold recording (any other
-                // next action) stays on the legacy MadnessPhase auto-reflect. The marker's handler
-                // does the compute so it runs on both live and replay. Placed before the XSS block
-                // so a fold-era CS game emits the marker first; XSS games (no CS) skip this entirely.
+                // CS Insanity pain fold: arm here, right after Necrophagy and before pain
+                // assignment, so overflow is measured against the final pain count (Necrophagy +
+                // any added pains) and the enemy units still alive after kills. Live (None) or a
+                // fold-era recording (marker next) arms; a pre-fold recording (any other next
+                // action) stays on the legacy MadnessPhase auto-reflect. Placed before the XSS
+                // block so a fold-era CS game emits the marker first; XSS games (no CS) skip this.
                 if (!csInsanityPainFoldDecided && factions.has(CS) && CS.can(Insanity) && csInsanityMeteorOrGlobulePresent) {
                     csInsanityPainFoldDecided = true
                     game.nextReplayActionHint match {
@@ -3080,17 +3087,40 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             jump(AssignDefenderKills)
 
         case CSInsanityKillFoldAction(self) =>
-            // Arm + compute here so it runs identically on live and replay, then re-enter the
-            // phase (now decided) to fold the overflow into the normal Kill assignment.
+            // Kill-fold trigger — armed right after the roll, before any Kill lands. Compute Kill
+            // overflow here (kills are final once channel-power has resolved) and re-enter the kill
+            // phase to fold it into normal player-driven Kill assignment. Runs identically on live
+            // and replay. Pain overflow is armed by its own trigger at Necrophagy, where the pain
+            // count and surviving enemy capacity are final (measuring earlier under-reflects).
             csInsanityKillFoldDecided = true
             csInsanityKillFoldArmed = true
             csInsanityComputeFold(true)
             jump(AssignDefenderKills)
 
         case CSInsanityPainFoldAction(self) =>
+            // Pain-fold trigger — armed right after Necrophagy, before pain assignment, so overflow
+            // is measured against the final pain count and surviving enemy units.
             csInsanityPainFoldDecided = true
             csInsanityPainFoldArmed = true
             csInsanityComputeFold(false)
+            // Insanity reflection log: one line per rolling faction that had unassignable overflow,
+            // combining its reflected Kills and Pains and omitting a zero component (so a pains-only
+            // or kills-only reflection never prints "0 kills"/"0 pains"). Emitted here, post-Necrophagy,
+            // where BOTH overflow counts are final — Kills were computed at the earlier kill-fold
+            // trigger and persist; Pains were just computed above. The reflected results then fold
+            // into each side's normal player-driven assignment. Deterministic on live and replay.
+            $(attacker, defender).foreach { roller =>
+                if (roller != CS) {
+                    val k = csInsanityFoldedKills(roller)
+                    val p = csInsanityFoldedPains(roller)
+                    if (k > 0 || p > 0) {
+                        val kStr = (k > 0).?(k + " Kill" + (k > 1).?("s").|("")).|("")
+                        val pStr = (p > 0).?(p + " Pain" + (p > 1).?("s").|("")).|("")
+                        val what = if (k > 0 && p > 0) kStr + " and " + pStr else kStr + pStr
+                        log(CS, Insanity.styled(CS) + ": reflected", what, "back onto", roller.full + "'s own units in", arena)
+                    }
+                }
+            }
             jump(NecrophagyPhase)
 
         case PreBattleDoneAction(self, bf) =>
