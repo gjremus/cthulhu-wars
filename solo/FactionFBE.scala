@@ -255,7 +255,7 @@ case class EliminateTwoFungalThrallsDoneAction(self : Faction, picked : $[UnitRe
 // Creator-corrected 2026-09-23: was a passive "3 dice on the card" threshold; now an
 // active Action. 0 Power; uses the manual die-picker (§USER-2026-07-22 framework).
 case class AnimatedRushUnlockMainAction(self : Faction)
-    extends OptionFactionAction(("Discard 2 dice to unlock " + AnimatedRush.name).styled(FBE)) with MainQuestion
+    extends OptionFactionAction("Discard 2 dice from your Faction Card".styled(FBE)) with MainQuestion
 
 // ── MANUAL DIE SELECTION FRAMEWORK (§USER-2026-07-22) ────────────────────────
 // Optional flow for manual die selection instead of auto-selecting lowest.
@@ -272,7 +272,7 @@ case class ManualDiePickAction(self : Faction, context : DieSelectionContext, ne
     override def question(implicit game : Game) = {
         val abilityName = context match {
             case AnimatedRushContext => "Animated Rush"
-            case AnimatedRushUnlockContext => "Animated Rush"
+            case AnimatedRushUnlockContext => "Faction Card"
             case ShapestealingContext => "Shapestealing"
             case DistributedDeathContext => "Distributed Death"
         }
@@ -286,7 +286,7 @@ case class ManualDieChooseAction(self : Faction, context : DieSelectionContext, 
     override def question(implicit game : Game) = {
         val abilityName = context match {
             case AnimatedRushContext => "Animated Rush"
-            case AnimatedRushUnlockContext => "Animated Rush"
+            case AnimatedRushUnlockContext => "Faction Card"
             case ShapestealingContext => "Shapestealing"
             case DistributedDeathContext => "Distributed Death"
         }
@@ -300,7 +300,7 @@ case class ManualDieUndoLastAction(self : Faction, context : DieSelectionContext
     override def question(implicit game : Game) = {
         val abilityName = context match {
             case AnimatedRushContext => "Animated Rush"
-            case AnimatedRushUnlockContext => "Animated Rush"
+            case AnimatedRushUnlockContext => "Faction Card"
             case ShapestealingContext => "Shapestealing"
             case DistributedDeathContext => "Distributed Death"
         }
@@ -1038,14 +1038,14 @@ object FBEExpansion extends Expansion {
                 val discard = math.min(2, game.fbeCardDice.num)
                 game.fbeCardDice = game.fbeCardDice.sortBy(x => x).drop(discard)
                 self.log(("Discarded " + discard + " " + (discard == 1).?("die").|("dice") +
-                    " to unlock " + AnimatedRush.name).styled(FBE))
+                    " from Faction Card").styled(FBE))
                 self.satisfy(AnimatedRushReq, AnimatedRushReq.text)
                 EndAction(self)
             }
             else
                 Force(ManualDiePickAction(self, AnimatedRushUnlockContext, 2, $, selectedDice => {
                     game.fbeCardDice = game.fbeCardDice.diff(selectedDice)
-                    self.log(("Discarded 2 dice to unlock " + AnimatedRush.name).styled(FBE))
+                    self.log("Discarded 2 dice from Faction Card".styled(FBE))
                     self.satisfy(AnimatedRushReq, AnimatedRushReq.text)
                     EndAction(self)
                 }))

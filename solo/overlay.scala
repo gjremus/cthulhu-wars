@@ -2688,7 +2688,7 @@ object Overlays {
             }
             requirement("As an Action, Eliminate Two Fungal Thralls." + locationInfo)
         case $("FBE", ShapestealingReq.text)        => requirement("Have 3 Units in an Enemy Start Area.")
-        case $("FBE", AnimatedRushReq.text)         => requirement("Have 3 Dice on your Faction Card.")
+        case $("FBE", AnimatedRushReq.text)         => requirement("As an Action, Discard 2 Dice from your Faction Card.")
         case $("FBE", SuccorReq.text)               => requirement("Byagoona Dies in Battle. Do not fulfill if the Kill/Elimination is prevented.")
         case $("FBE", OverlordOfDeathReq.text)      => requirement("Awaken Byagoona.")
 
