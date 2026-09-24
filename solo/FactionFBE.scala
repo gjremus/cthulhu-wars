@@ -17,13 +17,16 @@ import html._
 //    Storing the pip (not just the face) lets Shapestealing compare the literal pip
 //    value 1-6 to a Monster's Cost (§1.10 SB3) while Byagoona's Combat counts the
 //    Kill/Pain faces (§1.8).
-//  • Self Consuming death tally lives on game.fbeSelfConsumingDeaths : $[|[Faction]]
-//    (one entry per Unit of ANY faction that died this Action; the entry = the faction
-//    that CONTROLLED it). The 2+ Power trigger counts every Unit; the 3+ Doom bonus
-//    counts only Units controlled by the faction collecting the ability (§1.5.1) —
-//    that is FBE, or an enemy that copied Self Consuming via SL's Ancient Sorcery.
-//    Pushed in FBEExpansion.eliminate (universal death hook), evaluated and cleared
-//    in FBEExpansion.afterAction.
+//  • Self Consuming death tally lives on game.fbeSelfConsumingDeaths : $[(Region, |[Faction])]
+//    (one entry per Unit of ANY faction that died this Action, holding WHERE it died
+//    and the faction that CONTROLLED it). Creator-corrected 2026-09-23: the 2+ Power
+//    trigger only counts Units that died in the SAME Area (deaths in different Areas
+//    within one Action, e.g. Overlord of Death or Grasping Dead, do not combine); the
+//    3+ Doom bonus counts only same-Area Units controlled by the faction collecting
+//    the ability (§1.5.1) — that is FBE, or an enemy that copied Self Consuming via
+//    SL's Ancient Sorcery. A faction must have had a Unit present in that Area (still
+//    there, or one of its own that died there) to collect. Pushed in FBEExpansion.eliminate
+//    (universal death hook), evaluated and cleared in FBEExpansion.afterAction.
 //  • Ghasts are barred from any FBE game at SETUP (§1.6, creator-approved global
 //    Ghast ban — see Game.scala loyaltyCards init), so every "Monster" rule reads
 //    uniformly across Fungal Thralls and controlled Neutral Monsters with no
@@ -57,7 +60,7 @@ case object SelfConsuming extends FactionSpellbook(FBE, "Self Consuming")
 case object ChangelingAdherentsReq extends Requirement("A total of 3 Kills are Rolled in a Battle you Participate in")
 case object NecromanticSporesReq   extends Requirement("As an Action, Eliminate Two Fungal Thralls")
 case object ShapestealingReq        extends Requirement("Have 3 Units in an Enemy Start Area")
-case object AnimatedRushReq         extends Requirement("Have 3 Dice on your Faction Card")
+case object AnimatedRushReq         extends Requirement("As an Action, Discard 2 Dice from your Faction Card")
 case object SuccorReq               extends Requirement("Byagoona Dies in Battle. Do not fulfill if the Kill/Elimination is prevented")
 case object OverlordOfDeathReq      extends Requirement("Awaken Byagoona")
 
@@ -122,11 +125,12 @@ case class ByagoonaAwakenAreaAction(self : Faction, r : Region)
     extends BaseFactionAction(("Awaken " + Byagoona.name).styled(FBE) + " in", r) with Soft
 case class ByagoonaAwakenPickAction(self : Faction, r : Region, picked : $[UnitRef], remaining : $[UnitRef])
     extends ForcedAction with PowerNeutral with Soft {
-    // §4.6 live cost preview: "Cost so far: C; Power needed: max(0, 10 - C)".
+    // §4.6 live cost preview (creator-corrected 2026-09-23): "Power needed: max(0, 8 - N)",
+    // N = Monsters picked so far (was 10 minus their summed recruitment cost).
     override def question(implicit game : Game) = {
-        val c = picked./(ur => game.unit(ur).uclass.cost).sum
+        val n = picked.num
         ("Awaken " + Byagoona.name).styled(FBE) + ": choose Monsters to Eliminate in " + game.desc(r) +
-            " (Cost so far: " + c + "; Power needed: " + math.max(0, 10 - c).power + ")"
+            " (Eliminated so far: " + n + "; Power needed: " + math.max(0, 8 - n).power + ")"
     }
 }
 case class ByagoonaAwakenDoneAction(self : Faction, r : Region, picked : $[UnitRef])
@@ -247,11 +251,18 @@ case class EliminateTwoFungalThrallsPickAction(self : Faction, picked : $[UnitRe
 case class EliminateTwoFungalThrallsDoneAction(self : Faction, picked : $[UnitRef])
     extends BaseFactionAction(("Eliminate two " + FungalThrall.name + "s").styled(FBE), "Done".styled("power"))
 
+// ── ANIMATED RUSH REQUIREMENT — Discard 2 Dice from the Faction Card (§3.12.4) ──
+// Creator-corrected 2026-09-23: was a passive "3 dice on the card" threshold; now an
+// active Action. 0 Power; uses the manual die-picker (§USER-2026-07-22 framework).
+case class AnimatedRushUnlockMainAction(self : Faction)
+    extends OptionFactionAction(("Discard 2 dice to unlock " + AnimatedRush.name).styled(FBE)) with MainQuestion
+
 // ── MANUAL DIE SELECTION FRAMEWORK (§USER-2026-07-22) ────────────────────────
 // Optional flow for manual die selection instead of auto-selecting lowest.
 // Sealed trait to indicate which ability is requesting die selection.
 sealed trait DieSelectionContext
 case object AnimatedRushContext extends DieSelectionContext
+case object AnimatedRushUnlockContext extends DieSelectionContext
 case object ShapestealingContext extends DieSelectionContext
 case object DistributedDeathContext extends DieSelectionContext
 
@@ -261,6 +272,7 @@ case class ManualDiePickAction(self : Faction, context : DieSelectionContext, ne
     override def question(implicit game : Game) = {
         val abilityName = context match {
             case AnimatedRushContext => "Animated Rush"
+            case AnimatedRushUnlockContext => "Animated Rush"
             case ShapestealingContext => "Shapestealing"
             case DistributedDeathContext => "Distributed Death"
         }
@@ -274,6 +286,7 @@ case class ManualDieChooseAction(self : Faction, context : DieSelectionContext, 
     override def question(implicit game : Game) = {
         val abilityName = context match {
             case AnimatedRushContext => "Animated Rush"
+            case AnimatedRushUnlockContext => "Animated Rush"
             case ShapestealingContext => "Shapestealing"
             case DistributedDeathContext => "Distributed Death"
         }
@@ -287,6 +300,7 @@ case class ManualDieUndoLastAction(self : Faction, context : DieSelectionContext
     override def question(implicit game : Game) = {
         val abilityName = context match {
             case AnimatedRushContext => "Animated Rush"
+            case AnimatedRushUnlockContext => "Animated Rush"
             case ShapestealingContext => "Shapestealing"
             case DistributedDeathContext => "Distributed Death"
         }
@@ -322,25 +336,35 @@ object FBEExpansion extends Expansion {
         // control), so if it dies here it counts toward FBE's 3+ Doom clause
         // (user requirement: killing the stolen unit works for Self Consuming doom).
         val controller = if (game.fbeShapestolen.contains(u.ref)) FBE else u.faction
-        game.fbeSelfConsumingDeaths :+= |(controller)
+        game.fbeSelfConsumingDeaths :+= (u.region, |(controller))
     }
 
     // ── SELF CONSUMING resolution (fires at end of every Action) (§3.6) ───────
     override def afterAction()(implicit game : Game) {
         if (!game.setup.has(FBE)) return
         val deaths = game.fbeSelfConsumingDeaths
-        // §1.5.1: 2+ Units (any faction) Killed/Eliminated in one Action → +1 Power;
-        // if the collecting faction controlled at least 3 of those Units → also +1 Doom.
+        // §1.5.1 (creator-corrected 2026-09-23): 2+ Units (any faction) Killed/Eliminated
+        // in the SAME Area during one Action → +1 Power; deaths in different Areas within
+        // that Action (Overlord of Death eliminating Monsters across Areas, or Grasping
+        // Dead's multiple Battles) do NOT combine. A faction only collects if it had a Unit
+        // present in that Area — still there, or one of its own that died there (dying there
+        // still counts as present). If the collecting faction controlled at least 3 of the
+        // Units that died in that Area → also +1 Doom.
         // 2026-07-27: award to EVERY faction that currently has Self Consuming, not
         // just FBE — SL can copy it with Ancient Sorcery and must collect it too
         // (reported in game 'Disaster for Lunacy': SL copied it and gained nothing).
-        if (deaths.num >= 2) {
-            game.factions.%(_.has(SelfConsuming)).foreach { f =>
-                f.power += 1
-                f.log(SelfConsuming.styled(FBE) + ": 2+ Units died — gained", 1.power)
-                if (deaths.count(_ == |(f)) >= 3) {
-                    f.doom += 1
-                    f.log(SelfConsuming.styled(FBE) + ": controlled 3+ — also gained", 1.doom)
+        deaths.map(_._1).distinct.foreach { r =>
+            val deathsHere = deaths.filter(_._1 == r).map(_._2)
+            if (deathsHere.num >= 2) {
+                game.factions.%(_.has(SelfConsuming)).foreach { f =>
+                    if (f.at(r).any || deathsHere.contains(|(f))) {
+                        f.power += 1
+                        f.log(SelfConsuming.styled(FBE) + ": 2+ Units died in", r, "— gained", 1.power)
+                        if (deathsHere.count(_ == |(f)) >= 3) {
+                            f.doom += 1
+                            f.log(SelfConsuming.styled(FBE) + ": controlled 3+ in", r, "— also gained", 1.doom)
+                        }
+                    }
                 }
             }
         }
@@ -360,8 +384,9 @@ object FBEExpansion extends Expansion {
         // SBR 3 — Shapestealing: 3 FBE Units in any enemy Start Area (§3.12.3).
         f.satisfyIf(ShapestealingReq, ShapestealingReq.text,
             f.enemies.exists(e => game.starting.get(e).exists(r => f.at(r).num >= 3)))
-        // SBR 4 — Animated Rush: 3 dice on the Faction Card (§3.12.4).
-        f.satisfyIf(AnimatedRushReq, AnimatedRushReq.text, game.fbeCardDice.num >= 3)
+        // SBR 4 — Animated Rush (creator-corrected 2026-09-23): no longer a passive
+        // threshold. The player must actively Discard 2 Dice from the Faction Card as
+        // an Action (see AnimatedRushUnlockMainAction below) to satisfy this Req.
     }
 
     // Eligible Monsters FBE controls = Fungal Thralls + any controlled Neutral
@@ -500,16 +525,23 @@ object FBEExpansion extends Expansion {
             game.awakens(f)
             game.independents(f)
 
-            // Byagoona custom Awaken (§1.8): offer if Byagoona is in the pool and
-            // there exists an area where (sum of monster costs) + current power >= 10.
+            // Byagoona custom Awaken (§1.8, creator-corrected 2026-09-23: pay 8 Power
+            // minus 1 per Monster sacrificed, was 10 minus their summed recruitment
+            // cost): offer if Byagoona is in the pool and there exists an area where
+            // (Monster count there) + current power >= 8.
             if (f.pool.%(_.uclass == Byagoona).any && controlledMonstersAnywhere./(_.region).distinct.exists(r =>
-                controlledMonsters(r)./(_.uclass.cost).sum + f.power >= 10))
+                controlledMonsters(r).num + f.power >= 8))
                 + ByagoonaAwakenMainAction(f)
 
             // Necromantic Spores requirement — Eliminate Two Fungal Thralls (§3.12.2).
             // Thralls on the Moon count (eliminating units on the Moon is allowed).
             if (f.needs(NecromanticSporesReq) && f.units.%(u => u.uclass == FungalThrall && (u.region.onMap || u.region == BB.moon)).num >= 2)
                 + EliminateTwoFungalThrallsMainAction(f)
+
+            // Animated Rush requirement (creator-corrected 2026-09-23): actively
+            // Discard 2 Dice from the Faction Card as an Action (§3.12.4).
+            if (f.needs(AnimatedRushReq) && game.fbeCardDice.num >= 2)
+                + AnimatedRushUnlockMainAction(f)
 
             game.neutralSpellbooks(f)
             game.libraryActions(f)
@@ -526,9 +558,9 @@ object FBEExpansion extends Expansion {
 
         // ── BYAGOONA AWAKEN (§1.8 / §3.4.1) ──────────────────────────────────
         case ByagoonaAwakenMainAction(self) =>
-            // Only show areas where (sum of monster costs) + current power >= 10 (§1.8).
+            // Only show areas where (Monster count there) + current power >= 8 (§1.8, corrected).
             val eligibleAreas = controlledMonstersAnywhere./(_.region).distinct.%(r =>
-                controlledMonsters(r)./(_.uclass.cost).sum + self.power >= 10)
+                controlledMonsters(r).num + self.power >= 8)
             Ask(self).each(eligibleAreas)(r => ByagoonaAwakenAreaAction(self, r)).cancel
 
         case ByagoonaAwakenAreaAction(self, r) =>
@@ -567,8 +599,9 @@ object FBEExpansion extends Expansion {
                     pip => ByagoonaAwakenRollAction(self, r, picked, rolls :+ pip))
             }
             else {
-                val cost = picked./(ur => game.unit(ur).uclass.cost).sum
-                val owed = math.max(0, 10 - cost)
+                // §1.8 (creator-corrected 2026-09-23): pay 8 Power minus 1 per Monster
+                // sacrificed (was 10 minus their summed recruitment cost).
+                val owed = math.max(0, 8 - n)
                 // Eliminate the sacrificed Monsters (drives Self Consuming).
                 picked.foreach(ur => game.eliminate(game.unit(ur)))
                 // Place every rolled die (pip) on the Faction Card — re-Awaken ADDS
@@ -580,7 +613,7 @@ object FBEExpansion extends Expansion {
                 // Place Byagoona.
                 self.place(Byagoona, r)
                 self.log("Awaken " + Byagoona.name.styled(FBE) + ": Eliminated", n,
-                    ("Monster".s(n)).styled(FBE) + " (cost " + cost + "), rolled",
+                    ("Monster".s(n)).styled(FBE) + ", rolled",
                     rolls./(p => face(p).toString).mkString(", ") + ", paid", owed.power + ", appears in", r)
                 // SBR 6 — Awaken Byagoona (§3.12.6).
                 self.satisfy(OverlordOfDeathReq, OverlordOfDeathReq.text)
@@ -995,6 +1028,27 @@ object FBEExpansion extends Expansion {
             self.log(("Eliminated two " + FungalThrall.name + "s").styled(FBE))
             self.satisfy(NecromanticSporesReq, NecromanticSporesReq.text)
             EndAction(self)
+
+        // ── ANIMATED RUSH REQUIREMENT (§3.12.4, creator-corrected 2026-09-23) ────
+        case AnimatedRushUnlockMainAction(self) =>
+            // Replay-safety mirrors AnimatedRushMainAction above: the manual die
+            // picker is Soft (unrecorded), so on replay auto-discard the lowest 2
+            // dice deterministically instead of re-running the interactive picker.
+            if (game.nextReplayActionHint.any) {
+                val discard = math.min(2, game.fbeCardDice.num)
+                game.fbeCardDice = game.fbeCardDice.sortBy(x => x).drop(discard)
+                self.log(("Discarded " + discard + " " + (discard == 1).?("die").|("dice") +
+                    " to unlock " + AnimatedRush.name).styled(FBE))
+                self.satisfy(AnimatedRushReq, AnimatedRushReq.text)
+                EndAction(self)
+            }
+            else
+                Force(ManualDiePickAction(self, AnimatedRushUnlockContext, 2, $, selectedDice => {
+                    game.fbeCardDice = game.fbeCardDice.diff(selectedDice)
+                    self.log(("Discarded 2 dice to unlock " + AnimatedRush.name).styled(FBE))
+                    self.satisfy(AnimatedRushReq, AnimatedRushReq.text)
+                    EndAction(self)
+                }))
 
         // ── MANUAL DIE SELECTION FRAMEWORK (§USER-2026-07-22) ────────────────
         // Player manually chooses which dice to discard instead of auto-selecting lowest.

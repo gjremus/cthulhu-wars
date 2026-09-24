@@ -1814,15 +1814,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     //    FACE is derived (6=Kill, 4/5=Pain, else Miss). Byagoona's Combat = count of
     //    pips >= 4; Shapestealing compares a pip directly to a Monster Cost.
     //  • fbeSelfConsumingDeaths : Self Consuming per-Action death tally; one entry
-    //    per Unit of ANY faction that died this Action, holding the faction that
-    //    CONTROLLED it (None = controller not tracked). Triggers at 2+; the +1 Doom
-    //    clause needs 3+ entries controlled by the faction collecting the ability
-    //    (FBE, or an enemy that copied it via Ancient Sorcery).
+    //    per Unit of ANY faction that died this Action, holding WHERE it died and
+    //    the faction that CONTROLLED it (None = controller not tracked). Creator-
+    //    corrected 2026-09-23: triggers at 2+ IN THE SAME AREA (deaths in different
+    //    Areas within one Action do not combine); the +1 Doom clause needs 3+
+    //    same-Area entries controlled by the faction collecting the ability (FBE,
+    //    or an enemy that copied it via Ancient Sorcery).
     //  • fbeShapestolen : enemy Monsters temporarily fighting for FBE this Battle only.
     //    Shapestealing is a hard ability (once per Action Phase), but control is
     //    battle-scoped — stolen units revert to original owner at battle-end.
     var fbeCardDice : $[Int] = $
-    var fbeSelfConsumingDeaths : $[|[Faction]] = $
+    var fbeSelfConsumingDeaths : $[(Region, |[Faction])] = $
     var fbeShapestolen : $[UnitRef] = $
 
     // Xyrious Storm (XSS) state — Cloud Of Ashes holding zone (§1.10 SB3).

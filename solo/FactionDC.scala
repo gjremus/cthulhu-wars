@@ -1136,7 +1136,7 @@ object DCExpansion extends Expansion {
             // HB Fix SC-Satiate: multi-capture procs Self Consuming. Each captured
             // cultist counts as a unit removed for Self Consuming purposes (not FBE-controlled).
             if (game.setup.has(FBE) && game.fbeActionInProgress && capturedSoFar > 0)
-                (1 to capturedSoFar).foreach(_ => game.fbeSelfConsumingDeaths :+= None)
+                (1 to capturedSoFar).foreach(_ => game.fbeSelfConsumingDeaths :+= (area, None))
             EndAction(self)
 
         // ── Lure (cost 1, force-move adjacent enemy cultists into Y'Golonac's area) ──
