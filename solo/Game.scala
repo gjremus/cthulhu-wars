@@ -3662,6 +3662,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // once in ownGates*2 (=2); add +1 each to make it 3. Applies to whichever faction
                 // controls the well-gate. Suppressed under Disaster Looms (which zeroes ownGates).
                 val csWellGates = if (disasterLooms || !factions.has(CS)) 0 else f.gates.%(r => csPrismaticWellRegions.has(r)).num
+                // Colour Out of Space (CS): a GOO acting as a Gate (e.g. Opener of the Way's
+                // Yog-Sothoth, held in unitGate — not a real gate, so it never enters
+                // csPrismaticWellRegions) also becomes a Prismatic Well when a live Luminous
+                // Globule shares its region, yielding 3 Power total. The unit-Gate's base 2 is
+                // already counted via yogGateCount in ownGates; add +1 here. Suppressed under
+                // Disaster Looms and when the unit-Gate is mind-controlled (matches yogGateCount).
+                val csUnitGateWell = (!disasterLooms && factions.has(CS) && !yogGateSuppressed &&
+                    f.unitGate.exists(u => CS.at(u.region).%(_.uclass == LuminousGlobule).not(Zeroed).any)).??(1)
                 val oceanGates = (f.can(YhaNthlei) && f.has(Cthulhu)).??(f.enemies./(f => f.allGates.%(_.glyph == Ocean).num).sum)
                 val darkYoungs = f.can(RedSign).??(f.all(DarkYoung).num)
                 val feast = f.has(Feast).??(desecrated.%(r => f.at(r).any).num)
@@ -3691,7 +3699,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Shadows are in TI.gates and already counted in ownGates. Guarded → 0.
                 val tiShadowPower = tiShadowAdditionalGates(f) * 2
 
-                f.power = hibernate + ownGates * 2 + csWellGates + tiShadowPower + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship + fbHPBonus + tbTentacleAreas + bbCats + bbHP
+                f.power = hibernate + ownGates * 2 + csWellGates + csUnitGateWell + tiShadowPower + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship + fbHPBonus + tbTentacleAreas + bbCats + bbHP
                 f.hibernating = false
 
                 val fromHibernate = (hibernate > 0).?(hibernate.styled("region") + (wasHibernating.?(" hibernate").|(" carried over")))
@@ -3713,8 +3721,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val fromBBHP = (bbHP > 0).?(bbHP.styled("region") + " High Priest Bonus")
                 // Colour Out of Space (CS): log the +1-per-Prismatic-Well bonus (each well-gate = 3 Power total)
                 val fromWells = (csWellGates > 0).?(csWellGates.styled("region") + " Prismatic Well".s(csWellGates) + " (+1 each → 3 Power)")
+                // Colour Out of Space (CS): log the +1 when a GOO unit-Gate (Yog-Sothoth) sits on a Prismatic Well
+                val fromUnitGateWell = (csUnitGateWell > 0).?(csUnitGateWell.styled("region") + " Prismatic Well gate (+1 → 3 Power)")
 
-                f.log(if (f == BB) "gained" else "got", f.power.power, "(" + $(fromHibernate, fromGates, fromWells, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP, fromTBTentacles, fromBBCats, fromBBHP).flatten.mkString(" + ") + ")")
+                f.log(if (f == BB) "gained" else "got", f.power.power, "(" + $(fromHibernate, fromGates, fromWells, fromUnitGateWell, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP, fromTBTentacles, fromBBCats, fromBBHP).flatten.mkString(" + ") + ")")
 
                 if (greenDecayCultists > 0) {
                     f.log("Green Decay".styled("nt") + ":", greenDecayCultists, "captured " + "cultist".s(greenDecayCultists), "→", greenDecayCultists.es, "(not power)")
