@@ -518,7 +518,23 @@ object BBExpansion extends Expansion {
         // FCG #26: when BB has picked the unit class, hand the prompt to the
         // affected enemy faction so they pick which specific unit dies (FCG #28).
         case PredatorTypeChoiceAction(self, uc) =>
-            val enemyWithUnit = game.factions.find(f => f != self && f.allInPlay.%(_.uclass == uc).any)
+            // Must be the actual battle enemy, NOT "any faction that happens to own this
+            // unit type" — Acolyte and other cultist-type units are shared across several
+            // factions, so a generic game.factions.find picked whichever faction with that
+            // unit type came first in turn order, even if it never fought in this battle.
+            // Recompute the enemy the same way PredatorUseAction does, from the live battle.
+            val battleEnemy = game.battle.flatMap { b =>
+                val enemy = if (b.attacker == BB) b.defender else b.attacker
+                if (enemy.allInPlay.%(_.uclass == uc).any) Some(enemy) else None
+            }
+            // Replay-compat: games recorded before this fix already committed an elimination
+            // against whichever faction the old buggy lookup picked. Honor that exact recorded
+            // faction on replay (it still legitimately owns the unit), or the old recorded
+            // action no longer matches any offered menu option and replay crashes.
+            val hintedEnemy = game.nextReplayActionHint
+                .filter(_.startsWith("PredatorEnemyEliminateAction("))
+                .flatMap(h => Serialize.parseFaction(h.stripPrefix("PredatorEnemyEliminateAction(").split(",").head.trim))
+            val enemyWithUnit = hintedEnemy.orElse(battleEnemy)
             enemyWithUnit match {
                 case Some(e) =>
                     val candidates = e.allInPlay.%(_.uclass == uc)

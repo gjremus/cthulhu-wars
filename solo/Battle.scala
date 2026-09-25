@@ -334,6 +334,7 @@ class Side(private val self : Faction, var forces : $[UnitFigure], var str : Int
     def count(s : BattleSpellbook) = effects.count(s)
     var bloodthirstUsed : Int = 0
     var cthughaCombatBonus : Int = 0
+    var savageryBonus : Int = 0
 }
 
 class Battle(val arena : Region, val attacker : Faction, val defender : Faction, val effect : |[Spellbook])(implicit val game : Game) {
@@ -761,7 +762,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         val side = if (s == attacker) attackers else defenders
         // Cthugha combat bonus is a pre-battle choice not included in neutralStrength
         // Use side.forces (battle-local) not s.forces (global) — Shapestealing et al modify side.forces only
-        val str = s.strength(side.forces, s.opponent) + side.cthughaCombatBonus
+        val str = s.strength(side.forces, s.opponent) + side.cthughaCombatBonus + side.savageryBonus
 
         if (str != s.str) {
             log(s, "strength", (str > s.str).?("increased").|("decreased"), "to", str.str)
@@ -771,7 +772,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Safety: Albino Penguins -2 per penguin
         val penguinCount = side.forces.%(_.uclass == AlbinoPenguins).num
         if (penguinCount > 0 && s.str > 0) {
-            val withoutPenguins = s.strength(side.forces.%(_.uclass != AlbinoPenguins), s.opponent) + side.cthughaCombatBonus
+            val withoutPenguins = s.strength(side.forces.%(_.uclass != AlbinoPenguins), s.opponent) + side.cthughaCombatBonus + side.savageryBonus
             val expected = withoutPenguins + penguinCount * -2
             if (s.str != expected && s.str == withoutPenguins) {
                 s.str = math.max(0, expected)
@@ -782,7 +783,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Safety: Servitor of the Outer Gods -1 per servitor
         val servitorCount = side.forces.%(_.uclass == ServitorUnit).num
         if (servitorCount > 0 && s.str > 0) {
-            val withoutServitors = s.strength(side.forces.%(_.uclass != ServitorUnit), s.opponent) + side.cthughaCombatBonus
+            val withoutServitors = s.strength(side.forces.%(_.uclass != ServitorUnit), s.opponent) + side.cthughaCombatBonus + side.savageryBonus
             val expected = withoutServitors + servitorCount * -1
             if (s.str != expected && s.str == withoutServitors) {
                 s.str = math.max(0, expected)
@@ -1312,14 +1313,35 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     attacker.acted = true
 
                 attacker.forces = attacker.at(arena)
+                defender.forces = defender.at(arena)
+
+                // Colour Out of Space (CS) Excrescences fight for their CONTROLLER, not their
+                // physical faction. An Effervescent Excrescence is ALWAYS physically a CS unit
+                // (the figures come from and return to CS's pool — see CSExpansion.excrescenceOwner),
+                // but per Chromatic Perversion one sitting in a Prismatic Well controlled by another
+                // faction is OWNED by that faction, and that ownership changes hands throughout the
+                // game as Wells convert/revert. attacker/defender.forces above grabbed only each
+                // side's OWN physical units, so a controlled Excrescence was left off BOTH sides
+                // (its controller is battling but the unit is physically CS — e.g. a Corrupted
+                // Rending battle CS itself is not even in) or wrongly sat on CS's side (CS is
+                // battling but no longer controls it). Reassign every Excrescence in the arena to
+                // the side of its derived owner; if that owner is not one of the two battling
+                // factions the Excrescence takes no part.
+                CS.at(arena).%(_.uclass == EffervescentExcrescence).not(Zeroed).foreach { u =>
+                    val owner = CSExpansion.excrescenceOwner(u)
+                    sides.foreach(s => (s : Side).forces = (s : Side).forces.but(u))
+                    if (sides.has(owner)) {
+                        (owner : Side).forces :+= u
+                        if (owner != CS)
+                            log(u.uclass.styled(owner), "in", arena, "fights for", owner.full, "(controls the", "Prismatic Well".styled(CS) + ")")
+                    }
+                }
 
                 if (attacker.forces.none) {
                     log("No attackers left to battle")
 
                     return jump(PostBattlePhase)
                 }
-
-                defender.forces = defender.at(arena)
 
                 if (defender.forces.none) {
                     log("No defenders left to battle")
@@ -3837,6 +3859,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             self.power -= 1
             (self : Side).add(Savagery)
             (self : Side).str += bonus
+            (self : Side).savageryBonus += bonus
             self.log(Savagery.styled(BB) + ": paid", 1.power, "for +" + bonus.str, "strength (" + saturnCount + " Cat".s(saturnCount) + " from Saturn)")
             proceed()
 
