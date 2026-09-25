@@ -1983,6 +1983,7 @@ object Overlays {
                     <td></td>
                     <td>
                         <div class="h1 black-border" style="margin-right: -3ex; margin-left: -3ex; "><span class="h2 abaddon nt">${name}</span></div>
+                        ${if (name == "Junior Whateley") "<div class='black-border' style='margin-right: -3ex; margin-left: -3ex;'><span class='h2 abaddon nt'>(Terror)</span></div>" else ""}
                         <img class="img" src="${imageSource("info:n-" + slug)}">
                         <div>&nbsp;</div>
                         <div><span class="cost-color black-border">Cost: ${cost.toString} Power</span></div>
