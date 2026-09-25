@@ -1197,6 +1197,12 @@ case object NeutralTerrors extends GameOption
 case object IGOOs extends GameOption
 // Dunwich Horror — new "Neutral Cultists (Whateley Clan)" category toggle.
 case object WhateleyClan extends GameOption
+// Something About Cats task — Whateley "theft" toggle. Present = a Whateley Loyalty Card
+// MAY be taken from a rival faction (theft ON). Absent (the DEFAULT) = theft OFF, so the
+// setup row "Whateley Clan Unit Theft - Disable" reads "yes" by default and only unclaimed
+// pool cards may be recruited. Modelled as "allowed" (deviation from default) so the
+// default needs no reactive seeding — mere absence means disabled.
+case object WhateleyTheftAllowed extends GameOption
 
 case object IceAgeAffectsLethargy extends GameOption
 case object Opener4P10Gates extends GameOption
@@ -1277,7 +1283,11 @@ sealed trait WhateleyClanOption extends LoyaltyCardGameOption
 case object UseLaviniaWhateley extends LoyaltyCardGameOption(LaviniaWhateleyCard) with WhateleyClanOption
 case object UseWilburWhateley extends LoyaltyCardGameOption(WilburWhateleyCard) with WhateleyClanOption
 case object UseWizardWhateley extends LoyaltyCardGameOption(WizardWhateleyCard) with WhateleyClanOption
-case object UseJuniorWhateley extends LoyaltyCardGameOption(JuniorWhateleyCard) with WhateleyClanOption
+// Something About Cats task — Junior Whateley is a Terror, so its setup checkbox lives in the
+// "Neutral Terrors" menu group (NeutralTerrorOption), not the Neutral Cultists group. It remains
+// a Whateley clan unit mechanically (its .lc is a WhateleyLoyaltyCard, so it is still recruited /
+// stealable through the Whateley Doom-Phase flow).
+case object UseJuniorWhateley extends LoyaltyCardGameOption(JuniorWhateleyCard) with NeutralTerrorOption
 
 case class PlayerCount(n : Int) extends GameOption
 
@@ -1292,6 +1302,7 @@ object GameOptions {
         NeutralTerrors,
         IGOOs,
         WhateleyClan,
+        WhateleyTheftAllowed,
         IceAgeAffectsLethargy,
         Opener4P10Gates,
         OpenerCheapMutants,
@@ -2978,7 +2989,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def whateleyCardsAvailable(f : Faction) : $[WhateleyLoyaltyCard] = {
         val pool = loyaltyCards.of[WhateleyLoyaltyCard]
         val others = factions.but(f)./~(_.loyaltyCards.of[WhateleyLoyaltyCard])
-        (pool ++ others).distinct
+        // Something About Cats task — "theft" (taking a Whateley card from a rival) is only offered
+        // when explicitly enabled in setup; it is disabled by default (WhateleyTheftAllowed absent),
+        // in which case only still-unclaimed pool cards may be recruited.
+        (if (options.has(WhateleyTheftAllowed)) pool ++ others else pool).distinct
     }
 
     // Dunwich Horror — dynamic recruit-menu label: "Lavinia Whateley for 2 Power", or

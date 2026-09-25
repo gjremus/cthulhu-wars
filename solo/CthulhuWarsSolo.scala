@@ -5079,6 +5079,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, ElderShoggothCard, UseElderShoggoth, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, GreatRaceOfYithCard, UseGreatRaceOfYith, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, HoundOfTindalosCard, UseHoundOfTindalos, setup.options.has(NeutralTerrors)) ++
+                    useWith(setup, JuniorWhateleyCard, UseJuniorWhateley, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, QuachilUttausCard, UseQuachilUttaus, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, ShadowPharaohCard, UseShadowPharaoh, setup.options.has(NeutralTerrors)) ++
                     // iGOOs (alphabetical)
@@ -5101,11 +5102,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, YgolonacCard, UseYgolonac, setup.options.has(IGOOs)) ++
                     useWith(setup, YigCard, UseYig, setup.options.has(IGOOs)) ++
                     // Dunwich Horror — Neutral Cultists (Whateley Clan), alphabetical
-                    $("Variants" -> ("Neutral".styled("neutral") + " cultists — Whateley Clan (" + setup.get(WhateleyClan).?("yes").|("no").hl + ")")) ++
-                    useWith(setup, JuniorWhateleyCard, UseJuniorWhateley, setup.options.has(WhateleyClan)) ++
+                    $("Variants" -> ("Neutral".styled("neutral") + " Cultists (" + setup.get(WhateleyClan).?("yes").|("no").hl + ")")) ++
                     useWith(setup, LaviniaWhateleyCard, UseLaviniaWhateley, setup.options.has(WhateleyClan)) ++
                     useWith(setup, WilburWhateleyCard, UseWilburWhateley, setup.options.has(WhateleyClan)) ++
                     useWith(setup, WizardWhateleyCard, UseWizardWhateley, setup.options.has(WhateleyClan)) ++
+                    (setup.options.of[LoyaltyCardGameOption].exists(_.lc.is[WhateleyLoyaltyCard]))
+                        .$("Variants" -> ("Whateley Clan Unit Theft - Disable (" + setup.get(WhateleyTheftAllowed).?("no").|("yes").hl + ")")) ++
                     (factions.has(SL) && factions.has(WW))
                         .$("Variants" -> ("" + IceAge + " affects " + Lethargy + " (" + setup.get(IceAgeAffectsLethargy).?("yes").|("no").hl + ")")) ++
                     (factions.has(OW) && factions.num == 4)
@@ -5191,7 +5193,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         if (n == 0) {
                             setup.toggle(NeutralTerrors)
                             if (setup.options.has(NeutralTerrors))
-                                setup.options ++= $(UseBrownJenkin, UseDhole, UseElderShoggoth, UseGreatRaceOfYith, UseHoundOfTindalos, UseQuachilUttaus, UseShadowPharaoh)
+                                setup.options ++= $(UseBrownJenkin, UseDhole, UseElderShoggoth, UseGreatRaceOfYith, UseHoundOfTindalos, UseJuniorWhateley, UseQuachilUttaus, UseShadowPharaoh)
                             else
                                 setup.options = setup.options.notOf[NeutralTerrorOption]
                             setupQuestions()
@@ -5203,6 +5205,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1; if (n == 0) { setup.toggle(UseElderShoggoth); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGreatRaceOfYith); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseHoundOfTindalos); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseJuniorWhateley); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseQuachilUttaus); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseShadowPharaoh); setupQuestions() }
                         }
@@ -5241,17 +5244,19 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         if (n == 0) {
                             setup.toggle(WhateleyClan)
                             if (setup.options.has(WhateleyClan))
-                                setup.options ++= $(UseJuniorWhateley, UseLaviniaWhateley, UseWilburWhateley, UseWizardWhateley)
+                                setup.options ++= $(UseLaviniaWhateley, UseWilburWhateley, UseWizardWhateley)
                             else
                                 setup.options = setup.options.notOf[WhateleyClanOption]
                             setupQuestions()
                         }
                         if (setup.options.has(WhateleyClan)) {
                             // Whateley Clan (alphabetical): Junior, Lavinia, Wilbur, Wizard
-                            n -= 1; if (n == 0) { setup.toggle(UseJuniorWhateley); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseLaviniaWhateley); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseWilburWhateley); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseWizardWhateley); setupQuestions() }
+                        }
+                        if (setup.options.of[LoyaltyCardGameOption].exists(_.lc.is[WhateleyLoyaltyCard])) {
+                            n -= 1; if (n == 0) { setup.toggle(WhateleyTheftAllowed); setupQuestions() }
                         }
                         if (factions.has(SL) && factions.has(WW)) {
                             n -= 1
@@ -5449,6 +5454,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, ElderShoggothCard, UseElderShoggoth, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, GreatRaceOfYithCard, UseGreatRaceOfYith, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, HoundOfTindalosCard, UseHoundOfTindalos, setup.options.has(NeutralTerrors)) ++
+                    useWith(setup, JuniorWhateleyCard, UseJuniorWhateley, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, QuachilUttausCard, UseQuachilUttaus, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, ShadowPharaohCard, UseShadowPharaoh, setup.options.has(NeutralTerrors)) ++
                     // iGOOs (alphabetical)
@@ -5471,11 +5477,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, YgolonacCard, UseYgolonac, setup.options.has(IGOOs)) ++
                     useWith(setup, YigCard, UseYig, setup.options.has(IGOOs)) ++
                     // Dunwich Horror — Neutral Cultists (Whateley Clan), alphabetical
-                    $("Variants" -> ("Neutral".styled("neutral") + " cultists — Whateley Clan (" + setup.get(WhateleyClan).?("yes").|("no").hl + ")")) ++
-                    useWith(setup, JuniorWhateleyCard, UseJuniorWhateley, setup.options.has(WhateleyClan)) ++
+                    $("Variants" -> ("Neutral".styled("neutral") + " Cultists (" + setup.get(WhateleyClan).?("yes").|("no").hl + ")")) ++
                     useWith(setup, LaviniaWhateleyCard, UseLaviniaWhateley, setup.options.has(WhateleyClan)) ++
                     useWith(setup, WilburWhateleyCard, UseWilburWhateley, setup.options.has(WhateleyClan)) ++
                     useWith(setup, WizardWhateleyCard, UseWizardWhateley, setup.options.has(WhateleyClan)) ++
+                    (setup.options.of[LoyaltyCardGameOption].exists(_.lc.is[WhateleyLoyaltyCard]))
+                        .$("Variants" -> ("Whateley Clan Unit Theft - Disable (" + setup.get(WhateleyTheftAllowed).?("no").|("yes").hl + ")")) ++
                     (factions.has(SL) && factions.has(WW))
                         .$("Variants" -> ("" + IceAge + " affects " + Lethargy + " (" + setup.get(IceAgeAffectsLethargy).?("yes").|("no").hl + ")")) ++
                     (factions.has(OW) && factions.num == 4)
@@ -5564,7 +5571,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         if (n == 0) {
                             setup.toggle(NeutralTerrors)
                             if (setup.options.has(NeutralTerrors))
-                                setup.options ++= $(UseBrownJenkin, UseDhole, UseElderShoggoth, UseGreatRaceOfYith, UseHoundOfTindalos, UseQuachilUttaus, UseShadowPharaoh)
+                                setup.options ++= $(UseBrownJenkin, UseDhole, UseElderShoggoth, UseGreatRaceOfYith, UseHoundOfTindalos, UseJuniorWhateley, UseQuachilUttaus, UseShadowPharaoh)
                             else
                                 setup.options = setup.options.notOf[NeutralTerrorOption]
                             setupQuestions()
@@ -5576,6 +5583,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1; if (n == 0) { setup.toggle(UseElderShoggoth); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGreatRaceOfYith); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseHoundOfTindalos); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseJuniorWhateley); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseQuachilUttaus); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseShadowPharaoh); setupQuestions() }
                         }
@@ -5614,17 +5622,19 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         if (n == 0) {
                             setup.toggle(WhateleyClan)
                             if (setup.options.has(WhateleyClan))
-                                setup.options ++= $(UseJuniorWhateley, UseLaviniaWhateley, UseWilburWhateley, UseWizardWhateley)
+                                setup.options ++= $(UseLaviniaWhateley, UseWilburWhateley, UseWizardWhateley)
                             else
                                 setup.options = setup.options.notOf[WhateleyClanOption]
                             setupQuestions()
                         }
                         if (setup.options.has(WhateleyClan)) {
                             // Whateley Clan (alphabetical): Junior, Lavinia, Wilbur, Wizard
-                            n -= 1; if (n == 0) { setup.toggle(UseJuniorWhateley); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseLaviniaWhateley); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseWilburWhateley); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseWizardWhateley); setupQuestions() }
+                        }
+                        if (setup.options.of[LoyaltyCardGameOption].exists(_.lc.is[WhateleyLoyaltyCard])) {
+                            n -= 1; if (n == 0) { setup.toggle(WhateleyTheftAllowed); setupQuestions() }
                         }
                         if (factions.has(SL) && factions.has(WW)) {
                             n -= 1
@@ -5832,7 +5842,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             )
             val randTerrorPool : $[GameOption] = $(
                 UseBrownJenkin, UseDhole, UseElderShoggoth, UseGreatRaceOfYith,
-                UseHoundOfTindalos, UseQuachilUttaus, UseShadowPharaoh
+                UseHoundOfTindalos, UseJuniorWhateley, UseQuachilUttaus, UseShadowPharaoh
             )
             val randIGOOPool : $[GameOption] = $(
                 UseAbhoth, UseAtlachNacha, UseAzathothIGOO, UseBokrug, UseByatis,
@@ -5841,8 +5851,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 UseTulzscha, UseYgolonac, UseYig
             )
             // Dunwich Horror — Neutral Cultists (Whateley Clan), alphabetical.
+            // Something About Cats task — Junior Whateley (a Terror) now lives in the Terror pool above.
             val randWhateleyPool : $[GameOption] = $(
-                UseJuniorWhateley, UseLaviniaWhateley, UseWilburWhateley, UseWizardWhateley
+                UseLaviniaWhateley, UseWilburWhateley, UseWizardWhateley
             )
             var randMonsters = false
             var randTerrors = false
@@ -6268,7 +6279,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 renderRandRow("iGOOs", randIGOOPool.num,
                     () => randIGOOs, v => randIGOOs = v,
                     () => randIGOOCount, v => randIGOOCount = v)
-                renderRandRow("Neutral Cultists (Whateley Clan)", randWhateleyPool.num,
+                renderRandRow("Neutral Cultists", randWhateleyPool.num,
                     () => randWhateleys, v => randWhateleys = v,
                     () => randWhateleyCount, v => randWhateleyCount = v)
 
