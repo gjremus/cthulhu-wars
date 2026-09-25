@@ -1116,10 +1116,9 @@ object CthulhuWarsSolo {
                         case BB => DrawRect("bb-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Defilers Court (DC): acolyte unit sprite
                         case DC => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                        // Faceless Blight (FBE): no acolyte art yet — reuse DC acolyte sprite
-                        // tinted FBE green (placeholder per §A.v / §3.17). Replace with
-                        // fbe-acolyte.webp when art lands.
-                        case FBE => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        // Faceless Blight (FBE): real Acolyte art — silhouette extracted
+                        // from the v19 faction board, tinted FBE green (§A.v / §3.17).
+                        case FBE => DrawRect("fbe-acolyte", |(tint), x - 13, y - 54, 26, 60)
                         // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
@@ -1460,12 +1459,11 @@ object CthulhuWarsSolo {
                     case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 52, y - 104, 104, 104)
                     case TheLibrarian => DrawRect("librarian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 47, y - 146, 94, 146)
 
-                    // Faceless Blight (FBE): unit art not yet ready (§A.v / §3.17.3).
-                    // Placeholder sprites: Dimensional Shambler for Fungal Thrall, King
-                    // in Yellow for Byagoona, both tinted FBE green. Swap to
-                    // fbe-fungal-thrall.webp / fbe-byagoona.webp when art lands.
-                    case FungalThrall => DrawRect("n-dimensional-shambler", |(tint), x - 35, y - 75, 70, 85)
-                    case Byagoona     => DrawRect("ys-king-in-yellow", |(tint), x - 44, y - 111, 85, 116)
+                    // Faceless Blight (FBE): real unit art (§A.v / §3.17.3) — silhouettes
+                    // extracted from the v19 faction board, tinted FBE green. Sizes keep
+                    // each figure's native aspect (Thrall 54x85, Byagoona 67x125).
+                    case FungalThrall => DrawRect("fbe-fungal-thrall", |(tint), x - 27, y - 75, 54, 85)
+                    case Byagoona     => DrawRect("fbe-byagoona", |(tint), x - 33, y - 118, 67, 125)
 
                     // Xyrious Storm (XSS): placeholder sprites (no art yet).
                     // Amphibian Crawler = Gnorri, Twister = Shantak, Eye of the Storm = Star Vampire, Petrichor = Cthulhu-sized.
@@ -4033,12 +4031,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             case CatFromSaturn => "bb-cat-from-saturn"
                             case CatFromUranus => "bb-cat-from-uranus"
                             case Bastet        => "bb-bastet"
-                            // Faceless Blight (FBE): no unit art yet — the map uses
-                            // placeholder sprites (dc-acolyte / gc-high-priest). The Moon
-                            // must reuse the SAME placeholders, otherwise the auto-generated
-                            // "fbe-acolyte"/"fbe-high-priest" ids resolve to nothing and the
-                            // units render invisibly (1x1) — i.e. don't show up on the Moon.
-                            case Acolyte if f == FBE    => "dc-acolyte"
+                            // Faceless Blight (FBE): real Acolyte art (fbe-acolyte). HighPriest
+                            // stays on the gc placeholder — FBE fields no High Priest unit, so
+                            // this case is defensive only.
+                            case Acolyte if f == FBE    => "fbe-acolyte"
                             case HighPriest if f == FBE => "gc-high-priest"
                             case Acolyte       => f.short.toLowerCase + "-acolyte"
                             case HighPriest    => f.short.toLowerCase + "-high-priest"
@@ -4079,12 +4075,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             case Desiccated    => "fb-desiccated"
                             case RevenantOfKnaa=> "fb-revenant"
                             case Ghatanothoa   => "fb-ghatanothoa"
-                            // Faceless Blight (FBE) monster + GOO: placeholder art matching
-                            // the map (n-dimensional-shambler / ys-king-in-yellow). Without
-                            // these the Moon emits non-existent "fbe-*" ids and the figures
-                            // vanish. Swap to fbe-fungal-thrall/fbe-byagoona when art lands.
-                            case FungalThrall  => "n-dimensional-shambler"
-                            case Byagoona      => "ys-king-in-yellow"
+                            // Faceless Blight (FBE) monster + GOO: real art (fbe-fungal-thrall
+                            // / fbe-byagoona), matching the Earth map. Silhouettes from the v19
+                            // faction board.
+                            case FungalThrall  => "fbe-fungal-thrall"
+                            case Byagoona      => "fbe-byagoona"
                             case ProtoShoggoth => "tt-proto-shoggoth"
                             case UbboSathla    => "tt-ubbo-sathla"
                             case Ghast              => "n-ghast"
