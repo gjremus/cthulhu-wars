@@ -476,7 +476,13 @@ trait Faction { f =>
         // Azathoth IGOO: = glyph position
         units(AzathothIGOO).not(Zeroed).num * game.azathothGlyphPosition +
         // Dunwich — Dire Yog-Sothoth: = number of enemy-controlled faction Great Old Ones in play
-        units(DireYogSothoth).not(Zeroed).num * game.factions.but(f)./(_.factionGOOs.num).sum
+        units(DireYogSothoth).not(Zeroed).num * game.factions.but(f)./(_.factionGOOs.num).sum +
+        // Colour Out of Space (CS) Effervescent Excrescence: its combat must count for WHICHEVER
+        // faction holds it in a battle — excrescences fully transfer ownership via Prismatic Wells,
+        // so the combat lives here in the shared strength, not only in CS.strength. Otherwise an
+        // excrescence fighting for (say) Firstborn joins the side but rolls no dice. Vermiculite
+        // Hypertrophy (a CS spellbook) raises each excrescence's combat from 2 to 6 globally.
+        units(EffervescentExcrescence).not(Zeroed).num * (CS.can(VermiculiteHypertrophy).?(6).|(2))
 }
 
 // Elder Thing Mind Control: suppress GOO special abilities when Elder Thing shares area

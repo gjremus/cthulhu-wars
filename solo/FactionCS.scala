@@ -118,8 +118,8 @@ case object CS extends Faction { f =>
     //   Meteorite / Globule / Acolyte = 0
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
         val globulesOnBoard  = f.onMap(LuminousGlobule).not(Zeroed).num
-        val excrescenceCombat = f.can(VermiculiteHypertrophy).?(6).|(2)
-        units(EffervescentExcrescence).not(Zeroed).num * excrescenceCombat +
+        // Excrescence combat now lives in the shared Game.neutralStrength so it counts for whichever
+        // faction holds the excrescence in battle (not only CS). Do NOT re-add it here or it double-counts.
         units(CSTulzscha).not(Zeroed).num * globulesOnBoard * 2 +
         neutralStrength(units, opponent)
     }
