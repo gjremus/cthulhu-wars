@@ -1799,7 +1799,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Mirrors the Zagazig/Savagery pre-battle Use/Skip pattern (Battle.scala:506-512).
                 if (factions.has(BB) && BB.can(Predator) && sides.has(BB) && !BB.oncePerAction.has(Predator)) {
                     val bbSide = if (attacker == BB) attackers else defenders
-                    val bbHadUranus = bbSide.forces.%(_.uclass == CatFromUranus).any
+                    val bbHadUranus = (bbSide.forces ++ eliminated ++ exempted).%(u => u.faction == BB && u.uclass == CatFromUranus).any
                     if (bbHadUranus) {
                         val enemy = if (attacker == BB) defender else attacker
                         val lostTypes = eliminated.%(_.faction == enemy)./(_.uclass).distinct

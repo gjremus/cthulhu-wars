@@ -194,7 +194,7 @@ object OWExpansion extends Expansion {
             if (f.can(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(f.affords(1)).any)
                 // 2026-07-19: Beyond One CAN move DS chaos gates (ElderGod units).
                 // Only exclude regions with enemy GOO units (non-ElderGod).
-                game.gates.%(r => f.enemies.%(_.at(r, GOO).any).none).%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
+                game.gates.%(r => f.enemies.%(_.at(r, GOO, ElderGod).any).none).%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
                     + BeyondOneMainAction(f, _)
                 }
 
