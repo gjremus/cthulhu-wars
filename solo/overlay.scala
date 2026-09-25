@@ -2693,7 +2693,7 @@ object Overlays {
         case $("FBE", SuccorReq.text)               => requirement("Byagoona Dies in Battle. Do not fulfill if the Kill/Elimination is prevented.")
         case $("FBE", OverlordOfDeathReq.text)      => requirement("Awaken Byagoona.")
 
-        case $("FBE", SelfConsuming.name)        => spellbook(SelfConsuming.name,        "Ongoing (Faction Ability)", "Whenever two or more Units are Killed or Eliminated as part of the same Action, Gain 1 Power. If you controlled at least three of them, also gain 1 Doom.")
+        case $("FBE", SelfConsuming.name)        => spellbook(SelfConsuming.name,        "Ongoing (Faction Ability)", "Whenever an Action causes two or more Units to be Killed or Eliminated in the same Area, if you had a Unit Present, gain 1 Power. Also gain 1 Doom if you controlled at least three of those Units.")
         case $("FBE", ChangelingAdherents.name)  => spellbook(ChangelingAdherents.name,  "Gather Power", "Roll a die for each of your Acolytes controlling Gates and place them on your Faction Card.")
         case $("FBE", NecromanticSpores.name)    => spellbook(NecromanticSpores.name,    "Post-Battle", "Eliminate a Monster Present to create a Fungal Thrall for each enemy Unit Killed.")
         case $("FBE", Shapestealing.name)        => spellbook(Shapestealing.name,        "Pre-Battle", "Choose an Enemy Monster and roll a die from your Faction Card. If the value exceeds that Monster's Cost, it fights for you this Combat.")
@@ -2746,7 +2746,7 @@ object Overlays {
             s"""<div class=p>${cost("How to Awaken " + Byagoona.name + ":")}</div>
                 <div class=p>${cost("1)")} Eliminate one or more of your Monsters in a single Area and roll that many dice.</div>
                 <div class=p>${cost("2)")} Set all of the dice on your Faction Card.</div>
-                <div class=p>${cost("3)")} Pay Power equal to <span class=cost-color>max(0, 10 - the total Cost of Monsters Eliminated)</span>.</div>
+                <div class=p>${cost("3)")} Pay Power equal to <span class=cost-color>max(0, 8 - the number of Monsters Eliminated)</span>.</div>
                 <div class=p>${cost("4)")} ${Byagoona.name} appears in the Area.</div>
                 <div class=p>${combat} Equal to the number of Results (Kills and Pains) on dice on your Faction Card.</div>""")
     }
@@ -2758,7 +2758,7 @@ object Overlays {
         def fbeRef(sb : Spellbook) =
             s"""<span class="ability-color pointer" onclick="onExternalClick('FBE', '${sb.name}')">${sb.name}</span>"""
         faction(FBE, "info:fbe-background", SelfConsuming, "Ongoing",
-            "Whenever two or more Units are Killed or Eliminated as part of the same Action, Gain 1 Power. If you controlled at least three of them, also gain 1 Doom.",
+            "Whenever an Action causes two or more Units to be Killed or Eliminated in the same Area, if you had a Unit Present, gain 1 Power. Also gain 1 Doom if you controlled at least three of those Units.",
             $(ChangelingAdherents, NecromanticSpores, Shapestealing, AnimatedRush, Succor, OverlordOfDeath), $(
             (Acolyte,      6, "1", "0", s"""<div class=p>Setup: 6 Acolytes + a Controlled Gate in an empty area not adjacent to another faction's start area. Spellbook: ${fbeRef(ChangelingAdherents)}</div>"""),
             (FungalThrall, 10, "2", "2", s"""<div class=p>Spellbooks: ${fbeRef(NecromanticSpores)}, ${fbeRef(Succor)}</div>"""),
@@ -2766,7 +2766,7 @@ object Overlays {
                 <div class=p>${cost(s"How to Awaken ${Byagoona.name}:")}</div>
                 <div class=p>${cost("1)")} Eliminate one or more of your Monsters in a single area and roll that many dice.</div>
                 <div class=p>${cost("2)")} Set all of the dice on your Faction Card.</div>
-                <div class=p>${cost("3)")} Pay Power equal to the difference between the total Cost of Monsters Eliminated and 10 (floored at 0).</div>
+                <div class=p>${cost("3)")} Pay Power equal to 8 minus the number of Monsters Eliminated (floored at 0).</div>
                 <div class=p>${cost("4)")} Byagoona appears in the Area.</div>
                 <div class=p>${combat} Equal to the number of Results (Kills and Pains) on dice on your Faction Card.</div>
                 <div class=p>${ref(Shapestealing)} ${cost("(Pre-Battle):")} Choose an Enemy Monster and roll a die from your Faction Card. If the value exceeds that Monster's Cost, it fights for you this Combat.</div>
