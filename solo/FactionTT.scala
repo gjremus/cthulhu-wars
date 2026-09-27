@@ -140,7 +140,7 @@ case class TTUnspeakableOathMainAction(self : Faction) extends OptionFactionActi
     "Unspeakable Oath: sacrifice " + HighPriest.styled(TT) + " for " + 2.power
 ) with MainQuestion with Soft
 case class TTUnspeakableOathAction(self : Faction, u : UnitRef) extends BaseFactionAction(
-    "Sacrifice " + HighPriest.styled(TT),
+    implicit g => "Sacrifice " + HighPriest.styled(TT) + " in " + g.unit(u).region,
     implicit g => g.unit(u).full + " for " + 2.power
 )
 
