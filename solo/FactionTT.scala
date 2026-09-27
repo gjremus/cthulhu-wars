@@ -178,7 +178,7 @@ case class TTSurpriseTargetFactionAction(self : Faction, target : Faction) exten
 )
 case class TTSurpriseEliminateAcolyteAction(self : Faction, target : Faction) extends ForcedAction
 case class TTSurpriseAcolyteChoiceAction(self : Faction, target : Faction, u : UnitRef) extends BaseFactionAction(
-    "Eliminate " + Acolyte.styled(TT), implicit g => g.unit(u).full
+    implicit g => "Eliminate " + g.unit(u).uclass.styled(target), implicit g => g.unit(u).full
 )
 
 // IDOLATRY (Tsang exclusive: cost 1, select Faction Glyph area, move TT units from adjacent areas)
@@ -453,7 +453,9 @@ object TTExpansion extends Expansion {
                 + TTDarkRitualsMainAction(f)
 
             // LENG: Surprise! (enemy eliminates Acolyte, replaced by Proto-Shoggoth)
-            val surpriseEnemiesWithAcolytes = game.factions.but(f).%(e => e.allInPlay.%(_.uclass == Acolyte).any)
+            // Lunacy (BB): Earth Cats are targetable "as if Acolytes" by anything that targets Acolytes. On-map only (Proto-Shoggoth can't be placed on the Moon).
+            def surpriseTargetable(u : UnitFigure) = u.onMap && (u.uclass == Acolyte || (u.faction == BB && u.uclass == EarthCat))
+            val surpriseEnemiesWithAcolytes = game.factions.but(f).%(e => e.allInPlay.%(surpriseTargetable).any)
             if (f.can(SurpriseSB) && f.power >= 2 && surpriseEnemiesWithAcolytes.any && f.pool(ProtoShoggoth).any)
                 + TTSurpriseMainAction(f)
 
@@ -603,7 +605,8 @@ object TTExpansion extends Expansion {
         // SURPRISE! (Leng) — cost 2, enemy eliminates Acolyte, replaced by Proto-Shoggoth
         case TTSurpriseMainAction(self) =>
             self.power -= 2
-            val enemies = game.factions.but(self).%(e => e.allInPlay.%(_.uclass == Acolyte).any)
+            // Lunacy (BB): Earth Cats count as Acolytes for Surprise. On-map only (Proto-Shoggoth can't land on the Moon).
+            val enemies = game.factions.but(self).%(e => e.allInPlay.%(u => u.onMap && (u.uclass == Acolyte || (u.faction == BB && u.uclass == EarthCat))).any)
             Force(TTSurpriseChooseFactionAction(self, enemies))
 
         case TTSurpriseChooseFactionAction(self, enemies) =>
@@ -613,7 +616,7 @@ object TTExpansion extends Expansion {
             Force(TTSurpriseEliminateAcolyteAction(self, target))
 
         case TTSurpriseEliminateAcolyteAction(self, target) =>
-            val acolytes = target.allInPlay.%(_.uclass == Acolyte)
+            val acolytes = target.allInPlay.%(u => u.onMap && (u.uclass == Acolyte || (u.faction == BB && u.uclass == EarthCat)))
             if (acolytes.num == 1)
                 Force(TTSurpriseAcolyteChoiceAction(self, target, acolytes.head.ref))
             else
@@ -622,10 +625,11 @@ object TTExpansion extends Expansion {
         case TTSurpriseAcolyteChoiceAction(self, target, uref) =>
             val u = game.unit(uref)
             val r = u.region
+            val uc = u.uclass
             game.eliminate(u)
             if (self.pool(ProtoShoggoth).any)
                 self.place(ProtoShoggoth, r)
-            self.log(SurpriseSB.styled(TT), ": eliminated", Acolyte.styled(target), "in", r, ", placed", ProtoShoggoth.styled(TT))
+            self.log(SurpriseSB.styled(TT), ": eliminated", uc.styled(target), "in", r, ", placed", ProtoShoggoth.styled(TT))
             EndAction(self)
 
         // IDOLATRY (Tsang) — cost 1: select faction-glyph area, move any or all TT units from adjacent areas
