@@ -251,7 +251,7 @@ case class TIBloodOfferingMainAction() extends OptionFactionAction("Blood Offeri
 case class TIBloodOfferingDrawAction(drawn : $[ElderSign], remaining : Int) extends ForcedAction
 case class TIBloodOfferingOfferLoopAction(queue : $[Faction], drawn : $[ElderSign], offers : $[(Faction, UnitRef, Int)]) extends ForcedAction
 case class TIBloodOfferingOfferAction(who : Faction, ur : UnitRef, i : Int, queue : $[Faction], drawn : $[ElderSign], offers : $[(Faction, UnitRef, Int)]) extends BaseFactionAction(
-    g => "Blood Offering: " + who + " offers " + ur + " for " + drawn(i).short,
+    g => "Blood Offering: " + who + " offers " + ur + " in " + g.unit(ur).region + " for " + drawn(i).short,
     implicit g => "Offer " + ur.full + " for " + drawn(i).short) { override def self = who }
 case class TIBloodOfferingDeclineAction(who : Faction, queue : $[Faction], drawn : $[ElderSign], offers : $[(Faction, UnitRef, Int)]) extends BaseFactionAction(None, "Decline") { override def self = who }
 case class TIBloodOfferingResolveAction(drawn : $[ElderSign], offers : $[(Faction, UnitRef, Int)]) extends ForcedAction
