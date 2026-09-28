@@ -1028,7 +1028,7 @@ object CthulhuWarsSolo {
                 }
             }
 
-            case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0, splitTint : |[Processing] = None, cropBottomFrac : Double = 0.0, outline : Boolean = false)
+            case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0, splitTint : |[Processing] = None, cropBottomFrac : Double = 0.0)
 
             case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int, parasiteOrig : |[Faction] = None, cropBottomFrac : Double = 0.0) {
                 val defaultProcessing = Processing(None, None, None)
@@ -1116,9 +1116,10 @@ object CthulhuWarsSolo {
                         case BB => DrawRect("bb-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Defilers Court (DC): acolyte unit sprite
                         case DC => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                        // Faceless Blight (FBE): DC acolyte sprite tinted FBE-green (original look),
-                        // with a white outline pass so it reads like every other unit.
-                        case FBE => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60, outline = true)
+                        // Faceless Blight (FBE): dedicated pre-colored acolyte with a BAKED white
+                        // edge (see art/bake-unit-border.py) — matched to the Cultist green and
+                        // drawn tint None, exactly like every other baked unit sprite.
+                        case FBE => DrawRect("fbe-acolyte", None, x - 17, y - 54, 39, 60)
                         // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
@@ -1460,12 +1461,11 @@ object CthulhuWarsSolo {
                     case TheLibrarian => DrawRect("librarian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 47, y - 146, 94, 146)
 
                     // Faceless Blight (FBE): Fungal Thrall and Byagoona use their real sculpt art,
-                    // now stored light/desaturated so the SAME FBE-green multiply tint used by the
-                    // cultists gives the identical mossy-green tone (they were previously baked a
-                    // brighter green with no tint, which didn't match). A white outline pass gives
-                    // them the same edge as every other unit. Byagoona's box is ~30% larger.
-                    case FungalThrall => DrawRect("fbe-fungal-thrall", |(tint), x - 35, y - 75, 70, 85, outline = true)
-                    case Byagoona     => DrawRect("fbe-byagoona", |(tint), x - 70, y - 150, 140, 156, outline = true)
+                    // recolored to the Cultist green (detail preserved) with a BAKED white edge in a
+                    // transparent margin — see art/bake-unit-border.py. Drawn tint None, exactly like
+                    // every other baked unit sprite (cs-luminous-globule, cs-tulzscha, ...).
+                    case FungalThrall => DrawRect("fbe-fungal-thrall", None, x - 35, y - 75, 70, 85)
+                    case Byagoona     => DrawRect("fbe-byagoona", None, x - 70, y - 150, 140, 156)
 
                     // Xyrious Storm (XSS): placeholder sprites (no art yet).
                     // Amphibian Crawler = Gnorri, Twister = Shantak, Eye of the Storm = Star Vampire, Petrichor = Cthulhu-sized.
@@ -2599,13 +2599,10 @@ object CthulhuWarsSolo {
 
                 draws.sortBy(d => d.y + (d.unit == Gate || d.unit == ChaosGate || d.unit == LordsShadowGate || d.unit == PrismaticWell).?(-2000).|(0) + (d.unit == DesecrationToken || d.unit == WebToken).?(-1000).|(0))./(_.rect).%(r => r != null).foreach { d =>
                     g.globalAlpha = d.alpha
-                    val needsOutline = d.key == "custodian-icon" || d.key == "librarian-icon" || d.outline
+                    val needsOutline = d.key == "custodian-icon" || d.key == "librarian-icon"
                     if (needsOutline) {
                         g.shadowColor = "white"
-                        // Blur must scale with the drawn size: a fixed 8px halo reads well on a
-                        // small icon/cultist but vanishes on a large unit (Byagoona at 140px wide).
-                        // Scale by width so every FBE unit gets a proportional, visible white rim.
-                        g.shadowBlur = math.max(8, d.width / 6)
+                        g.shadowBlur = 8
                         g.shadowOffsetX = 0
                         g.shadowOffsetY = 0
                     }
