@@ -310,12 +310,12 @@ class GameEvaluationTT(implicit game : Game) extends GameEvaluation(TT)(game) {
                 result +:= Evaluation(25, "#TT remove-gate")
 
             // ── SYCOPHANCY (prompted choices) ─────────────────────────────────
-            case TTSycophancyGiveDoomAction(_, _, _) =>
-                // Give 1 doom to TT if ritualer is leading
+            case TTSycophancyGiveDoomAction(_, _, _, _, _) =>
+                // Give 1 doom to the Sycophancy holder if ritualer is leading
                 others.%(ofinale).any |=> 500 -> "#TT sycophancy-give-finale"
                 true |=> 10 -> "#TT sycophancy-give"
 
-            case TTSycophancyLoseDoomAction(_, _, _) =>
+            case TTSycophancyLoseDoomAction(_, _, _, _, _) =>
                 true |=> 5 -> "#TT sycophancy-lose"
 
             // ── HIEROPHANTS HP PLACEMENT ────────────────────────────────────

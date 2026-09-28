@@ -3179,13 +3179,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             val es = f.goos.factionGOOs.num + f.can(Consecration).??($(0, 1, 1, 1, 2)(cathedrals.num))
 
-            // TT Sycophancy: when an ENEMY performs a ritual, pause before doom resolves and prompt the ritualer
-            if (factions.has(TT) && f != TT && TT.has(Sycophancy)) {
-                // power already deducted above; doom/es not yet applied — pass them to the prompt continuation
-                return Force(TTSycophancyPromptAction(f, doom, es))
-            }
-
-            Force(TTSycophancyResumeRitualAction(f, doom, es))
+            // Sycophancy: when an ENEMY performs a ritual, pause before doom resolves and let
+            // every faction that holds Sycophancy (TT natively, SL via Ancient Sorcery) react.
+            // power already deducted above; doom/es not yet applied — pass them to the chain.
+            val sycophants = factions.but(f).%(_.has(Sycophancy))
+            if (sycophants.any)
+                Force(TTSycophancyChainAction(sycophants, f, doom, SycRitualResume(es)))
+            else
+                Force(TTSycophancyResumeRitualAction(f, doom, es))
 
         // TT Sycophancy resume point — shared by normal ritual and Sycophancy-adjusted doom values
         case TTSycophancyResumeRitualAction(f, doom, es) =>

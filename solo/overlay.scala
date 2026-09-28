@@ -819,7 +819,7 @@ object Overlays {
             (Acolyte,       6, "1", "0",  s"""<div class=p>Spellbook: ${reference(TT, Soulless)}</div>"""),
             (HighPriest,    3, "3", "0",  s"""<div class=p><span class=ability-color>Unspeakable Oath</span> ${cost("(Ongoing):")} At the end of any player's Action (even if it is not your turn), Sacrifice your High Priest (return him to your Pool) and gain 2 Power. This may also be done during the Gather Power and Doom phase.</div><div class=p>Spellbooks: ${reference(TT, Martyrdom)}, ${reference(TT, Hierophants)}, ${reference(TT, TabletsOfTheGods)}</div>"""),
             (ProtoShoggoth, 6, "2", "1",  s"""<div class=p>Spellbook: ${reference(TT, TerrorSB)}</div>"""),
-            (UbboSathla,    1, "6/0", "?",  s"""
+            (UbboSathla,    1, "6/0", calc(g => g.ubboGrowth),  s"""
                 <div class=p>${cost("How to Awaken Ubbo-Sathla:")}</div>
                 <div class=p>${cost("1)")} You must have a Controlled Gate and a High Priest in play (he need not be with the Gate) during the Doom Phase or the Action Phase.</div>
                 <div class=p>${cost("2)")} If it is the Doom Phase, pay 0 Power; if it is the Action Phase, pay <span class=cost-color>6 Power</span>.</div>
@@ -1483,7 +1483,7 @@ object Overlays {
             (Mutant,      mutantQty, mutantCost, "1", s"""<div class=p>Spellbook: ${owRef(MillionFavoredOnes)}</div>"""),
             (Abomination, 3, "3", "2", s"""<div class=p>Spellbooks: ${owRef(MillionFavoredOnes)}, ${owRef(DreadCurse)}</div>"""),
             (SpawnOW,     2, "4", "3", s"""<div class=p>Spellbooks: ${owRef(MillionFavoredOnes)}, ${owRef(DreadCurse)}</div>"""),
-            (YogSothoth,  1, "6", "?", s"""
+            (YogSothoth,  1, "6", calc(g => { implicit val gg : Game = g; 2 * g.factions.but(OW)./(_.factionGOOs.num).sum }), s"""
                 <div class=p>${cost(s"How to Awaken ${YogSothoth.name}:")}</div>
                 <div class=p>${cost("1)")} You must have a Spawn of Yog-Sothoth on the Map.</div>
                 <div class=p>${cost("2)")} Pay ${power(6)}. Replace the Spawn with Yog-Sothoth.</div>
