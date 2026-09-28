@@ -1389,7 +1389,7 @@ object Overlays {
             (Mutant,      mutantQty, mutantCost, "1", s"""<div class=p>Spellbook: ${owRef(MillionFavoredOnes)}</div>"""),
             (Abomination, 3, "3", "2", s"""<div class=p>Spellbooks: ${owRef(MillionFavoredOnes)}, ${owRef(DreadCurse)}</div>"""),
             (SpawnOW,     2, "4", "3", s"""<div class=p>Spellbooks: ${owRef(MillionFavoredOnes)}, ${owRef(DreadCurse)}</div>"""),
-            (YogSothoth,  1, "6", "?", s"""
+            (YogSothoth,  1, "6", calc(g => { implicit val gg : Game = g; 2 * g.factions.but(OW)./(_.factionGOOs.num).sum }), s"""
                 <div class=p>${cost(s"How to Awaken ${YogSothoth.name}:")}</div>
                 <div class=p>${cost("1)")} You must have a Spawn of Yog-Sothoth on the Map.</div>
                 <div class=p>${cost("2)")} Pay ${power(6)}. Replace the Spawn with Yog-Sothoth.</div>
