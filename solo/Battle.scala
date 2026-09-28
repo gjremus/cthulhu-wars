@@ -764,6 +764,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Use side.forces (battle-local) not s.forces (global) — Shapestealing et al modify side.forces only
         val str = s.strength(side.forces, s.opponent) + side.cthughaCombatBonus + side.savageryBonus
 
+        println("TRACE-PREROLL: s=" + s.name + " computedStr=" + str + " current.str=" + s.str + " side.savageryBonus=" + side.savageryBonus + " sideIsAttackers=" + (side eq attackers))
+
         if (str != s.str) {
             log(s, "strength", (str > s.str).?("increased").|("decreased"), "to", str.str)
             s.str = str
@@ -1575,6 +1577,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(RollAttackers)
 
             case RollAttackers =>
+                println("TRACE-ROLLATTACKERS: attacker=" + attacker.name + " attacker.str=" + attacker.str + " savageryBonus=" + attackers.savageryBonus)
                 RollBattle(attacker, "attack", attacker.str, x => BattleRollAction(attacker, x, RollDefenders))
 
             case RollDefenders =>
@@ -3860,6 +3863,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             (self : Side).add(Savagery)
             (self : Side).str += bonus
             (self : Side).savageryBonus += bonus
+            println("TRACE-SAVAGERY: after apply, self=" + self.name + " side.str=" + (self : Side).str + " savageryBonus=" + (self : Side).savageryBonus + " isAttacker=" + (self == attacker))
             self.log(Savagery.styled(BB) + ": paid", 1.power, "for +" + bonus.str, "strength (" + saturnCount + " Cat".s(saturnCount) + " from Saturn)")
             proceed()
 

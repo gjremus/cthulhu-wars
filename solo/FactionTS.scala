@@ -89,6 +89,13 @@ case class TSDeathMarchDoneAction(self : Faction) extends BaseFactionAction(None
 case class TSHecatombRitualCostAction(self : Faction, power : Int, dh : Int) extends OptionFactionAction(
     "Ritual of Annihilation".styled("doom") + ": " + power.power + (dh > 0).?(" + " + dh.toString.styled("kill") + " Death's Head").|(s"")
 ) with DoomQuestion
+// Pure-DH Hecatomb resumes here after any Sycophancy reaction; doom is the final (possibly reduced) value.
+// TT/BB/HB only (references the Sycophancy infra in FactionTT); the MNU build has no TT so it keeps the
+// inline pure-DH resolution below and never routes through Sycophancy (Sycophancy can't exist in an MNU game).
+case class TSHecatombResumeAction(self : Faction, doom : Int, es : Int) extends ForcedAction
+case class SycHecatombResume(es : Int) extends SycophancyResume {
+    def resume(ritualer : Faction, doom : Int) : ForcedAction = TSHecatombResumeAction(ritualer, doom, es)
+}
 
 // SHEPHERD OF THE CRYPT (Gather Power Phase)
 case class TSShepherdGatherMainAction(self : Faction) extends OptionFactionAction("Shepherd of the Crypt: gain " + 1.power + " per " + TombHerd.styled(TS)) with MainQuestion with PowerNeutral
@@ -333,48 +340,61 @@ object TSExpansion extends Expansion {
                 val esGoo = if (self == TB) self.goos.factionGOOs.any.??(1) else self.goos.factionGOOs.num
                 val es = esGoo + self.can(Consecration).??($(0, 1, 1, 1, 2)(game.cathedrals.num))
 
-                // Exactly match standard ritual: power, doom, log, ES, acted
-                // power already 0, no deduction needed
-                self.doom += doom
-                game.appendLog($(CthulhuWarsSolo.DottedLine))
-                self.log("performed Hecatomb ritual (pure DH, no track advance)", "and gained", doom.doom, (es > 0).??("and " + es.es))
-                self.takeES(es)
-                self.acted = true
-
-                // Do NOT add to ritualHistory (no standard glyph placement)
-                // Do NOT advance ritualMarker
-
-                // Track pure-DH ritual for overlay glyph placement
-                // Store the ritual marker index at time of ritual — overlay will calculate position
-                TSExpansion.pureDHRitualsDone += 1
-                TSExpansion.pureDHMarkerIndices :+= game.ritualMarker
-
-                game.triggers()
-                game.showROAT()
-
-                // Pure-DH Hecatomb resolves doom directly (no ritualHistory glyph, no
-                // RitualAction dispatch), so it bypasses BOTH channels that normally
-                // notify cross-faction RoA reactors. Notify DC Pilgrimage / TT Sycophancy
-                // explicitly — a Hecatomb IS a Ritual of Annihilation for them.
-                game.notifyRoAReactors(self)
-
-                self.satisfy(PerformRitual, "Perform Ritual of Annihilation (Hecatomb pure DH)")
-
-                // TS's OWN ritual spellbook requirement (TSRitualOrEnemyGate) is normally
-                // satisfied by TSExpansion.triggers() polling ritualHistory.has(TS). Pure-DH
-                // Hecatomb deliberately skips ritualHistory (no track glyph), so that poll
-                // never fires and TS would not unlock its spellbook from a pure-DH ritual —
-                // unlike a standard/mixed Hecatomb (which routes through RitualAction and
-                // does append ritualHistory). Satisfy it directly so a pure-DH Hecatomb
-                // unlocks TS's spellbook too. `satisfy` is idempotent (only logs + fulfils
-                // if still needed); the CheckSpellbooksAction below then prompts the SB pick.
-                self.satisfy(TSRitualOrEnemyGate, "Hecatomb Ritual of Annihilation")
-
-                // Continue doom phase — exactly as standard ritual does for TS (no tome penalty)
-                CheckSpellbooksAction(DoomAction(self))
+                // Hecatomb IS a Ritual of Annihilation — let every Sycophancy holder react
+                // before doom resolves (same as standard RitualAction / Bubastis RA), then finish
+                // in TSHecatombResumeAction with the (possibly reduced) doom. Previously the pure-DH
+                // path applied doom inline and only called notifyRoAReactors, so it satisfied TT's
+                // requirement but never fired the interactive Sycophancy prompt.
+                val sycophants = game.factions.but(self).%(_.has(Sycophancy))
+                if (sycophants.any)
+                    Force(TTSycophancyChainAction(sycophants, self, doom, SycHecatombResume(es)))
+                else
+                    Force(TSHecatombResumeAction(self, doom, es))
             }
             else
                 Force(RitualAction(self, power, 1))
+
+        case TSHecatombResumeAction(self, doom, es) =>
+            // Exactly match standard ritual: power, doom, log, ES, acted
+            // power already 0, no deduction needed
+            self.doom += doom
+            game.appendLog($(CthulhuWarsSolo.DottedLine))
+            self.log("performed Hecatomb ritual (pure DH, no track advance)", "and gained", doom.doom, (es > 0).??("and " + es.es))
+            self.takeES(es)
+            self.acted = true
+
+            // Do NOT add to ritualHistory (no standard glyph placement)
+            // Do NOT advance ritualMarker
+
+            // Track pure-DH ritual for overlay glyph placement
+            // Store the ritual marker index at time of ritual — overlay will calculate position
+            TSExpansion.pureDHRitualsDone += 1
+            TSExpansion.pureDHMarkerIndices :+= game.ritualMarker
+
+            game.triggers()
+            game.showROAT()
+
+            // Pure-DH Hecatomb resolves doom directly (no ritualHistory glyph, no RitualAction
+            // dispatch), so it bypasses the channels that normally notify cross-faction RoA
+            // reactors. Notify DC Pilgrimage / the TTSycophancyTrigger requirement explicitly —
+            // a Hecatomb IS a Ritual of Annihilation for them. The Sycophancy PROMPT itself
+            // already fired above (if any holder was present).
+            game.notifyRoAReactors(self)
+
+            self.satisfy(PerformRitual, "Perform Ritual of Annihilation (Hecatomb pure DH)")
+
+            // TS's OWN ritual spellbook requirement (TSRitualOrEnemyGate) is normally
+            // satisfied by TSExpansion.triggers() polling ritualHistory.has(TS). Pure-DH
+            // Hecatomb deliberately skips ritualHistory (no track glyph), so that poll
+            // never fires and TS would not unlock its spellbook from a pure-DH ritual —
+            // unlike a standard/mixed Hecatomb (which routes through RitualAction and
+            // does append ritualHistory). Satisfy it directly so a pure-DH Hecatomb
+            // unlocks TS's spellbook too. `satisfy` is idempotent (only logs + fulfils
+            // if still needed); the CheckSpellbooksAction below then prompts the SB pick.
+            self.satisfy(TSRitualOrEnemyGate, "Hecatomb Ritual of Annihilation")
+
+            // Continue doom phase — exactly as standard ritual does for TS (no tome penalty)
+            CheckSpellbooksAction(DoomAction(self))
 
         // MAIN ACTIONS
         case MainAction(f) if f == TS && f.active.not =>

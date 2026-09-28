@@ -4501,13 +4501,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val esGoo = if (f == TB) f.goos.factionGOOs.any.??(1) else f.goos.factionGOOs.num
             val es = esGoo + (f.can(Consecration) && !options.has(ANAlternateSpellbooks)).??($(0, 1, 1, 1, 2)(cathedrals.num))
 
-            // TT Sycophancy: when an ENEMY performs a ritual, pause before doom resolves and prompt the ritualer
-            if (factions.has(TT) && f != TT && TT.has(Sycophancy)) {
-                // power already deducted above; doom/es not yet applied — pass them to the prompt continuation
-                return Force(TTSycophancyPromptAction(f, doom, es))
-            }
-
-            Force(TTSycophancyResumeRitualAction(f, doom, es))
+            // Sycophancy: when an ENEMY performs a ritual, pause before doom resolves and let
+            // every faction that holds Sycophancy (TT natively, SL via Ancient Sorcery) react.
+            // power already deducted above; doom/es not yet applied — pass them to the chain.
+            val sycophants = factions.but(f).%(_.has(Sycophancy))
+            if (sycophants.any)
+                Force(TTSycophancyChainAction(sycophants, f, doom, SycRitualResume(es)))
+            else
+                Force(TTSycophancyResumeRitualAction(f, doom, es))
 
         // TT Sycophancy resume point — shared by normal ritual and Sycophancy-adjusted doom values
         case TTSycophancyResumeRitualAction(f, doom, es) =>
@@ -4594,10 +4595,27 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val esBonus    = enemyGate.??(1) + enemyGOO.??(2)
 
             self.power -= cost
-            self.doom  += 4
+
+            // Requires Attention is a Ritual of Annihilation, so — exactly like the standard
+            // RitualAction intercept — let every Sycophancy holder (TT natively, SL via Ancient
+            // Sorcery) react before doom resolves, then finish in RequiresAttentionResumeAction
+            // with the (possibly reduced) doom. Without this, RA bypassed Sycophancy entirely.
+            val sycophants = factions.but(self).%(_.has(Sycophancy))
+            if (sycophants.any)
+                Force(TTSycophancyChainAction(sycophants, self, 4, SycRequiresAttentionResume(r, esBonus)))
+            else
+                Force(RequiresAttentionResumeAction(self, r, 4, esBonus))
+
+        case RequiresAttentionResumeAction(self, r, doom, esBonus) =>
+            // Recompute the descriptive gate/GOO flags for the log line (esBonus already fixed
+            // at target time; nothing between then and now changes the units at r).
+            val enemyGate = factions.but(self).exists(_.gates.has(r))
+            val enemyGOO  = factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any || (AN.can(HolyGround) && e.at(r, Cathedral).any))
+
+            self.doom += doom
 
             log(CthulhuWarsSolo.DottedLine)
-            self.log("performed Ritual of Annihilation with", RequiresAttention.styled(BB), "in", r, "— gained", 4.doom)
+            self.log("performed Ritual of Annihilation with", RequiresAttention.styled(BB), "in", r, "— gained", doom.doom)
             if (esBonus > 0)
                 self.log(RequiresAttention.styled(BB) + ":", esBonus.es, "bonus (" + enemyGate.??("enemy gate") + (enemyGate && enemyGOO).??(", ") + enemyGOO.??("enemy GOO") + ")")
             self.takeES(esBonus)
@@ -4610,7 +4628,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             ritualHistoryCeremony :+= false
             triggers()
             // Requires Attention bypasses the RitualAction intercept, so notify the
-            // cross-faction RoA reactors (DC Pilgrimage, TT Sycophancy) explicitly.
+            // cross-faction RoA reactors (DC Pilgrimage, and the TTSycophancyTrigger
+            // requirement) explicitly. The Sycophancy PROMPT itself already fired above.
             notifyRoAReactors(self)
             if (ritualTrack(ritualMarker) != 999)
                 ritualMarker += 1

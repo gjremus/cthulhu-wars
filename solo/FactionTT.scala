@@ -247,15 +247,35 @@ case class TTDoomsdayPlaceAction(self : Faction, card : LoyaltyCard, r : Region)
 // INERRANT (Sarkomand exclusive: doom phase ritual bonus ES — handled in Game.scala RitualAction)
 // OTHERWORLD ALLIANCES (Sarkomand exclusive: +1 combat to neutral monsters/terrors — handled in neutralStrength in Game.scala)
 
-// SYCOPHANCY (faction ability: enemy chooses when ritualing — injected in Game.scala RitualAction)
+// SYCOPHANCY (faction ability: when an ENEMY performs a Ritual of Annihilation of ANY
+// kind, every faction that holds Sycophancy — TT natively, or SL via Ancient Sorcery —
+// makes the ritualer choose: gain 1 fewer Doom, or give that faction 1 Doom).
+//
+// A SycophancyResume descriptor lets the SAME prompt machinery serve every RoA path:
+// the standard RitualAction resume AND non-standard RoAs (Bubastis "Requires Attention",
+// and any future special ritual). Each RoA path builds the concrete continuation via
+// resume(...) so the chain never has to know about faction-specific action types — that
+// keeps builds that lack a given faction (e.g. the TT build has no Bubastis) compiling.
+// NOT sealed on purpose: variants live in different faction files (SycRitualResume here,
+// SycRequiresAttentionResume in FactionBB) and are resolved polymorphically, not by match.
+trait SycophancyResume extends Record {
+    def resume(ritualer : Faction, doom : Int) : ForcedAction
+}
+case class SycRitualResume(es : Int) extends SycophancyResume {
+    def resume(ritualer : Faction, doom : Int) : ForcedAction = TTSycophancyResumeRitualAction(ritualer, doom, es)
+}
+
 // TTSycophancyResumeRitualAction is the shared continuation used by both normal and Sycophancy-adjusted ritual resolution
 case class TTSycophancyResumeRitualAction(ritualer : Faction, doom : Int, es : Int) extends ForcedAction
-case class TTSycophancyPromptAction(ritualer : Faction, doom : Int, es : Int) extends ForcedAction
-case class TTSycophancyLoseDoomAction(self : Faction, doom : Int, es : Int) extends BaseFactionAction(
+// Chain entry: prompt the next Sycophancy holder, or dispatch the final resume when none remain.
+// reactors = the Sycophancy holders still to prompt (chained one at a time so multiple
+// holders — e.g. TT plus an SL Ancient-Sorcery copy — EACH get their reaction, rules-correct).
+case class TTSycophancyChainAction(reactors : $[Faction], ritualer : Faction, doom : Int, resume : SycophancyResume) extends ForcedAction
+case class TTSycophancyLoseDoomAction(reactor : Faction, reactors : $[Faction], self : Faction, doom : Int, resume : SycophancyResume) extends BaseFactionAction(
     "Gain 1 fewer Doom (Sycophancy)", implicit g => "Gain " + (doom - 1) + " Doom instead of " + doom
 )
-case class TTSycophancyGiveDoomAction(self : Faction, doom : Int, es : Int) extends BaseFactionAction(
-    "Give 1 Doom to " + TT.toString + " (Sycophancy)", TT.toString + " gains 1 Doom"
+case class TTSycophancyGiveDoomAction(reactor : Faction, reactors : $[Faction], self : Faction, doom : Int, resume : SycophancyResume) extends BaseFactionAction(
+    "Give 1 Doom to " + reactor.toString + " (Sycophancy)", reactor.toString + " gains 1 Doom"
 )
 
 // HIEROPHANTS (all tribes: on spellbook earn, place HP at gate or grow counter)
@@ -740,20 +760,28 @@ object TTExpansion extends Expansion {
             // Route through the standard iGOO placement engine at cost 0
             Force(IndependentGOOAction(self, card, r, 0))
 
-        // SYCOPHANCY: prompt the ritualING faction — they choose, then ritual completes via TTSycophancyRitualAction
-        case TTSycophancyPromptAction(ritualer, doom, es) =>
-            Ask(ritualer)
-                .add(TTSycophancyLoseDoomAction(ritualer, doom, es))
-                .add(TTSycophancyGiveDoomAction(ritualer, doom, es))
+        // SYCOPHANCY: walk the list of Sycophancy holders. For each, prompt the ritualING
+        // faction to lose 1 Doom or give that holder 1 Doom; when the list is empty, dispatch
+        // the RoA-specific resume with the (possibly reduced) Doom.
+        case TTSycophancyChainAction(reactors, ritualer, doom, resume) =>
+            if (reactors.none)
+                Force(resume.resume(ritualer, doom))
+            else {
+                val r    = reactors.head
+                val rest = reactors.tail
+                Ask(ritualer)
+                    .add(TTSycophancyLoseDoomAction(r, rest, ritualer, doom, resume))
+                    .add(TTSycophancyGiveDoomAction(r, rest, ritualer, doom, resume))
+            }
 
-        case TTSycophancyLoseDoomAction(ritualer, doom, es) =>
-            ritualer.log("Sycophancy".styled(TT) + ": chooses to gain " + (doom - 1).doom + " (1 fewer)")
-            Force(TTSycophancyResumeRitualAction(ritualer, doom - 1, es))
+        case TTSycophancyLoseDoomAction(reactor, rest, ritualer, doom, resume) =>
+            ritualer.log("Sycophancy".styled(reactor) + ": chooses to gain " + (doom - 1).doom + " (1 fewer)")
+            Force(TTSycophancyChainAction(rest, ritualer, doom - 1, resume))
 
-        case TTSycophancyGiveDoomAction(ritualer, doom, es) =>
-            TT.doom += 1
-            ritualer.log("Sycophancy".styled(TT) + ": gave", 1.doom, "to", TT)
-            Force(TTSycophancyResumeRitualAction(ritualer, doom, es))
+        case TTSycophancyGiveDoomAction(reactor, rest, ritualer, doom, resume) =>
+            reactor.doom += 1
+            ritualer.log("Sycophancy".styled(reactor) + ": gave", 1.doom, "to", reactor)
+            Force(TTSycophancyChainAction(rest, ritualer, doom, resume))
 
         // HIEROPHANTS: on any TT spellbook earn, place HP at gate or grow counter
         case TTHierophantsPlaceHPAction(self, gates, next) =>

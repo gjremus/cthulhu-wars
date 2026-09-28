@@ -1116,9 +1116,9 @@ object CthulhuWarsSolo {
                         case BB => DrawRect("bb-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Defilers Court (DC): acolyte unit sprite
                         case DC => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                        // Faceless Blight (FBE): reuse the DC acolyte sprite tinted FBE green
-                        // (placeholder — no bespoke FBE cultist art) per §A.v / §3.17.
-                        case FBE => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        // Faceless Blight (FBE): DC acolyte sprite baked FBE-green with its
+                        // light edge preserved (mossy, matches the rest of FBE), NO tint.
+                        case FBE => DrawRect("fbe-acolyte", None, x - 17, y - 54, 39, 60)
                         // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
@@ -1461,9 +1461,11 @@ object CthulhuWarsSolo {
 
                     // Faceless Blight (FBE): Fungal Thrall reuses the Dimensional Shambler sprite
                     // tinted FBE green (placeholder). Byagoona uses its real sculpt art
-                    // (fbe-byagoona.webp — background removed), tinted FBE green.
-                    case FungalThrall => DrawRect("n-dimensional-shambler", |(tint), x - 35, y - 75, 70, 85)
-                    case Byagoona     => DrawRect("fbe-byagoona", |(tint), x - 54, y - 114, 108, 120)
+                    // (fbe-byagoona.webp — background removed). The green is now BAKED into the
+                    // asset (color-blend, white rim preserved), so it renders with NO tint; the
+                    // draw box is ~30% larger than the other GOOs to match its scale.
+                    case FungalThrall => DrawRect("fbe-fungal-thrall", None, x - 35, y - 75, 70, 85)
+                    case Byagoona     => DrawRect("fbe-byagoona", None, x - 70, y - 150, 140, 156)
 
                     // Xyrious Storm (XSS): placeholder sprites (no art yet).
                     // Amphibian Crawler = Gnorri, Twister = Shantak, Eye of the Storm = Star Vampire, Petrichor = Cthulhu-sized.
