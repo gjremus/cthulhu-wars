@@ -603,7 +603,6 @@ object TTExpansion extends Expansion {
 
         // SURPRISE! (Leng) — cost 2, enemy eliminates Acolyte, replaced by Proto-Shoggoth
         case TTSurpriseMainAction(self) =>
-            self.power -= 2
             val enemies = game.factions.but(self).%(e => e.allInPlay.%(_.uclass == Acolyte).any)
             Force(TTSurpriseChooseFactionAction(self, enemies))
 
@@ -611,6 +610,11 @@ object TTExpansion extends Expansion {
             Ask(self).each(enemies)(e => TTSurpriseTargetFactionAction(self, e)).cancel
 
         case TTSurpriseTargetFactionAction(self, target) =>
+            // Deducting here (not in TTSurpriseMainAction) because this Ask-driven step is
+            // the one that reliably fires on every real invocation of this main action —
+            // TTSurpriseMainAction itself was found to be skipped by the live main-action
+            // menu dispatcher, which was silently letting Surprise! run for free.
+            self.power -= 2
             Force(TTSurpriseEliminateAcolyteAction(self, target))
 
         case TTSurpriseEliminateAcolyteAction(self, target) =>
@@ -626,7 +630,7 @@ object TTExpansion extends Expansion {
             game.eliminate(u)
             if (self.pool(ProtoShoggoth).any)
                 self.place(ProtoShoggoth, r)
-            self.log(SurpriseSB.styled(TT), ": eliminated", Acolyte.styled(target), "in", r, ", placed", ProtoShoggoth.styled(TT))
+            self.log(SurpriseSB.styled(TT), ": spent", 2.power, ", eliminated", Acolyte.styled(target), "in", r, ", placed", ProtoShoggoth.styled(TT))
             EndAction(self)
 
         // IDOLATRY (Tsang) — cost 1: select faction-glyph area, move any or all TT units from adjacent areas
