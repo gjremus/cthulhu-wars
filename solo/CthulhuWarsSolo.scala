@@ -1116,9 +1116,8 @@ object CthulhuWarsSolo {
                         case BB => DrawRect("bb-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Defilers Court (DC): acolyte unit sprite
                         case DC => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                        // Faceless Blight (FBE): DC acolyte sprite baked FBE-green with its
-                        // light edge preserved (mossy, matches the rest of FBE), NO tint.
-                        case FBE => DrawRect("fbe-acolyte", None, x - 17, y - 54, 39, 60)
+                        // Faceless Blight (FBE): DC acolyte sprite tinted FBE-green (original look).
+                        case FBE => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
