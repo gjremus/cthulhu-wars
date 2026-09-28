@@ -3540,12 +3540,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             val es = f.goos.factionGOOs.num + f.can(Consecration).??($(0, 1, 1, 1, 2)(cathedrals.num))
 
-            // TT Sycophancy: when an ENEMY performs a ritual, pause before doom resolves and prompt the ritualer
-            if (factions.has(TT) && f != TT && TT.has(Sycophancy)) {
-                return Force(TTSycophancyPromptAction(f, doom, es))
-            }
-
-            Force(TTSycophancyResumeRitualAction(f, doom, es))
+            // Sycophancy: when an ENEMY performs a ritual, pause before doom resolves and let
+            // every faction that holds Sycophancy (TT natively, SL via Ancient Sorcery) react.
+            // power already deducted above; doom/es not yet applied — pass them to the chain.
+            val sycophants = factions.but(f).%(_.has(Sycophancy))
+            if (sycophants.any)
+                Force(TTSycophancyChainAction(sycophants, f, doom, SycRitualResume(es)))
+            else
+                Force(TTSycophancyResumeRitualAction(f, doom, es))
 
         // TT Sycophancy resume point — shared by normal ritual and Sycophancy-adjusted doom values
         case TTSycophancyResumeRitualAction(f, doom, es) =>
@@ -3627,26 +3629,33 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // unchanged from prior behaviour.
             val cost = self.can(Herald).?(5).|(ritualCost)
             self.power -= cost
-            val enemyGate  = factions.but(self).exists(_.gates.has(r))
-            val enemyGOO   = factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any)
-            val esBonus    = enemyGate.??(1) + enemyGOO.??(2)
-            val doom       = 4
 
-            // TT Sycophancy: Requires Attention is a Ritual of Annihilation and should trigger Sycophancy
-            if (factions.has(TT) && self != TT && TT.has(Sycophancy)) {
-                bbRequiresAttentionPendingRegion = Some(r)
-                return Force(TTSycophancyPromptAction(self, doom, esBonus))
-            }
+            val enemyGate = factions.but(self).exists(_.gates.has(r))
+            val enemyGOO  = factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any)
+            val esBonus   = enemyGate.??(1) + enemyGOO.??(2)
 
-            Force(BBRequiresAttentionResumeAction(self, doom, esBonus, r))
+            // Requires Attention is a Ritual of Annihilation, so — exactly like the standard
+            // RitualAction intercept — let every Sycophancy holder (TT natively, SL via Ancient
+            // Sorcery) react before doom resolves, then finish in RequiresAttentionResumeAction
+            // with the (possibly reduced) doom. Without this, RA bypassed Sycophancy entirely.
+            val sycophants = factions.but(self).%(_.has(Sycophancy))
+            if (sycophants.any)
+                Force(TTSycophancyChainAction(sycophants, self, 4, SycRequiresAttentionResume(r, esBonus)))
+            else
+                Force(RequiresAttentionResumeAction(self, r, 4, esBonus))
 
-        case BBRequiresAttentionResumeAction(self, doom, esBonus, r) =>
+        case RequiresAttentionResumeAction(self, r, doom, esBonus) =>
+            // Recompute the descriptive gate/GOO flags for the log line (esBonus already fixed
+            // at target time; nothing between then and now changes the units at r).
+            val enemyGate = factions.but(self).exists(_.gates.has(r))
+            val enemyGOO  = factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any)
+
             self.doom += doom
 
             log(CthulhuWarsSolo.DottedLine)
-            self.log(RequiresAttention.styled(BB) + ": ritual in", r, "— paid", self.can(Herald).?(5).|(ritualCost).power, "— gained", doom.doom)
+            self.log("performed Ritual of Annihilation with", RequiresAttention.styled(BB), "in", r, "— gained", doom.doom)
             if (esBonus > 0)
-                self.log(RequiresAttention.styled(BB) + ":", esBonus.es, "bonus (" + factions.but(self).exists(_.gates.has(r)).??("enemy gate") + (factions.but(self).exists(_.gates.has(r)) && factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any)).??(", ") + factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any).??("enemy GOO") + ")")
+                self.log(RequiresAttention.styled(BB) + ":", esBonus.es, "bonus (" + enemyGate.??("enemy gate") + (enemyGate && enemyGOO).??(", ") + enemyGOO.??("enemy GOO") + ")")
             self.takeES(esBonus)
             self.acted = true
             ritualHistory :+= self

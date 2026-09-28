@@ -272,8 +272,12 @@ case class RequiresAttentionTargetAction(self : Faction, r : Region)
     extends BaseFactionAction(RequiresAttention.styled(BB) + ": resolve in", r)
 case class RequiresAttentionSkipAction(self : Faction)
     extends OptionFactionAction(("Skip " + RequiresAttention.name).styled(BB)) with MainQuestion
-case class BBRequiresAttentionResumeAction(self : Faction, doom : Int, esBonus : Int, r : Region)
-    extends ForcedAction
+// Requires Attention resumes here after any Sycophancy reaction; doom is the final (possibly reduced) value.
+case class RequiresAttentionResumeAction(self : Faction, r : Region, doom : Int, esBonus : Int) extends ForcedAction
+// Sycophancy resume descriptor for the Requires Attention path (BB/HB only — the TT build has no Bubastis).
+case class SycRequiresAttentionResume(r : Region, esBonus : Int) extends SycophancyResume {
+    def resume(ritualer : Faction, doom : Int) : ForcedAction = RequiresAttentionResumeAction(ritualer, r, doom, esBonus)
+}
 
 // ── SPELLBOOK REQUIREMENTS (Task 3.12.1) ─────────────────────────────────────
 // Audit V11: handler mutates Power and ends terminally — must be HARD, not Soft.
