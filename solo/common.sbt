@@ -1,6 +1,6 @@
 name := "Cthulhu Wars Solo HRF"
 
-version := "tcho-tcho-v2.5.65"
+version := "tcho-tcho-v2.5.66"
 
 scalaVersion := "2.13.16"
 
