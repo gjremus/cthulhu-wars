@@ -475,6 +475,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
     var eliminated : $[UnitFigure] = $
     var eliminatedByDice : $[UnitFigure] = $
+    // TT Fulmination: total combat kills (both sides) captured at EliminatePhase, before the
+    // eliminate loop clears killed units from forces. Read at PostBattlePhase (too late to
+    // recount there — forces are already empty, which awarded 0 ES for a 7-kill battle).
+    var ttFulminationKillCount : Int = 0
 
     def eliminate(u : UnitFigure) {
         exempt(u)
@@ -2142,6 +2146,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         game.tiFuryTransferTo = |(enemy)
                 }
 
+                // TT Fulmination: count total combat kills on both sides NOW, before the eliminate
+                // loop below clears them from forces. Entered exactly once per battle (jump at
+                // QuachilDustToDustPhase), so this captures the final kill count exactly once.
+                ttFulminationKillCount = sides./~(_.forces).count(_.health == Killed)
                 sides.foreach { s =>
                     s.forces.%(_.health == Killed).foreach(eliminate)
                 }
@@ -2709,7 +2717,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Fire here (after all kills/pains assigned) so totalKills is the final count
                 if (TTExpansion.ttFulminationPending) {
                     TTExpansion.ttFulminationPending = false
-                    val totalKills = sides./~(_.forces).count(_.health == Killed)
+                    val totalKills = ttFulminationKillCount
                     return DelayedContinue(50, Ask(TT)
                         .add(TTFulminationTakeAction(TT, totalKills))
                         .add(TTFulminationDeclineAction(TT)))
