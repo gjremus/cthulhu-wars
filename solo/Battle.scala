@@ -351,6 +351,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     var eliminated : $[UnitFigure] = $
+    // TT Fulmination: total combat kills (both sides) captured at EliminatePhase, before the
+    // eliminate loop clears killed units from forces. Read at the Fulmination fire site (too late
+    // to recount there — forces are already empty, which awarded 0 ES for a 7-kill battle).
+    var ttFulminationKillCount : Int = 0
 
     // Dhole: track sides that already triggered Planetary Destruction (prevents re-trigger on proceed / eliminated-path re-entry)
     var dholePlanetaryProcessed : $[Faction] = $
@@ -1542,6 +1546,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
                 checkDaolothSpellbook()
 
+                // TT Fulmination: count total combat kills on both sides NOW, before the eliminate
+                // loop below clears them from forces. EliminatePhase is entered exactly once per battle.
+                ttFulminationKillCount = sides./~(_.forces).count(_.health == Killed)
+
                 sides.foreach { s =>
                     s.forces.%(_.health == Killed).foreach(eliminate)
                 }
@@ -1864,7 +1872,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // Fire here (after all kills/pains assigned) so totalKills is the final count
                 if (TTExpansion.ttFulminationPending) {
                     TTExpansion.ttFulminationPending = false
-                    val totalKills = sides./~(_.forces).count(_.health == Killed)
+                    val totalKills = ttFulminationKillCount
                     return DelayedContinue(50, Ask(TT)
                         .add(TTFulminationTakeAction(TT, totalKills))
                         .add(TTFulminationDeclineAction(TT)))
