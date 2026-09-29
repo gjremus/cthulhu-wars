@@ -305,6 +305,13 @@ object SLExpansion extends Expansion {
             if (f.can(Writhe) && f.power >= 2)
                 + FBWritheMainAction(f)
 
+            // Thousand Writhing Maws borrowed via Ancient Sorcery (TB ability). Same
+            // working shape as Hibernate (WW)/Psychosis (DS)/Writhe (FB) above: must be
+            // offered here in SL's own MainAction menu since FactionTB's mirror handler
+            // builds a LOCAL Asking that internalPerform's expansions loop discards.
+            if (f.can(ThousandWrithingMaws) && f.power >= 2 && TBExpansion.tbMawsEligibleTypes(f).any)
+                + TBWrithingMawsMainAction(f)
+
             if (game.options.has(SleeperEasierSBR)) {
                 if (f.needs(Pay3SomeoneGains3) && f.power == 1)
                     + PayLastPowerAction(f)

@@ -160,16 +160,16 @@ case class TBSetupPlaceTentacleInAction(self : Faction, r : Region, remaining : 
 
 // -- THOUSAND WRITHING MAWS: 2-Power double recruit/summon (§1.5.1 / §3.6.3 / §4.3) --
 case class TBWrithingMawsMainAction(self : Faction)
-    extends OptionFactionAction(ThousandWrithingMaws.styled(TB) + ": recruit/summon two upto 2-cost units of same type (" + 2.power + ")") with MainQuestion with Soft
+    extends OptionFactionAction(ThousandWrithingMaws.styled(self) + ": recruit/summon two upto 2-cost units of same type (" + 2.power + ")") with MainQuestion with Soft
 case class TBWrithingMawsTypeAction(self : Faction, uc : UnitClass)
-    extends BaseFactionAction(ThousandWrithingMaws.styled(TB) + ": two", uc.styled(TB)) with Soft
+    extends BaseFactionAction(ThousandWrithingMaws.styled(self) + ": two", uc.styled(self)) with Soft
 case class TBWrithingMawsPlaceFirstAction(self : Faction, uc : UnitClass)
     extends ForcedAction with Soft {
-    override def question(implicit game : Game) = ThousandWrithingMaws.styled(TB) + ": place first " + uc.styled(TB)
+    override def question(implicit game : Game) = ThousandWrithingMaws.styled(self) + ": place first " + uc.styled(self)
 }
 case class TBWrithingMawsPlaceSecondAction(self : Faction, uc : UnitClass, r1 : Region)
     extends ForcedAction with Soft {
-    override def question(implicit game : Game) = ThousandWrithingMaws.styled(TB) + ": place second " + uc.styled(TB)
+    override def question(implicit game : Game) = ThousandWrithingMaws.styled(self) + ": place second " + uc.styled(self)
 }
 case class TBWrithingMawsAction(self : Faction, uc : UnitClass, r1 : Region, r2 : Region)
     extends ForcedAction
@@ -657,20 +657,20 @@ object TBExpansion extends Expansion {
                 (game.board.regions ++ game.tbMantleInPlay.??($(TB.mantle))).%(r => self.at(r).any || self.gates.has(r)).%!(_.is[MoonHold])
             else
                 self.gates
-            Ask(self).each(areas)(r => TBWrithingMawsPlaceSecondAction(self, uc, r).as(r)(ThousandWrithingMaws.styled(TB), ": place first", uc.styled(TB), "in")).cancel
+            Ask(self).each(areas)(r => TBWrithingMawsPlaceSecondAction(self, uc, r).as(r)(ThousandWrithingMaws.styled(self), ": place first", uc.styled(self), "in")).cancel
 
         case TBWrithingMawsPlaceSecondAction(self, uc, r1) =>
             val areas = if (uc.utype == Cultist)
                 (game.board.regions ++ game.tbMantleInPlay.??($(TB.mantle))).%(r => self.at(r).any || self.gates.has(r)).%!(_.is[MoonHold])
             else
                 self.gates
-            Ask(self).each(areas)(r => TBWrithingMawsAction(self, uc, r1, r).as(r)(ThousandWrithingMaws.styled(TB), ": place second", uc.styled(TB), "in")).cancel
+            Ask(self).each(areas)(r => TBWrithingMawsAction(self, uc, r1, r).as(r)(ThousandWrithingMaws.styled(self), ": place second", uc.styled(self), "in")).cancel
 
         case TBWrithingMawsAction(self, uc, r1, r2) =>
             self.power -= 2
             self.place(uc, r1)
             self.place(uc, r2)
-            self.log(ThousandWrithingMaws.styled(TB) + ": placed two", uc.styled(TB), "in", r1, "and", r2)
+            self.log(ThousandWrithingMaws.styled(self) + ": placed two", uc.styled(self), "in", r1, "and", r2)
             // Check Behemoth: if Power hit 0
             tbCheckBehemoth(EndAction(self))
 
