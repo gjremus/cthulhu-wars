@@ -167,6 +167,20 @@ object CthulhuWarsSolo {
         result.canvas
     }
 
+    // Solid-white silhouette of a sprite, masked to its own alpha. Used to stamp a
+    // thin CRISP white keyline around a unit (FBE units, DrawRect outline = true):
+    // draw this at a small ring of offsets behind the real sprite. Unlike shadowBlur
+    // (a soft glow) this is a hard edge, matching the baked keyline other units have.
+    def getWhiteSilhouette(k : String) : html.Canvas = {
+        val source = dom.document.getElementById(k).asInstanceOf[html.Image]
+        val result = new Bitmap(source.width, source.height)
+        result.context.fillStyle = "#ffffff"
+        result.context.fillRect(0, 0, source.width, source.height)
+        result.context.globalCompositeOperation = "destination-in"
+        result.context.drawImage(source, 0, 0)
+        result.canvas
+    }
+
     def newDiv(cl : String, content : String, click : () => Unit = null) = {
         val p = dom.document.createElement("div").asInstanceOf[html.Div]
         p.className = cl
@@ -1028,7 +1042,7 @@ object CthulhuWarsSolo {
                 }
             }
 
-            case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0, splitTint : |[Processing] = None, cropBottomFrac : Double = 0.0)
+            case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0, splitTint : |[Processing] = None, cropBottomFrac : Double = 0.0, outline : Boolean = false)
 
             case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int, parasiteOrig : |[Faction] = None, cropBottomFrac : Double = 0.0) {
                 val defaultProcessing = Processing(None, None, None)
@@ -1116,10 +1130,10 @@ object CthulhuWarsSolo {
                         case BB => DrawRect("bb-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Defilers Court (DC): acolyte unit sprite
                         case DC => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                        // Faceless Blight (FBE): dedicated pre-colored acolyte with a BAKED white
-                        // edge (see art/bake-unit-border.py) — matched to the Cultist green and
-                        // drawn tint None, exactly like every other baked unit sprite.
-                        case FBE => DrawRect("fbe-acolyte", None, x - 17, y - 54, 39, 60)
+                        // Faceless Blight (FBE): DC acolyte sprite tinted FBE-green (the correct
+                        // Cultist colour comes from the #3d5f1c multiply — do NOT recolor the art),
+                        // plus a thin crisp white keyline (outline=true) so it reads like every unit.
+                        case FBE => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60, outline = true)
                         // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
@@ -1461,11 +1475,11 @@ object CthulhuWarsSolo {
                     case TheLibrarian => DrawRect("librarian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 47, y - 146, 94, 146)
 
                     // Faceless Blight (FBE): Fungal Thrall and Byagoona use their real sculpt art,
-                    // recolored to the Cultist green (detail preserved) with a BAKED white edge in a
-                    // transparent margin — see art/bake-unit-border.py. Drawn tint None, exactly like
-                    // every other baked unit sprite (cs-luminous-globule, cs-tulzscha, ...).
-                    case FungalThrall => DrawRect("fbe-fungal-thrall", None, x - 35, y - 75, 70, 85)
-                    case Byagoona     => DrawRect("fbe-byagoona", None, x - 70, y - 150, 140, 156)
+                    // stored light/desaturated so the SAME FBE-green #3d5f1c multiply tint produces
+                    // the correct Cultist-matched green (do NOT recolor the art). A thin crisp white
+                    // keyline (outline=true) gives them the same edge as every other unit.
+                    case FungalThrall => DrawRect("fbe-fungal-thrall", |(tint), x - 35, y - 75, 70, 85, outline = true)
+                    case Byagoona     => DrawRect("fbe-byagoona", |(tint), x - 70, y - 150, 140, 156, outline = true)
 
                     // Xyrious Storm (XSS): placeholder sprites (no art yet).
                     // Amphibian Crawler = Gnorri, Twister = Shantak, Eye of the Storm = Star Vampire, Petrichor = Cthulhu-sized.
@@ -2649,8 +2663,19 @@ object CthulhuWarsSolo {
                         g.clip()
                         g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
                         g.restore()
-                    } else
+                    } else {
+                        if (d.outline) {
+                            // Thin CRISP white keyline (FBE units): stamp a hard white silhouette at
+                            // a small ring of offsets behind the tinted sprite. ~2px on screen for
+                            // every unit regardless of box size — the same edge every other unit has,
+                            // NOT the soft shadowBlur glow used by the custodian/librarian icons.
+                            val sil = getWhiteSilhouette(d.key)
+                            val r = 1
+                            for ((ox, oy) <- $((r, 0), (-r, 0), (0, r), (0, -r), (r, r), (r, -r), (-r, r), (-r, -r)))
+                                g.drawImage(sil, d.x + ox, d.y + oy, d.width, d.height)
+                        }
                         g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
+                    }
                     if (needsOutline) {
                         g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
                         g.drawImage(d.tint./(t => getTintedAsset(d.key, t)).|(getAsset(d.key)), d.x, d.y, d.width, d.height)
