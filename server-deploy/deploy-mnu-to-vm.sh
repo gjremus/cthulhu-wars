@@ -23,7 +23,10 @@ set -euo pipefail
 
 MNU_ROOT="/Users/gremus/cthulhu-wars More Neutral Units"
 SSH_KEY="/Users/gremus/My Drive/Personal/Games/Cthulhu Wars/Library at Celaeno/Server Deployment/oracle_cw_ed25519"
-HOST="oracle-cw-server@35.255.125.91"
+# VM IP changes across restarts (GCP free tier); use the DNS hostname so SSH tracks
+# whatever IP Dynu currently points cwo.freeddns.org at (was 35.255.125.91, then
+# 34.27.40.209 — stop chasing IPs).
+HOST="oracle-cw-server@cwo.freeddns.org"
 REMOTE_ROOT="/opt/cwo/mnu"
 
 DO_BUILD=false
