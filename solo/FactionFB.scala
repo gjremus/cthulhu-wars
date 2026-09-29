@@ -90,19 +90,21 @@ case object FB extends Faction { f =>
 
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
         if (units.none) return 0
-        // Bug fix Round 4: Revenant combat = (number of Desiccated on map) per Revenant.
-        // Previously this used `f.onMap(Desiccated).num`, which includes Zeroed units (units
-        // that have been eliminated mid-battle but not yet removed). Mirroring the TS Glaaki
-        // pattern (`f.onMap(DeepTendril).not(Zeroed).num`), we exclude Zeroed Desiccated so
-        // a Desiccated killed earlier in the same battle no longer contributes to Revenant combat.
-        val desiccatedInPlay = f.onMap(Desiccated).not(Zeroed).num
+        // CHANGED 2026-09-29 (owner request): Revenant of K'Naa combat is now a FLAT 3,
+        // no longer scaling with the number of Desiccated in play. Original calc preserved below.
+        // // Bug fix Round 4: Revenant combat = (number of Desiccated on map) per Revenant.
+        // // Previously this used `f.onMap(Desiccated).num`, which includes Zeroed units (units
+        // // that have been eliminated mid-battle but not yet removed). Mirroring the TS Glaaki
+        // // pattern (`f.onMap(DeepTendril).not(Zeroed).num`), we exclude Zeroed Desiccated so
+        // // a Desiccated killed earlier in the same battle no longer contributes to Revenant combat.
+        // val desiccatedInPlay = f.onMap(Desiccated).not(Zeroed).num
         val arena = game.battle./(_.arena)
         val onLand = arena./(_.glyph != Ocean).|(units.head.region.glyph != Ocean)
 
         val ghatoCombat = game.battle.any.?(game.fbPowerAtBattleStart).|(f.power)
 
         units(Desiccated).not(Zeroed).num * (onLand.?(1).|(0)) +
-        units(RevenantOfKnaa).not(Zeroed).num * desiccatedInPlay +
+        units(RevenantOfKnaa).not(Zeroed).num * 3 +   // CHANGED 2026-09-29: flat 3 (was * desiccatedInPlay)
         units(Ghatanothoa).not(Zeroed).num * ghatoCombat +
         neutralStrength(units, opponent)
     }
@@ -529,8 +531,11 @@ object FBExpansion extends Expansion {
     // True when FB has anything currently face-up that can be spent on Infernal Pact:
     // its own faction spellbooks, an iGOO neutral spellbook it controls, or a library
     // tome it holds.
+    // CHANGED 2026-09-29 (owner request): Infernal Pact may only flip FB's own FACTION
+    // spellbooks. iGOO neutral spellbooks and FB-held library tomes are no longer eligible.
+    // Original: faceUpSpellbooks.any || faceUpIGOOSpellbooks.any || faceUpFBTomes.any
     def hasAnyIPEligibleFaceUp(implicit game : Game) : Boolean =
-        faceUpSpellbooks.any || faceUpIGOOSpellbooks.any || faceUpFBTomes.any
+        faceUpSpellbooks.any
 
     // v4 (2026-05-12): FB-held library tomes currently face-down. Per designer Q2,
     // these count toward FBTwoFacedownSpellbooks SBR. Includes tomes flipped either
@@ -1266,20 +1271,25 @@ object FBExpansion extends Expansion {
 
         // ── INFERNAL PACT ──
         case FBInfernalPactMainAction(self) =>
-            // Round 8 Bug 40: offer both faction spellbooks and IGOO spellbooks for flipping
-            val available : $[Spellbook] = faceUpSpellbooks ++ faceUpIGOOSpellbooks
-            // v4 (2026-05-12): also offer FB-held face-up library tomes for IP flipping
-            val faceUpTomes : $[LibraryTome] = $(TomeBarrier, TomeGuardian, TomeLarvae, TomeYr)
-                .%(t => game.tomeHolders.get(t).flatten.has(FB))
-                .%(t => game.tomeFaceUp.getOrElse(t, true))
-            if (available.any || faceUpTomes.any) {
+            // CHANGED 2026-09-29 (owner request): Infernal Pact only offers FB's own FACTION
+            // spellbooks. iGOO neutral spellbooks and FB-held library tomes are no longer offered.
+            // Handlers (FBInfernalPactChooseTomeAction) are retained for replay of older games.
+            // // Round 8 Bug 40: offer both faction spellbooks and IGOO spellbooks for flipping
+            // val available : $[Spellbook] = faceUpSpellbooks ++ faceUpIGOOSpellbooks
+            // // v4 (2026-05-12): also offer FB-held face-up library tomes for IP flipping
+            // val faceUpTomes : $[LibraryTome] = $(TomeBarrier, TomeGuardian, TomeLarvae, TomeYr)
+            //     .%(t => game.tomeHolders.get(t).flatten.has(FB))
+            //     .%(t => game.tomeFaceUp.getOrElse(t, true))
+            val available : $[Spellbook] = faceUpSpellbooks
+            if (available.any) {
                 implicit val asking = Asking(self)
                 available.foreach { sb =>
                     + FBInfernalPactChooseAction(self, sb)
                 }
-                faceUpTomes.foreach { t =>
-                    + FBInfernalPactChooseTomeAction(self, t)
-                }
+                // CHANGED 2026-09-29: tome flipping disabled (non-faction spellbook)
+                // faceUpTomes.foreach { t =>
+                //     + FBInfernalPactChooseTomeAction(self, t)
+                // }
                 + FBInfernalPactDoneAction(self)
                 + FBInfernalPactCancelAction(self)
                 asking
@@ -1396,18 +1406,22 @@ object FBExpansion extends Expansion {
         // update game.fbInfernalPact* vars) are identical so the existing end-of-turn cleanup
         // in EndTurnAction works for both phases without modification.
         case FBInfernalPactDoomMainAction(self) =>
-            // Round 8 Bug 40: offer both faction spellbooks and IGOO spellbooks for flipping.
-            // 2026-05-21: also offer FB-held face-up library tomes.
-            val available : $[Spellbook] = faceUpSpellbooks ++ faceUpIGOOSpellbooks
-            val tomes = faceUpFBTomes
-            if (available.any || tomes.any) {
+            // CHANGED 2026-09-29 (owner request): Infernal Pact only offers FB's own FACTION
+            // spellbooks. iGOO neutral spellbooks and FB-held library tomes are no longer offered.
+            // // Round 8 Bug 40: offer both faction spellbooks and IGOO spellbooks for flipping.
+            // // 2026-05-21: also offer FB-held face-up library tomes.
+            // val available : $[Spellbook] = faceUpSpellbooks ++ faceUpIGOOSpellbooks
+            // val tomes = faceUpFBTomes
+            val available : $[Spellbook] = faceUpSpellbooks
+            if (available.any) {
                 implicit val asking = Asking(self)
                 available.foreach { sb =>
                     + FBInfernalPactDoomChooseAction(self, sb)
                 }
-                tomes.foreach { t =>
-                    + FBInfernalPactChooseTomeAction(self, t)
-                }
+                // CHANGED 2026-09-29: tome flipping disabled (non-faction spellbook)
+                // tomes.foreach { t =>
+                //     + FBInfernalPactChooseTomeAction(self, t)
+                // }
                 + FBInfernalPactDoomDoneAction(self)
                 + FBInfernalPactDoomCancelAction(self)
                 asking
