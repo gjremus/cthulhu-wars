@@ -47,7 +47,9 @@ class Setup(factions : $[Faction], diff : Difficulty) {
         case 3 => MapEarth33
         case 4 => MapEarth35
         case 5 => MapEarth55
-    })
+    }) ++ $(NeutralMonsters, NeutralTerrors) ++
+    $(UseDimensionalShamblers, UseElderThing, UseGhast, UseAlbinoPenguins, UseGnorri, UseGug, UseInsectsFromShaggai, UseLengSpider, UseMoonbeast, UseSatyr, UseServitor, UseShantak, UseStarVampire, UseVoonith) ++
+    $(UseBrownJenkin, UseDhole, UseElderShoggoth, UseGreatRaceOfYith, UseHoundOfTindalos, UseQuachilUttaus, UseShadowPharaoh)
 
     def toggle(go : GameOption) {
         options = if (options.has(go))
@@ -4044,7 +4046,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     $("Gameplay" -> ("Async Options (" + setup.get(AsyncActions).?("yes").|("no").hl + ")")) ++
                     $("Variants" -> ("High Priests (" + setup.get(HighPriests).?("yes").|("no").hl + ")")) ++
                     $("Variants" -> ("Neutral".styled("neutral") + " spellbooks (" + setup.get(NeutralSpellbooks).?("yes").|("no").hl + ")")) ++
-                    $("Variants" -> ("Neutral".styled("neutral") + " monsters (" + setup.get(NeutralMonsters).?("yes").|("no").hl + ")")) ++
                     // Monsters (alphabetical)
                     useWith(setup, DimensionalShamblerCard, UseDimensionalShamblers, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, ElderThingCard, UseElderThing, setup.options.has(NeutralMonsters)) ++
@@ -4061,7 +4062,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, StarVampireCard, UseStarVampire, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, VoonithCard, UseVoonith, setup.options.has(NeutralMonsters)) ++
                     // Terrors (alphabetical)
-                    $("Variants" -> ("Neutral".styled("neutral") + " terrors (" + setup.get(NeutralTerrors).?("yes").|("no").hl + ")")) ++
                     useWith(setup, BrownJenkinCard, UseBrownJenkin, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, DholeCard, UseDhole, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, ElderShoggothCard, UseElderShoggoth, setup.options.has(NeutralTerrors)) ++
@@ -4136,18 +4136,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             setup.toggle(NeutralSpellbooks)
                             setupQuestions()
                         }
-                        n -= 1
-                        if (n == 0) {
-                            setup.toggle(NeutralMonsters)
-
-                            if (setup.options.has(NeutralMonsters))
-                                setup.options ++= $(UseDimensionalShamblers, UseElderThing, UseGhast, UseAlbinoPenguins, UseGnorri, UseGug, UseInsectsFromShaggai, UseLengSpider, UseMoonbeast, UseSatyr, UseServitor, UseShantak, UseStarVampire, UseVoonith)
-                            else
-                                setup.options = setup.options.notOf[NeutralMonsterOption]
-
-                            setupQuestions()
-                        }
-                        if (setup.options.has(NeutralMonsters)) {
+                        // Neutral monsters are always enabled in MNU build
+                        {
                             // Monsters (alphabetical): DimensionalShambler, ElderThing, Ghast, AlbinoPenguins, Gnorri, Gug, InsectsFromShaggai, LengSpider, Moonbeast, Satyr, Servitor, Shantak, StarVampire, Voonith
                             n -= 1; if (n == 0) { setup.toggle(UseDimensionalShamblers); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseElderThing); setupQuestions() }
@@ -4164,16 +4154,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1; if (n == 0) { setup.toggle(UseStarVampire); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseVoonith); setupQuestions() }
                         }
-                        n -= 1
-                        if (n == 0) {
-                            setup.toggle(NeutralTerrors)
-                            if (setup.options.has(NeutralTerrors))
-                                setup.options ++= $(UseBrownJenkin, UseDhole, UseElderShoggoth, UseGreatRaceOfYith, UseHoundOfTindalos, UseQuachilUttaus, UseShadowPharaoh)
-                            else
-                                setup.options = setup.options.notOf[NeutralTerrorOption]
-                            setupQuestions()
-                        }
-                        if (setup.options.has(NeutralTerrors)) {
+                        // Neutral terrors are always enabled in MNU build
+                        {
                             // Terrors (alphabetical): BrownJenkin, Dhole, ElderShoggoth, GreatRaceOfYith, HoundOfTindalos, QuachilUttaus, ShadowPharaoh
                             n -= 1; if (n == 0) { setup.toggle(UseBrownJenkin); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseDhole); setupQuestions() }
@@ -4355,7 +4337,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     $("Gameplay" -> ("Async Options (" + setup.get(AsyncActions).?("yes").|("no").hl + ")")) ++
                     $("Variants" -> ("High Priests (" + setup.get(HighPriests).?("yes").|("no").hl + ")")) ++
                     $("Variants" -> ("Neutral".styled("neutral") + " spellbooks (" + setup.get(NeutralSpellbooks).?("yes").|("no").hl + ")")) ++
-                    $("Variants" -> ("Neutral".styled("neutral") + " monsters (" + setup.get(NeutralMonsters).?("yes").|("no").hl + ")")) ++
                     // Monsters (alphabetical)
                     useWith(setup, DimensionalShamblerCard, UseDimensionalShamblers, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, ElderThingCard, UseElderThing, setup.options.has(NeutralMonsters)) ++
@@ -4372,7 +4353,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, StarVampireCard, UseStarVampire, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, VoonithCard, UseVoonith, setup.options.has(NeutralMonsters)) ++
                     // Terrors (alphabetical)
-                    $("Variants" -> ("Neutral".styled("neutral") + " terrors (" + setup.get(NeutralTerrors).?("yes").|("no").hl + ")")) ++
                     useWith(setup, BrownJenkinCard, UseBrownJenkin, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, DholeCard, UseDhole, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, ElderShoggothCard, UseElderShoggoth, setup.options.has(NeutralTerrors)) ++
@@ -4450,18 +4430,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             setup.toggle(NeutralSpellbooks)
                             setupQuestions()
                         }
-                        n -= 1
-                        if (n == 0) {
-                            setup.toggle(NeutralMonsters)
-
-                            if (setup.options.has(NeutralMonsters))
-                                setup.options ++= $(UseDimensionalShamblers, UseElderThing, UseGhast, UseAlbinoPenguins, UseGnorri, UseGug, UseInsectsFromShaggai, UseLengSpider, UseMoonbeast, UseSatyr, UseServitor, UseShantak, UseStarVampire, UseVoonith)
-                            else
-                                setup.options = setup.options.notOf[NeutralMonsterOption]
-
-                            setupQuestions()
-                        }
-                        if (setup.options.has(NeutralMonsters)) {
+                        // Neutral monsters are always enabled in MNU build
+                        {
                             // Monsters (alphabetical): DimensionalShambler, ElderThing, Ghast, AlbinoPenguins, Gnorri, Gug, InsectsFromShaggai, LengSpider, Moonbeast, Satyr, Servitor, Shantak, StarVampire, Voonith
                             n -= 1; if (n == 0) { setup.toggle(UseDimensionalShamblers); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseElderThing); setupQuestions() }
@@ -4478,16 +4448,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1; if (n == 0) { setup.toggle(UseStarVampire); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseVoonith); setupQuestions() }
                         }
-                        n -= 1
-                        if (n == 0) {
-                            setup.toggle(NeutralTerrors)
-                            if (setup.options.has(NeutralTerrors))
-                                setup.options ++= $(UseBrownJenkin, UseDhole, UseElderShoggoth, UseGreatRaceOfYith, UseHoundOfTindalos, UseQuachilUttaus, UseShadowPharaoh)
-                            else
-                                setup.options = setup.options.notOf[NeutralTerrorOption]
-                            setupQuestions()
-                        }
-                        if (setup.options.has(NeutralTerrors)) {
+                        // Neutral terrors are always enabled in MNU build
+                        {
                             // Terrors (alphabetical): BrownJenkin, Dhole, ElderShoggoth, GreatRaceOfYith, HoundOfTindalos, QuachilUttaus, ShadowPharaoh
                             n -= 1; if (n == 0) { setup.toggle(UseBrownJenkin); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseDhole); setupQuestions() }
