@@ -1380,7 +1380,7 @@ case class Bot3(faction : Faction) {
                         val u = game.unit(uRef)
                         val uc = u.uclass
                         val utype = uc.utype
-                        val isGOO = utype == GOO
+                        val isGOO = uc.isGOO
                         val isCultist = utype == Cultist
                         val isFactionUnit = uc.isInstanceOf[FactionUnitClass]
                         val isNeutral = !isFactionUnit && (utype == Monster || utype == Terror)
@@ -1402,7 +1402,7 @@ case class Bot3(faction : Faction) {
                         val u = game.unit(uRef)
                         val uc = u.uclass
                         val utype = uc.utype
-                        val isGOO = utype == GOO
+                        val isGOO = uc.isGOO
                         val isCultist = utype == Cultist
                         val isFactionUnit = uc.isInstanceOf[FactionUnitClass]
                         val isNeutral = !isFactionUnit && (utype == Monster || utype == Terror)

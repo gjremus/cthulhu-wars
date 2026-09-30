@@ -49,7 +49,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
     val leaderGooRegion : |[Region] = leaderFaction.flatMap { lf =>
         if (!enemiesInFinale.contains(lf)) None
         else {
-            val gooRegions = lf.allInPlay.%(u => u.uclass.utype == GOO && u.region.onMap)./(_.region).distinct
+            val gooRegions = lf.allInPlay.%(u => u.uclass.isGOO && u.region.onMap)./(_.region).distinct
             gooRegions.headOption
         }
     }
@@ -71,11 +71,11 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
     val fbProjDoom : Int = projDoom(self)
     val projThreatFaction : |[Faction] = {
         val threats = others.%(f => projDoom(f) >= 15 && projDoom(f) >= fbProjDoom + 2 &&
-            f.allInPlay.%(u => u.uclass.utype == GOO && u.region.onMap).any)
+            f.allInPlay.%(u => u.uclass.isGOO && u.region.onMap).any)
         if (threats.any) Some(threats.maxBy(projDoom(_))) else None
     }
     val huntTargetGooRegion : |[Region] = projThreatFaction.flatMap { tf =>
-        val onMapGoos = tf.allInPlay.%(u => u.uclass.utype == GOO && u.region.onMap)
+        val onMapGoos = tf.allInPlay.%(u => u.uclass.isGOO && u.region.onMap)
         if (onMapGoos.none) None
         else if (onMapGoos.num == 1) Some(onMapGoos.head.region)
         else {
@@ -357,7 +357,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // the conditions in AttackAction.ghatoVsGooAttack / CaptureAction.
                 val supportNeededAtTop: Boolean = topTarget.exists { r =>
                     val foesAtR = others.flatMap(_.at(r))
-                    val enemyGooAtR = foesAtR.exists(_.uclass.utype == GOO)
+                    val enemyGooAtR = foesAtR.exists(_.uclass.isGOO)
                     val enemyGateAtR = others.exists(_.gates.has(r))
                     val targetF = others.find(_.gates.has(r)).getOrElse(others.headOption.getOrElse(self))
                     val fbAttackTT = self.strength(self.at(r), targetF)
@@ -497,7 +497,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val ghatoOnClaimableGate = laterAP && game.gates.exists(r =>
                     (self.at(r, Ghatanothoa).any || self.at(r, RevenantOfKnaa).any) &&
                     !self.gates.has(r) &&
-                    others./~(_.at(r)).%(_.uclass.utype == GOO).none)
+                    others./~(_.at(r)).%(_.uclass.isGOO).none)
                 (ghatoOnClaimableGate) |=> -12000 -> "BLOCK writhe: Ghato on claimable gate — use CoF/recruit"
                 // Low-power defense writhe: 3 controlled gates, < 3 defended by ghato/rev
                 // Worth doing at 1 power if there's a SB to flip for IP
@@ -519,7 +519,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 defenseWrithe |=> 8700 -> "writhe defense: redistribute CG defenders across gates"
                 // B4: Enemy GOO arrived at Ghato's region → writhe Ghato AWAY to next best gate
                 val ghatoThreatenedByGOO = laterAP && gooOnMap > 0 && writheDice >= 4 &&
-                    self.all(Ghatanothoa).exists(u => others./~(_.at(u.region)).%(_.uclass.utype == GOO).any)
+                    self.all(Ghatanothoa).exists(u => others./~(_.at(u.region)).%(_.uclass.isGOO).any)
                 ghatoThreatenedByGOO |=> 9300 -> "B4: URGENT writhe — enemy GOO at Ghato's region"
                 // Cathedral vacating: Ghato at cathedral with AN combat > 0, and Ghato cost >= 4
                 val ghatoAtDangerousCathedral = laterAP && gooOnMap > 0 && writheDice >= 4 &&
@@ -547,7 +547,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // Does ANY enemy gate match tiers 1-4 (no GOO, combat < 4)?
                 val hasT1to4Target = others.exists(f => f.gates.exists { gr =>
                     val foeUnits = f.at(gr)
-                    val foeGoos = foeUnits.%(_.uclass.utype == GOO)
+                    val foeGoos = foeUnits.%(_.uclass.isGOO)
                     val foeMon = foeUnits.%(_.uclass.utype == Monster).num
                     val foeTer = foeUnits.%(_.uclass.utype == Terror).num
                     val combat = foeMon + foeTer * 4
@@ -556,7 +556,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // Does ANY enemy gate match tier 5 (combat > 3, need 3+ pains)?
                 val hasT5Target = others.exists(f => f.gates.exists { gr =>
                     val foeUnits = f.at(gr)
-                    val foeGoos = foeUnits.%(_.uclass.utype == GOO)
+                    val foeGoos = foeUnits.%(_.uclass.isGOO)
                     val foeMon = foeUnits.%(_.uclass.utype == Monster).num
                     val foeTer = foeUnits.%(_.uclass.utype == Terror).num
                     val combat = foeMon + foeTer * 4
@@ -566,7 +566,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val hasDYGateTarget = others.exists(f => f.gates.exists { gr =>
                     val foeUnits = f.at(gr)
                     val hasDY = foeUnits.%(_.uclass == DarkYoung).any
-                    val foeGoos = foeUnits.%(_.uclass.utype == GOO)
+                    val foeGoos = foeUnits.%(_.uclass.isGOO)
                     foeGoos.none && hasDY
                 })
                 // Keep if: target exists AND enough pains to use it
@@ -618,7 +618,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val postAwakenCapture = gooOnMap > 0 && self.gates.num < 3
                 val hasT1to4Target = others.exists(f => f.gates.exists { gr =>
                     val foeUnits = f.at(gr)
-                    val foeGoos = foeUnits.%(_.uclass.utype == GOO)
+                    val foeGoos = foeUnits.%(_.uclass.isGOO)
                     val foeMon = foeUnits.%(_.uclass.utype == Monster).num
                     val foeTer = foeUnits.%(_.uclass.utype == Terror).num
                     val combat = foeMon + foeTer * 4
@@ -626,7 +626,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 })
                 val hasT5Target = others.exists(f => f.gates.exists { gr =>
                     val foeUnits = f.at(gr)
-                    val foeGoos = foeUnits.%(_.uclass.utype == GOO)
+                    val foeGoos = foeUnits.%(_.uclass.isGOO)
                     val foeMon = foeUnits.%(_.uclass.utype == Monster).num
                     val foeTer = foeUnits.%(_.uclass.utype == Terror).num
                     val combat = foeMon + foeTer * 4
@@ -635,7 +635,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val hasDYGateTarget2 = others.exists(f => f.gates.exists { gr =>
                     val foeUnits = f.at(gr)
                     val hasDY = foeUnits.%(_.uclass == DarkYoung).any
-                    val foeGoos = foeUnits.%(_.uclass.utype == GOO)
+                    val foeGoos = foeUnits.%(_.uclass.isGOO)
                     foeGoos.none && hasDY
                 })
                 val canUseT1to4 = hasT1to4Target && pains >= 1
@@ -1299,20 +1299,20 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 }
                 // AP1: block enemy gates and enemy-occupied regions — use empty land only
                 (firstAP && !sameRegion && r.enemyGate) |=> -10000 -> "AP1: BLOCK enemy gate (5th-6th choice)"
-                val hasEnemyMonstersOrGoos = r.foes.%(f => f.uclass.utype == Monster || f.uclass.utype == Terror || f.uclass.utype == GOO).any
+                val hasEnemyMonstersOrGoos = r.foes.%(f => f.uclass.utype == Monster || f.uclass.utype == Terror || f.uclass.isGOO).any
                 (firstAP && !sameRegion && hasEnemyMonstersOrGoos) |=> -8000 -> "AP1: avoid enemy monsters/GOOs"
                 // AP1 adjacency: penalize regions adjacent to enemy monsters/GOOs
                 if (firstAP && land && r.empty && !sameRegion) {
                     // 1-region buffer checks
                     val adjMonsterOrGoo = r.near.exists(nr => others.exists(f =>
-                        f.at(nr).%(u2 => u2.uclass.utype == Monster || u2.uclass.utype == Terror || u2.uclass.utype == GOO).any))
+                        f.at(nr).%(u2 => u2.uclass.utype == Monster || u2.uclass.utype == Terror || u2.uclass.isGOO).any))
                     val adjEnemyGate = r.near.exists(nr => nr.enemyGate)
                     adjMonsterOrGoo |=> -1000 -> "AP1: adjacent to enemy monsters/GOOs"
                     adjEnemyGate |=> -500 -> "AP1: adjacent to enemy gate"
                     // 2-region buffer boost: no enemy monsters/GOOs/gates within 2 steps
                     val twoStepDanger = r.near./~(_.near).distinct.exists { nr2 =>
                         nr2.enemyGate || others.exists(f =>
-                            f.at(nr2).%(u2 => u2.uclass.utype == Monster || u2.uclass.utype == Terror || u2.uclass.utype == GOO).any)
+                            f.at(nr2).%(u2 => u2.uclass.utype == Monster || u2.uclass.utype == Terror || u2.uclass.isGOO).any)
                     }
                     (!adjMonsterOrGoo && !adjEnemyGate && !twoStepDanger) |=> 1500 -> "AP1: 2-region buffer from all threats"
                 }
@@ -1441,7 +1441,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // B2c: Writhe pain cultist to empty gate where Ghato/Rev is (to claim it)
                 val ghatoOrRevAtGate = (self.at(r, Ghatanothoa).any || self.at(r, RevenantOfKnaa).any) &&
                     game.gates.has(r) && !self.gates.has(r)
-                val noEnemyGooAtDest = others./~(_.at(r)).%(_.uclass.utype == GOO).none
+                val noEnemyGooAtDest = others./~(_.at(r)).%(_.uclass.isGOO).none
                 val noFBCultAtDest = self.at(r).%(_.canControlGate).none
                 (u.cultist && ghatoOrRevAtGate && noEnemyGooAtDest && noFBCultAtDest) |=> 8000 -> "B2c: pain cultist to Ghato's empty gate (claim it)"
 
@@ -1449,7 +1449,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val ghatoAloneAtDYGate = self.at(r, Ghatanothoa).any && r.enemyGate &&
                     self.at(r).num == 1 &&
                     others./~(_.at(r)).%(_.uclass == DarkYoung).any &&
-                    others./~(_.at(r)).%(_.uclass.utype == GOO).none
+                    others./~(_.at(r)).%(_.uclass.isGOO).none
                 (u.cultist && ghatoAloneAtDYGate) |=> 8500 -> "B3c: cultist to Ghato at DY gate (need battle force)"
                 (u.uclass == Desiccated && ghatoAloneAtDYGate) |=> 8300 -> "B3c: desc to Ghato at DY gate (battle support)"
 
@@ -1623,7 +1623,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 val noCrater = !hasCrater
                 // No vulnerable enemy gates: all enemy gates have GOO
                 val noVulnerableEnemyGates = !others.exists(f => f.gates.exists(gr =>
-                    f.at(gr).%(_.uclass.utype == GOO).none))
+                    f.at(gr).%(_.uclass.isGOO).none))
                 // Both non-Ghato FB gates have revs
                 val fbGatesWithRevs = self.gates.%(gr =>
                     self.at(gr, RevenantOfKnaa).any || self.at(gr, Ghatanothoa).any).num
@@ -1934,7 +1934,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                     !others.exists(_.gates.has(r))
                 val noEnemyUnitsHere = others./~(_.at(r)).none
                 val claimRecruit = isAco && fbMonsterOnGate && unclaimedGateHere &&
-                    (noEnemyUnitsHere || others./~(_.at(r)).%(_.uclass.utype == GOO).none)
+                    (noEnemyUnitsHere || others./~(_.at(r)).%(_.uclass.isGOO).none)
                 claimRecruit |=> 9000 -> "B2b: recruit cultist at FB monster's empty gate to CLAIM it"
                 // v5.8 (2026-05-13): Eye-Opens follow-up — a single FB Desc sits
                 // on a newly-empty gate (post-Eye-Opens kill); recruit a cultist
@@ -2024,7 +2024,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // a Rev summon this AP. Plan: next AP, writhe + combat into the
                 // enemy GOO.
                 val enemyGooAtGateIPM = others.exists(f => f.allInPlay.exists(u =>
-                    u.uclass.utype == GOO && u.region.onMap &&
+                    u.uclass.isGOO && u.region.onMap &&
                     (f.gates.has(u.region) || u.region.gate)))
                 val flingComboIPM = (power == 1 || power == 2) &&
                     self.onMap(Ghatanothoa).any &&
@@ -2080,7 +2080,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // v5.12 (2026-05-14): fling-combo allows flipping every non-CG SB
                 // including DM. Score 2000 to beat normal flips when conditions hold.
                 val enemyGooAtGateC = others.exists(f => f.allInPlay.exists(u =>
-                    u.uclass.utype == GOO && u.region.onMap &&
+                    u.uclass.isGOO && u.region.onMap &&
                     (f.gates.has(u.region) || u.region.gate)))
                 val flingComboC = (power == 1 || power == 2) &&
                     self.onMap(Ghatanothoa).any &&
@@ -2173,7 +2173,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 // (IP main is Soft-exploded). Apply same wantIP boost as Choose.
                 // SBR gating: when 2-Facedown SBR is unmet, only exit after 2 flips.
                 val enemyGooAtGateD = others.exists(f => f.allInPlay.exists(u =>
-                    u.uclass.utype == GOO && u.region.onMap &&
+                    u.uclass.isGOO && u.region.onMap &&
                     (f.gates.has(u.region) || u.region.gate)))
                 val flingComboD = (power == 1 || power == 2) &&
                     self.onMap(Ghatanothoa).any &&
@@ -2360,7 +2360,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                     others.%(_.gates.has(r)).any &&
                     (self.at(r, Ghatanothoa).any || self.at(r, RevenantOfKnaa).any) &&
                     others./~(_.at(r)).%(_.cultist).none &&
-                    others./~(_.at(r)).%(_.uclass.utype == GOO).none)
+                    others./~(_.at(r)).%(_.uclass.isGOO).none)
                 (ghatoOnEmptyEnemyGate) |=> 9600 -> "CoF: Ghato on empty gate — claim it (HIGHEST)"
                 (ghatoOnEnemyGateNoCultists) |=> 9600 -> "CoF: Ghato on enemy gate, no cultists — claim it"
                 val revGhatoOnGate = self.gates.exists(r => self.at(r, Ghatanothoa).any || self.at(r, RevenantOfKnaa).any)
@@ -2457,7 +2457,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                     val enemySide = if (b.attacker == FB) b.defenders else b.attackers
                     (fbSide.rolls.count(_ == Kill),
                      enemySide.forces.num,
-                     enemySide.forces.%(_.uclass.utype == GOO).num)
+                     enemySide.forces.%(_.uclass.isGOO).num)
                 }.getOrElse((0, 0, 0))
                 val rolledKills = battleStats._1
                 val enemyUnits = battleStats._2
@@ -2488,7 +2488,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                     val enemySide = if (b.attacker == FB) b.defenders else b.attackers
                     (fbSide.rolls.count(_ == Kill),
                      enemySide.forces.num,
-                     enemySide.forces.%(_.uclass.utype == GOO).num)
+                     enemySide.forces.%(_.uclass.isGOO).num)
                 }.getOrElse((0, 0, 0))
                 val rolledKills = battleStats._1
                 val enemyUnits = battleStats._2

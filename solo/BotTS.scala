@@ -123,7 +123,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
         // AN Cathedral danger: AN combat > 0 + cathedral + (AN has power/HP, or SL can spend 3)
         val slCanSpend3 = SL.exists && SL.power >= 3 && (!SL.has(Lethargy) || !SL.has(AncientSorcery))
         def noEnemyGOOOrIGOO(r : Region) : Boolean =
-            others./~(_.at(r)).%(u => u.uclass.utype == GOO).none
+            others./~(_.at(r)).%(u => u.uclass.isGOO).none
 
         def anCathedralDanger(r : Region) : Boolean = {
             val anCombat = if (AN.exists) AN.strength(AN.at(r), self) else 0
@@ -583,7 +583,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 // GOO/iGOO THREAT: if enemy GOO or iGOO in TS controlled gate,
                 // and Glaaki is adjacent and NOT on a controlled gate, Undulate to threatened gate
                 val threatenedTSGates = self.gates.%(g =>
-                    others./~(_.at(g)).%(u => u.uclass.utype == GOO).any)
+                    others./~(_.at(g)).%(u => u.uclass.isGOO).any)
                 val glaakiAdjacentToThreat = !o.ownGate && threatenedTSGates.%(g =>
                     game.board.connected(o).has(g)).any
                 (glaakiAdjacentToThreat && threatenedTSGates.has(d)) |=> 5000 -> "TS: Glaaki to threatened gate (GOO/iGOO)"
@@ -1104,7 +1104,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 val ownStr    = adjustedOwnStrengthForCosmicUnity(self.strength(allies, f), allies, foes, opponent = f)
 
                 // GOO/iGOO at TS controlled gate: battle if favorable
-                val gooAtOwnGate = r.ownGate && foes.%(_.uclass.utype == GOO).any
+                val gooAtOwnGate = r.ownGate && foes.%(_.uclass.isGOO).any
                 (gooAtOwnGate && ownStr > enemyStr) |=> 4500 -> "TS: battle GOO/iGOO at own gate (favorable)"
 
                 // [2026-04-01 20:22] v1.18.069: CC Invisibility — polyps negate combat. Don't attack when polyps >= TS units.

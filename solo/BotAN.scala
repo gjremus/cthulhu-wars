@@ -726,7 +726,7 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
                     val destHasOwnMonster = r.allies.%(u => u.uclass.utype == Monster).any
                     val destHasYothans = r.allies.%(u => u.uclass == Yothan).any
                     val destHasEnemyMonster = r.foes.%(_.uclass.utype == Monster).any
-                    val destHasEnemyGOO = r.foes.%(_.uclass.utype == GOO).any
+                    val destHasEnemyGOO = r.foes.%(_.uclass.isGOO).any
                     val destHasEnemyMonsterOrGOO = destHasEnemyMonster || destHasEnemyGOO
                     val destCouldGiveGCOceanGate = r.ocean && GC.needs(OceanGates)
                     val destHasLoneEnemyGoo = others.exists { f =>
@@ -888,7 +888,7 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
                 val destHasOwnMonster = d.allies.%(u => u.uclass.utype == Monster).any
                 val destHasYothans = d.allies.%(u => u.uclass == Yothan).any
                 val destHasEnemyMonster = d.foes.%(_.uclass.utype == Monster).any
-                val destHasEnemyGOO = d.foes.%(_.uclass.utype == GOO).any
+                val destHasEnemyGOO = d.foes.%(_.uclass.isGOO).any
                 val destHasEnemyMonsterOrGOO = destHasEnemyMonster || destHasEnemyGOO
                 val destCouldGiveGCOceanGate = d.ocean && GC.needs(OceanGates)
                 val destHasLoneEnemyGoo = others.exists { f =>
@@ -995,7 +995,7 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
                 val destHasOwnMonster = d.allies.%(u => u.uclass.utype == Monster).any
                 val destHasYothans = d.allies.%(u => u.uclass == Yothan).any
                 val destHasEnemyMonster = d.foes.%(_.uclass.utype == Monster).any
-                val destHasEnemyGOO = d.foes.%(_.uclass.utype == GOO).any
+                val destHasEnemyGOO = d.foes.%(_.uclass.isGOO).any
                 val destHasEnemyMonsterOrGOO = destHasEnemyMonster || destHasEnemyGOO
                 val destCouldGiveGCOceanGate = d.ocean && GC.needs(OceanGates)
                 val destHasLoneEnemyGoo = others.exists { f =>
