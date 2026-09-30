@@ -191,6 +191,7 @@ class Serialize(val game : Game) {
         case EApply("TsunamiProcessAction", ps) => ForcedCultistMoveProcessAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[$[(Faction, $[UnitRef])]], parseExpr(ps(3)).asInstanceOf[Boolean], parseExpr(ps(4)).asInstanceOf[Action])
         case EApply("ForcedCultistMoveAction", ps) => ForcedCultistMoveAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[$[UnitRef]], parseExpr(ps(4)).asInstanceOf[Action])
         case EApply("ForcedCultistMoveProcessAction", ps) => ForcedCultistMoveProcessAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[$[(Faction, $[UnitRef])]], parseExpr(ps(3)).asInstanceOf[Boolean], parseExpr(ps(4)).asInstanceOf[Action])
+        case EApply("ForcedCultistMoveOrderAction", ps) => ForcedCultistMoveOrderAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Faction], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[$[(Faction, $[UnitRef])]], parseExpr(ps(4)).asInstanceOf[Boolean], parseExpr(ps(5)).asInstanceOf[Action])
         // [LEGACY REPLAY] Pre-632df8c FBE Animated Rush actions had fewer params (no cancel/refund fields).
         case EApply("AnimatedRushMoveAction", ps) if ps.num == 5 =>
             val dest = parseExpr(ps(2)).asInstanceOf[Region]
