@@ -5458,7 +5458,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     case 3 =>
                         ask("More Factions/ Units", $(
                             "<a href='/' target='_blank'><div>Library at Celaeno (main)</div></a>",
-                            "<a href='/mnu/' target='_blank'><div><span style='color:#b8b8b8'>More Neutral Units (MNU)</span></div></a>",
                             "<a href='/BB/' target='_blank'><div><span style='color:#c8a84b'>Bubastis</span></div></a>",
                             "<a href='/HB/' target='_blank'><div><span style='color:#ff4444'>H</span><span style='color:#ff8c00'>o</span><span style='color:#ffd700'>m</span><span style='color:#44cc44'>e</span><span style='color:#4488ff'>b</span><span style='color:#8844ff'>r</span><span style='color:#cc44cc'>e</span><span style='color:#ff4444'>w</span></div></a>",
                             "Cancel"
