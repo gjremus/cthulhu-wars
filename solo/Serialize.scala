@@ -171,6 +171,8 @@ class Serialize(val game : Game) {
         case EApply("FBCyclopeanGazeSource", ps) => FBCyclopeanGazeSource(parseExpr(ps(0)).asInstanceOf[Region], parseExpr(ps(1)).asInstanceOf[UnitClass])
         case EApply("FBWritheKillEntry", ps) => FBWritheKillEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[UnitClass], parseExpr(ps(3)).asInstanceOf[|[UnitRef]])
         case EApply("FBWrithePainEntry", ps) => FBWrithePainEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Region])
+        case EApply("FBWritheRollResultAction", ps) if ps.num == 3 => FBWritheRollResultAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[$[BattleRoll]])
+        case EApply("FBWritheRollResultAction", ps) if ps.num == 4 => FBWritheRollResultAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Int], parseExpr(ps(2)).asInstanceOf[$[BattleRoll]], parseExpr(ps(3)).asInstanceOf[Boolean])
         // [LEGACY REPLAY] The abandoned MNU v2.0.1 engine (commit a779f68) logged a 5-param
         // TSPlaceTomeUnitAction(self=TS, uc, r, tomeNum, flipper) where the 5th param is the faction
         // that used the Cursed Tome and whose turn must end. Canonical v2.5 reverted to 4-param. Map
