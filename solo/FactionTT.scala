@@ -180,7 +180,7 @@ case class TTSurpriseTargetFactionAction(self : Faction, target : Faction) exten
 )
 case class TTSurpriseEliminateAcolyteAction(self : Faction, target : Faction) extends ForcedAction
 case class TTSurpriseAcolyteChoiceAction(self : Faction, target : Faction, u : UnitRef) extends BaseFactionAction(
-    TT.full + " " + SurpriseSB.styled(TT) + ": Choose an " + Acolyte.styled(target) + " to be eliminated", implicit g => g.unit(u).full
+    TT.full + " " + SurpriseSB.styled(TT) + ": Choose an " + Acolyte.styled(target) + " to be eliminated", implicit g => g.unit(u).full + " in " + g.unit(u).region
 )
 
 // IDOLATRY (Tsang exclusive: cost 1, select Faction Glyph area, move TT units from adjacent areas)
@@ -473,8 +473,8 @@ object TTExpansion extends Expansion {
                 + TTDarkRitualsMainAction(f)
 
             // LENG: Surprise! (enemy eliminates Acolyte, replaced by Proto-Shoggoth)
-            // Lunacy (BB): Earth Cats are targetable "as if Acolytes" by anything that targets Acolytes. On-map only (Proto-Shoggoth can't be placed on the Moon).
-            val surpriseEnemiesWithAcolytes = game.factions.but(f).%(e => e.allInPlay.%(u => u.onMap && (u.uclass == Acolyte || (u.faction == BB && u.uclass == EarthCat))).any)
+            // Lunacy (BB): Earth Cats are targetable "as if Acolytes" by anything that targets Acolytes. Includes the Moon — Surprise is a replace-in-place (like GC Devolve), and the Proto-Shoggoth is a Monster, which place() permits on the Moon.
+            val surpriseEnemiesWithAcolytes = game.factions.but(f).%(e => e.allInPlay.%(u => (u.onMap || u.region == BB.moon) && (u.uclass == Acolyte || (u.faction == BB && u.uclass == EarthCat))).any)
             if (f.can(SurpriseSB) && f.power >= 2 && surpriseEnemiesWithAcolytes.any && f.pool(ProtoShoggoth).any)
                 + TTSurpriseMainAction(f)
 
@@ -623,8 +623,8 @@ object TTExpansion extends Expansion {
 
         // SURPRISE! (Leng) — cost 2, enemy eliminates Acolyte, replaced by Proto-Shoggoth
         case TTSurpriseMainAction(self) =>
-            // Lunacy (BB): Earth Cats count as Acolytes for Surprise. On-map only (Proto-Shoggoth can't land on the Moon).
-            val enemies = game.factions.but(self).%(e => e.allInPlay.%(u => u.onMap && (u.uclass == Acolyte || (u.faction == BB && u.uclass == EarthCat))).any)
+            // Lunacy (BB): Earth Cats count as Acolytes for Surprise. Includes the Moon — replace-in-place, Proto-Shoggoth (Monster) is placeable there.
+            val enemies = game.factions.but(self).%(e => e.allInPlay.%(u => (u.onMap || u.region == BB.moon) && (u.uclass == Acolyte || (u.faction == BB && u.uclass == EarthCat))).any)
             Force(TTSurpriseChooseFactionAction(self, enemies))
 
         case TTSurpriseChooseFactionAction(self, enemies) =>
@@ -639,7 +639,7 @@ object TTExpansion extends Expansion {
             Force(TTSurpriseEliminateAcolyteAction(self, target))
 
         case TTSurpriseEliminateAcolyteAction(self, target) =>
-            val acolytes = target.allInPlay.%(u => u.onMap && (u.uclass == Acolyte || (u.faction == BB && u.uclass == EarthCat)))
+            val acolytes = target.allInPlay.%(u => (u.onMap || u.region == BB.moon) && (u.uclass == Acolyte || (u.faction == BB && u.uclass == EarthCat)))
             if (acolytes.num == 1)
                 Force(TTSurpriseAcolyteChoiceAction(self, target, acolytes.head.ref))
             else

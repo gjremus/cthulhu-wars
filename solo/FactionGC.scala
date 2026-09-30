@@ -140,7 +140,7 @@ object GCExpansion extends Expansion {
             game.independents(f)
 
             if (f.can(Dreams) && f.pool(Acolyte).any)
-                areas.%(f.affords(2)).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
+                areasWithMoon.%(f.affords(2)).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
                     + DreamsMainAction(f, l)
                 }
 
@@ -193,7 +193,7 @@ object GCExpansion extends Expansion {
             Force(DevolveMainAction(f, then))
 
         case DevolveMainAction(f, then) =>
-            Ask(f).some(areas)(r => f.at(r, Acolyte)./(c => DevolveAction(f, c.region, then))).cancel
+            Ask(f).some(areasWithMoon)(r => f.at(r, Acolyte)./(c => DevolveAction(f, c.region, then))).cancel
 
         case DevolveAction(f, r, then) =>
             if ((f.at(r, Monster, GOO) ++ f.at(r, ElderGod)).none)

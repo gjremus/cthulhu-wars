@@ -438,7 +438,7 @@ object TSExpansion extends Expansion {
 
             // GRASPING DEAD: battle with only Tomb-Herds
             if (f.can(GraspingDead) && f.units.%(u => u.uclass == TombHerd && (u.region.onMap || u.region == BB.moon)).any && {
-                val allAreas = areas ++ game.factions.has(BB).??($(BB.moon))
+                val allAreas = areasWithMoon
                 allAreas.%(r => f.at(r, TombHerd).any && f.enemies.exists(_.at(r).any)).any
             } && (f.power >= 1 || game.deathsHead >= 2))
                 + GraspingDeadMainAction(f)
@@ -579,7 +579,7 @@ object TSExpansion extends Expansion {
 
         case GraspingDeadPayPowerAction(self) =>
             self.power -= 1
-            TSExpansion.graspingDeadRemaining = areas.%(r => self.at(r, TombHerd).any && self.enemies.exists(_.at(r).any))
+            TSExpansion.graspingDeadRemaining = areasWithMoon.%(r => self.at(r, TombHerd).any && self.enemies.exists(_.at(r).any))
             TSExpansion.graspingDeadFought = $()
             TSExpansion.graspingDeadActive = true
             Force(GraspingDeadChooseRegionAction(self))
@@ -587,7 +587,7 @@ object TSExpansion extends Expansion {
         case GraspingDeadPayDHAction(self) =>
             game.deathsHead -= 2
             self.log("spent 2 Death's Head for", GraspingDead)
-            TSExpansion.graspingDeadRemaining = areas.%(r => self.at(r, TombHerd).any && self.enemies.exists(_.at(r).any))
+            TSExpansion.graspingDeadRemaining = areasWithMoon.%(r => self.at(r, TombHerd).any && self.enemies.exists(_.at(r).any))
             TSExpansion.graspingDeadFought = $()
             TSExpansion.graspingDeadActive = true
             Force(GraspingDeadChooseRegionAction(self))

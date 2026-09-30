@@ -2709,7 +2709,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
         // INIT
         case StartAction =>
-            log("Cthulhu Wars Expansions - 1.22")
+            log("Cthulhu Wars Expansions - 1.22.1")
             log("Options", options./(_.toString.hh).mkString(" "))
 
             if (options.has(GateDiplomacy)) {
@@ -3089,7 +3089,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             TSExpansion.shepherdDoneThisGather = false
             factions.foreach { f =>
                 if (f.want(MaoCeremony)) {
-                    f.cultists.onMap.some.foreach { l =>
+                    f.cultists.%(u => u.region.onMap || u.region == BB.moon).some.foreach { l =>
                         return Ask(f).each(l)(c => MaoCeremonyAction(f, c.region, c.uclass)).add(MaoCeremonyDoneAction(f))
                     }
                 }
@@ -3565,7 +3565,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     f.takeES(tabletsBonus)
                     f.log(TabletsOfTheGods.styled(TT), ": gained", tabletsBonus.es, "bonus (HP at gates)")
                 }
-                f.all(HighPriest).onMap.foreach(eliminate)
+                f.all(HighPriest).%(u => u.region.onMap || u.region == BB.moon).foreach(eliminate)
                 f.log(TabletsOfTheGods.styled(TT), ": eliminated all High Priests")
             }
 

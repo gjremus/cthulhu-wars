@@ -351,12 +351,14 @@ object CthulhuWarsSolo {
         val secs = diff % 60
         val mins = diff / 60
 
-        // On-screen version banner. Fixed public label per the "main" build spec
-        // (user 2026-09-30): reads exactly "Cthulhu Wars Expansions - 1.22", nothing
-        // else. The internal build id (BuildInfo.version, e.g. bubastis-v2.4.x) is
-        // still compiled in via the replay-filename / quine-save strings below, so
-        // deploys stay grep-verifiable — this only changes the displayed text.
-        val version = "Cthulhu Wars Expansions - 1.22"
+        // On-screen version banner. Public label per the "main" build spec
+        // (user 2026-09-30): "Cthulhu Wars Expansions - <major>.<minor>[.<patch>]".
+        // The major.minor (1.22) stays fixed; a trailing ".N" is a patch level that
+        // bumps for each in-place fix release (1.22 -> 1.22.1 -> 1.22.2 ...). The
+        // internal build id (BuildInfo.version, e.g. bubastis-v2.4.x) is still compiled
+        // in via the replay-filename / quine-save strings below, so deploys stay
+        // grep-verifiable — this only changes the displayed text.
+        val version = "Cthulhu Wars Expansions - 1.22.1"
 
         log(version)
 
