@@ -351,8 +351,9 @@ object TTExpansion extends Expansion {
     override def eliminate(u : UnitFigure)(implicit game : Game) {
         if (!game.setup.has(TT)) return
 
-        // TTGOOKilledInBattle: any GOO killed in battle
-        if (u.uclass.utype == GOO && game.battle.any && game.battle.get.eliminated.contains(u))
+        // TTGOOKilledInBattle: any GOO killed in battle. Use isGOO (not utype == GOO) so ElderGod
+        // units (Bubastis's Bastet) also count as GOOs — matches the corrected BB build.
+        if (u.uclass.isGOO && game.battle.any && game.battle.get.eliminated.contains(u))
             TT.satisfy(TTGOOKilledInBattle, "GOO killed in battle")
 
         // Fulmination fires in Battle.scala's AssignKillAction when Ubbo is killed — no action needed here
