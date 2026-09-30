@@ -272,6 +272,9 @@ case class SpendToFlipTomeAction(self : Faction, tome : LibraryTome) extends Bas
 
 // Tome usage actions
 case class UseTomeGuardianMainAction(self : Faction) extends OptionFactionAction(implicit g => "Use " + TomeGuardian.elem + " (" + "1 Power".styled("power") + ")") with MainQuestion with Soft
+case class UseTomeGuardianRegionAction(self : Faction, source : Region) extends BaseFactionAction(implicit g => "Relocate enemy units in", source) with Soft {
+    override def question(implicit game : Game) = "Choose region with " + TomeGuardian.elem
+}
 case class UseTomeGuardianRelocateAction(self : Faction, source : Region, target : Faction) extends BaseFactionAction(implicit g => "Choose faction to relocate from " + source, implicit g => target.full) with Soft
 case class UseTomeGuardianDestAction(self : Faction, source : Region, target : Faction, dest : Region) extends BaseFactionAction(implicit g => "Move to", dest) {
     override def question(implicit game : Game) = "Choose destination for " + target.full + " units from " + source
@@ -372,7 +375,7 @@ object LibraryExpansion extends Expansion {
             u.region = oubliette
             game.fbSuppressCGForPlacement = false
             u.onGate = false
-            target.log(u.uclass.styled(target), "moved to", oubliette, "(" + "Custodian".styled("lb") + ")")
+            target.log(u.styledName, "moved to", oubliette, "(" + "Custodian".styled("lb") + ")")
             // Chronophage: the moved unit belongs to `target` (not the activator `self`), so
             // offer `target` its free Hound teleport. No-op unless `target` owns the Hound card.
             Force(CronophageAfterMoveAction(target, CustodianResolveAgonyAction(self, r, remaining)))
@@ -528,7 +531,7 @@ object LibraryExpansion extends Expansion {
                 val u = game.unit(ref)
                 val r = u.region
                 game.eliminate(u)
-                self.log("eliminated", u.uclass.styled(self), "in", r, "to satisfy", "Agony".styled("lb"))
+                self.log("eliminated", u.styledName, "in", r, "to satisfy", "Agony".styled("lb"))
             }
             // 2026-05-11 loop-break: if the bot reaches Done with no eliminations,
             // it picked into Eliminate path but then refused every unit (Bot3 scoring
@@ -667,12 +670,22 @@ object LibraryExpansion extends Expansion {
         // ── GUARDIAN UNDER THE LAKE — move enemy units between Archway regions ──
         case UseTomeGuardianMainAction(self) =>
             val arches = game.board.regions.%(game.board.archways.contains)
-            // Show one entry per (region, enemy faction) combo where enemy has units
-            val options = arches./~{ r =>
+            val regionsWithEnemies = arches.%(r =>
+                factions.but(self).%(_.at(r).%(u => u.uclass.utype != MapUnit).any).any)
+            val regionOptions = regionsWithEnemies./(r => UseTomeGuardianRegionAction(self, r))
+            val legacyOptions = arches./~{ r =>
                 factions.but(self).%(_.at(r).%(u => u.uclass.utype != MapUnit).any)./(f =>
                     UseTomeGuardianRelocateAction(self, r, f))
             }
-            Ask(self).each(options)(identity).cancel
+            Ask(self).list(regionOptions).list(legacyOptions).cancel
+
+        case UseTomeGuardianRegionAction(self, source) =>
+            val enemies = factions.but(self).%(_.at(source).%(u => u.uclass.utype != MapUnit).any)
+            if (enemies.num == 1)
+                Force(UseTomeGuardianRelocateAction(self, source, enemies.head))
+            else
+                Ask(self).each(enemies)(f =>
+                    UseTomeGuardianRelocateAction(self, source, f)).cancel
 
         case UseTomeGuardianRelocateAction(self, source, target) =>
             // Show all OTHER archway regions as destinations, with cancel
@@ -747,7 +760,7 @@ object LibraryExpansion extends Expansion {
             u.region = owner.reserve
             u.onGate = false
             game.tomeFaceUp = game.tomeFaceUp + (tome -> true)
-            self.log("released", u.uclass.styled(owner), "to flip", tome.elem, "face-up")
+            self.log("released", u.styledName, "to flip", tome.elem, "face-up")
             Force(MainAction(self))
 
         case FlipTomeDiscardESAction(self, tome) =>
