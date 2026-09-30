@@ -296,7 +296,7 @@ object CthulhuWarsSolo {
         val origin = dom.window.location.origin + "/"
         val cwsOptions = Option(getElem("cws-options"))
         val delay = cwsOptions./~(_.getAttribute("data-delay").?)./~(_.toIntOption).|(30)
-        val menu = cwsOptions./~(_.getAttribute("data-menu").?)./~(_.toIntOption).|(5)
+        val menu = cwsOptions./~(_.getAttribute("data-menu").?)./~(_.toIntOption).|(6)
         // val menu = cwsOptions./~(_.getAttribute("data-menu").?)./~(_.toIntOption).|(6) // Temp for test (comment out before deploying)
         val scroll = cwsOptions./~(_.getAttribute("data-scroll").?)./(_ == "true").|(false)
         // Round 8: if data-server isn't set (local dev), fall back to origin (the URL the
@@ -6682,7 +6682,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 // Round 8: replaced hardcoded cwo.im URL with the page's own origin so the
                 // "Online game" link goes to localhost when running locally. For production
                 // (data-server set to a real backend URL), the link still goes to that URL.
-                ask("Cthulhu Wars", $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='" + origin + "' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "More Factions/ Units".hl, "Extra", "About", "Test").take(menu), {
+                ask("Cthulhu Wars", $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='" + origin + "' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "<a href='/' target='_blank'><div>Main</div></a>", "<a href='https://cwo.im/' target='_blank'><div>OG CWO.IM</div></a>", "Extra", "About", "Test").take(menu), {
                     case 998_0 =>
                         val setup = new Setup(randomSeating($(GC, BG, WW, OW)), Normal)
                         setup.difficulty += OW -> Debug
@@ -6760,7 +6760,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             else
                                 topMenu()
                         })
-                    case 4 => ask("Cthulhu Wars Extra", $("Survival mode".styled("kill"), "Download Offline Version".hl, "<a href='https://necronomicon.app/' target='_blank'><div>Necronomicon</div></a>", "<a href='https://cthulhuwars.fandom.com/' target='_blank'><div>Cthulhu Wars Strategy Wiki</div></a>", "Back"), {
+                    case 5 => ask("Cthulhu Wars Extra", $("Survival mode".styled("kill"), "Download Offline Version".hl, "<a href='https://necronomicon.app/' target='_blank'><div>Necronomicon</div></a>", "<a href='https://cthulhuwars.fandom.com/' target='_blank'><div>Cthulhu Wars Strategy Wiki</div></a>", "Back"), {
                         case 0 =>
                             val base = allFactions.take(4)
                             ask("Choose faction", base./(f => f.full) :+ "Back", nf => {
@@ -6781,7 +6781,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         case 2 | 3 | 4 =>
                             topMenu()
                     })
-                    case 5 =>
+                    case 6 =>
                         ask("Cthulhu Wars Solo", $(
                             "<a href='https://boardgamegeek.com/filepage/152635/cthulhu-wars-solo-hrf-19' target='_blank'><div>Project Homepage</div></a>",
                             "Developed by " + "Haunt Roll Fail".hl,
@@ -6795,13 +6795,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             "All graphics in the app belong to Petersen Games.<br>Used with permission.",
                             "Back"
                         ), { _ => topMenu() })
-                    case 3 =>
-                        ask("More Factions/ Units", $(
-                            "<a href='/' target='_blank'><div>Main</div></a>",
-                            "<a href='/BB/' target='_blank'><div><span style='color:#c8a84b'>Bubastis</span></div></a>",
-                            "Cancel"
-                        ), { _ => topMenu() })
-                    case 6 =>
+                    case 3 => topMenu()
+                    case 4 => topMenu()
+                    case 7 =>
                         val setup = new Setup(randomSeating($(GC, BG, WW)), Normal)
                         setup.difficulty += GC -> Human
                         setup.difficulty += BG -> Normal
