@@ -6798,7 +6798,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     case 3 =>
                         ask("More Factions/ Units", $(
                             "<a href='/' target='_blank'><div>Main</div></a>",
-                            "<a href='/TchoTcho/' target='_blank'><div><span style='color:#fc9ca0'>TchoTcho</span></div></a>",
                             "<a href='/BB/' target='_blank'><div><span style='color:#c8a84b'>Bubastis</span></div></a>",
                             "Cancel"
                         ), { _ => topMenu() })
