@@ -351,7 +351,12 @@ object CthulhuWarsSolo {
         val secs = diff % 60
         val mins = diff / 60
 
-        val version = "Cthulhu Wars HRF " + BuildInfo.version
+        // On-screen version banner. Fixed public label per the "main" build spec
+        // (user 2026-09-30): reads exactly "Cthulhu Wars Expansions - 1.22", nothing
+        // else. The internal build id (BuildInfo.version, e.g. bubastis-v2.4.x) is
+        // still compiled in via the replay-filename / quine-save strings below, so
+        // deploys stay grep-verifiable — this only changes the displayed text.
+        val version = "Cthulhu Wars Expansions - 1.22"
 
         log(version)
 
@@ -5774,7 +5779,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 // Round 8: replaced hardcoded cwo.im URL with the page's own origin so the
                 // "Online game" link goes to localhost when running locally. For production
                 // (data-server set to a real backend URL), the link still goes to that URL.
-                ask("Cthulhu Wars Expansions - Based on HRF 1.22", $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='" + origin + "' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "<a href='/HB/' target='_blank'><div><span style='color:#ff4444'>H</span><span style='color:#ff8c00'>o</span><span style='color:#ffd700'>m</span><span style='color:#44cc44'>e</span><span style='color:#4488ff'>b</span><span style='color:#8844ff'>r</span><span style='color:#cc44cc'>e</span><span style='color:#ff4444'>w</span><span style='color:#ff8c00'>s</span></div></a>", "<a href='https://cwo.im/' target='_blank'><div>OG CWO.IM</div></a>", "Extra", "About", "Test").take(menu), {
+                ask("Cthulhu Wars", $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='" + origin + "' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "<a href='/HB/' target='_blank'><div><span style='color:#ff4444'>H</span><span style='color:#ff8c00'>o</span><span style='color:#ffd700'>m</span><span style='color:#44cc44'>e</span><span style='color:#4488ff'>b</span><span style='color:#8844ff'>r</span><span style='color:#cc44cc'>e</span><span style='color:#ff4444'>w</span><span style='color:#ff8c00'>s</span></div></a>", "<a href='https://cwo.im/' target='_blank'><div>OG CWO.IM</div></a>", "Extra", "About", "Test").take(menu), {
                     case 998_0 =>
                         val setup = new Setup(randomSeating($(GC, BG, WW, OW)), Normal)
                         setup.difficulty += OW -> Debug

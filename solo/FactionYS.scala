@@ -152,11 +152,13 @@ object YSExpansion extends Expansion {
 
             if (f.can(HWINTBN) && f.used(ScreamingDead).not && f.has(Hastur)) {
                 val o = f.goo(Hastur).region
-                // RULES CLARIFICATION (supersedes prior bullet 45): HWINTBN is a MOVE
-                // and may NOT send Hastur TO the Moon (only BB may move a unit to the
-                // Moon). `areas` excludes BB.moon, which is correct both when Hastur is
-                // on the Moon (moves OFF to any area) and on the map.
-                areas.%(f.affords(1)).but(o).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
+                // RULES (user 2026-09-30, supersedes the prior "not to the Moon" clarification):
+                // the Earth Cat rule is NOT limited to eliminations — ANY spellbook that targets
+                // or even mentions Cultists/Acolytes applies to Earth Cats. HWINTBN sends Hastur
+                // to an area containing an enemy "Cultist" (Earth Cats count), so Hastur MAY move
+                // to the Moon when an Earth Cat is there. Use areasWithMoon. The move itself sets
+                // Hastur's region directly (HWINTBNAction), bypassing the BB-only Moon place() guard.
+                areasWithMoon.%(f.affords(1)).but(o).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
                     + HWINTBNMainAction(f, o, l)
                 }
             }

@@ -1631,8 +1631,10 @@ object FBExpansion extends Expansion {
         case FBTheEyeOpensLoopAction(self, pending) =>
             // Find eligible regions: have desiccated + enemy cultist, not already targeted
             // Lunacy (BB): Earth Cats are targetable as Cultists by enemy spellbooks.
+            // Use areasWithMoon so Eye Opens reaches Earth Cats on the Moon — FB can be
+            // on the Moon (with a Desiccated) via BB Catnapping or FB Writhe (user 2026-09-30).
             val doneRegions = pending./(_.region)
-            val eligible = areas.%(r => !doneRegions.has(r) && self.at(r, Desiccated).any &&
+            val eligible = areasWithMoon.%(r => !doneRegions.has(r) && self.at(r, Desiccated).any &&
                 self.enemies.exists(_.at(r).%(_.targetableAsCultistByEnemy).any))
             if (eligible.none)
                 Force(FBTheEyeOpensCommitAction(self, pending))
