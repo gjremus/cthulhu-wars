@@ -243,7 +243,12 @@ object DSExpansion extends Expansion {
 
             val hasFlippedTome = game.board.isLibraryMap && $(TomeGuardian, TomeLarvae, TomeYr).exists(t =>
                 game.tomeHolders.getOrElse(t, None).has(f) && !game.tomeFaceUp.getOrElse(t, true))
-            if (f.power >= 1 && f.can(Consummation) && (f.oncePerTurn.any || hasFlippedTome))
+            // Only DS's OWN flipped spellbooks qualify. f.oncePerTurn is overloaded: besides
+            // the spellbooks DS flipped face down this turn, it also collects foreign markers
+            // (e.g. MessengerOfYig, added to a RESPONDER's oncePerTurn as an "already responded
+            // this turn" flag) that DS neither owns nor can unflip. Filter by f.has so Consummation
+            // isn't offered (or offered with an empty list) when only such foreign markers exist.
+            if (f.power >= 1 && f.can(Consummation) && (f.oncePerTurn.%(sb => f.has(sb)).any || hasFlippedTome))
                 + ConsummationAction(f)
 
             if (f.can(FiendishGrowth) && f.all(AvatarAntithesis).any && (f.pool.monsters ++ f.pool.acolytes).any && f.affords(1)(f.all(AvatarAntithesis).head.region))
@@ -582,7 +587,10 @@ object DSExpansion extends Expansion {
 
         // CONSUMMATION
         case ConsummationAction(self) =>
-            val sbOptions = self.oncePerTurn./(sb => ConsummationUnflipAction(self, sb))
+            // Only offer spellbooks DS actually owns (self.has). oncePerTurn also holds foreign
+            // once-per-turn markers like MessengerOfYig — a responder's "already responded" flag
+            // for a Yig owned by another faction — which DS neither owns nor flipped face down.
+            val sbOptions = self.oncePerTurn.%(sb => self.has(sb))./(sb => ConsummationUnflipAction(self, sb))
             // Library at Celaeno: also offer face-down Library tomes held by DS
             val tomeOptions : $[Action] = if (game.board.isLibraryMap)
                 $(TomeGuardian, TomeLarvae, TomeYr).%(t =>

@@ -24,6 +24,11 @@ trait GameImplicits {
     def factions(implicit game : Game) = game.factions
     def factionlike(implicit game : Game) = game.factionlike
     def areas(implicit game : Game) = game.board.regions
+    // Shared list for "Y on Moon" powers per the Moon Power Reference: the normal map areas
+    // plus the Moon itself. Powers that the doc marks as allowed on the Moon should scope their
+    // area checks off this instead of `areas` alone, so the Moon isn't silently excluded — the
+    // same root cause that previously broke Lethargy, Capture Monster, and Bastet's own powers.
+    def areasWithMoon(implicit game : Game) : $[Region] = areas :+ BB.moon
 
 
     def log(m : Any*)(implicit game : Game) = game.appendLog(m.$)

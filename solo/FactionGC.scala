@@ -140,7 +140,7 @@ object GCExpansion extends Expansion {
             game.independents(f)
 
             if (f.can(Dreams) && f.pool(Acolyte).any)
-                areas.%(f.affords(2)).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
+                areasWithMoon.%(f.affords(2)).%(r => f.enemies.%(e => e.at(r).%(_.targetableAsCultistByEnemy).any).any).some.foreach { l =>
                     + DreamsMainAction(f, l)
                 }
 

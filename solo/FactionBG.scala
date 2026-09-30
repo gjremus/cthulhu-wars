@@ -254,7 +254,7 @@ object BGExpansion extends Expansion {
 
         // ELIMINATE CULTISTS
         case EliminateTwoCultistsMainAction(self) =>
-            val cultists = areas./~(r => self.at(r).cultists.sortP.take(2))
+            val cultists = areasWithMoon./~(r => self.at(r).cultists.sortP.take(2))
             val pairs = cultists./~(a => cultists.dropWhile(_ != a).dropStarting./(b => (a, b))).distinct
             Ask(self).each(pairs)((a, b) => EliminateTwoCultistsAction(self, a, b)).cancel
 
@@ -268,7 +268,7 @@ object BGExpansion extends Expansion {
 
         // AWAKEN
         case AwakenMainAction(self : BG, uc : ShubNiggurath.type, locations) =>
-            val cultists = areas./~(r => self.at(r).cultists.sortP.take(2))
+            val cultists = areasWithMoon./~(r => self.at(r).cultists.sortP.take(2))
             val pairs = cultists./~(a => cultists.dropWhile(_ != a).dropStarting./(b => (a, b))).distinct
             Ask(self).each(pairs)((a, b) => AwakenEliminateTwoCultistsAction(self, uc, locations, a, b)).cancel
 
