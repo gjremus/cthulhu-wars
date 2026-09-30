@@ -1570,6 +1570,12 @@ case class Bot3(faction : Faction) {
                         true |=> 100 -> "agony sting ocean"
 
                     // ── Forced cultist move (Tsunami / Agony Sting response) ───────
+                    // ── Forced cultist move order (Tsunami / Agony Sting faction pick) ─
+                    case ForcedCultistMoveOrderAction(_, f, _, remaining, _, _) =>
+                        val cultistCount = remaining.find(_._1 == f).map(_._2.num).|(0)
+                        (cultistCount > 1) |=> 200 -> "order: more cultists first"
+                        true |=> 100 -> "order: default"
+
                     case ForcedCultistMoveAction(_, u, dest, _, _) =>
                         // Cultist owner picks where forced cultist goes
                         self.gates.has(dest) |=> 500 -> "forced move: move to own gate"

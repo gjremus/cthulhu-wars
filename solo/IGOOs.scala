@@ -367,6 +367,9 @@ case class ForcedCultistMoveAction(self : Faction, u : UnitRef, dest : Region, r
     override def question(implicit game : Game) = self.full + " — " + "Forced Move".styled("nt") + " — choose destination for " + (if (u != null) u.uclass.styled(self) else "unit".styled(self))
 }
 case class ForcedCultistMoveProcessAction(self : Faction, sourceRegion : Region, remaining : $[(Faction, $[UnitRef])], oceanDest : Boolean, then : Action) extends ForcedAction
+case class ForcedCultistMoveOrderAction(self : Faction, f : Faction, sourceRegion : Region, remaining : $[(Faction, $[UnitRef])], oceanDest : Boolean, then : Action) extends BaseFactionAction(implicit g => f.full, f.short) {
+    override def question(implicit game : Game) = self.full + " — " + "Agony Sting".styled("nt") + " — choose faction to move Cultists first"
+}
 
 // Yig: Messenger of Yig — doom phase donation choice
 case class MessengerOfYigDonateAction(self : Faction, yigOwner : Faction) extends BaseFactionAction(
@@ -1064,7 +1067,10 @@ object IGOOsExpansion extends Expansion {
             val allCultists = game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist))
             val perFaction = factions./(owner => (owner, allCultists.%(u => MindParasite.trueOwner(u) == owner)./(_.ref))).%{ case (_, units) => units.any }
             self.log("Tsunami".styled("nt") + ": all Cultists in", r, "must move to adjacent Ocean")
-            ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = true, EndAction(self))
+            if (perFaction.num > 1)
+                Ask(self).each(perFaction./{ case (f, _) => f })(f => ForcedCultistMoveOrderAction(self, f, r, perFaction, true, EndAction(self)))
+            else
+                ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = true, EndAction(self))
 
         // Mother Hydra: Agony Sting
         case MotherHydraAgonyStingMainAction(self) =>
@@ -1084,9 +1090,16 @@ object IGOOsExpansion extends Expansion {
             val allCultists = game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist))
             val perFaction = self.enemies./(owner => (owner, allCultists.%(u => MindParasite.trueOwner(u) == owner)./(_.ref))).%{ case (_, units) => units.any }
             self.log("The Agony Sting".styled("nt") + ": all enemy Cultists in", r, "must move to adjacent Land")
-            ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = false, EndAction(self))
+            if (perFaction.num > 1)
+                Ask(self).each(perFaction./{ case (f, _) => f })(f => ForcedCultistMoveOrderAction(self, f, r, perFaction, false, EndAction(self)))
+            else
+                ForcedCultistMoveProcessAction(self, r, perFaction, oceanDest = false, EndAction(self))
 
         // Forced cultist move: shared between Tsunami and Agony Sting
+        case ForcedCultistMoveOrderAction(self, chosenFaction, sourceRegion, remaining, oceanDest, then) =>
+            val reordered = remaining.%{ case (f, _) => f == chosenFaction } ++ remaining.%{ case (f, _) => f != chosenFaction }
+            ForcedCultistMoveProcessAction(self, sourceRegion, reordered, oceanDest, then)
+
         case ForcedCultistMoveProcessAction(self, sourceRegion, remaining, oceanDest, then) =>
             if (remaining.none) {
                 Force(then)
