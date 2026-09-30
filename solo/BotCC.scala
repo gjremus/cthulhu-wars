@@ -930,7 +930,7 @@ class GameEvaluationCC(implicit game : Game) extends GameEvaluation(CC)(game) {
                             r.freeGate |=> -100 -> "dont send non cultists to free gate"
                             r.empty |=> 200 -> "send non cultists to empty"
 
-                            f != AN && u.utype == GOO && u != Cthulhu && game.cathedrals.contains(r) && AN.has(UnholyGround) && r.str(AN) > 0 |=> 50000 -> "send goo to unholy ground"
+                            f != AN && u.isGOO && u != Cthulhu && game.cathedrals.contains(r) && AN.has(UnholyGround) && r.str(AN) > 0 |=> 50000 -> "send goo to unholy ground"
                         }
 
                 }

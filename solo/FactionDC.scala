@@ -931,7 +931,7 @@ object DCExpansion extends Expansion {
 
         // ── Doom-Phase SB-Requirement opt-ins (wrap in CheckSpellbooksAction per Item 9) ─
         case DCProselytizeReqOptInAction(self) =>
-            val enemyGOOs = game.factions.but(self)./~(_.allInPlay).%(u => u.uclass.utype == GOO || (u.uclass == Cathedral && AN.can(HolyGround))).num
+            val enemyGOOs = game.factions.but(self)./~(_.allInPlay).%(u => u.uclass.isGOO || (u.uclass == Cathedral && AN.can(HolyGround))).num
             self.satisfy(ProselytizeReq, "Doom Phase SBR: gain 2 Sin per enemy GOO")
             // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
             val proselytizeWant   = 2 * enemyGOOs
@@ -2187,7 +2187,7 @@ object DCExpansion extends Expansion {
 // Satiate: "SBR: +X Power, +Y Sin (1P/ other earned SB, 1S/ pool SB excl. this)" where X+Y=5
 case class DCProselytizeReqOptInAction(self : Faction)
     extends OptionFactionAction(implicit g => {
-        val enemyGOOs = g.factions.but(self)./~(_.allInPlay).%(u => u.uclass.utype == GOO || (u.uclass == Cathedral && AN.can(HolyGround))).num
+        val enemyGOOs = g.factions.but(self)./~(_.allInPlay).%(u => u.uclass.isGOO || (u.uclass == Cathedral && AN.can(HolyGround))).num
         val total = 2 * enemyGOOs
         "SBR".styled(DC) + ": " + ("+" + total + " Sin").styled("dc") + " (2/ enemy GOO)"
     })

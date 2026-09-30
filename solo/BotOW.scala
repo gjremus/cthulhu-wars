@@ -663,7 +663,7 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
 
             case IndependentGOOAction(_, lc, r, _) =>
                 val undefendedGate = r.ownGate && self.at(r, YogSothoth).none &&
-                    self.at(r).%(u => u.uclass.utype == GOO).none
+                    self.at(r).%(u => u.uclass.isGOO).none
                 undefendedGate |=> 9000 -> "OW: igoo at undefended gate"
                 r.ownGate && r.allies.cultists.any |=> 5000 -> "OW: igoo at own gate"
                 r.ownGate |=> 4000 -> "OW: igoo at gate"
@@ -692,7 +692,7 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
             // Move iGOOs to defend unprotected OW gates
             case MoveAction(_, u, o, d, _) if u.uclass.isInstanceOf[IGOO] =>
                 val destUndefended = d.ownGate && self.at(d, YogSothoth).none &&
-                    self.at(d).%(iu => iu.uclass.utype == GOO && iu != u).none
+                    self.at(d).%(iu => iu.uclass.isGOO && iu != u).none
                 val srcHasYog = self.at(o, YogSothoth).any
                 destUndefended |=> 7000 -> "OW: move iGOO to undefended gate"
                 (srcHasYog && d.ownGate) |=> 5000 -> "OW: iGOO leave Yog's gate for other gate"
@@ -729,7 +729,7 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
             // Move neutral monsters like slightly-less-than Mutants
             case MoveAction(_, u, o, d, _) if u.uclass.isInstanceOf[NeutralMonster] =>
                 val undefendedGate = d.ownGate && self.at(d, YogSothoth).none &&
-                    self.at(d).%(_.uclass.utype == GOO).none
+                    self.at(d).%(_.uclass.isGOO).none
                 undefendedGate |=> 4000 -> "OW: NM to undefended gate"
                 d.ownGate |=> 2000 -> "OW: NM to own gate"
                 d.foes.cultists.any && d.foes.goos.none |=> 1500 -> "OW: NM toward enemy cultists"

@@ -533,8 +533,8 @@ object IGOOsExpansion extends Expansion {
         // Mother Hydra: "Have no GOOs in Ocean, or AN enemy has no GOOs in Ocean"
         factions.foreach { f =>
             if (f.has(MotherHydra) && f.upgrades.has(TheZygote).not) {
-                val ownerGOOsInOcean = f.allInPlay.%(_.uclass.utype == GOO).%(_.region.glyph == Ocean).any
-                val anyEnemyNoGOOInOcean = f.enemies.exists(e => e.allInPlay.%(_.uclass.utype == GOO).%(_.region.glyph == Ocean).none)
+                val ownerGOOsInOcean = f.allInPlay.%(_.uclass.isGOO).%(_.region.glyph == Ocean).any
+                val anyEnemyNoGOOInOcean = f.enemies.exists(e => e.allInPlay.%(_.uclass.isGOO).%(_.region.glyph == Ocean).none)
                 if (!ownerGOOsInOcean || anyEnemyNoGOOInOcean) {
                     f.upgrades :+= TheZygote
                     f.log("gained", TheZygote.styled(f), "for", MotherHydra.styled(f))

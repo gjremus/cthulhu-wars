@@ -1031,7 +1031,7 @@ object TBExpansion extends Expansion {
                     // but if this action was recorded in an old game log before the filter, replay-protect by skipping them here)
                     remaining.foreach { ur =>
                         val u = game.unit(ur)
-                        if (u.uclass.utype == GOO || u.uclass.utype == Building) {
+                        if (u.uclass.isGOO || u.uclass.utype == Building) {
                             println(s"[PSYCH SHRIEK DEFENSE] Refusing to eliminate ${u.uclass.utype} ${u.uclass} (recorded in old game log before GOO/Building filter fix)")
                         } else {
                             println(s"[PSYCH SHRIEK TRACE] Eliminating ${u.uclass} (${u.faction}) at ${u.region} due to no retreat destinations. Enemy faction: ${enemy}. Enemy power before: ${enemy.power}")

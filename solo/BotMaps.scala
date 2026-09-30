@@ -59,20 +59,20 @@ object BotMaps {
                 // Urgent if custodian is in a region with own monster-protected cultist
                 val cusRegion = game.custodianRegion
                 val urgent = cusRegion.exists(r => self.at(r).%(_.canControlGate).any &&
-                    self.at(r).%(u => u.uclass.utype == Monster || u.uclass.utype == Terror || u.uclass.utype == GOO).any)
+                    self.at(r).%(u => u.uclass.utype == Monster || u.uclass.utype == Terror || u.uclass.isGOO).any)
                 if (urgent) $((action, 9500, "URGENT: custodian blocking own monster-protected cultist"))
                 else $
 
             case SpendOnLibrarianAction(f) if f == self =>
                 val libRegion = game.librarianRegion
                 val urgent = libRegion.exists(r => self.at(r).%(_.canControlGate).any &&
-                    self.at(r).%(u => u.uclass.utype == Monster || u.uclass.utype == Terror || u.uclass.utype == GOO).any)
+                    self.at(r).%(u => u.uclass.utype == Monster || u.uclass.utype == Terror || u.uclass.isGOO).any)
                 // Librarian: also conditioned on valid target region (not own gate or own GOO)
                 val hasValidTarget = game.board.regions.%(_.glyph.onMap).exists(r =>
                     !libRegion.has(r) &&
                     others.exists(f2 => f2.at(r).%(u => u.uclass.utype != MapUnit).any &&
                         game.tomeOverdue.exists { case (tome, overdue) => overdue && game.tomeHolders.get(tome).flatten.has(f2) }) &&
-                    !self.gates.has(r) && self.at(r).%(_.uclass.utype == GOO).none)
+                    !self.gates.has(r) && self.at(r).%(_.uclass.isGOO).none)
                 if (urgent && hasValidTarget) $((action, 9500, "URGENT: librarian blocking own monster-protected cultist"))
                 else if (urgent) $((action, 5000, "librarian blocking cultist but no valid target"))
                 else $
@@ -130,14 +130,14 @@ object BotMaps {
             case LibrarianMoveAction(_, r) =>
                 // Must not move to region with own gate or own GOO
                 val hasOwnGate = self.gates.has(r)
-                val hasOwnGOO = self.at(r).%(_.uclass.utype == GOO).any
+                val hasOwnGOO = self.at(r).%(_.uclass.isGOO).any
                 if (hasOwnGate || hasOwnGOO) $((action, -10000, "librarian: can't target own gate/GOO region"))
                 else {
-                    val hasOwnMonsters = self.at(r).%(u => u.uclass.utype == Monster || u.uclass.utype == Terror || u.uclass.utype == GOO).any
+                    val hasOwnMonsters = self.at(r).%(u => u.uclass.utype == Monster || u.uclass.utype == Terror || u.uclass.isGOO).any
                     val enemyFactions = others.%(_.at(r).%(u => u.uclass.utype != MapUnit).any)
                     val topDoomFaction = others.sortBy(-_.doom).headOption
                     val topPowerFaction = others.sortBy(-_.power).headOption
-                    val goos = others./~(_.at(r)).%(_.uclass.utype == GOO)
+                    val goos = others./~(_.at(r)).%(_.uclass.isGOO)
                     val maxGooCost = if (goos.any) goos./(_.uclass.cost).max else 0
 
                     val score = if (!hasOwnMonsters && enemyFactions.any) 8000  // no own monsters
@@ -154,7 +154,7 @@ object BotMaps {
             case CustodianAssignToFactionAction(f, r, remaining, _, target) =>
                 if (target == f) $((action, -10000, "agony: never target self"))
                 else {
-                    val hasGOO = target.allInPlay.%(_.uclass.utype == GOO).any
+                    val hasGOO = target.allInPlay.%(_.uclass.isGOO).any
                     val unitCount = target.at(r).%(u => u.uclass.utype != MapUnit).num
                     val gooVulnerable = hasGOO && unitCount <= remaining
                     val mostDoom = others.but(self).sortBy(-_.doom).headOption.has(target)
@@ -169,7 +169,7 @@ object BotMaps {
             case LibrarianAssignToFactionAction(f, r, _, remaining, _, _, target) =>
                 if (target == f) $((action, -10000, "agony: never target self (activator last resort)"))
                 else {
-                    val hasGOO = target.allInPlay.%(_.uclass.utype == GOO).any
+                    val hasGOO = target.allInPlay.%(_.uclass.isGOO).any
                     val unitCount = target.at(r).%(u => u.uclass.utype != MapUnit).num
                     val gooVulnerable = hasGOO && unitCount <= remaining
                     val mostDoom = others.but(self).sortBy(-_.doom).headOption.has(target)
@@ -206,7 +206,7 @@ object BotMaps {
                     if (cost == 0) -100
                     else if (cost == 1 && !controlsGate) -200
                     else if (cost <= 3) -400 - cost * 50
-                    else if (u.uclass.utype == GOO) -1100 - cost * 100
+                    else if (u.uclass.isGOO) -1100 - cost * 100
                     else -1000 - cost * 100
                 $((action, score, "agony resolve: eliminate " + u.uclass.name + " (cost " + cost + ", controlsGate=" + controlsGate + ")"))
 

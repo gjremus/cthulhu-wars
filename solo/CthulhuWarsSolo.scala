@@ -2298,7 +2298,7 @@ object CthulhuWarsSolo {
                         }
                     }
 
-                    if (free.num > sticking.num * 0 + 3 || free.%(_.unit.utype == GOO).any || (oldGates.has(r).not && game.gates.has(r)) || tomeStateChangedHere) {
+                    if (free.num > sticking.num * 0 + 3 || free.%(_.unit.isGOO).any || (oldGates.has(r).not && game.gates.has(r)) || tomeStateChangedHere) {
                         free = free ++ sticking
                         sticking = $
                     }
