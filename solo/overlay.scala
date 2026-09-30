@@ -2762,7 +2762,7 @@ object Overlays {
             $(ChangelingAdherents, NecromanticSpores, Shapestealing, AnimatedRush, Succor, OverlordOfDeath), $(
             (Acolyte,      6, "1", "0", s"""<div class=p>Setup: 6 Acolytes + a Controlled Gate in an empty area not adjacent to another faction's start area. Spellbook: ${fbeRef(ChangelingAdherents)}</div>"""),
             (FungalThrall, 10, "2", "2", s"""<div class=p>Spellbooks: ${fbeRef(NecromanticSpores)}, ${fbeRef(Succor)}</div>"""),
-            (Byagoona,     1, "?", "?", s"""
+            (Byagoona,     1, "?", calc(g => g.fbeCardDice.count(_ >= 4)), s"""
                 <div class=p>${cost(s"How to Awaken ${Byagoona.name}:")}</div>
                 <div class=p>${cost("1)")} Eliminate one or more of your Monsters in a single area and roll that many dice.</div>
                 <div class=p>${cost("2)")} Set all of the dice on your Faction Card.</div>
