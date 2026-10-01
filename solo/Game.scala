@@ -484,10 +484,13 @@ object MindParasite {
     // Cultist-equivalent: every effect targeting Cultists also targets Earth Cats
     // (Lunacy rule). The Acolyte filter is extended to also match EarthCat so the
     // parasite conversion fires when an Insect from Shaggai shares an off-gate
-    // area with a BB Earth Cat. Earth Cats on the Moon are unaffected because
-    // u.region.onMap is false for the Moon.
+    // area with a BB Earth Cat. The Moon (BB.moon) is flagged off-map (region.onMap
+    // == false) but is a real play area: off-gate Earth Cats on the Moon CAN be
+    // parasitized, so the off-map exclusion explicitly permits BB.moon (while still
+    // excluding pool / limbo / other non-board regions). On-gate units stay immune
+    // per the core Mind Parasite rule (u.onGate).
     def shouldParasitize(u : UnitFigure)(implicit game : Game) : |[Faction] = {
-        if ((u.uclass != Acolyte && u.uclass != EarthCat) || u.onGate || !u.region.onMap) return None
+        if ((u.uclass != Acolyte && u.uclass != EarthCat) || u.onGate || (!u.region.onMap && u.region != BB.moon)) return None
         game.factions.find(f => f != u.faction && f.loyaltyCards.has(InsectsFromShaggaiCard) && f.at(u.region, InsectsFromShaggai).any)
     }
 
@@ -541,7 +544,7 @@ object MindParasite {
     def checkConversions()(implicit game : Game) : Unit = {
         // Convert Acolytes / Earth Cats that should be parasitized
         game.factions.foreach { f =>
-            f.units.%(u => (u.uclass == Acolyte || u.uclass == EarthCat) && u.region.onMap && !u.onGate).foreach { u =>
+            f.units.%(u => (u.uclass == Acolyte || u.uclass == EarthCat) && (u.region.onMap || u.region == BB.moon) && !u.onGate).foreach { u =>
                 val sp = shouldParasitize(u)
                 sp.foreach { insectOwner =>
                     parasitize(u, insectOwner)
@@ -2661,11 +2664,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val r = bastet.region
                 val hasEnemyCultist = factions.but(f).exists(e => e.at(r).%(u => u.uclass.utype == Cultist).any)
                 // BB Fix 78, v2.4.30 — Elder Thing co-located with Bastet suppresses Needs Attention (combat unaffected).
-                // If any Elder Thing (regardless of which faction holds the loyalty card) shares Bastet's area, the
-                // doom-phase Needs Attention ritual is suppressed. Bastet's combat abilities (kill rolls, Lunacy in
-                // battle) are NOT affected — only the doom-phase ritual menu entry. Mirrors the existing Elder Thing
-                // block messages used by other GOO faction abilities (FB Infernal Pact, BG Avatar, AN Spinneret, etc.).
-                val elderThingHere = factions.exists(e => e.at(r).%(_.uclass == ElderThing).any)
+                // Only an ENEMY's Elder Thing suppresses the ritual: Elder Thing Mind Control is enemy-only everywhere
+                // else (ElderThingMindControl.suppresses, Battle.scala, FB Infernal Pact, BG Avatar, AN Spinneret, etc.),
+                // and you cannot Mind-Control your own GOO. BB can own/summon its own Elder Thing, so this must exclude
+                // f (BB) itself. Bastet's combat abilities (kill rolls, Lunacy in battle) are NOT affected — only the
+                // doom-phase ritual menu entry.  Bug fix: previously `factions.exists` wrongly blocked BB's own ritual.
+                val elderThingHere = factions.but(f).exists(e => e.at(r).%(_.uclass == ElderThing).any)
                 if (hasEnemyCultist && elderThingHere)
                     + GroupAction(RequiresAttention.styled(BB) + " blocked by " + "Elder Thing".styled("nt"))
                 else if (hasEnemyCultist)
@@ -2709,7 +2713,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
         // INIT
         case StartAction =>
-            log("Cthulhu Wars Expansions - 1.22.1")
+            log("Cthulhu Wars Expansions - 1.22.2")
             log("Options", options./(_.toString.hh).mkString(" "))
 
             if (options.has(GateDiplomacy)) {
