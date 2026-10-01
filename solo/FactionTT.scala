@@ -153,9 +153,14 @@ case class TTRemoveGateAction(self : Faction, r : Region) extends BaseFactionAct
 )
 
 // DARK RITUALS (Leng exclusive: all enemy factions with TT HP in start area pay 2P or 2D)
+// NOT Soft: this IS the committing action — its handler flips the spellbook, logs, and kicks
+// off the pay sequence with no TT sub-choice in between. Soft actions are never recorded/POSTed
+// (Action.isRecorded excludes isSoft), so online it would run only locally and the menu would
+// cycle right back. Correct Soft openers (Devolve/Dreams/Remove Gate) only build a sub-menu and
+// defer the commit to a Hard action; here there is no such intermediate, so it must be Hard.
 case class TTDarkRitualsMainAction(self : Faction) extends OptionFactionAction(
     DarkRituals.styled(TT) + ": enemies with your High Priests in their Start Area pay 2 Power or 2 Doom"
-) with MainQuestion with Soft
+) with MainQuestion
 case class TTDarkRitualsPayAction(self : Faction, target : Faction) extends ForcedAction
 case class TTDarkRitualsPayPowerAction(self : Faction, payer : Faction) extends BaseFactionAction("Pay 2 Power", payer.toString)
 case class TTDarkRitualsPay2DoomAction(self : Faction, payer : Faction) extends BaseFactionAction("Pay 2 Doom", payer.toString)
