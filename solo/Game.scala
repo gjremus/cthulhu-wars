@@ -530,50 +530,64 @@ object MindParasite {
         if (u.uclass == MindParasiteCultist) originalFaction(u).|(u.faction) else u.faction
 
     // Check if an Acolyte SHOULD be parasitized (off-gate, shares area with enemy Insect)
+    // BB Fix 80 (ported to HB) — Mind Parasite affects Earth Cats. Earth Cats are
+    // BB's Cultist-equivalent (Lunacy rule), so the Acolyte filter is extended to
+    // also match EarthCat. The Moon (BB.moon) is flagged off-map (region.onMap ==
+    // false) but is a real play area: off-gate Earth Cats on the Moon CAN be
+    // parasitized, so the off-map exclusion explicitly permits BB.moon (while still
+    // excluding pool / limbo). On-gate units stay immune per the core rule.
     def shouldParasitize(u : UnitFigure)(implicit game : Game) : |[Faction] = {
-        if (u.uclass != Acolyte || u.onGate || !u.region.onMap) return None
+        if ((u.uclass != Acolyte && u.uclass != EarthCat) || u.onGate || (!u.region.onMap && u.region != BB.moon)) return None
         game.factions.find(f => f != u.faction && f.loyaltyCards.has(InsectsFromShaggaiCard) && f.at(u.region, InsectsFromShaggai).any)
     }
 
-    // Convert an Acolyte to MindParasiteCultist under the insect owner
+    // Convert an Acolyte (or BB Earth Cat) to MindParasiteCultist under the insect owner
+    // BB Fix 80 (ported to HB) — track the original UnitClass so unparasitize restores it.
     def parasitize(u : UnitFigure, insectOwner : Faction)(implicit game : Game) : Unit = {
         val originalFac = u.faction
+        val originalUClass = u.uclass
         val region = u.region
         val origIndex = u.index
-        // Remove original Acolyte
+        // Remove original unit
         originalFac.units :-= u
         // Create parasitized version under insect owner with unique index
         val mpIndex = game.mindParasiteNextIndex
         game.mindParasiteNextIndex += 1
         val parasitized = new UnitFigure(insectOwner, MindParasiteCultist, mpIndex, region)
         insectOwner.units :+= parasitized
-        // Track original faction and original index for restoration
+        // Track original faction, index, and UnitClass for restoration
         game.mindParasiteOriginalFaction += (parasitized.ref -> originalFac)
         game.mindParasiteOriginalIndex += (parasitized.ref -> origIndex)
-        game.appendLog($(styledAlt("Acolyte", originalFac, insectOwner), "in", region, "afflicted with", "Mind Parasite".styled("nt")))
+        game.mindParasiteOriginalUClass += (parasitized.ref -> originalUClass)
+        game.appendLog($(styledAlt(originalUClass.name, originalFac, insectOwner), "in", region, "afflicted with", "Mind Parasite".styled("nt")))
     }
 
-    // Convert a MindParasiteCultist back to normal Acolyte under original faction
+    // Convert a MindParasiteCultist back to its original UnitClass under original faction
+    // BB Fix 80 (ported to HB) — restore using the tracked original UnitClass (Acolyte
+    // or EarthCat); fallback Acolyte for saves from before this fix.
     def unparasitize(u : UnitFigure)(implicit game : Game) : Unit = {
         val origFac = game.mindParasiteOriginalFaction.getOrElse(u.ref, u.faction)
         val region = u.region
         val origIndex = game.mindParasiteOriginalIndex.getOrElse(u.ref, u.index)
+        val origUClass = game.mindParasiteOriginalUClass.getOrElse(u.ref, Acolyte)
         // Remove parasitized unit from insect owner
         u.faction.units :-= u
-        // Create normal Acolyte under original faction with original index
-        val restored = new UnitFigure(origFac, Acolyte, origIndex, region)
+        // Create restored unit under original faction with original index and class
+        val restored = new UnitFigure(origFac, origUClass, origIndex, region)
         origFac.units :+= restored
         // Clean up tracking
         game.mindParasiteOriginalFaction -= u.ref
         game.mindParasiteOriginalIndex -= u.ref
-        game.appendLog($(styledAlt("Acolyte", origFac, u.faction), "in", region, "freed from", "Mind Parasite".styled("nt")))
+        game.mindParasiteOriginalUClass -= u.ref
+        game.appendLog($(styledAlt(origUClass.name, origFac, u.faction), "in", region, "freed from", "Mind Parasite".styled("nt")))
     }
 
     // Run conversion check — called from triggers()
+    // BB Fix 80 (ported to HB) — candidate filter extended to EarthCat + BB.moon.
     def checkConversions()(implicit game : Game) : Unit = {
-        // Convert Acolytes that should be parasitized
+        // Convert Acolytes / Earth Cats that should be parasitized
         game.factions.foreach { f =>
-            f.units.%(u => u.uclass == Acolyte && u.region.onMap && !u.onGate).foreach { u =>
+            f.units.%(u => (u.uclass == Acolyte || u.uclass == EarthCat) && (u.region.onMap || u.region == BB.moon) && !u.onGate).foreach { u =>
                 val sp = shouldParasitize(u)
                 sp.foreach { insectOwner =>
                     parasitize(u, insectOwner)
@@ -592,9 +606,10 @@ object MindParasite {
     }
 
     // Old compatibility — check by Acolyte position (for canMove etc.)
+    // BB Fix 80 (ported to HB) — Acolyte filter extended to also match EarthCat.
     def controller(u : UnitFigure)(implicit game : Game) : |[Faction] = {
         if (u.uclass == MindParasiteCultist) |(u.faction)
-        else if (u.uclass != Acolyte || u.onGate) None
+        else if ((u.uclass != Acolyte && u.uclass != EarthCat) || u.onGate) None
         else game.factions.find(f => f != u.faction && f.loyaltyCards.has(InsectsFromShaggaiCard) && f.at(u.region, InsectsFromShaggai).any)
     }
 }
@@ -2091,6 +2106,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var mindParasiteCaptureRejected : $[UnitRef] = $
     var mindParasiteNextIndex : Int = 100
     var mindParasiteOriginalIndex : Map[UnitRef, Int] = Map()
+    // BB Fix 80 (ported to HB) — track the original UnitClass so an Earth Cat
+    // parasitized by Insects from Shaggai restores as an Earth Cat, not an Acolyte.
+    var mindParasiteOriginalUClass : Map[UnitRef, UnitClass] = Map()
     // Bug fix Round 6: track last Writhe pain destination for "join" UI hint when paining separately
     var fbWritheLastPainRegion : |[Region] = None
     var fbWritheLastPainedUnit : String = ""
@@ -2311,13 +2329,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         if (u.tag(Eliminated)) {
             // Mind Parasite: unparasitize on elimination — return to original faction's reserve
+            // BB Fix 80 (ported to HB) — restore using the tracked original UnitClass so an
+            // Earth Cat parasitized by Insects from Shaggai returns to BB's pool as an Earth Cat.
             if (u.uclass == MindParasiteCultist) {
                 val origFac = mindParasiteOriginalFaction.get(u.ref).|(u.faction)
                 val origIndex = mindParasiteOriginalIndex.getOrElse(u.ref, u.index)
+                val origUClass = mindParasiteOriginalUClass.getOrElse(u.ref, Acolyte)
                 u.faction.units :-= u
                 mindParasiteOriginalFaction -= u.ref
                 mindParasiteOriginalIndex -= u.ref
-                val restored = new UnitFigure(origFac, Acolyte, origIndex, origFac.reserve)
+                mindParasiteOriginalUClass -= u.ref
+                val restored = new UnitFigure(origFac, origUClass, origIndex, origFac.reserve)
                 origFac.units :+= restored
                 return
             }
