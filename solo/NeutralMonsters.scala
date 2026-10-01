@@ -60,9 +60,9 @@ case object QuachilUttausCard extends NeutralTerrorLoyaltyCard(QuachilUttausIcon
 case object QuachilUttausIcon extends UnitClass(QuachilUttaus.name + " Icon", Token, 0)
 case object QuachilUttaus extends UnitClass("Quachil Uttaus", Terror, 4) with NeutralMonster
 
-case object ShadowPharaohCard extends NeutralTerrorLoyaltyCard(ShadowPharaohIcon, ShadowPharaoh, cost = 2, powerCost = 2, quantity = 1, combat = 0)
+case object ShadowPharaohCard extends NeutralTerrorLoyaltyCard(ShadowPharaohIcon, ShadowPharaoh, cost = 2, powerCost = 2, quantity = 1, combat = 2)
 case object ShadowPharaohIcon extends UnitClass(ShadowPharaoh.name + " Icon", Token, 0)
-case object ShadowPharaoh extends UnitClass("The Shadow Pharaoh", Terror, 2) with NeutralMonster
+case object ShadowPharaoh extends UnitClass("The Shadow Pharaoh", Terror, 4) with NeutralMonster
 
 case object HoundOfTindalosCard extends NeutralTerrorLoyaltyCard(HoundOfTindalosIcon, HoundOfTindalos, cost = 2, powerCost = 2, quantity = 1, combat = 4)
 case object HoundOfTindalosIcon extends UnitClass(HoundOfTindalos.name + " Icon", Token, 0)

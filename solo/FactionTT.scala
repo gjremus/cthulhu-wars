@@ -661,8 +661,11 @@ object TTExpansion extends Expansion {
             EndAction(self)
 
         // IDOLATRY (Tsang) — cost 1: select faction-glyph area, move any or all TT units from adjacent areas
+        // Soft opener MUST stay pure navigation: it is not recorded, so any mutation here (e.g. the
+        // power payment) is lost on replay and Idolatry becomes free after a server round-trip. The
+        // cost is paid in the Hard TTIdolatryDoneAction commit instead (which also means Cancel needs
+        // no refund). See TTDarkRituals note above for the same soft-vs-hard pitfall.
         case TTIdolatryMainAction(self) =>
-            self.power -= 1
             val coreFactions = $(GC, CC, BG, YS, SL, WW)
             val factionGlyphAreas = {
                 val inGame = game.factions./~(fx => game.starting.get(fx).toList)
@@ -683,7 +686,7 @@ object TTExpansion extends Expansion {
                 .add(TTIdolatryCancelAction(self).as("Cancel"))
 
         case TTIdolatryCancelAction(self) =>
-            self.power += 1
+            // No refund: the power is only paid in TTIdolatryDoneAction, so cancelling costs nothing.
             PreMainAction(self)
 
         case TTIdolatryChooseSourceAction(self, dest, pool) =>
@@ -695,7 +698,7 @@ object TTExpansion extends Expansion {
             sources.foreach { src =>
                 + TTIdolatryChooseUnitAction(self, dest, src, pool).as(src)
             }
-            + TTIdolatryCancelAction(self).as("Cancel all — refund", 1.power)
+            + TTIdolatryCancelAction(self).as("Cancel all")
             asking
 
         case TTIdolatryChooseUnitAction(self, dest, src, pool) =>
@@ -728,6 +731,8 @@ object TTExpansion extends Expansion {
             Force(TTIdolatryChooseSourceAction(self, dest, newPool))
 
         case TTIdolatryDoneAction(self, dest, pool) =>
+            // Pay the cost here (Hard, recorded) so it survives replay — see TTIdolatryMainAction note.
+            self.power -= 1
             pool.foreach { uref =>
                 val u = game.unit(uref)
                 val from = u.region

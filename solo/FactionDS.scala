@@ -79,7 +79,11 @@ case class FiendishGrowthPlaceAction(self : Faction, r : Region, n : Int) extend
 case class FiendishGrowthPlaceUnitAction(self : Faction, r : Region, uc : UnitClass, n : Int) extends BaseFactionAction("Place in " + r, uc.styled(self))
 
 // Alternate spellbook actions
-case class OmnipotenceMainAction(self : Faction) extends OptionFactionAction(Omnipotence.styled(self) + " " + "(" + "1 Power".styled("power") + ")") with MainQuestion with Soft
+// NOT Soft: this activation pays 1 Power, resets dsOmnipotenceMoonCredited, and sets oncePerTurn.
+// A Soft handler is never recorded, so on replay the payment/flag-reset are lost while the Hard
+// move actions still replay the avatar moves — DS ends up 1 Power richer (and the Moon-credit flag
+// stale). Must be Hard so the activation records. (OmnipotenceCancelAction is already Hard here.)
+case class OmnipotenceMainAction(self : Faction) extends OptionFactionAction(Omnipotence.styled(self) + " " + "(" + "1 Power".styled("power") + ")") with MainQuestion
 case class OmnipotenceSelectAction(self : Faction, selected : $[UnitRef], remaining : $[UnitRef]) extends BaseFactionAction(implicit g => "Choose Avatars to move", implicit g => {
     // Show the avatar just added to selected (the last one)
     selected.lastOption./(ref => { val u = g.unit(ref); u.uclass.styled(self) + " in " + u.region }).|("Select")
