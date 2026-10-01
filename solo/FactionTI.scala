@@ -162,7 +162,10 @@ case class TIAwakenBaphometUnitAction(r : Region, uc : UnitClass) extends BaseFa
     implicit g => uc.styled(TI) + " in " + r) { override def self = TI }
 
 // Spellbook Requirement 3 (§1.9): pay 4 Power and 1 Doom as your Action.
-case class TIPayPowerDoomMainAction() extends OptionFactionAction("Pay 4 Power and 1 Doom (Spellbook Requirement)") with MainQuestion with Soft { override def self = TI }
+// NOT Soft: this is the committing action (deducts power/doom, satisfies the requirement, ends the
+// action) with no sub-choice. A Soft handler is never recorded, so the payment would be lost on
+// replay and the option would just cycle back — the same soft-vs-hard pitfall as TTDarkRituals.
+case class TIPayPowerDoomMainAction() extends OptionFactionAction("Pay 4 Power and 1 Doom (Spellbook Requirement)") with MainQuestion { override def self = TI }
 
 // Sacrament of Flesh (Baphomet Doom Phase, §1.8): a MANDATORY Doom-Phase step —
 // permanently remove `toRemove` Faction Units you Control (1, or 2 with all 6

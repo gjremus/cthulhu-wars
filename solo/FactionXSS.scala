@@ -138,8 +138,10 @@ case class TsunamiAction(self : Faction, eye : UnitRef, source : Region, dest : 
 // Pre-Battle reinforcement: Soft opt-in -> Soft unit pick (from any adjacent areas) -> Hard commit
 case class StaticAccumulatorPreBattleMainAction(self : Faction)
     extends OptionFactionAction(StaticAccumulator.styled(XSS)) with PreBattleQuestion with Soft
+// NOT Soft: recorded so the decline survives replay (matches FBE's ShapestealingSkipAction).
+// The Use opener above stays Soft because it defers to a Hard commit; a bare Skip must record.
 case class StaticAccumulatorSkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + StaticAccumulator.name).styled(XSS)) with PreBattleQuestion with Soft
+    extends OptionFactionAction(("Skip " + StaticAccumulator.name).styled(XSS)) with PreBattleQuestion
 case class StaticAccumulatorUnitPickAction(self : Faction, arena : Region, picked : $[UnitRef], remaining : $[UnitRef], costLeft : Int)
     extends ForcedAction with PowerNeutral with Soft {
     override def question(implicit game : Game) = StaticAccumulator.styled(XSS) + ": pick Units from adjacent Areas (Cost left: " + costLeft + ")"
@@ -151,10 +153,14 @@ case class StaticAccumulatorAction(self : Faction, arena : Region, picked : $[Un
 
 // -- CLOUD OF ASHES (§1.10 SB3 / §3.10.3 / §4.4.3) ---------------------------
 // Kill-reroute prompt (per Monster killed)
+// NOT Soft: these are user-selected battle-phase decisions that mutate persistent state
+// (game.xssFactionCardMonsters, unit.region). A Soft action is never recorded, so on replay the
+// battle re-resolves, re-reaches CloudOfAshesPromptPhase, re-asks the same monster, and desyncs/
+// cycles. Battle decisions that mutate must be Hard — same as AssignPainAction (BaseFactionAction).
 case class CloudOfAshesHoldAction(self : Faction, u : UnitRef)
-    extends OptionFactionAction(implicit g => CloudOfAshes.styled(XSS) + ": send " + g.unit(u).uclass.styled(XSS) + " to Faction Card?") with Soft { override def question(implicit game : Game) = CloudOfAshes.styled(XSS) }
+    extends OptionFactionAction(implicit g => CloudOfAshes.styled(XSS) + ": send " + g.unit(u).uclass.styled(XSS) + " to Faction Card?") { override def question(implicit game : Game) = CloudOfAshes.styled(XSS) }
 case class CloudOfAshesDeclineAction(self : Faction, u : UnitRef)
-    extends OptionFactionAction(implicit g => CloudOfAshes.styled(XSS) + ": return " + g.unit(u).uclass.styled(XSS) + " to Pool") with Soft { override def question(implicit game : Game) = CloudOfAshes.styled(XSS) }
+    extends OptionFactionAction(implicit g => CloudOfAshes.styled(XSS) + ": return " + g.unit(u).uclass.styled(XSS) + " to Pool") { override def question(implicit game : Game) = CloudOfAshes.styled(XSS) }
 // Doom Phase return
 case class CloudOfAshesDoomReturnMainAction(self : Faction)
     extends OptionFactionAction(CloudOfAshes.styled(XSS) + ": return a Monster") with DoomQuestion with Soft
@@ -180,8 +186,11 @@ case class CloudOfAshesDoomReturnAction(self : Faction, monster : UnitRef, dest 
 // If after resolution no units remain in the battle area AND opponent had a non-Cultist, gain Elder Sign.
 case class DistantThunderclapOfferAction(self : Faction, excessPains : Int, arena : Region, opponent : Faction, opponentHadNonCultist : Boolean)
     extends OptionFactionAction("Distant Thunderclap".styled(XSS) + " (assign " + excessPains + " excess Pain to self)") with PostBattleQuestion with Soft
+// NOT Soft: this Skip is the ONLY way to advance past the Distant Thunderclap offer (its handler
+// Forces BattleProceedAction(AssignDefenderPains)); the offer Ask has no Hard "Done". A Soft action
+// is never recorded, so on replay the phase never advances and the battle re-asks forever — stall.
 case class DistantThunderclapSkipAction(self : Faction)
-    extends OptionFactionAction("Skip " + "Distant Thunderclap".styled(XSS)) with PostBattleQuestion with Soft
+    extends OptionFactionAction("Skip " + "Distant Thunderclap".styled(XSS)) with PostBattleQuestion
 case class DistantThunderclapPainAction(self : Faction, remaining : Int, candidates : $[UnitRef], arena : Region, opponent : Faction, opponentHadNonCultist : Boolean)
     extends ForcedAction with PowerNeutral {
     override def question(implicit game : Game) = "Distant Thunderclap".styled(XSS) + ": assign excess Pain (" + remaining + " left)"

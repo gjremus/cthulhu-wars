@@ -79,7 +79,11 @@ case class FiendishGrowthPlaceAction(self : Faction, r : Region, n : Int) extend
 case class FiendishGrowthPlaceUnitAction(self : Faction, r : Region, uc : UnitClass, n : Int) extends BaseFactionAction("Place in " + r, uc.styled(self))
 
 // Alternate spellbook actions
-case class OmnipotenceMainAction(self : Faction) extends OptionFactionAction(Omnipotence.styled(self) + " " + "(" + "1 Power".styled("power") + ")") with MainQuestion with Soft
+// NOT Soft: this activation pays 1 Power, resets dsOmnipotenceMoonCredited, and sets oncePerTurn.
+// A Soft handler is never recorded, so on replay the payment/flag-reset are lost while the Hard
+// move actions still replay the avatar moves — DS ends up 1 Power richer (and the Moon-credit flag
+// stale). Must be Hard so the activation records. (OmnipotenceCancelAction must be Hard in lockstep.)
+case class OmnipotenceMainAction(self : Faction) extends OptionFactionAction(Omnipotence.styled(self) + " " + "(" + "1 Power".styled("power") + ")") with MainQuestion
 case class OmnipotenceSelectAction(self : Faction, selected : $[UnitRef], remaining : $[UnitRef]) extends BaseFactionAction(implicit g => "Choose Avatars to move", implicit g => {
     // Show the avatar just added to selected (the last one)
     selected.lastOption./(ref => { val u = g.unit(ref); u.uclass.styled(self) + " in " + u.region }).|("Select")
@@ -89,7 +93,10 @@ case class OmnipotenceMoveAllAction(self : Faction, selected : $[UnitRef], r : R
 case class OmnipotenceMoveSeparatelyAction(self : Faction, selected : $[UnitRef]) extends BaseFactionAction("Move Avatars", "Move separately")
 case class OmnipotenceMoveOneAction(self : Faction, u : UnitRef, r : Region, remaining : $[UnitRef]) extends BaseFactionAction(implicit g => "Move " + g.unit(u).uclass.styled(self) + " to", r)
 case class OmnipotenceJoinAction(self : Faction, selected : $[UnitRef], r : Region) extends BaseFactionAction("Join units in", r)
-case class OmnipotenceCancelAction(self : Faction) extends BaseFactionAction("Omnipotence", "Cancel") with Soft
+// NOT Soft: refunds the 1 Power (self.power += 1) and clears oncePerTurn. If this were Soft while
+// the Main payment is now Hard-recorded, the refund would be lost on replay and the Power stranded.
+// Hard in lockstep with OmnipotenceMainAction. (BB build already has this Hard.)
+case class OmnipotenceCancelAction(self : Faction) extends BaseFactionAction("Omnipotence", "Cancel")
 
 case class FiendishSpawnPreBattleAction(self : Faction) extends OptionFactionAction(FiendishSpawn.styled(self)) with PreBattleQuestion
 case class FiendishSpawnChooseAction(self : Faction, uc : UnitClass, placed : Int) extends BaseFactionAction(implicit g => "Place Larva in battle", uc.styled(self))

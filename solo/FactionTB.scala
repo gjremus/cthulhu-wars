@@ -237,8 +237,11 @@ case class TBAutotomyUseAction(self : Faction)
     extends OptionFactionAction("Use " + Autotomy.styled(TB)) with PostBattleQuestion with Soft {
     override def question(implicit game : Game) = Autotomy.styled(TB)
 }
+// NOT Soft: this Skip is the ONLY way to advance past the Autotomy offer (its handler proceed()s);
+// the offer Ask has no Hard "Done". A Soft action is never recorded, so on replay the phase never
+// advances and the battle re-asks forever — stall. The Use opener above stays Soft (Hard commit).
 case class TBAutotomySkipAction(self : Faction)
-    extends OptionFactionAction("Skip " + Autotomy.styled(TB)) with PostBattleQuestion with Soft {
+    extends OptionFactionAction("Skip " + Autotomy.styled(TB)) with PostBattleQuestion {
     override def question(implicit game : Game) = Autotomy.styled(TB)
 }
 // Crawling Chaos Madness: TB consent for the enemy to use Subterrane (Mantle /
