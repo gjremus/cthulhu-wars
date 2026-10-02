@@ -473,7 +473,8 @@ object IGOOsExpansion extends Expansion {
                 val ghat = f.allInPlay.%(_.uclass == GhatanotoaIGOO)
                 if (ghat.any && !ElderThingMindControl.suppresses(ghat.head)) {
                     val r = ghat.head.region
-                    f.enemies./~(_.at(r).%(_.uclass.utype == Cultist)).foreach { u =>
+                    // Earth Cats count as Bubastis's Cultists when an enemy targets them (targetable-as-Cultist rule).
+                    f.enemies./~(_.at(r).%(u => u.uclass.utype == Cultist || (u.faction == BB && u.uclass == EarthCat))).foreach { u =>
                         if (!game.mummifiedCultists.has(u.ref)) {
                             game.mummifiedCultists :+= u.ref
                             log("Execration of Mu".styled("nt") + ":", u.uclass.styled(u.faction), "auto-mummified in", r)
@@ -1153,7 +1154,7 @@ object IGOOsExpansion extends Expansion {
             self.power -= 1
             val ghat = self.allInPlay.%(_.uclass == GhatanotoaIGOO).head
             val r = ghat.region
-            val targets = self.enemies./~(_.at(r).%(_.uclass.utype == Cultist).%(u => !game.mummifiedCultists.has(u.ref)))
+            val targets = self.enemies./~(_.at(r).%(u => u.uclass.utype == Cultist || (u.faction == BB && u.uclass == EarthCat)).%(u => !game.mummifiedCultists.has(u.ref)))   // Earth Cats = BB Cultists
             targets.foreach { u =>
                 game.mummifiedCultists :+= u.ref
             }

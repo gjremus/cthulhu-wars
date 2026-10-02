@@ -358,7 +358,7 @@ object CthulhuWarsSolo {
         // internal build id (BuildInfo.version, e.g. bubastis-v2.4.x) is still compiled
         // in via the replay-filename / quine-save strings below, so deploys stay
         // grep-verifiable — this only changes the displayed text.
-        val version = "Cthulhu Wars Expansions - 1.22.2"
+        val version = "Cthulhu Wars Expansions - 1.22.3"
 
         log(version)
 
@@ -984,7 +984,7 @@ object CthulhuWarsSolo {
 
             case class DrawRect(key : String, tint : |[Processing], x : Int, y : Int, width : Int, height : Int, cx : Int = 0, cy : Int = 0, alpha : Double = 1.0, rotation : Double = 0.0, splitTint : |[Processing] = None)
 
-            case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int, parasiteOrig : |[Faction] = None) {
+            case class DrawItem(region : Region, faction : Faction, unit : UnitClass, health : UnitHealth, tags : $[UnitState], x : Int, y : Int, parasiteOrig : |[(Faction, UnitClass)] = None) {
                 val defaultProcessing = Processing(None, None, None)
 
                 val tint = faction @@ {
@@ -1058,9 +1058,14 @@ object CthulhuWarsSolo {
                     // must NOT fall back to a region-wide lookup, or two parasitized
                     // cultists of different original factions in the same area would
                     // both take the first one's color.
+                    // Draws the figure's OWN original sprite (faction Acolyte, Earth Cat, ...) at its
+                    // normal size, split with the insect owner's colour. Old saves without a tracked
+                    // original class fall back to that faction's Acolyte.
                     case MindParasiteCultist =>
-                        val origTint = parasiteOrig./(of => DrawItem(null, of, Acolyte, Alive, $, 0, 0).tint).|(tint)
-                        DrawRect("ts-acolyte", |(origTint), x - 17, y - 54, 39, 60, splitTint = |(tint))
+                        val (of, ouc) = parasiteOrig.|((faction, Acolyte))
+                        val base = DrawItem(null, of, ouc, Alive, $, x, y).proto
+                        if (base != null) base.copy(splitTint = |(tint))
+                        else DrawRect("ts-acolyte", |(DrawItem(null, of, Acolyte, Alive, $, 0, 0).tint), x - 17, y - 54, 39, 60, splitTint = |(tint))
 
                     case HighPriest => faction match {
                         case BG => DrawRect("bg-high-priest", None, x - 35, y - 60, 70, 68)
@@ -1850,7 +1855,7 @@ object CthulhuWarsSolo {
                             // Per-figure Mind Parasite original faction, so each
                             // parasitized cultist splits with its OWN true color
                             // (refreshed every render from the live mapping).
-                            val pOrig = if (u.uclass == MindParasiteCultist) game.mindParasiteOriginalFaction.get(u.ref) else None
+                            val pOrig = if (u.uclass == MindParasiteCultist) game.mindParasiteOriginalFaction.get(u.ref)./(of => (of, game.mindParasiteOriginalUClass.get(u.ref).|(Acolyte))) else None
                             all +:= DrawItem(r, f, u.uclass, u.health, tags, 0, 0, pOrig)
                         }
                     }
@@ -3515,7 +3520,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             case AtlachNacha        => "n-atlach-nacha"
                             case Bokrug             => "n-bokrug"
                             case GlaakiIGOO         => "n-glaaki-igoo"
-                            case MindParasiteCultist => "ts-acolyte"
+                            // Parasitized figure: show its OWN original sprite (Earth Cat, faction Acolyte, ...).
+                            case MindParasiteCultist =>
+                                val of = displayGame.mindParasiteOriginalFaction.get(u.ref).|(f)
+                                val ouc = displayGame.mindParasiteOriginalUClass.get(u.ref).|(Acolyte)
+                                moonSpriteAssetId(new UnitFigure(of, ouc, 0, u.region))
                             case other              => f.short.toLowerCase + "-" + other.name.toLowerCase.replace(" ", "-").replace("'", "")
                         }
                     }
