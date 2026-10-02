@@ -209,7 +209,16 @@ case class ServitorPlaceAction(self : Faction, target : Faction, r : Region) ext
 // exactly where it is on the Map. WhateleyRecruitMainAction is Soft (a sub-menu); the
 // leaf WhateleyRecruitAction / WhateleyPlaceAction are Hard (they mutate ownership/board).
 case class WhateleyRecruitMainAction(self : Faction) extends OptionFactionAction(implicit g => "Recruit " + "Whateley Clan".styled("nt")) with DoomQuestion with Soft with PowerNeutral
-case class WhateleyRecruitAction(self : Faction, card : WhateleyLoyaltyCard) extends BaseFactionAction(implicit g => "Recruit " + card.short, implicit g => g.whateleyRecruitLabel(self, card))
+// Same button format as the Loyalty Card (Terror/Monster) menu: empty question so no redundant
+// per-button subtitle, and a "?" icon that opens the Whateley's loyalty-card overlay.
+case class WhateleyRecruitAction(self : Faction, card : WhateleyLoyaltyCard) extends BaseFactionAction(g => "", implicit g => {
+    val qm = Overlays.imageSource("question-mark")
+    val p = s""""${card.name.replace('\\'.toString, '\\'.toString + '\\'.toString)}"""".replace('"'.toString, "&quot;")
+    "<div class=sbdiv>" +
+        g.whateleyRecruitLabel(self, card) +
+        s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" />""" +
+    "</div>"
+})
 case class WhateleyPlaceAction(self : Faction, card : WhateleyLoyaltyCard, r : Region) extends BaseFactionAction(implicit g => card.unit.styled(self) + " placed in", implicit g => r + self.iced(r))
 
 // Dunwich: Wilbur Whateley "Open the Way" — a cost-0 Action. Spend a Gate banked on Wilbur's
