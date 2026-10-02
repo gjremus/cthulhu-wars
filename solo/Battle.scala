@@ -1349,8 +1349,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 }
                 jump(HarbingerKillPhase)
 
-                jump(HarbingerKillPhase)
-
             case HarbingerKillPhase =>
                 sides.foreach { s =>
                     if (s.tag(Harbinger)) {
