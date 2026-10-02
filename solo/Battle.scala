@@ -1341,13 +1341,25 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                if (attacker.forces.none) {
+                // REPLAY SAFETY (same pattern as prebattle()'s own guard above): a later
+                // rule/exemption change can leave a side with no units in the arena on
+                // replay even though it genuinely had units when the game was first
+                // played (e.g. an earlier power's retreat/removal behavior changed since
+                // this game was recorded). Ending the battle here changes what the next
+                // recorded action means and desyncs replay ("no active battle" cascading
+                // into an eventual uncaught crash). If replay's next hint is an ordinary
+                // battle-continuation action, honor the old recorded path instead of
+                // ending the battle early — same as prebattle() already does.
+                val battleStartReplayExpectsContinue = game.nextReplayActionHint.exists(h =>
+                    h.startsWith("PreBattleDoneAction") || h.startsWith("BattleRollAction") || h.startsWith("CthughaCombatChoose"))
+
+                if (attacker.forces.none && !battleStartReplayExpectsContinue) {
                     log("No attackers left to battle")
 
                     return jump(PostBattlePhase)
                 }
 
-                if (defender.forces.none) {
+                if (defender.forces.none && !battleStartReplayExpectsContinue) {
                     log("No defenders left to battle")
 
                     return jump(PostBattlePhase)
@@ -1369,11 +1381,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             exempt(u)
                         }
                     }
-                    if (attacker.forces.none) {
+                    if (attacker.forces.none && !battleStartReplayExpectsContinue) {
                         log("No attackers left to battle")
                         return jump(PostBattlePhase)
                     }
-                    if (defender.forces.none) {
+                    if (defender.forces.none && !battleStartReplayExpectsContinue) {
                         log("No defenders left to battle")
                         return jump(PostBattlePhase)
                     }
@@ -1393,11 +1405,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             exempt(u)
                         }
                     }
-                    if (attacker.forces.none) {
+                    if (attacker.forces.none && !battleStartReplayExpectsContinue) {
                         log("No attackers left to battle")
                         return jump(PostBattlePhase)
                     }
-                    if (defender.forces.none) {
+                    if (defender.forces.none && !battleStartReplayExpectsContinue) {
                         log("No defenders left to battle")
                         return jump(PostBattlePhase)
                     }
@@ -1419,11 +1431,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             exempt(u)
                         }
                     }
-                    if (attacker.forces.none) {
+                    if (attacker.forces.none && !battleStartReplayExpectsContinue) {
                         log("No attackers left to battle")
                         return jump(PostBattlePhase)
                     }
-                    if (defender.forces.none) {
+                    if (defender.forces.none && !battleStartReplayExpectsContinue) {
                         log("No defenders left to battle")
                         return jump(PostBattlePhase)
                     }
@@ -1484,11 +1496,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             exempt(u)
                         }
                     }
-                    if (attacker.forces.none) {
+                    if (attacker.forces.none && !battleStartReplayExpectsContinue) {
                         log("No attackers left to battle")
                         return jump(PostBattlePhase)
                     }
-                    if (defender.forces.none) {
+                    if (defender.forces.none && !battleStartReplayExpectsContinue) {
                         log("No defenders left to battle")
                         return jump(PostBattlePhase)
                     }

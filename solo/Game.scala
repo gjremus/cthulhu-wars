@@ -5658,7 +5658,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             ProceedBattlesAction
 
         case ProceedBattlesAction =>
-            println(s"[CS-TRACE6] ProceedBattlesAction enter: nexedAny=${game.nexed.any} battleAny=${battle.any} queueNum=${queue.num} queueArenas=${queue./(_.arena)}")
             if (game.nexed.any && battle.any) {
                 game.nexed = $
 
@@ -5707,7 +5706,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 }
 
                 battle = queue.starting
-                println(s"[CS-TRACE6] ProceedBattlesAction fallthrough: set battle.any=${battle.any} arena=${battle./(_.arena)}")
 
                 // Round 8 Bug 60: removed the fbPowerAtBattleStart snapshot here. It used to
                 // capture FB.power at battle proceed time, but that's AFTER AttackAction deducted
@@ -6322,12 +6320,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // BATTLE
         case action if battle.any =>
-            try battle.get.perform(action)
-            catch { case e : Throwable =>
-                val b = battle.get
-                println(s"[CS-TRACE] battle.perform crashed. phase=${b.phase} arena=${b.arena} attacker=${b.attacker} defender=${b.defender} action=${action} err=${e.getClass.getName}: ${e.getMessage}")
-                throw e
-            }
+            battle.get.perform(action)
 
         // Defensive: battle-context actions performed when game.battle is None.
         // Replay or out-of-order continuation can leave a PreBattleQuestion-typed
@@ -6337,7 +6330,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // battle was cleared before the continuation ran, but at least the
         // remaining log replays.
         case action : PreBattleQuestion =>
-            println(s"[CS-TRACE7] PreBattleQuestion with no active battle. action=$action queueNum=${queue.num} nexed=$nexed battleResumePhase=$battleResumePhase")
             log("[warn] battle action " + action.getClass.getSimpleName + " skipped — no active battle")
             StartContinue
 
@@ -6362,12 +6354,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             println(s"[WARN] ${action.getClass.getSimpleName} with no active battle — continuing")
             StartContinue
 
-        // DIAGNOSTIC (temporary, row 7): BattleRollAction reaching Game-level dispatch with no
-        // active battle has no existing defensive case (unlike PreBattleQuestion/PostBattleQuestion
-        // above) and was falling through to an uncaught MatchError. Logging full queue/nexed state
-        // to find why game.battle was cleared before this roll, instead of crashing.
+        // Defensive: same no-active-battle race as PreBattleQuestion/PostBattleQuestion
+        // above, but for BattleRollAction (row 7: fixed at the source in BattleStart's
+        // replay-safety guard, kept here as a last-resort net rather than an uncaught
+        // MatchError).
         case action : BattleRollAction =>
-            println(s"[CS-TRACE5] BattleRollAction with no active battle. action=$action queueNum=${queue.num} queueHead=${queue.take(3)} nexed=$nexed battleResumePhase=$battleResumePhase")
+            log("[warn] battle action " + action.getClass.getSimpleName + " skipped — no active battle")
             StartContinue
 
     }
