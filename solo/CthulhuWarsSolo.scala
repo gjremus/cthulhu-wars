@@ -63,6 +63,9 @@ class Setup(factions : $[Faction], diff : Difficulty) {
     var dice = true
     var es = true
     var confirm = false
+
+    // Non-default player names from the alternative faction picker.
+    var playerNames : Map[Faction, String] = Map()
 }
 
 class CachedBitmap(val node : dom.Element) {
@@ -568,7 +571,12 @@ object CthulhuWarsSolo {
             val urlV = (dom.window.location.search + "&version=").splt("version=")(1).splt("&")(0)
             val v = (urlV != "").??("?version=" + urlV)
 
-            post(server + "create", $(roles, version, name, stp).mkString("\n")) { master =>
+            // Renamed players from the alt picker are recorded straight after the start
+            // of the game (StartAction first, exactly as the first player would record it).
+            val names = setup.seating.%(setup.playerNames.contains)./(f => "SetPlayerNameAction(" + f.short + ", \"" + setup.playerNames(f) + "\")")
+            val initial = names.any.??($("StartAction") ++ names)
+
+            post(server + "create", ($(roles, version, name, stp) ++ initial).mkString("\n")) { master =>
                 get(server + "roles/" + master) { ras =>
                     val rs = ras.split("\n").toList.map(_.split(" ")).map(s => s(0) -> s(1)).filter(_._1 != "$")
                     var ca = "Copy all"
@@ -639,6 +647,8 @@ object CthulhuWarsSolo {
             }
 
             var game = new Game(board, track, seating, true, setup.options)
+            // Local games have no creation log, so apply the picker's names directly.
+            if (hash == "") game.playerNames = setup.playerNames
             var overrideGame : |[Game] = None
             def displayGame = overrideGame.|(game)
 
@@ -3011,9 +3021,14 @@ object CthulhuWarsSolo {
                     }.mkString("")
                 }
                 val nameStyled = if (f == CS) s"""<span class="inline-block">${csRainbowSpan(f.name)}</span>""" else "" + f
-                val name = div("name")(nameStyled + silenceTokenIcon)
+                // Player name (only when renamed from the default): first 5 letters next to the
+                // full faction name, first letter next to the acronym. Same white, normal-weight
+                // font as the power line below (the name div is 120% bold, so scale back to 100%).
+                def playerTag(n : String) = s"""<span class="power" style="font-size:83%; font-weight:normal; margin-left:0.4em;">${n}</span>"""
+                val pName = game.playerNames.get(f)
+                val name = div("name")(nameStyled + pName./(n => playerTag(n.take(5))).|("") + silenceTokenIcon)
                 val shortNameStyled = if (f == CS) csRainbowSpan(f.short) else f.short.styled(f)
-                val nameS = div("name")(shortNameStyled + silenceTokenIcon)
+                val nameS = div("name")(shortNameStyled + pName./(n => playerTag(n.take(1))).|("") + silenceTokenIcon)
                 // Tombstalker (TS): append Death's Head count to faction status panel
                 val dhStr = (f == TS).?(" | " + (game.deathsHead.toString + " Death's Head").styled(TS)).|("")
                 // Firstborn (FB): Round 8 Bug 75 — append Infernal Pact discount count
@@ -4440,6 +4455,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 undoDiv.appendChild(newDiv("option" + style./(" " + _).|(""), "Cancel", () => { cancelUndo() }))
 
                 val g = new Game(board, track, seating, true, setup.options)
+                if (hash == "") g.playerNames = setup.playerNames
 
                 actions.reverse.take(n).foreach { a =>
                     if (a.isVoid.not)
@@ -4463,6 +4479,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 var cc : Continue = StartContinue
 
                 val g = new Game(board, track, seating, true, setup.options)
+                if (hash == "") g.playerNames = setup.playerNames
 
                 actions.reverse.indexed./ { (a, i) =>
                     if (a.isVoid.not) {
@@ -4788,6 +4805,46 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 val options = ((1 -> es1) :: (2 -> es2) :: (3 -> es3)).%>(_ > 0)
                                 ask(q(g), options./((e, q) => "[" + e.styled("es") + "]" + " of " + q), n => perform(draw(options(n)._1, true)))
 
+                            // Commands -> Change Name: an editable name field with Save / Clear / Cancel
+                            // instead of the usual buttons. Save and Clear record SetPlayerNameAction.
+                            case UIQuestion(f, game, actions, _) if f != null && actions.exists(_.unwrap.is[PlayerNameEditAction]) => {
+                                cancelUndo()
+                                stopBackgroundCheck()
+                                clear(actionDiv)
+
+                                actionDiv.className = "inner action unselectable"
+
+                                actionDiv.appendChild(newDiv("", "Player Name"))
+
+                                val nameIn = dom.document.createElement("input").asInstanceOf[html.Input]
+                                nameIn.`type` = "text"
+                                nameIn.maxLength = 24
+                                nameIn.placeholder = "Player name"
+                                nameIn.value = game.playerNames.get(f).|("")
+                                nameIn.style.cssText = "box-sizing:border-box;width:100%;margin:0.5ex 0 1ex 0;padding:5px 8px;background:#0d1117;border:1px solid #30363d;border-radius:5px;color:#e6edf3;font-family:inherit;font-size:inherit;user-select:text;-webkit-user-select:text;"
+                                actionDiv.appendChild(nameIn)
+
+                                def done(a : Action) {
+                                    clear(actionDiv)
+                                    perform(a)
+                                }
+
+                                def save() = done(SetPlayerNameAction(f, PlayerNames.clean(nameIn.value)))
+
+                                nameIn.onkeydown = (e : dom.KeyboardEvent) => {
+                                    e.stopPropagation()
+                                    if (e.key == "Enter")
+                                        save()
+                                }
+
+                                actionDiv.appendChild(newDiv("option " + f.style + "-border", "Save".hl, () => save()))
+                                actionDiv.appendChild(newDiv("option " + f.style + "-border", "Clear", () => done(SetPlayerNameAction(f, ""))))
+                                actionDiv.appendChild(newDiv("option " + f.style + "-border", "Cancel", () => done(CancelAction)))
+
+                                nameIn.focus()
+
+                                None
+                            }
                             case UIQuestion(e, game, actions, waiting) if hash != "" && e != null && self.none && localReplay.not => {
                                 startBackgroundCheck()
 
@@ -6443,6 +6500,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     // the pool, take the requested count, add umbrella +
                     // picks to setup.options.
                     pendingRandomNeutrals = Some({ setup =>
+                        // Carry renamed players (not the default "Player N") into the game.
+                        setup.playerNames = ordered.%{ case (n, _) => PlayerNames.isDefault(n).not }./{ case (n, f) => f -> PlayerNames.clean(n) }.toMap
                         if (randMonsters && randMonsterCount > 0) {
                             val picks = scala.util.Random.shuffle(randMonsterPool.toList).take(randMonsterCount)
                             setup.options = (setup.options.notOf[NeutralMonsterOption]).but(NeutralMonsters)
@@ -6617,7 +6676,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                         val title = dom.document.createElement("div")
                         title.innerHTML = s"""
-                            <div style="
+                            <div id="game-title" style="
                                 position: fixed;
                                 left: 0;
                                 top: 0;
@@ -6669,6 +6728,42 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             </div>"""
 
                         dom.document.body.appendChild(title)
+
+                        // Small screens (phones): the title covers part of the map, so tapping
+                        // its text moves it to the bottom of the map, and tapping again moves it
+                        // back to the top. On bigger screens the text stays click-through.
+                        {
+                            val box = dom.document.getElementById("game-title").asInstanceOf[html.Element]
+                            val text = box.querySelector("[data-elem=text]").asInstanceOf[html.Element]
+                            var atBottom = false
+
+                            def smallScreen = dom.window.matchMedia("(max-width: 600px), (max-height: 600px)").matches
+
+                            def mapBottom : Double = $("map-small", "map-big")./(dom.document.getElementById)
+                                .%(e => e != null && e.asInstanceOf[html.Element].offsetHeight > 0)./(_.getBoundingClientRect().bottom)
+                                .starting.|(dom.window.innerHeight.toDouble)
+
+                            def place() {
+                                if (smallScreen.not)
+                                    atBottom = false
+
+                                text.style.pointerEvents = smallScreen.?("auto").|("")
+                                text.style.cursor = smallScreen.?("pointer").|("")
+                                box.style.top = atBottom.?("" + (mapBottom - box.offsetHeight).max(0) + "px").|("0")
+                            }
+
+                            text.onclick = (e : dom.MouseEvent) => {
+                                if (smallScreen) {
+                                    e.stopPropagation()
+                                    atBottom = atBottom.not
+                                    place()
+                                }
+                            }
+
+                            dom.window.addEventListener("resize", (_ : dom.Event) => place())
+
+                            place()
+                        }
 
                         dom.document.title = logs(1) + " - Cthulhu Wars HRF"
 
