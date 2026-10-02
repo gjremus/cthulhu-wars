@@ -575,7 +575,7 @@ object Overlays {
         case $("Lavinia Whateley") => loyaltyCardWhateley("Lavinia Whateley", "lavinia-whateley-dunwich", 2, 0, "Bride of the Old Ones", "Ongoing", "If Lavinia shares an Area with any Great Old One (any Faction) at the start of an Action, she is immune to Kills, Pains, and Eliminations until after the Action ends.", "Mother of Monsters", "Doom Phase", "If you control Lavinia, pay half as much Power and/or Doom for any Independent Great Old One; Neutral Monster, Terror, or Cultist; or Clan member you acquire. Round fractions up.")
         case $("Wilbur Whateley") => loyaltyCardWhateley("Wilbur Whateley", "wilbur-whateley", 3, 0, "Yr and Nhnngr", "Doom Phase", "When you perform a Ritual of Annihilation, place a Gate (from the Pool) on Wilbur's Loyalty Card. These Gates remain even when Wilbur switches loyalty.", "Open the Way", "Action: Cost 0", "Take a Gate from Wilbur's Loyalty Card and place it anywhere on the Map (following normal Gate placement — never a second Gate in an Area that already has one).", wilburGateMarker)
         case $("Wizard Whateley") => loyaltyCardWhateley("Wizard Whateley", "wizard-whateley", 2, 0, "Clan Patriarch", "Recruit Cultist Action", "When you recruit a Cultist in Wizard Whateley's Area, it costs one fewer Power. A 0-cost Cultist gains you 1 Power.", "Magician", "Pre-Battle", "If Wizard is involved in the Battle, you may immediately muster an Independent Great Old One; Neutral Monster, Terror, or Cultist; or Clan member as if it were the Doom Phase, if all other requirements are met. Pay normal costs (unless you also Control Lavinia).")
-        case $("Junior Whateley") => loyaltyCardWhateley("Junior Whateley", "junior-whateley", 4, 4, "Growth", "Doom Phase", "If Junior Whateley is in play, place any token on his Loyalty Card. These tokens remain even when Junior switches loyalty.", "Transmogrification", "Action: Cost 0", "If Junior has at least 1 token, roll a die. If the roll is equal to or less than the number of tokens, replace Junior with any Great Old One (Neutral or Faction), ignoring all Awakening requirements including cost; place Junior back in your Pool. Win or lose, discard one token. A rival's Great Old One recruited this way stays under their Control.", juniorTokenMarker)
+        case $("Junior Whateley") => loyaltyCardWhateley("Junior Whateley", "junior-whateley", 4, 4, "Growth", "Doom Phase", "If Junior Whateley is in play, place any token on his Loyalty Card. These tokens remain even when Junior switches loyalty.", "Transmogrification", "Action: Cost 0", "If Junior has at least 1 token, roll a die. If the roll is equal to or less than the number of tokens, replace Junior with any Great Old One (Neutral or Faction), ignoring all Awakening requirements including cost; place Junior back in your Pool. Win or lose, discard one token. A rival's Great Old One recruited this way stays under their Control.", juniorTokenMarker, juniorTransmogUnavailable)
         case $("Dire Yog-Sothoth") => loyaltyCardIGOO("Dire Yog-Sothoth", "6 (Opener of the Way) or 10 minus your Unit's cost", "Equal to the number of enemy-Controlled Faction Great Old Ones in play", false, "Opener of the Way: You must have a Spawn of Yog-Sothoth on the Map. Pay 6 Power and replace the Spawn with Dire Yog-Sothoth. This counts as Awakening Yog-Sothoth if you have not yet done so; then each other player gains 1 Elder Sign.<br>All other Factions: You have a Great Old One in play plus your most expensive Monster or Terror. Pay 10 Power minus your Unit's cost, and replace it with Dire Yog-Sothoth.", "To Rule Them All", "Action: Cost 4", "Dire Yog-Sothoth can Capture other Great Old Ones following the same rules as Capture Cultist.", "Your Great Old One is in the same Area as two enemy Great Old Ones.", "It Walks Unseen", "Move", "When you Move any other Unit(s), you may also Move Dire Yog-Sothoth at no additional cost.")
         // Shared common text — back of all four Whateley cards. Each Whateley card
         // links here via onExternalClick('How to Recruit Whateley Clan').
@@ -1969,7 +1969,7 @@ object Overlays {
     // Dunwich Horror — Whateley Clan loyalty card overlay. Two ability blocks, an explicit
     // image slug (Lavinia shares a name with another neutral, so the slug can't be derived
     // from the name), and the shared "How to Recruit Whateley Clan" footer.
-    def loyaltyCardWhateley(name : String, slug : String, cost : Int, combat : Int, ability1 : String, phase1 : String, text1 : String, ability2 : String, phase2 : String, text2 : String, markerHtml : String = "") = s"""
+    def loyaltyCardWhateley(name : String, slug : String, cost : Int, combat : Int, ability1 : String, phase1 : String, text1 : String, ability2 : String, phase2 : String, text2 : String, markerHtml : String = "", ability2Unavailable : |[String] = None) = { val dim2 = ability2Unavailable.any.??(" dimmed"); s"""
         <table class="loyalty-card-table">
             <thead>
                 <tr>
@@ -1994,7 +1994,7 @@ object Overlays {
                         </div>
                         <div>&nbsp;</div>
                         <div class="black-border">
-                            <span class="ability-color">${ability2} </span><span class="cost-color">(${phase2})</span><span class="nt">: ${text2}</span>
+                            <span class="ability-color${dim2}">${ability2} </span><span class="cost-color${dim2}">(${phase2})</span><span class="nt${dim2}">: ${text2}</span>${ability2Unavailable./(t => "<div><span class=\"nt\">" + t + "</span></div>").|("")}
                         </div>
                         ${markerHtml}
                         <div>&nbsp;</div>
@@ -2005,7 +2005,7 @@ object Overlays {
                     <td></td>
                 </tr>
             </tbody>
-        </table>"""
+        </table>""" }
 
     // Wilbur Whateley pop-up marker — a shrunk Gate image with the stored-Gate count
     // (Yr and Nhnngr) overlaid, banked on his Loyalty Card. Reads the live count from
@@ -2022,6 +2022,15 @@ object Overlays {
                     <div><span class="nt">Gates stored (Yr and Nhnngr)</span></div>
                 </div>"""
         case _ => ""
+    }
+
+    // Junior Whateley "Transmogrification" — greyed out (with a note) when no Great Old One,
+    // iGOO, or Elder God is off the map to trade for. Same availability test as the action menu.
+    // (The faction passed only affects who an unclaimed iGOO enters under, not whether any exist.)
+    def juniorTransmogUnavailable : |[String] = Overlays.currentGame match {
+        case Some(g) if g.factions.any && g.transmogGreatOldOnes(g.factions.head).none =>
+            Some("No applicable units available to awaken.")
+        case _ => None
     }
 
     // Junior Whateley pop-up marker — a small pink circle (matching his pink base) with the

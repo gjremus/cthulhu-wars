@@ -2966,8 +2966,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // Dunwich: Junior Whateley "Transmogrification" — a cost-0 action. Roll a d6; on a roll
         // <= banked tokens, trade Junior for any Great Old One not on the map. One token is always
-        // discarded. Offered while Junior is in play and at least one token is banked.
-        if (!servitorBlocking && f.loyaltyCards.has(JuniorWhateleyCard) && juniorTokens > 0 && f.units.exists(u => u.uclass == JuniorWhateley && u.region.inPlay))
+        // discarded. Offered while Junior is in play, at least one token is banked, and at least one
+        // Great Old One / iGOO / Elder God is off the map to trade for (card ignores all requirements).
+        if (!servitorBlocking && f.loyaltyCards.has(JuniorWhateleyCard) && juniorTokens > 0 && f.units.exists(u => u.uclass == JuniorWhateley && u.region.inPlay) && transmogGreatOldOnes(f).any)
             + JuniorTransmogrifyMainAction(f)
     }
 
@@ -3053,7 +3054,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val factionGOOs = factions./~(f2 => f2.pool.%(_.uclass.isGOO)./(u => (u.uclass, f2)))
         val igooCards = (loyaltyCards.of[IGOOLoyaltyCard] ++ factions./~(_.loyaltyCards.of[IGOOLoyaltyCard])).distinct
         val igoos = igooCards./(c => (c.unit, factions.find(_.loyaltyCards.has(c)).|(f)))
-        (factionGOOs ++ igoos).%((uc : UnitClass, fac : Faction) => onMap.has(uc).not).distinctBy(_._1).sortBy(_._1.name)
+        (factionGOOs ++ igoos).%((uc : UnitClass, fac : Faction) => onMap.has(uc).not && uc != ShuddeMellSegment).distinctBy(_._1).sortBy(_._1.name)
     }
 
     // Dunwich Horror — Wizard "Magician" muster options. Each tuple is (unit, card-to-claim, Power,
