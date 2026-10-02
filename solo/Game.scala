@@ -5641,6 +5641,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             ProceedBattlesAction
 
         case ProceedBattlesAction =>
+            println(s"[CS-TRACE6] ProceedBattlesAction enter: nexedAny=${game.nexed.any} battleAny=${battle.any} queueNum=${queue.num} queueArenas=${queue./(_.arena)}")
             if (game.nexed.any && battle.any) {
                 game.nexed = $
 
@@ -5689,6 +5690,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 }
 
                 battle = queue.starting
+                println(s"[CS-TRACE6] ProceedBattlesAction fallthrough: set battle.any=${battle.any} arena=${battle./(_.arena)}")
 
                 // Round 8 Bug 60: removed the fbPowerAtBattleStart snapshot here. It used to
                 // capture FB.power at battle proceed time, but that's AFTER AttackAction deducted
@@ -6298,6 +6300,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // battle was cleared before the continuation ran, but at least the
         // remaining log replays.
         case action : PreBattleQuestion =>
+            println(s"[CS-TRACE7] PreBattleQuestion with no active battle. action=$action queueNum=${queue.num} nexed=$nexed battleResumePhase=$battleResumePhase")
             log("[warn] battle action " + action.getClass.getSimpleName + " skipped — no active battle")
             StartContinue
 
