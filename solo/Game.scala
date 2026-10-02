@@ -6283,7 +6283,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // BATTLE
         case action if battle.any =>
-            battle.get.perform(action)
+            try battle.get.perform(action)
+            catch { case e : Throwable =>
+                val b = battle.get
+                println(s"[CS-TRACE] battle.perform crashed. phase=${b.phase} arena=${b.arena} attacker=${b.attacker} defender=${b.defender} action=${action} err=${e.getClass.getName}: ${e.getMessage}")
+                throw e
+            }
 
         // Defensive: battle-context actions performed when game.battle is None.
         // Replay or out-of-order continuation can leave a PreBattleQuestion-typed
@@ -6315,6 +6320,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // action's game-state work was already done by FBExpansion — just continue.
         case _ : FBCarnageChooseSpellbookAction | _ : FBCarnagePayPowerAction | _ : FBCarnageCancelAction | _ : FBCyclopeanGazeBattleDoneAction =>
             println(s"[WARN] ${action.getClass.getSimpleName} with no active battle — continuing")
+            StartContinue
+
+        // DIAGNOSTIC (temporary, row 7): BattleRollAction reaching Game-level dispatch with no
+        // active battle has no existing defensive case (unlike PreBattleQuestion/PostBattleQuestion
+        // above) and was falling through to an uncaught MatchError. Logging full queue/nexed state
+        // to find why game.battle was cleared before this roll, instead of crashing.
+        case action : BattleRollAction =>
+            println(s"[CS-TRACE5] BattleRollAction with no active battle. action=$action queueNum=${queue.num} queueHead=${queue.take(3)} nexed=$nexed battleResumePhase=$battleResumePhase")
             StartContinue
 
     }

@@ -173,11 +173,28 @@ case class CSEffulgentAction(r : Region) extends BaseFactionAction(implicit g =>
 // a time, in its own chosen order, looping until it has none left in the region before moving on
 // to the next faction. Modelled on Howl's per-unit retreat (Battle.scala) and Corrupted Rending's
 // faction-ordering (below) — this is a plain retreat (no kill/pain assignment).
-case class CSEffulgentRetreatFactionsAction(r : Region, remaining : $[Faction]) extends ForcedAction
-case class CSEffulgentRetreatPickFactionAction(r : Region, a : Faction, remaining : $[Faction]) extends ForcedAction
-case class CSEffulgentRetreatUnitAction(f : Faction, r : Region, remaining : $[Faction]) extends ForcedAction
-case class CSEffulgentRetreatUnitPickAction(f : Faction, u : UnitRef, r : Region, remaining : $[Faction]) extends ForcedAction
-case class CSEffulgentRetreatMoveAction(f : Faction, u : UnitRef, to : Region, r : Region, remaining : $[Faction]) extends ForcedAction
+// acting = the faction whose main action this retreat sweep belongs to (whoever actually took
+// Effulgent Sacrifice - any faction under the owner respec, always CS under the legacy flow), so
+// the sweep ends the correct faction's turn-action instead of always ending CS's. REPLAY
+// COMPATIBILITY: games recorded before `acting` was added stored these with one fewer
+// parameter; each class keeps an auxiliary constructor at the old arity (defaulting acting
+// to CS, the only acting faction possible before this field existed) so those old histories
+// still parse instead of hitting "unknown class" on replay.
+case class CSEffulgentRetreatFactionsAction(r : Region, remaining : $[Faction], acting : Faction) extends ForcedAction {
+    def this(r : Region, remaining : $[Faction]) = this(r, remaining, CS)
+}
+case class CSEffulgentRetreatPickFactionAction(r : Region, a : Faction, remaining : $[Faction], acting : Faction) extends ForcedAction {
+    def this(r : Region, a : Faction, remaining : $[Faction]) = this(r, a, remaining, CS)
+}
+case class CSEffulgentRetreatUnitAction(f : Faction, r : Region, remaining : $[Faction], acting : Faction) extends ForcedAction {
+    def this(f : Faction, r : Region, remaining : $[Faction]) = this(f, r, remaining, CS)
+}
+case class CSEffulgentRetreatUnitPickAction(f : Faction, u : UnitRef, r : Region, remaining : $[Faction], acting : Faction) extends ForcedAction {
+    def this(f : Faction, u : UnitRef, r : Region, remaining : $[Faction]) = this(f, u, r, remaining, CS)
+}
+case class CSEffulgentRetreatMoveAction(f : Faction, u : UnitRef, to : Region, r : Region, remaining : $[Faction], acting : Faction) extends ForcedAction {
+    def this(f : Faction, u : UnitRef, to : Region, r : Region, remaining : $[Faction]) = this(f, u, to, r, remaining, CS)
+}
 
 // SB5 Effulgent Sacrifice — owner respec (0-cost cross-faction action). Once CS has earned the
 // Effulgent Sacrifice spellbook, ANY faction may take this on its own turn (offered from
@@ -544,39 +561,39 @@ object CSExpansion extends Expansion {
                 // Every faction (including CS itself) with units still standing in r must now retreat them all out.
                 val others = game.setup.%(e => e.at(r).not(Zeroed).any)
                 if (others.any)
-                    Force(CSEffulgentRetreatFactionsAction(r, others))
+                    Force(CSEffulgentRetreatFactionsAction(r, others, CS))
                 else
                     EndAction(CS)
             }
 
         // SB5 Effulgent Sacrifice retreat sweep (addendum) — see case classes above.
-        case CSEffulgentRetreatFactionsAction(r, remaining) =>
+        case CSEffulgentRetreatFactionsAction(r, remaining, acting) =>
             if (remaining.none)
-                EndAction(CS)
+                EndAction(acting)
             else if (remaining.num == 1)
-                Force(CSEffulgentRetreatUnitAction(remaining.head, r, $))
+                Force(CSEffulgentRetreatUnitAction(remaining.head, r, $, acting))
             else
-                Ask(CS).each(remaining)(a => CSEffulgentRetreatPickFactionAction(r, a, remaining.%(_ != a)).as(a)("Choose the next faction to retreat out of", r))
+                Ask(CS).each(remaining)(a => CSEffulgentRetreatPickFactionAction(r, a, remaining.%(_ != a), acting).as(a)("Choose the next faction to retreat out of", r))
 
-        case CSEffulgentRetreatPickFactionAction(r, a, remaining) =>
+        case CSEffulgentRetreatPickFactionAction(r, a, remaining, acting) =>
             CS.log("chose", a.full, "to retreat next out of", r, "(" + EffulgentSacrifice.styled(CS) + ")")
-            Force(CSEffulgentRetreatUnitAction(a, r, remaining))
+            Force(CSEffulgentRetreatUnitAction(a, r, remaining, acting))
 
-        case CSEffulgentRetreatUnitAction(f, r, remaining) =>
+        case CSEffulgentRetreatUnitAction(f, r, remaining, acting) =>
             val units = f.at(r).not(Zeroed)
             if (units.none)
-                Force(CSEffulgentRetreatFactionsAction(r, remaining))
+                Force(CSEffulgentRetreatFactionsAction(r, remaining, acting))
             else
-                Ask(f).each(units)(u => CSEffulgentRetreatUnitPickAction(f, u.ref, r, remaining).as(u.ref)("Retreat a unit from", r))
+                Ask(f).each(units)(u => CSEffulgentRetreatUnitPickAction(f, u.ref, r, remaining, acting).as(u.ref)("Retreat a unit from", r))
 
-        case CSEffulgentRetreatUnitPickAction(f, u, r, remaining) =>
-            Ask(f).each(r.connectedForRetreat)(to => CSEffulgentRetreatMoveAction(f, u, to, r, remaining).as(to)("Retreat", u.full, "to"))
+        case CSEffulgentRetreatUnitPickAction(f, u, r, remaining, acting) =>
+            Ask(f).each(r.connectedForRetreat)(to => CSEffulgentRetreatMoveAction(f, u, to, r, remaining, acting).as(to)("Retreat", u.full, "to"))
 
-        case CSEffulgentRetreatMoveAction(f, u, to, r, remaining) =>
+        case CSEffulgentRetreatMoveAction(f, u, to, r, remaining, acting) =>
             u.region = to
             u.onGate = false
             f.log("retreated", u.full, "from", r, "to", to, "(" + EffulgentSacrifice.styled(CS) + ")")
-            Force(CSEffulgentRetreatUnitAction(f, r, remaining))
+            Force(CSEffulgentRetreatUnitAction(f, r, remaining, acting))
 
         // SB5 Effulgent Sacrifice — owner respec (0-cost cross-faction action, see class above).
         case CSEffulgentSacrificeAction(f, r) =>
@@ -585,10 +602,20 @@ object CSExpansion extends Expansion {
             val globs    = CS.at(r).%(_.uclass == LuminousGlobule).not(Zeroed)
             val sb = "(" + EffulgentSacrifice.styled(CS) + ")"
             // Standard logging, one line per effect (only the action name is unique here).
-            // 1) Cultists eliminated (all of the acting faction's cultists in the region).
+            // 1) Cultists eliminated (all of the acting faction's cultists in the region),
+            // each refunded half its cost rounded down, same refund rule as the pre-respec
+            // design (see the LEGACY CSEffulgentAction flow above) - the owner flagged this
+            // refund log line as missing.
             if (cultists.any)
                 f.log("eliminated", cultists.num, "Cultist" + (cultists.num > 1).??("s"), "in", r, sb)
-            cultists.foreach(game.eliminate)
+            cultists.foreach { u =>
+                val refund = u.uclass.cost / 2
+                game.eliminate(u)
+                if (refund > 0) {
+                    f.power += refund
+                    f.log("recovered", refund.power, sb)
+                }
+            }
             // 2) Globule eliminated (a Prismatic Well always has a Globule).
             globs.foreach { g => f.log("eliminated", g, "in", r, sb); game.eliminate(g) }
             // 3) Doom awarded to the acting faction.
@@ -597,7 +624,16 @@ object CSExpansion extends Expansion {
             // 4) Elder Sign awarded to CS no matter who acts (so if CS itself acts, it gains both).
             CS.takeES(1)
             CS.log("gained an", "Elder Sign".styled("es"), sb)
-            EndAction(f)
+            // 5) Every faction (including CS itself) with units still standing in r - meteorites,
+            // Tulzscha, excrescences, anything not already eliminated above - must now retreat
+            // them all out. Reuses the same retreat-order sweep (CS picks the order, one unit at
+            // a time, same pattern as Mother Hydra's Agony Sting) already built for this power
+            // pre-respec, so this isn't a new one-off flow.
+            val others = game.setup.%(e => e.at(r).not(Zeroed).any)
+            if (others.any)
+                Force(CSEffulgentRetreatFactionsAction(r, others, f))
+            else
+                EndAction(f)
 
         // SB6 Core Exposure (Task 3.10.6).
         case CSCoreExposureMainAction(l) =>
