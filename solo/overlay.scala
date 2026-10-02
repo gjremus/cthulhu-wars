@@ -56,8 +56,39 @@ class InfoOverlay(overlay : html.Element) {
         old = None
     }
 
+    // The fixed game title (id "game-title") sits above everything. On small screens it can
+    // cover a faction card's name; in that case hide it while the card is showing, so it
+    // looks like it is behind the overlay, the same as the map.
+    private var titleCheckedFor : |[dom.HTMLTableElement] = None
+
+    private def titleElem = dom.document.getElementById("game-title").as[html.Element]
+
+    private def syncTitle() {
+        titleElem.foreach { t =>
+            if (showing.none || old.none) {
+                titleCheckedFor = None
+                t.style.visibility = ""
+            }
+            else
+            if (titleCheckedFor != old) {
+                titleCheckedFor = old
+                val covers = old.get.querySelector(".h1").as[html.Element].exists { h =>
+                    val range = dom.document.createRange()
+                    range.selectNodeContents(h)
+                    val a = range.getBoundingClientRect()
+                    val b = t.getBoundingClientRect()
+                    a.width > 0 && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+                }
+                t.style.visibility = covers.?("hidden").|("")
+            }
+        }
+    }
+
     def hide() {
         showing = None
+
+        titleCheckedFor = None
+        titleElem.foreach(_.style.visibility = "")
 
         overlay.parentElement.parentElement.style.display = "none"
 
@@ -117,6 +148,9 @@ class InfoOverlay(overlay : html.Element) {
 
         if (soonShow > 1)
             soonShow -= 1
+
+        if (soonShow <= 1)
+            syncTitle()
 
         dom.window.requestAnimationFrame { _ =>
             readjust()
@@ -2113,6 +2147,10 @@ object Overlays {
         ), setup = true)
     }
 
+    // Renamed player's full name, shown to the right of the faction name on its card.
+    def factionPlayerName(f : Faction) : String = currentGame./~(_.playerNames.get(f))./(n =>
+        s"""<span style="color:white; font-size:55%; font-variant:normal; margin-left:0.6em; white-space:nowrap;">${n}</span>""").|("")
+
     def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "", setup : Boolean = false, sbLine : String = "") = s"""
         <table class="faction-table" style="background-image:url(${imageSource(background)})">
             <thead>
@@ -2135,7 +2173,7 @@ object Overlays {
                 <tr>
                     <td colspan=6>
                         <div style="padding-left: 3ex; padding-right: 3ex; padding-bottom: 1ex;">
-                            <div class="h1 abaddon">${f.name}</div>
+                            <div class="h1 abaddon">${f.name}${factionPlayerName(f)}</div>
                             <div class="border-outer">
                                 <div class="border-inner">
                                     <span class=ability-color>${unique.name}</span>

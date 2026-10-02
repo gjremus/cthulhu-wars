@@ -1386,6 +1386,19 @@ case class CommandsAddAction(self : Faction, plan : Plan) extends BaseFactionAct
 case class CommandsRemoveAction(self : Faction, plan : Plan) extends BaseFactionAction(plan.group, plan.selected) with OutOfTurn with NoClear
 case class CommandsInfoAction(self : Faction, plan : Plan) extends BaseFactionAction(plan.group, plan.unselected) with Info
 
+// Player names: set by the alternative faction picker (recorded at game creation) or via
+// Commands -> "Change Name". An empty name means "default", and nothing is shown.
+object PlayerNames {
+    // Plain printable ASCII only (the server strips anything else), no quotes/backslashes
+    // (log serialization) and no HTML special characters (names are shown as raw HTML).
+    def clean(s : String) : String = s.filter(c => c >= 32 && c < 127 && "\"\\<>&".contains(c).not).trim.take(24)
+    def isDefault(s : String) : Boolean = clean(s).isEmpty || clean(s).matches("(?i)player\\s*[0-9]+")
+}
+
+case class PlayerNameMainAction(self : Faction) extends BaseFactionAction("Player Name", "Change Name") with OutOfTurn with Soft
+case class PlayerNameEditAction(self : Faction) extends BaseFactionAction("Player Name", "Edit Name") with OutOfTurn with Soft
+case class SetPlayerNameAction(self : Faction, name : String) extends BaseFactionAction("Player Name", "Save") with OutOfTurn
+
 
 class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], val logging : Boolean, val providedOptions : $[GameOption]) extends Expansion {
     private implicit val game : Game = this
@@ -1646,6 +1659,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     // ── Library at Celaeno state ──
     var silenceTokens : Map[Faction, Int] = Map()
+
+    // Player names per faction (absent = default, not shown). See PlayerNames.
+    var playerNames : Map[Faction, String] = Map()
     var tomeHolders : Map[LibraryTome, |[Faction]] = Map(
         TomeBarrier -> None, TomeGuardian -> None, TomeLarvae -> None, TomeYr -> None)
     var tomeOverdue : Map[LibraryTome, Boolean] = Map(
@@ -2120,7 +2136,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 .%(p => p.is[ShamblerPlan].not || f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
                 .%(p => inActionPhase || (p.is[GateDiplomacyPlan].not && p.is[HighPriestGatesPlan].not))
             vp.%(f.commands.has)./(p => Info(p.info)(p.group)) ++
-            vp.any.$(CommandsMainAction(f)) }
+            // Always offered: Commands also holds "Change Name", even with no plans.
+            $(CommandsMainAction(f)) }
         )
     }
 
@@ -2713,7 +2730,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
         // INIT
         case StartAction =>
-            log("Cthulhu Wars Expansions - 1.22.3")
+            log("Cthulhu Wars Expansions - 1.22.4")
             log("Options", options./(_.toString.hh).mkString(" "))
 
             if (options.has(GateDiplomacy)) {
@@ -4846,8 +4863,28 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     else
                         CommandsInfoAction(f, p)
                 }
+                .add(PlayerNameMainAction(f))
                 .group(" ")
                 .cancel
+
+        case PlayerNameMainAction(f) =>
+            // The UI draws a text field + Save / Clear / Cancel for this Ask (see
+            // CthulhuWarsSolo UIQuestion with PlayerNameEditAction); Save/Clear record
+            // SetPlayerNameAction, Cancel returns to the main menu.
+            Ask(f).add(PlayerNameEditAction(f)).cancel
+
+        case PlayerNameEditAction(f) =>
+            Ask(f).add(PlayerNameEditAction(f)).cancel
+
+        case SetPlayerNameAction(f, name) =>
+            val n = PlayerNames.clean(name)
+
+            if (PlayerNames.isDefault(n))
+                playerNames -= f
+            else
+                playerNames += f -> n
+
+            Force(OutOfTurnReturn)
 
         case CommandsAddAction(f, plan) =>
             plan.as[OneOfPlan]./(p => f.commands = f.commands.%!(_.as[OneOfPlan].?(_.group == p.group)))
