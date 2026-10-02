@@ -3011,6 +3011,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def laviniaCost(f : Faction, base : Int, asIfDoomPhase : Boolean) : Int =
         if (asIfDoomPhase && controlsLavinia(f)) (base + 1) / 2 else base
 
+    // Mother of Monsters halved (Doom, Power) for a Monster/Terror Loyalty Card. The Shadow
+    // Pharaoh CC special (no Doom) carries over, with its Power halved too.
+    def motherOfMonstersCost(f : Faction, lc : LoyaltyCard) : (Int, Int) = {
+        val d = if (lc.unit == ShadowPharaoh && f == CC) 0 else (lc.doom + 1) / 2
+        (d, (lc.power + 1) / 2)
+    }
+    def motherOfMonstersCards(f : Faction) : $[LoyaltyCard] =
+        (loyaltyCards.of[NeutralMonsterLoyaltyCard].sortBy(_.name) ++ loyaltyCards.of[NeutralTerrorLoyaltyCard].sortBy(_.name))
+            .%{ c => val (d, p) = motherOfMonstersCost(f, c); f.doom >= d && f.power >= p }
+
     // Dunwich Horror — the Whateley Clan cards f can recruit right now: the four cards
     // NOT currently held by f, whether still unclaimed (game pool) or held by another
     // faction (which can be taken away, the miniature staying put).
@@ -3435,7 +3445,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def hires(f : Faction)(implicit w : AskWrapper) {
-        if (f.hired.not && game.loyaltyCards.%(_.doom > 0).exists(c => f.doom >= c.doom && f.power >= c.power))
+        if (f.hired.not && controlsLavinia(f).not && game.loyaltyCards.%(_.doom > 0).exists(c => f.doom >= c.doom && f.power >= c.power))
             + LoyaltyCardDoomAction(f)
     }
 
@@ -3444,8 +3454,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // another owner. Offered only when at least one available Whateley is affordable at
     // its current (possibly Lavinia-halved) Power cost.
     def recruitsWhateley(f : Faction)(implicit w : AskWrapper) {
-        if (f.whateleyRecruited.not && whateleyCardsAvailable(f).exists(c => f.power >= laviniaCost(f, c.cost, true)))
+        if (f.whateleyRecruited.not && controlsLavinia(f).not && whateleyCardsAvailable(f).exists(c => f.power >= laviniaCost(f, c.cost, true)))
             + WhateleyRecruitMainAction(f)
+    }
+
+    // Dunwich: Lavinia "Mother of Monsters" — for her controller this single Doom menu item
+    // replaces the regular hire + Whateley recruit items (see MotherOfMonstersMainAction).
+    def motherOfMonsters(f : Faction)(implicit w : AskWrapper) {
+        if (controlsLavinia(f) && (motherOfMonstersCards(f).any && f.hired.not ||
+            f.whateleyRecruited.not && whateleyCardsAvailable(f).exists(c => f.power >= laviniaCost(f, c.cost, true))))
+            + MotherOfMonstersMainAction(f)
     }
 
     def doomDone(f : Faction, blockDone : Boolean = false)(implicit w : AskWrapper) {
@@ -4428,6 +4446,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             game.hires(f)
 
             game.recruitsWhateley(f)
+
+            game.motherOfMonsters(f)
 
             game.doomDone(f)
 

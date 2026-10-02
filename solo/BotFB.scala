@@ -3013,7 +3013,7 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             // ══════════════════════════════════════════════════════════════════
 
             // ── NM: Loyalty card (2 doom cost) ──────────────────────────────
-            case LoyaltyCardDoomAction(_) =>
+            case LoyaltyCardDoomAction(_) | MotherOfMonstersMainAction(_) =>
                 val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
                 val hasIGOO = self.loyaltyCards.of[IGOOLoyaltyCard].any
                 hasNMCard |=> -100000 -> "NU: already have NM card"
@@ -3023,6 +3023,23 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
                 true |=> 2000 -> "NU: loyalty card base"
 
             case NeutralMonstersAction(_, lc) =>
+                val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
+                val hasIGOO = self.loyaltyCards.of[IGOOLoyaltyCard].any
+                hasNMCard |=> -100000 -> "NU: already have NM card"
+                (hasNMCard || hasIGOO) |=> -100000 -> "NU: already have neutral unit"
+                // 2026-05-11 v3: FB specializes in iGOOs (Ygolonac top). Keep NM scores
+                // intentionally low so FB doesn't pick an NM card and then become unable
+                // to awaken an iGOO. TS and DS cover NM diversity instead.
+                true |=> 500 -> "NU: nm base (deprioritized for FB)"
+                (lc.unit == Shantak)    |=> 800 -> "NU: shantak carry to gates"
+                (lc.unit == Ghast)      |=> 700 -> "NU: ghast swarm"
+                (lc.unit == Gnorri)     |=> 600 -> "NU: gnorri summons"
+                (lc.unit == Voonith)    |=> 600 -> "NU: voonith combat"
+                (lc.unit == Gug)        |=> 500 -> "NU: gug 3 combat"
+                (lc.unit == StarVampire) |=> 500 -> "NU: star vampire"
+                (lc.unit == DimensionalShamblerUnit) |=> 500 -> "NU: shambler"
+
+            case MotherOfMonstersCardAction(_, lc) =>
                 val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
                 val hasIGOO = self.loyaltyCards.of[IGOOLoyaltyCard].any
                 hasNMCard |=> -100000 -> "NU: already have NM card"

@@ -108,7 +108,7 @@ class GameEvaluationCC(implicit game : Game) extends GameEvaluation(CC)(game) {
                 self.pool.goos.any |=> -200 -> "not all goos in play"
                 true |=> -250 -> "dont ritual unless have reasons"
 
-            case NeutralMonstersAction(_, _) =>
+            case NeutralMonstersAction(_, _) | MotherOfMonstersCardAction(_, _) =>
                 true |=> -100000 -> "don't obtain loyalty cards (for now)"
 
             // DS Power/Doom offer: take Power when Nyarlathotep isn't on map

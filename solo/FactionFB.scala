@@ -613,6 +613,8 @@ object FBExpansion extends Expansion {
 
             game.recruitsWhateley(f)
 
+            game.motherOfMonsters(f)
+
             game.doomDone(f)
 
             if (ipBoost > 0)

@@ -190,6 +190,21 @@ case class NeutralMonstersAction(self : Faction, lc : LoyaltyCard) extends BaseF
         s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" />""" +
     "</div>"
 }) with PowerNeutral
+// Dunwich: Lavinia Whateley "Mother of Monsters" (Doom Phase only). A separate Doom menu item for
+// the faction controlling Lavinia: inside it, Monster/Terror Loyalty Cards and Whateley Clan members
+// cost half their Doom AND Power (rounded up). For that faction it replaces the regular "Obtain
+// Loyalty Card" / "Recruit Whateley Clan" items; the once-per-Doom-Phase limits still apply.
+// New record types (MotherOfMonstersCardAction), so older games replay unchanged.
+case class MotherOfMonstersMainAction(self : Faction) extends OptionFactionAction("Mother of Monsters".styled("nt")) with DoomQuestion with Soft with PowerNeutral
+case class MotherOfMonstersCardAction(self : Faction, lc : LoyaltyCard) extends BaseFactionAction(g => "", implicit g => {
+    val qm = Overlays.imageSource("question-mark")
+    val p = s""""${lc.name.replace('\\'.toString, '\\'.toString + '\\'.toString)}"""".replace('"'.toString, "&quot;")
+    val (d, pw) = g.motherOfMonstersCost(self, lc)
+    "<div class=sbdiv>" +
+        lc.short + " for " + $((d > 0).??(d.doom), (pw > 0).??(pw.power)).but("").mkString(" + ") +
+        s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" />""" +
+    "</div>"
+}) with PowerNeutral
 case class LoyaltyCardSummonAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(g => "" + self + " places " + uc.styled(self) + " in", implicit g => r + self.iced(r))
 
 case class FreeSummonAction(self : Faction, uc : UnitClass, r : Region, l : $[Region]) extends BaseFactionAction(g => "" + self + " summons " + uc.styled(self) + " for free in", implicit g => r + self.iced(r))
@@ -233,7 +248,9 @@ case class WilburOpenTheWayAction(self : Faction, r : Region) extends BaseFactio
 // RollD6 -> JuniorTransmogRollAction so an undo cannot re-roll for a better result.
 case class JuniorTransmogrifyMainAction(self : Faction) extends OptionFactionAction(implicit g => "Transmogrification".styled("nt") + " (" + g.juniorTokens.toString + " token" + (g.juniorTokens == 1).?("").|("s") + ")") with MainQuestion with Soft with PowerNeutral
 case class JuniorTransmogRollAction(self : Faction, r : Region, roll : Int) extends ForcedAction
-case class JuniorTransmogPickAction(self : Faction, r : Region, goo : UnitClass, owner : Faction) extends BaseFactionAction(implicit g => "Transmogrify into " + goo.styled(owner), implicit g => (owner != self).??("stays under " + owner.full + " control"))
+// Empty question: the GOO name goes ON the button (the group header already says what this is).
+// Previously the name was the per-button subtitle and the button itself was blank for own GOOs.
+case class JuniorTransmogPickAction(self : Faction, r : Region, goo : UnitClass, owner : Faction) extends BaseFactionAction(g => "", implicit g => goo.styled(owner) + (owner != self).??(" (stays under " + owner.full + " control)"))
 
 case class ShantakCarryCultistAction(self : Faction, o : Region, ur : UnitRef, r : Region) extends ForcedAction
 // Chronophage teleport: `then` is the calling power's own continuation (the move
@@ -290,6 +307,78 @@ case class MoonbeastChooseSpellbookAction(self : Faction, target : Faction, sb :
 
 
 object NeutralMonstersExpansion extends Expansion {
+    // Shared post-payment placement for a hired Monster/Terror Loyalty Card — used by the normal
+    // hire (NeutralMonstersAction) and Lavinia's halved-cost hire (MotherOfMonstersCardAction).
+    def placeHiredCard(self : Faction, lc : LoyaltyCard)(implicit game : Game) : Continue = {
+        if (lc.unit == DimensionalShamblerUnit) {
+            lc.quantity.times(DimensionalShamblerUnit).foreach { u =>
+                self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
+            }
+            self.pool(DimensionalShamblerUnit).head.region = ShamblerHold(self)
+            self.log(DimensionalShamblerUnit.styled(self), "placed on Faction Card")
+            ShamblerDeployCommandsAction(self, CheckSpellbooksAction(DoomAction(self)))
+        } else if (lc.unit == MoonbeastUnit) {
+            // Moonbeast: on acquisition, place first Moonbeast onto enemy spellbook/requirement slot
+            // Card: "When a Moonbeast is Summoned, place it on a Spellbook on an enemy's Faction Card"
+            lc.quantity.times(lc.unit).foreach { u =>
+                self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
+            }
+            // Build list of available spellbook slots across all enemies
+            // Rule: target EARNED spellbooks first. Only if no enemy has any earned spellbooks,
+            // then target unfulfilled requirement slots (SBRs).
+            val blockedSBs = game.moonbeastOnSpellbook.values./(t => t._2).toSet
+            val earnedSlots = self.enemies./~{ target =>
+                target.spellbooks.%(sb => !blockedSBs.contains(sb))./(sb => (target, sb))
+            }
+            val allSlots = if (earnedSlots.any) earnedSlots else {
+                // Fallback: unfulfilled requirement slots
+                self.enemies./~{ target =>
+                    target.library.%(sb => !target.spellbooks.has(sb) && !blockedSBs.contains(sb))./(sb => (target, sb))
+                }
+            }
+            if (allSlots.any)
+                Ask(self).each(allSlots)((target, sb) => MoonbeastInitialPlaceAction(self, target, sb))
+            else {
+                self.log("no enemy Spellbooks or slots available for", MoonbeastUnit.styled(self))
+                CheckSpellbooksAction(DoomAction(self))
+            }
+        } else if (lc.unit == ServitorUnit) {
+            // Servitor of the Outer Gods: upon taking loyalty card, immediately prompt
+            // player to choose which faction receives the card. Cancel returns to card selection.
+            Ask(self).each(self.enemies)(f => ServitorAssignFactionAction(self, f)).cancel
+        } else if (lc.unit == InsectsFromShaggai) {
+            // Insects from Shaggai: place in any Area
+            lc.quantity.times(lc.unit).foreach { u =>
+                self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
+            }
+            Ask(self).each(areas ++ game.factions.has(BB).??($(BB.moon)))(r => LoyaltyCardSummonAction(self, lc.unit, r))
+        } else if (lc.unit == HoundOfTindalos) {
+            // Hound of Tindalos: place at ANY Gate (not just owner's Controlled Gate)
+            lc.quantity.times(lc.unit).foreach { u =>
+                self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
+            }
+            // Place at ANY Gate area, including the Moon (a controlled Gate) — use
+            // the same Gate-area predicate the Cronophage teleport uses.
+            val houndGates = HoundOfTindalosGates.regions
+            if (houndGates.any)
+                Ask(self).each(houndGates)(r => LoyaltyCardSummonAction(self, lc.unit, r))
+            else {
+                self.log("had nowhere to place", lc.unit.styled(self))
+                CheckSpellbooksAction(DoomAction(self))
+            }
+        } else {
+            lc.quantity.times(lc.unit).foreach { u =>
+                self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
+            }
+            if (self.neutralPlacementGates.any)
+                Ask(self).each(self.neutralPlacementGates)(r => LoyaltyCardSummonAction(self, lc.unit, r))
+            else {
+                self.log("had nowhere to place", lc.unit.styled(self))
+                CheckSpellbooksAction(DoomAction(self))
+            }
+        }
+    }
+
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) = action @@ {
         case LoyaltyCardDoomAction(self) =>
             val monsterCards = game.loyaltyCards.of[NeutralMonsterLoyaltyCard].%(_.doom <= self.doom).%(_.power <= self.power).sortBy(_.name)
@@ -326,73 +415,48 @@ object NeutralMonstersExpansion extends Expansion {
                 self.log("obtained the", lc.short, "Loyalty Card".styled("nt"), "for", $((lc.doom > 0).??(lc.doom.doom), (lc.power > 0).??(lc.power.power)).but("").mkString(" and "))
             }
 
-            if (lc.unit == DimensionalShamblerUnit) {
-                lc.quantity.times(DimensionalShamblerUnit).foreach { u =>
-                    self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
-                }
-                self.pool(DimensionalShamblerUnit).head.region = ShamblerHold(self)
-                self.log(DimensionalShamblerUnit.styled(self), "placed on Faction Card")
-                ShamblerDeployCommandsAction(self, CheckSpellbooksAction(DoomAction(self)))
-            } else if (lc.unit == MoonbeastUnit) {
-                // Moonbeast: on acquisition, place first Moonbeast onto enemy spellbook/requirement slot
-                // Card: "When a Moonbeast is Summoned, place it on a Spellbook on an enemy's Faction Card"
-                lc.quantity.times(lc.unit).foreach { u =>
-                    self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
-                }
-                // Build list of available spellbook slots across all enemies
-                // Rule: target EARNED spellbooks first. Only if no enemy has any earned spellbooks,
-                // then target unfulfilled requirement slots (SBRs).
-                val blockedSBs = game.moonbeastOnSpellbook.values./(t => t._2).toSet
-                val earnedSlots = self.enemies./~{ target =>
-                    target.spellbooks.%(sb => !blockedSBs.contains(sb))./(sb => (target, sb))
-                }
-                val allSlots = if (earnedSlots.any) earnedSlots else {
-                    // Fallback: unfulfilled requirement slots
-                    self.enemies./~{ target =>
-                        target.library.%(sb => !target.spellbooks.has(sb) && !blockedSBs.contains(sb))./(sb => (target, sb))
-                    }
-                }
-                if (allSlots.any)
-                    Ask(self).each(allSlots)((target, sb) => MoonbeastInitialPlaceAction(self, target, sb))
-                else {
-                    self.log("no enemy Spellbooks or slots available for", MoonbeastUnit.styled(self))
-                    CheckSpellbooksAction(DoomAction(self))
-                }
-            } else if (lc.unit == ServitorUnit) {
-                // Servitor of the Outer Gods: upon taking loyalty card, immediately prompt
-                // player to choose which faction receives the card. Cancel returns to card selection.
-                Ask(self).each(self.enemies)(f => ServitorAssignFactionAction(self, f)).cancel
-            } else if (lc.unit == InsectsFromShaggai) {
-                // Insects from Shaggai: place in any Area
-                lc.quantity.times(lc.unit).foreach { u =>
-                    self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
-                }
-                Ask(self).each(areas ++ game.factions.has(BB).??($(BB.moon)))(r => LoyaltyCardSummonAction(self, lc.unit, r))
-            } else if (lc.unit == HoundOfTindalos) {
-                // Hound of Tindalos: place at ANY Gate (not just owner's Controlled Gate)
-                lc.quantity.times(lc.unit).foreach { u =>
-                    self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
-                }
-                // Place at ANY Gate area, including the Moon (a controlled Gate) — use
-                // the same Gate-area predicate the Cronophage teleport uses.
-                val houndGates = HoundOfTindalosGates.regions
-                if (houndGates.any)
-                    Ask(self).each(houndGates)(r => LoyaltyCardSummonAction(self, lc.unit, r))
-                else {
-                    self.log("had nowhere to place", lc.unit.styled(self))
-                    CheckSpellbooksAction(DoomAction(self))
-                }
-            } else {
-                lc.quantity.times(lc.unit).foreach { u =>
-                    self.units :+= new UnitFigure(self, u, self.units.%(_.uclass == u).num + 1, self.reserve)
-                }
-                if (self.neutralPlacementGates.any)
-                    Ask(self).each(self.neutralPlacementGates)(r => LoyaltyCardSummonAction(self, lc.unit, r))
-                else {
-                    self.log("had nowhere to place", lc.unit.styled(self))
-                    CheckSpellbooksAction(DoomAction(self))
-                }
+            placeHiredCard(self, lc)
+
+        // ── DUNWICH LAVINIA "MOTHER OF MONSTERS" ──
+        case MotherOfMonstersMainAction(self) =>
+            val cards = self.hired.not.??(game.motherOfMonstersCards(self))
+            val whateleys = self.whateleyRecruited.not.??(game.whateleyCardsAvailable(self).%(c => self.power >= game.laviniaCost(self, c.cost, true)).sortBy(_.unit.name))
+
+            var ask = Ask(self).group("Mother of Monsters".styled("nt") + " — half cost")
+            val monsters = cards.of[NeutralMonsterLoyaltyCard]
+            val terrors = cards.of[NeutralTerrorLoyaltyCard]
+            if (monsters.any) {
+                ask = ask.group("Monsters".styled("nt"))
+                ask = ask.each(monsters)(c => MotherOfMonstersCardAction(self, c))
             }
+            if (terrors.any) {
+                ask = ask.group("Terrors".styled("nt"))
+                ask = ask.each(terrors)(c => MotherOfMonstersCardAction(self, c))
+            }
+            if (whateleys.any) {
+                ask = ask.group("Whateley Clan".styled("nt"))
+                ask = ask.each(whateleys)(c => WhateleyRecruitAction(self, c))
+            }
+            ask.cancel
+
+        case MotherOfMonstersCardAction(self, lc) =>
+            val (d, pw) = game.motherOfMonstersCost(self, lc)
+            self.loyaltyCards :+= lc
+            game.loyaltyCards :-= lc
+            self.hired = true
+
+            self.doom -= d
+            self.power -= pw
+            self.log("used", "Mother of Monsters".styled("nt") + ": obtained the", lc.short, "Loyalty Card".styled("nt"), "for", $((d > 0).??(d.doom), (pw > 0).??(pw.power)).but("").mkString(" and "), "(half cost)")
+
+            // Shadow Pharaoh CC special still hands the others 1 Elder Sign each.
+            if (lc.unit == ShadowPharaoh && self == CC)
+                factions.but(self).foreach { f =>
+                    f.takeES(1)
+                    f.log("gained", 1.es, "from", ShadowPharaoh.styled(self), "acquisition")
+                }
+
+            placeHiredCard(self, lc)
 
         // ── DUNWICH WHATELEY CLAN RECRUIT ──
         case WhateleyRecruitMainAction(self) =>

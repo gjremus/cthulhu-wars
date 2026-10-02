@@ -61,7 +61,7 @@ class GameEvaluationYSOld(implicit game : Game) extends GameEvaluation(YS)(game)
 
                 !self.allSB |=> -1000 -> "spellbooks first"
 
-            case NeutralMonstersAction(_, _) =>
+            case NeutralMonstersAction(_, _) | MotherOfMonstersCardAction(_, _) =>
                 true |=> -100000 -> "don't obtain loyalty cards (for now)"
 
             case DoomDoneAction(_) =>

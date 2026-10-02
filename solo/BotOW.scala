@@ -222,7 +222,7 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
 
                 !self.allSB |=> -1000 -> "spellbooks first"
 
-            case NeutralMonstersAction(_, _) =>
+            case NeutralMonstersAction(_, _) | MotherOfMonstersCardAction(_, _) =>
                 true |=> -100000 -> "don't obtain loyalty cards (for now)"
 
             // Azathoth Synthesis bidding — never let DS win; prefer power, fall back to doom
@@ -700,7 +700,7 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
                 !d.ownGate && o.ownGate |=> -3000 -> "OW: don't move iGOO off gate"
 
             // ── OW Loyalty Card (Neutral Monsters) ───────────────────────────
-            case LoyaltyCardDoomAction(_) =>
+            case LoyaltyCardDoomAction(_) | MotherOfMonstersMainAction(_) =>
                 val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
                 hasNMCard |=> -100000 -> "OW: already have NM card"
                 self.doom < 5 |=> 5000 -> "OW: loyalty card early"
@@ -708,6 +708,18 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
                 true |=> 3000 -> "OW: loyalty card base"
 
             case NeutralMonstersAction(_, lc) =>
+                val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
+                hasNMCard |=> -100000 -> "OW: already have NM card"
+                (lc.unit == Voonith) |=> 2000 -> "OW: voonith top"
+                (lc.unit == StarVampire) |=> 1800 -> "OW: star vampire"
+                (lc.unit == Gug) |=> 1600 -> "OW: gug"
+                (lc.unit == Gnorri) |=> 1400 -> "OW: gnorri"
+                (lc.unit == DimensionalShamblerUnit) |=> 1200 -> "OW: shambler"
+                (lc.unit == Ghast) |=> 1000 -> "OW: ghast"
+                (lc.unit == Shantak) |=> -2000 -> "OW: shantak not useful"
+                true |=> 1000 -> "OW: nm base"
+
+            case MotherOfMonstersCardAction(_, lc) =>
                 val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
                 hasNMCard |=> -100000 -> "OW: already have NM card"
                 (lc.unit == Voonith) |=> 2000 -> "OW: voonith top"

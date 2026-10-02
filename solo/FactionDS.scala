@@ -184,6 +184,8 @@ object DSExpansion extends Expansion {
 
             game.recruitsWhateley(f)
 
+            game.motherOfMonsters(f)
+
             if (f.needs(PowerDoomOffer) && f.enemies.any)
                 + PowerDoomOfferAction(f)
 

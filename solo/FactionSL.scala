@@ -139,6 +139,8 @@ object SLExpansion extends Expansion {
 
             game.recruitsWhateley(f)
 
+            game.motherOfMonsters(f)
+
             val hasSorcery = f.has(AncientSorcery) && f.at(SL.sorcery, SerpentMan).any
             if (hasSorcery)
                 + AncientSorceryDoomAction(f)

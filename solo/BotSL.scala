@@ -94,7 +94,7 @@ class GameEvaluationSL(implicit game : Game) extends GameEvaluation(SL)(game) {
                 self.pool.goos.any |=> -200 -> "not all goos in play"
                 true |=> -250 -> "dont ritual unless have reasons"
 
-            case NeutralMonstersAction(_, _) =>
+            case NeutralMonstersAction(_, _) | MotherOfMonstersCardAction(_, _) =>
                 true |=> -100000 -> "don't obtain loyalty cards (for now)"
 
             // Azathoth Synthesis bidding — never let DS win; prefer power, fall back to doom

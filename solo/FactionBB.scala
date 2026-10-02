@@ -380,6 +380,8 @@ object BBExpansion extends Expansion {
 
             game.recruitsWhateley(f)
 
+            game.motherOfMonsters(f)
+
             game.doomDone(f)
 
             asking

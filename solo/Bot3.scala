@@ -539,7 +539,7 @@ case class Bot3(faction : Faction) {
                     self.pool.goos.any |=> -200 -> "not all goos in play"
                     true |=> -250 -> "don't ritual unless have reasons"
 
-                case NeutralMonstersAction(_, _) =>
+                case NeutralMonstersAction(_, _) | MotherOfMonstersCardAction(_, _) =>
                     true |=> -100000 -> "don't obtain loyalty cards (for now)"
 
                 case ServitorAssignFactionAction(_, target) =>
@@ -1460,7 +1460,7 @@ case class Bot3(faction : Faction) {
                     // strategic moves.
 
                     // ── Loyalty card pickup (general entry point) ───────────
-                    case LoyaltyCardDoomAction(_) =>
+                    case LoyaltyCardDoomAction(_) | MotherOfMonstersMainAction(_) =>
                         // Take a loyalty card at doom phase if we don't already have one
                         val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
                         val hasTerrorCard = self.loyaltyCards.of[NeutralTerrorLoyaltyCard].any

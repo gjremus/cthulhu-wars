@@ -281,7 +281,7 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
 
                 true |=> -250 -> "don't ritual unless have reasons"
 
-            case NeutralMonstersAction(_, _) =>
+            case NeutralMonstersAction(_, _) | MotherOfMonstersCardAction(_, _) =>
                 true |=> -100000 -> "don't obtain loyalty cards (for now)"
 
             // Azathoth Synthesis bidding — never let DS win; prefer power, fall back to doom

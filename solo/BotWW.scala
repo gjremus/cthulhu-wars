@@ -288,7 +288,7 @@ class GameEvaluationWW(implicit game : Game) extends GameEvaluation(WW)(game) {
                 power - cost > 10 && maxDoomGain > 4 |=> 1200 -> "much"
                 power - cost > 8 && maxDoomGain > 5 |=> 1100 -> "minimuch"
 
-            case NeutralMonstersAction(_, _) =>
+            case NeutralMonstersAction(_, _) | MotherOfMonstersCardAction(_, _) =>
                 true |=> -100000 -> "don't obtain loyalty cards (for now)"
 
             // Azathoth Synthesis bidding — never let DS win; prefer power, fall back to doom

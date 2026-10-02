@@ -393,7 +393,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
             case DoomDoneAction(_) =>
                 true |=> 933 -> "#625 doom done"
 
-            case LoyaltyCardDoomAction(_) =>
+            case LoyaltyCardDoomAction(_) | MotherOfMonstersMainAction(_) =>
                 // [NU-TEST 2026-04-04] Very restrictive: 2 doom is huge for TS. Only with massive surplus.
                 val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
                 val hasIGOOD = self.loyaltyCards.of[IGOOLoyaltyCard].any
@@ -509,6 +509,19 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 true |=> -800 -> "#570 main done"
 
             case NeutralMonstersAction(_, lc) =>
+                val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
+                hasNMCard |=> -100000 -> "NU: already have NM card"
+                true |=> 1000 -> "NU: nm base"
+                // §18 boost: TS combat-focused with jitter on top three for diversity
+                (lc.unit == Gug)        |=> (1900 + (math.random() * 300).toInt) -> "NU: gug combat"
+                (lc.unit == Voonith)    |=> (1800 + (math.random() * 300).toInt) -> "NU: voonith combat"
+                (lc.unit == Gnorri)     |=> (1700 + (math.random() * 300).toInt) -> "NU: gnorri summons"
+                (lc.unit == Ghast)      |=> 1500 -> "NU: ghast"
+                (lc.unit == DimensionalShamblerUnit) |=> 1400 -> "NU: shambler"
+                (lc.unit == StarVampire) |=> 1300 -> "NU: star vampire"
+                (lc.unit == Shantak)    |=> 1200 -> "NU: shantak"
+
+            case MotherOfMonstersCardAction(_, lc) =>
                 val hasNMCard = self.loyaltyCards.of[NeutralMonsterLoyaltyCard].any
                 hasNMCard |=> -100000 -> "NU: already have NM card"
                 true |=> 1000 -> "NU: nm base"
