@@ -361,7 +361,7 @@ object CthulhuWarsSolo {
         // internal build id (BuildInfo.version, e.g. bubastis-v2.4.x) is still compiled
         // in via the replay-filename / quine-save strings below, so deploys stay
         // grep-verifiable — this only changes the displayed text.
-        val version = "Cthulhu Wars Expansions - 1.22.4"
+        val version = "Cthulhu Wars Expansions - 1.22.5"
 
         log(version)
 
@@ -3361,7 +3361,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             flex-wrap: nowrap;
                             width: 100%;
                         ">
-                            <span
+                            <span id="map-roa-btn"
                                 style="
                                     pointer-events: auto;
                                     cursor: pointer;
@@ -3431,7 +3431,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 TSCursedTomesOverlay.factionTomes = displayGame.cursedTomesOwned.map { case (f, tomes) => f.style -> tomes }
                 TSCursedTomesOverlay.tomesOnCard = displayGame.tsTomesOnCard
 
-                dom.document.getElementById("roa-cost-num").?.foreach(_.innerHTML = displayGame.ritualCost.toString)
+                // Both ritual circles (the map's and the game title's) share this id, so update every copy.
+                val roaNums = dom.document.querySelectorAll("[id=roa-cost-num]")
+                0.until(roaNums.length).foreach(i => roaNums(i).asInstanceOf[html.Element].innerHTML = displayGame.ritualCost.toString)
 
                 // §3.11.1: Bubastis Moon HUD — refresh top-right map HUD button each tick so
                 // the displayed count and the click-overlay's unit list stay current.
@@ -5846,6 +5848,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 text.style.pointerEvents = smallScreen.?("auto").|("")
                                 text.style.cursor = smallScreen.?("pointer").|("")
                                 box.style.top = atBottom.?("" + (mapBottom - box.offsetHeight).max(0) + "px").|("0")
+
+                                // The map has its own ritual circle under the title's one; hide it while the
+                                // title (with its circle) sits at the bottom so there is no duplicate on top.
+                                dom.document.getElementById("map-roa-btn").?.foreach(_.asInstanceOf[html.Element].style.visibility = atBottom.?("hidden").|(""))
                             }
 
                             text.onclick = (e : dom.MouseEvent) => {
