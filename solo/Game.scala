@@ -565,7 +565,7 @@ object MindParasite {
     // Convert a MindParasiteCultist back to its original UnitClass under original faction
     // BB Fix 80 (ported to HB) — restore using the tracked original UnitClass (Acolyte
     // or EarthCat); fallback Acolyte for saves from before this fix.
-    def unparasitize(u : UnitFigure)(implicit game : Game) : Unit = {
+    def unparasitize(u : UnitFigure, quiet : Boolean = false)(implicit game : Game) : UnitFigure = {
         val origFac = game.mindParasiteOriginalFaction.getOrElse(u.ref, u.faction)
         val region = u.region
         val origIndex = game.mindParasiteOriginalIndex.getOrElse(u.ref, u.index)
@@ -579,7 +579,38 @@ object MindParasite {
         game.mindParasiteOriginalFaction -= u.ref
         game.mindParasiteOriginalIndex -= u.ref
         game.mindParasiteOriginalUClass -= u.ref
-        game.appendLog($(styledAlt(origUClass.name, origFac, u.faction), "in", region, "freed from", "Mind Parasite".styled("nt")))
+        if (!quiet)
+            game.appendLog($(styledAlt(origUClass.name, origFac, u.faction), "in", region, "freed from", "Mind Parasite".styled("nt")))
+        restored
+    }
+
+    // Mind Parasite control is limited (insects move them and fight with them only).
+    // The ORIGINAL owner keeps its own sacrifice / replace / Writhe abilities over its
+    // parasitized cultists: Shub-Niggurath awaken + Blood Sacrifice (BG), Devolve (GC),
+    // Million Favored Ones (OW), Writhe kill + pain (FB).
+    // Parasitized cultists currently on the map whose original owner is f.
+    def heldFrom(f : Faction)(implicit game : Game) : $[UnitFigure] =
+        game.factions.but(f)./~(_.units.%(u => u.uclass == MindParasiteCultist && (u.region.onMap || u.region == BB.moon) && originalFaction(u).has(f)))
+
+    def originalUClass(u : UnitFigure)(implicit game : Game) : UnitClass =
+        if (u.uclass == MindParasiteCultist) game.mindParasiteOriginalUClass.getOrElse(u.ref, Acolyte) else u.uclass
+
+    // Hand a parasitized cultist back to its original owner in place (no log line) so the
+    // owner's ability then acts on its own figure; any other unit is returned unchanged.
+    // If it is left standing next to the Insects, checkConversions re-parasitizes it.
+    def reclaim(u : UnitFigure)(implicit game : Game) : UnitFigure =
+        if (isParasitized(u)) unparasitize(u, quiet = true) else u
+
+    // Send a parasitized cultist straight to its original owner's pool.
+    def returnToPool(u : UnitFigure)(implicit game : Game) : Unit = {
+        val origFac = game.mindParasiteOriginalFaction.get(u.ref).|(u.faction)
+        val origIndex = game.mindParasiteOriginalIndex.getOrElse(u.ref, u.index)
+        val origUClass = game.mindParasiteOriginalUClass.getOrElse(u.ref, Acolyte)
+        u.faction.units :-= u
+        game.mindParasiteOriginalFaction -= u.ref
+        game.mindParasiteOriginalIndex -= u.ref
+        game.mindParasiteOriginalUClass -= u.ref
+        origFac.units :+= new UnitFigure(origFac, origUClass, origIndex, origFac.reserve)
     }
 
     // Run conversion check — called from triggers()
@@ -2348,15 +2379,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // BB Fix 80 (ported to HB) — restore using the tracked original UnitClass so an
             // Earth Cat parasitized by Insects from Shaggai returns to BB's pool as an Earth Cat.
             if (u.uclass == MindParasiteCultist) {
-                val origFac = mindParasiteOriginalFaction.get(u.ref).|(u.faction)
-                val origIndex = mindParasiteOriginalIndex.getOrElse(u.ref, u.index)
-                val origUClass = mindParasiteOriginalUClass.getOrElse(u.ref, Acolyte)
-                u.faction.units :-= u
-                mindParasiteOriginalFaction -= u.ref
-                mindParasiteOriginalIndex -= u.ref
-                mindParasiteOriginalUClass -= u.ref
-                val restored = new UnitFigure(origFac, origUClass, origIndex, origFac.reserve)
-                origFac.units :+= restored
+                MindParasite.returnToPool(u)(this)
                 return
             }
 

@@ -1082,8 +1082,9 @@ object FBExpansion extends Expansion {
                     EndAction(self)
             } else {
                 // Sort by region name, then by unit cost descending
-                // Mind Parasite: parasitized cultists cannot be Writhe-eliminated
-                val units = self.units.%(u => (u.region.onMap || u.region == BB.moon) && u.uclass != Crater && u.uclass != MindParasiteCultist && !game.fbWritheUsedUnits.has(u.ref))
+                // Mind Parasite: FB's own parasitized Acolytes CAN be Writhe-eliminated (MindParasite.heldFrom);
+                // insect-controlled cultists of other factions (self.units of type MindParasiteCultist) cannot.
+                val units = (self.units.%(u => (u.region.onMap || u.region == BB.moon) && u.uclass != Crater && u.uclass != MindParasiteCultist && !game.fbWritheUsedUnits.has(u.ref)) ++ MindParasite.heldFrom(self))
                     .sortBy(u => (u.region.toString, -u.uclass.cost))
                 if (units.none)
                     EndAction(self)
@@ -1097,8 +1098,10 @@ object FBExpansion extends Expansion {
                 }
             }
 
-        case FBWritheKillUnitAction(self, uRef, remainingKills, remainingPains) =>
-            val u = game.unit(uRef)
+        case FBWritheKillUnitAction(self, pickedRef, remainingKills, remainingPains) =>
+            // Reclaim a parasitized FB Acolyte first so the kill (and Undo) act on FB's own figure
+            val u = MindParasite.reclaim(game.unit(pickedRef))
+            val uRef = u.ref
             val r = u.region
             val origClass = u.uclass
             game.fbWritheUsedUnits :+= uRef
@@ -1123,7 +1126,7 @@ object FBExpansion extends Expansion {
                 EndAction(self)
             else {
                 // Sort by region name, then by unit cost descending
-                val units = self.units.%(u => (u.region.onMap || u.region == BB.moon) && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref))
+                val units = (self.units.%(u => (u.region.onMap || u.region == BB.moon) && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref)) ++ MindParasite.heldFrom(self).%(u => !game.fbWritheUsedUnits.has(u.ref)))
                     .sortBy(u => (u.region.toString, -u.uclass.cost))
                 if (units.none)
                     EndAction(self)
@@ -1146,7 +1149,7 @@ object FBExpansion extends Expansion {
                 Force(FBWritheMoveAllAction(self, newChosen))
             } else {
                 // Sort by region name, then by unit cost descending
-                val units = self.units.%(u => (u.region.onMap || u.region == BB.moon) && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref) && !newChosen.has(u.ref))
+                val units = (self.units.%(u => (u.region.onMap || u.region == BB.moon) && u.uclass != Crater && !game.fbWritheUsedUnits.has(u.ref)) ++ MindParasite.heldFrom(self).%(u => !game.fbWritheUsedUnits.has(u.ref))).%(u => !newChosen.has(u.ref))
                     .sortBy(u => (u.region.toString, -u.uclass.cost))
                 if (units.none) {
                     // No more units to choose, move with what we have
@@ -1181,24 +1184,24 @@ object FBExpansion extends Expansion {
 
         case FBWritheMoveAllToRegionAction(self, r, chosen) =>
             chosen.foreach { uRef =>
-                val u = game.unit(uRef)
+                val u = MindParasite.reclaim(game.unit(uRef))
                 val from = u.region
-                game.fbWrithePainLog :+= FBWrithePainEntry(uRef, from, r)
+                game.fbWrithePainLog :+= FBWrithePainEntry(u.ref, from, r)
                 u.region = r
                 u.onGate = false
-                game.fbWritheUsedUnits :+= uRef
+                game.fbWritheUsedUnits :+= u.ref
                 self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
             }
             EndAction(self)
 
         case FBWritheMoveAllToRegionJoinAction(self, r, chosen, _) =>
             chosen.foreach { uRef =>
-                val u = game.unit(uRef)
+                val u = MindParasite.reclaim(game.unit(uRef))
                 val from = u.region
-                game.fbWrithePainLog :+= FBWrithePainEntry(uRef, from, r)
+                game.fbWrithePainLog :+= FBWrithePainEntry(u.ref, from, r)
                 u.region = r
                 u.onGate = false
-                game.fbWritheUsedUnits :+= uRef
+                game.fbWritheUsedUnits :+= u.ref
                 self.log(Writhe.styled(FB) + ": relocated", u.uclass.styled(self), "from", from, "to", r)
             }
             EndAction(self)
@@ -1242,9 +1245,9 @@ object FBExpansion extends Expansion {
             asking
 
         case FBWritheMoveOneToRegionAction(self, uRef, r, remaining) =>
-            val u = game.unit(uRef)
+            val u = MindParasite.reclaim(game.unit(uRef))
             val from = u.region
-            game.fbWrithePainLog :+= FBWrithePainEntry(uRef, from, r)
+            game.fbWrithePainLog :+= FBWrithePainEntry(u.ref, from, r)
             u.region = r
             u.onGate = false
             // Bug fix Round 6: store destination for "join" hint on next unit's region list
@@ -1258,9 +1261,9 @@ object FBExpansion extends Expansion {
 
         // Bug fix Round 6: "join" variant dispatches identically to normal region move
         case FBWritheMoveOneJoinAction(self, uRef, r, remaining, _) =>
-            val u = game.unit(uRef)
+            val u = MindParasite.reclaim(game.unit(uRef))
             val from = u.region
-            game.fbWrithePainLog :+= FBWrithePainEntry(uRef, from, r)
+            game.fbWrithePainLog :+= FBWrithePainEntry(u.ref, from, r)
             u.region = r
             u.onGate = false
             game.fbWritheLastPainRegion = |(r)
