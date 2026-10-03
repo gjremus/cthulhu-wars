@@ -596,11 +596,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log(EffervescentExcrescence.styled(CS), "assigned", Pain, "— converted to", Kill, "(" + VermiculiteHypertrophy.styled(CS) + ")")
             csVermiculitePainsConverted += 1
             assignKill(unit)
+            println("TRACE_VERM before eliminate: ref=" + unit.ref + " region=" + unit.region + " health=" + unit.health)
             // Pains are assigned in AssignDefenderPains/AssignAttackerPains, which run AFTER
             // EliminatePhase's one-time removal sweep (see BattlePhase order above) — so a Pain
             // converted to a Kill here would never actually be removed from the map. Eliminate
             // it immediately via the same eliminate() every other Kill uses at EliminatePhase.
             if (unit.health == Killed) eliminate(unit)
+            println("TRACE_VERM after eliminate: ref=" + unit.ref + " region=" + unit.region + " health=" + unit.health + " tagEliminated=" + unit.tag(Eliminated))
             return
         }
          unit.health = unit.health match {
