@@ -1562,7 +1562,12 @@ case class AttackMainAction(self : Faction, l : $[Region], effect : |[Spellbook]
 case class AttackAction(self : Faction, r : Region, f : Faction, effect : |[Spellbook]) extends BaseFactionAction(implicit g => "Battle in " + r + effect./(" with " + _).|("") + self.iced(r), f)
 
 case class BuildGateMainAction(self : Faction, l : $[Region]) extends OptionFactionAction("Build Gate") with MainQuestion with Soft
-case class BuildGateAction(self : Faction, r : Region) extends BaseFactionAction(implicit g => "Build gate" + g.forNPowerWithTax(r, self, 3 - self.has(UmrAtTawil).??(1)) + " in", r)
+case class BuildGateAction(self : Faction, r : Region) extends BaseFactionAction(implicit g => {
+    val baseCost = 3 - self.has(UmrAtTawil).??(1)
+    val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, baseCost) else 0
+    "Build gate" + g.forNPowerWithTax(r, self, baseCost - ipDiscount) +
+        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")") + " in"
+}, r)
 
 case class CaptureMainAction(self : Faction, l : $[Region], effect : |[Spellbook]) extends OptionFactionAction("Capture") with MainQuestion with Soft
 case class CaptureAction(self : Faction, r : Region, f : Faction, effect : |[Spellbook]) extends ForcedAction
@@ -1575,12 +1580,32 @@ case class MindParasiteBlockCaptureAction(self : Faction, captor : Faction, r : 
 case class MindParasiteAllowCaptureAction(self : Faction, captor : Faction, r : Region, ur : UnitRef) extends BaseFactionAction("Mind Parasite", "Allow capture")
 
 case class RecruitMainAction(self : Faction, uc : UnitClass, l : $[Region]) extends OptionFactionAction("Recruit " + uc.styled(self)) with MainQuestion with Soft
-case class RecruitAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => "Recruit " + uc.styled(self) + g.forNPowerWithTax(r, self, self.recruitCost(uc, r)) + " in", implicit g => r + self.iced(r))
+case class RecruitAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => {
+    val baseCost = self.recruitCost(uc, r)
+    val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, baseCost) else 0
+    "Recruit " + uc.styled(self) + g.forNPowerWithTax(r, self, baseCost - ipDiscount) +
+        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")") + " in"
+}, implicit g => r + self.iced(r))
 
 case class SummonMainAction(self : Faction, uc : UnitClass, l : $[Region], suffix : String = "") extends OptionFactionAction("Summon " + uc.styled(self) + suffix) with MainQuestion with Soft
-case class SummonAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => "Summon " + uc.styled(self) + g.forNPowerWithTax(r, self, self.summonCost(uc, r)) + " in", implicit g => r + self.iced(r))
-case class SummonFromPoolAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => "Summon " + uc.styled(self) + " from pool" + g.forNPowerWithTax(r, self, self.summonCost(uc, r)) + " in", implicit g => r + self.iced(r))
-case class SummonFromVelvetFanAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => "Summon " + uc.styled(self) + " from Velvet Fan" + g.forNPowerWithTax(r, self, self.summonCost(uc, r)) + " in", implicit g => r + self.iced(r))
+case class SummonAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => {
+    val baseCost = self.summonCost(uc, r)
+    val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, baseCost) else 0
+    "Summon " + uc.styled(self) + g.forNPowerWithTax(r, self, baseCost - ipDiscount) +
+        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")") + " in"
+}, implicit g => r + self.iced(r))
+case class SummonFromPoolAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => {
+    val baseCost = self.summonCost(uc, r)
+    val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, baseCost) else 0
+    "Summon " + uc.styled(self) + " from pool" + g.forNPowerWithTax(r, self, baseCost - ipDiscount) +
+        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")") + " in"
+}, implicit g => r + self.iced(r))
+case class SummonFromVelvetFanAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => {
+    val baseCost = self.summonCost(uc, r)
+    val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, baseCost) else 0
+    "Summon " + uc.styled(self) + " from Velvet Fan" + g.forNPowerWithTax(r, self, baseCost - ipDiscount) +
+        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")") + " in"
+}, implicit g => r + self.iced(r))
 case class SummonedAction(self : Faction, uc : UnitClass, r : Region, l : $[Region]) extends ForcedAction
 
 case class AwakenMainAction(self : Faction, uc : UnitClass, l : $[Region]) extends OptionFactionAction("Awaken " + uc.styled(self)) with MainQuestion with Soft
