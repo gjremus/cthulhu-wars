@@ -2079,26 +2079,6 @@ object FBExpansion extends Expansion {
             FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on summon")
             UnknownContinue
 
-        // dac9973 split Summon into SummonFromPoolAction / SummonFromVelvetFanAction
-        // (source picker for pool vs Bloated Woman's Velvet Fan) — that split never
-        // got its own IP intercept, so a summon routed through either of these two
-        // silently paid full power with no discount. Same pattern as SummonAction above.
-        case SummonFromPoolAction(f, uc, r) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val baseCost = f.summonCost(uc, r)
-            val consumed = min(game.fbInfernalPactDiscount, baseCost)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on summon")
-            UnknownContinue
-
-        case SummonFromVelvetFanAction(f, uc, r) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val baseCost = f.summonCost(uc, r)
-            val consumed = min(game.fbInfernalPactDiscount, baseCost)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on summon")
-            UnknownContinue
-
         // The summon flow was later split into SummonFromPoolAction / SummonFromVelvetFanAction,
         // which the SummonAction intercept above never sees — so the discount must cover them too.
         // Only intercept when the summon will go through; otherwise the base handler bails
