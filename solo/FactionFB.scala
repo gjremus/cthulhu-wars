@@ -2077,6 +2077,24 @@ object FBExpansion extends Expansion {
             FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on summon")
             UnknownContinue
 
+        // The summon flow was later split into SummonFromPoolAction / SummonFromVelvetFanAction,
+        // which the SummonAction intercept above never sees — so the discount must cover them too.
+        // Only intercept when the summon will go through; otherwise the base handler bails
+        // without charging and the pre-added boost would leak into real Power.
+        case SummonFromPoolAction(f, uc, r) if f == FB && game.fbInfernalPactDiscount > 0 && f.pool(uc).any && f.affords(max(0, f.summonCost(uc, r) - game.fbInfernalPactDiscount))(r) =>
+            val consumed = min(game.fbInfernalPactDiscount, f.summonCost(uc, r))
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on summon")
+            UnknownContinue
+
+        case SummonFromVelvetFanAction(f, uc, r) if f == FB && game.fbInfernalPactDiscount > 0 && f.units.exists(u => u.uclass == uc && u.region.is[VelvetFanHold]) && f.affords(max(0, f.summonCost(uc, r) - game.fbInfernalPactDiscount))(r) =>
+            val consumed = min(game.fbInfernalPactDiscount, f.summonCost(uc, r))
+            game.fbInfernalPactDiscount -= consumed
+            f.power += consumed
+            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on summon")
+            UnknownContinue
+
         case MoveAction(f, u, from, to, cost) if f == FB && game.fbInfernalPactDiscount > 0 =>
             val consumed = min(game.fbInfernalPactDiscount, cost)
             game.fbInfernalPactDiscount -= consumed

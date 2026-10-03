@@ -361,7 +361,7 @@ object CthulhuWarsSolo {
         // internal build id (BuildInfo.version, e.g. bubastis-v2.4.x) is still compiled
         // in via the replay-filename / quine-save strings below, so deploys stay
         // grep-verifiable — this only changes the displayed text.
-        val version = "Cthulhu Wars Expansions - 1.22.6"
+        val version = "Cthulhu Wars Expansions - 1.22.7"
 
         log(version)
 

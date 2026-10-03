@@ -1368,7 +1368,7 @@ case class SummonFromVelvetFanAction(self : Faction, uc : UnitClass, r : Region)
 case class SummonedAction(self : Faction, uc : UnitClass, r : Region, l : $[Region]) extends ForcedAction
 
 case class AwakenMainAction(self : Faction, uc : UnitClass, l : $[Region]) extends OptionFactionAction("Awaken " + uc.styled(self)) with MainQuestion with Soft
-case class AwakenAction(self : Faction, uc : UnitClass, r : Region, cost : Int) extends BaseFactionAction(g => "Awaken " + uc.styled(self) + g.forNPowerWithTax(r, self, cost) + " in", implicit g => r + self.iced(r))
+case class AwakenAction(self : Faction, uc : UnitClass, r : Region, cost : Int) extends BaseFactionAction(g => "Awaken " + uc.styled(self) + g.forNPowerWithTax(r, self, cost, false) + " in", implicit g => r + self.iced(r))
 case class AwakenedAction(self : Faction, uc : UnitClass, r : Region, cost : Int) extends ForcedAction
 
 case class Offer(f : Faction, n : Int)
@@ -1835,7 +1835,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         }
     }
 
-    def forNPowerWithTax(r : Region, f : Faction, n : Int) : String = { val p = n + f.taxIn(r) ; " for " + p.power }
+    def forNPowerWithTax(r : Region, f : Faction, n : Int, ip : Boolean = true) : String = {
+        val p = n + f.taxIn(r)
+        // Firstborn Infernal Pact: show the price after the banked discount (the discount
+        // covers the base cost only, not tax), matching the FBExpansion cost intercepts.
+        if (ip && f == FB && fbInfernalPactDiscount > 0 && n > 0)
+            " for " + (max(0, n - fbInfernalPactDiscount) + f.taxIn(r)).power + " (" + "IP discounted".styled(FB.style) + ")"
+        else
+            " for " + p.power
+    }
     def for1PowerWithTax(r : Region, f : Faction) : String = { val p = 1 + f.taxIn(r) ; if (p != 1) " for " + p.power else "" }
 
     def unit(ur : UnitRef) = {
@@ -2730,7 +2738,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
         // INIT
         case StartAction =>
-            log("Cthulhu Wars Expansions - 1.22.6")
+            log("Cthulhu Wars Expansions - 1.22.7")
             log("Options", options./(_.toString.hh).mkString(" "))
 
             if (options.has(GateDiplomacy)) {
