@@ -76,6 +76,8 @@ case class DevolveCommandsAction(self : GC, then : ForcedAction) extends ForcedA
 case class DevolvePromptAction(self : GC, then : ForcedAction) extends ForcedAction with Soft
 case class DevolveMainAction(self : GC, then : ForcedAction) extends OptionFactionAction(Devolve) with MainQuestion with Soft
 case class DevolveAction(self : GC, r : Region, then : ForcedAction) extends BaseFactionAction(Devolve, Acolyte.styled(self) + " in " + r)
+// Mind Parasite: GC may still Devolve its own parasitized Acolytes (see MindParasite.heldFrom)
+case class DevolveParasitizedAction(self : GC, r : Region, ur : UnitRef, then : ForcedAction) extends BaseFactionAction(Devolve, implicit g => g.unit(ur).styledName + " in " + r)
 
 case class DreamsMainAction(self : GC, l : $[Region]) extends OptionFactionAction(Dreams) with MainQuestion with Soft
 case class DreamsAction(self : GC, r : Region, f : Faction) extends BaseFactionAction(Dreams, implicit g => Acolyte.styled(f) + " in " + r + self.iced(r))
@@ -109,7 +111,7 @@ object GCExpansion extends Expansion {
             if (f.hasAllSB)
                 game.battles(f)
 
-            if (f.can(Devolve) && f.all(Acolyte).any && f.pool(DeepOne).any)
+            if (f.can(Devolve) && (f.all(Acolyte).any || MindParasite.heldFrom(f).any) && f.pool(DeepOne).any)
                 + DevolveMainAction(f, MainAction(f))
 
             game.reveals(f)
@@ -162,7 +164,7 @@ object GCExpansion extends Expansion {
                     + UnsubmergeMainAction(f, l)
                 }
 
-            if (f.can(Devolve) && f.all(Acolyte).any && f.pool(DeepOne).any)
+            if (f.can(Devolve) && (f.all(Acolyte).any || MindParasite.heldFrom(f).any) && f.pool(DeepOne).any)
                 + DevolveMainAction(f, MainAction(f))
 
             game.neutralSpellbooks(f)
@@ -193,7 +195,11 @@ object GCExpansion extends Expansion {
             Force(DevolveMainAction(f, then))
 
         case DevolveMainAction(f, then) =>
-            Ask(f).some(areasWithMoon)(r => f.at(r, Acolyte)./(c => DevolveAction(f, c.region, then))).cancel
+            Ask(f).some(areasWithMoon)(r => f.at(r, Acolyte)./(c => DevolveAction(f, c.region, then)) ++ MindParasite.heldFrom(f).%(_.region == r)./(c => DevolveParasitizedAction(f, r, c.ref, then))).cancel
+
+        case DevolveParasitizedAction(f, r, ur, then) =>
+            MindParasite.reclaim(game.unit(ur))
+            Force(DevolveAction(f, r, then))
 
         case DevolveAction(f, r, then) =>
             if ((f.at(r, Monster, GOO) ++ f.at(r, ElderGod)).none)

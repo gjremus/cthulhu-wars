@@ -1740,7 +1740,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     if (s.tag(MillionFavoredOnes)) {
                         s.remove(MillionFavoredOnes)
 
-                        val options = s.forces.sortA./~(u => u.uclass match {
+                        // Mind Parasite: OW may still promote its own parasitized Acolytes in the arena
+                        // (they fought on the insect side, so they are not in s.forces).
+                        val heldAcolytes = MindParasite.heldFrom(s).%(u => u.region == arena && MindParasite.originalUClass(u) == Acolyte)
+                        val options = (s.forces.sortA ++ heldAcolytes)./~(u => u.uclass match {
+                            case MindParasiteCultist if MindParasite.originalFaction(u).has(s) && s.pool(Mutant).any => |(MillionFavoredOnesXAction(s, u.region, u, $(Mutant)).as(u.styledName, "in", u.region, "to", Mutant)(MillionFavoredOnes))
                             case Acolyte if s.pool(Mutant).any      => |(MillionFavoredOnesXAction(s, u.region, u, $(Mutant)).as(u.ref.full, "in", u.region, "to", Mutant)(MillionFavoredOnes))
                             case Mutant if s.pool(Abomination).any  => |(MillionFavoredOnesXAction(s, u.region, u, $(Abomination)).as(u.ref.full, "in", u.region, "to", Abomination)(MillionFavoredOnes))
                             case Abomination if s.pool(SpawnOW).any => |(MillionFavoredOnesXAction(s, u.region, u, $(SpawnOW)).as(u.ref.full, "in", u.region, "to", SpawnOW)(MillionFavoredOnes))
@@ -2694,8 +2698,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             self.log("promoted", t, "in", r, "to", nw./(_.styled(self)).mkString(", "))
             proceed()
 
-        case MillionFavoredOnesXAction(self, r, u, nw) =>
+        case MillionFavoredOnesXAction(self, r, ur, nw) =>
             self.add(MillionFavoredOnes)
+            val u0 = game.unit(ur)
+            exempt(u0)
+            val u = MindParasite.reclaim(u0)
             exempt(u)
             // MF1 is a REPLACEMENT, not a kill/elimination — move to reserve directly
             // without calling game.eliminate() which triggers Death March, Passion, etc.

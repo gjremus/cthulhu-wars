@@ -43,6 +43,13 @@ case object BG extends Faction { f =>
     def short = "BG"
     def style = "bg"
 
+    // Sacrifice-pair label suffix naming the two figures when either is a parasitized Acolyte,
+    // so "own + parasitized" and "two parasitized" choices are distinguishable.
+    def parasitizedPairNote(a : UnitRef, b : UnitRef)(implicit game : Game) : String = {
+        val (ua, ub) = (game.unit(a), game.unit(b))
+        (MindParasite.isParasitized(ua) || MindParasite.isParasitized(ub)).??(" (" + ua.styledName + ", " + ub.styledName + ")")
+    }
+
     override def abilities = $(Fertility, Avatar)
     override def library = $(Frenzy, Ghroth, Necrophagy, RedSign, BloodSacrifice, ThousandYoung)
     override def requirements(options : $[GameOption]) = $(Spread4, Spread6, Spread8, SpreadSocial, EliminateTwoCultists, AwakenShubNiggurath)
@@ -60,7 +67,7 @@ case object BG extends Faction { f =>
     }
 
     override def awakenCost(u : UnitClass, r : Region)(implicit game : Game) = u match {
-        case ShubNiggurath => (f.gates.has(r) && (f.cultists.num >= 2)).?(8)
+        case ShubNiggurath => (f.gates.has(r) && (f.cultists.num + MindParasite.heldFrom(f).num >= 2)).?(8)
         case _ => None
     }
 
@@ -82,9 +89,9 @@ case class BloodSacrificeDoomAction(self : BG) extends OptionFactionAction(Blood
 case class BloodSacrificeAction(self : BG, r : Region, u : UnitRef) extends ForcedAction
 
 case class EliminateTwoCultistsMainAction(self : BG) extends OptionFactionAction("Eliminate two " + Cultist.plural.styled(self) + " for a spellbook") with MainQuestion with Soft
-case class EliminateTwoCultistsAction(self : BG, a : UnitRef, b : UnitRef) extends BaseFactionAction("Eliminate two " + Cultist.plural.styled(self) + " for a spellbook", implicit g => (a.region == b.region).?("Two from " + a.region)|("From " + a.region + " and " + b.region))
+case class EliminateTwoCultistsAction(self : BG, a : UnitRef, b : UnitRef) extends BaseFactionAction("Eliminate two " + Cultist.plural.styled(self) + " for a spellbook", implicit g => ((a.region == b.region).?("Two from " + a.region)|("From " + a.region + " and " + b.region)) + BG.parasitizedPairNote(a, b))
 
-case class AwakenEliminateTwoCultistsAction(self : BG, uc : UnitClass, l : $[Region], a : UnitRef, b : UnitRef) extends BaseFactionAction("Eliminate two " + Cultist.plural.styled(self) + " to awaken " + uc.styled(self), implicit g => (a.region == b.region).?("Two from " + a.region)|("From " + a.region + " and " + b.region))
+case class AwakenEliminateTwoCultistsAction(self : BG, uc : UnitClass, l : $[Region], a : UnitRef, b : UnitRef) extends BaseFactionAction("Eliminate two " + Cultist.plural.styled(self) + " to awaken " + uc.styled(self), implicit g => ((a.region == b.region).?("Two from " + a.region)|("From " + a.region + " and " + b.region)) + BG.parasitizedPairNote(a, b))
 
 case class AvatarMainAction(self : BG, o : Region, l : $[Region]) extends OptionFactionAction(Avatar) with MainQuestion with Soft
 case class AvatarAction(self : BG, o : Region, r : Region, f : Faction) extends BaseFactionAction(Avatar, implicit g => "" + f + " in " + r + self.iced(r))
@@ -131,7 +138,7 @@ object BGExpansion extends Expansion {
 
             game.rituals(f)
 
-            if (f.can(BloodSacrifice) && f.has(ShubNiggurath) && f.cultists.any)
+            if (f.can(BloodSacrifice) && f.has(ShubNiggurath) && (f.cultists.any || MindParasite.heldFrom(f).any))
                 + BloodSacrificeDoomAction(f)
 
             game.reveals(f)
@@ -214,7 +221,7 @@ object BGExpansion extends Expansion {
             if (f.can(Ghroth) && f.power >= 2)
                 + GhrothMainAction(f)
 
-            if (f.needs(EliminateTwoCultists) && f.cultists.num >= 2)
+            if (f.needs(EliminateTwoCultists) && f.cultists.num + MindParasite.heldFrom(f).num >= 2)
                 + EliminateTwoCultistsMainAction(f)
 
             game.neutralSpellbooks(f)
@@ -238,9 +245,11 @@ object BGExpansion extends Expansion {
 
         // BLOOD SACRIFICE
         case BloodSacrificeDoomAction(self) =>
-            Ask(self).each(self.cultists.sortP)(u => BloodSacrificeAction(self, u.region, u).as(u.ref.full, "in", u.region)(BloodSacrifice)).cancel
+            Ask(self).each(self.cultists.sortP ++ MindParasite.heldFrom(self))(u => BloodSacrificeAction(self, u.region, u).as(u.ref.full, "in", u.region)(BloodSacrifice)).cancel
 
-        case BloodSacrificeAction(self, r, u) =>
+        case BloodSacrificeAction(self, r, ur) =>
+            // Mind Parasite: BG may sacrifice its own parasitized Acolytes (see MindParasite.heldFrom)
+            val u = MindParasite.reclaim(game.unit(ur))
             game.eliminate(u)
             self.oncePerTurn :+= BloodSacrifice
             self.takeES(1)
@@ -263,12 +272,12 @@ object BGExpansion extends Expansion {
 
         // ELIMINATE CULTISTS
         case EliminateTwoCultistsMainAction(self) =>
-            val cultists = areasWithMoon./~(r => self.at(r).cultists.sortP.take(2))
-            val pairs = cultists./~(a => cultists.dropWhile(_ != a).dropStarting./(b => (a, b))).distinct
+            val cultists = areasWithMoon./~(r => self.at(r).cultists.sortP.take(2) ++ MindParasite.heldFrom(self).%(_.region == r).take(2))
+            val pairs = cultists./~(a => cultists.dropWhile(_ != a).dropStarting./(b => (a, b))).distinct.distinctBy { case (a, b) => (a.region, a.uclass, MindParasite.isParasitized(a), b.region, b.uclass, MindParasite.isParasitized(b)) }
             Ask(self).each(pairs)((a, b) => EliminateTwoCultistsAction(self, a, b)).cancel
 
         case EliminateTwoCultistsAction(self, a, b) =>
-            $(a, b).foreach { u =>
+            $(a, b)./(ur => MindParasite.reclaim(game.unit(ur))).foreach { u =>
                 log(u, "in", u.region, "was sacrificed")
                 game.eliminate(u)
             }
@@ -277,13 +286,13 @@ object BGExpansion extends Expansion {
 
         // AWAKEN
         case AwakenMainAction(self : BG, uc : ShubNiggurath.type, locations) =>
-            val cultists = areasWithMoon./~(r => self.at(r).cultists.sortP.take(2))
-            val pairs = cultists./~(a => cultists.dropWhile(_ != a).dropStarting./(b => (a, b))).distinct
+            val cultists = areasWithMoon./~(r => self.at(r).cultists.sortP.take(2) ++ MindParasite.heldFrom(self).%(_.region == r).take(2))
+            val pairs = cultists./~(a => cultists.dropWhile(_ != a).dropStarting./(b => (a, b))).distinct.distinctBy { case (a, b) => (a.region, a.uclass, MindParasite.isParasitized(a), b.region, b.uclass, MindParasite.isParasitized(b)) }
             Ask(self).each(pairs)((a, b) => AwakenEliminateTwoCultistsAction(self, uc, locations, a, b)).cancel
 
         case AwakenEliminateTwoCultistsAction(self, uc, locations, a, b) =>
             val q = locations./~(r => self.awakenCost(uc, r)./(cost => AwakenAction(self, uc, r, cost)))
-            $(a, b).foreach { u =>
+            $(a, b)./(ur => MindParasite.reclaim(game.unit(ur))).foreach { u =>
                 log(u, "in", u.region, "was sacrificed")
                 game.eliminate(u)
             }
