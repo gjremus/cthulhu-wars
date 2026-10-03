@@ -6133,6 +6133,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Goat"), never the short code, so this was always false and every
             // Fertility summon fell through to EndAction, ending BG's turn early.
             if (self == BG && self.oncePerRound.contains(Fertility)) {
+                println(s"[BG-MENU-TRACE] post-Fertility-summon re-ask: acted=${self.acted}")
                 triggers()
                 Force(MainAction(self))
             }
