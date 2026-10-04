@@ -355,6 +355,37 @@ case class FBCyclopeanGazeKillChoiceAction(self : Faction, painedFaction : Facti
 // Battle.scala catches this in its action dispatcher and calls proceed() to resume battle flow.
 case class FBCyclopeanGazeBattleDoneAction(self : Faction) extends ForcedAction with PowerNeutral
 
+// ── CYCLOPEAN GAZE LEGACY REPLAY SUPPORT ──
+// Pre-batching games already have the OLD per-source interleaved CG chain baked
+// permanently into their action history (FB use/skip -> enemy picks a unit -> FB picks
+// a destination, one source at a time, looping back for the next source) because every
+// action a player/bot ever chose is deserialized straight from that game's saved text
+// and re-executed on every reload (see CthulhuWarsSolo.scala's replay loop) — it is
+// never recomputed from scratch. These Legacy-suffixed classes exist ONLY so that old
+// serialized text keeps parsing and replaying exactly as it always did; nothing here is
+// ever constructed by fresh code (see the explicit [LEGACY REPLAY] cases in
+// Serialize.scala that route by old arity). Do not extend or "fix" this chain — it is a
+// frozen copy of the pre-batching behavior, kept solely for backward compatibility.
+case class FBCyclopeanGazePhaseActionLegacy4(self : Faction, actor : Faction, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends ForcedAction with PowerNeutral
+case class FBCyclopeanGazeUseActionLegacy6(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends OptionFactionAction(
+    implicit g => "Use " + CyclopeanGaze.styled(FB) + " (" + sourceUnit.styled(FB) + " in " + r + ")"
+) with PowerNeutral { def question(implicit game : Game) = CyclopeanGaze.styled(FB) }
+case class FBCyclopeanGazeSkipActionLegacy6(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends OptionFactionAction(
+    implicit g => "Skip " + CyclopeanGaze.styled(FB) + " (" + sourceUnit.styled(FB) + " in " + r + ")"
+) with PowerNeutral { def question(implicit game : Game) = CyclopeanGaze.styled(FB) }
+case class FBCyclopeanGazeAssignPainActionLegacy6(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends ForcedAction with PowerNeutral
+case class FBCyclopeanGazePainUnitActionLegacy7(self : Faction, actor : Faction, u : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends BaseFactionAction(
+    implicit g => CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + self.name.styled(self) + " choose unit to pain",
+    implicit g => g.unit(u).full + " in " + r
+) with PowerNeutral
+case class FBCyclopeanGazeDestinationActionLegacy7(self : Faction, u : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], actor : Faction, fromBattle : Boolean) extends BaseFactionAction(
+    implicit g => CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + FB.name.styled(FB) + " retreat " + g.unit(u).full + " to", r
+) with PowerNeutral
+case class FBCyclopeanGazeKillChoiceActionLegacy8(self : Faction, painedFaction : Faction, killRef : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], actor : Faction, fromBattle : Boolean) extends BaseFactionAction(
+    implicit g => CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + painedFaction.name.styled(painedFaction) + " choose unit to eliminate (no retreat)",
+    implicit g => g.unit(killRef).full
+) with PowerNeutral
+
 // ── DEVIL'S MARK ACTIONS ── Doom phase: place Crater on controlled gate (land only), gain ES, destroy gates
 // Bug fix: Devil's Mark must NOT be Soft. Soft actions are not recorded in the undo log,
 // and making the menu opener Soft caused a 300-game regression (doom 20→12, rituals 3.8→1.7).
@@ -2039,6 +2070,81 @@ object FBExpansion extends Expansion {
         // action dispatcher catches this and calls proceed(); the FB expansion just acknowledges it.
         case FBCyclopeanGazeBattleDoneAction(self) =>
             UnknownContinue
+
+        // ── CYCLOPEAN GAZE LEGACY REPLAY HANDLERS ── frozen copy of the pre-batching
+        // per-source interleaved chain; see the Legacy class definitions above for why
+        // this exists. Never reached by fresh triggers, only by old replayed games.
+        case FBCyclopeanGazePhaseActionLegacy4(self, actor, sourcesPending, fromBattle) =>
+            if (sourcesPending.any) {
+                val FBCyclopeanGazeSource(r, srcUnit) = sourcesPending.head
+                val rest = sourcesPending.tail
+                val units = actor.at(r).%(u => u.uclass.utype != Building)
+                if (units.any) {
+                    implicit val asking = Asking(FB)
+                    + FBCyclopeanGazeUseActionLegacy6(FB, actor, r, srcUnit, rest, fromBattle)
+                    + FBCyclopeanGazeSkipActionLegacy6(FB, actor, r, srcUnit, rest, fromBattle)
+                    asking
+                } else
+                    Force(FBCyclopeanGazePhaseActionLegacy4(self, actor, rest, fromBattle))
+            } else {
+                if (fromBattle)
+                    Force(FBCyclopeanGazeBattleDoneAction(self))
+                else
+                    Then(AfterAction(actor))
+            }
+
+        case FBCyclopeanGazeUseActionLegacy6(self, actor, r, sourceUnit, sourcesPending, fromBattle) =>
+            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + " in " + r + ": used")
+            Force(FBCyclopeanGazeAssignPainActionLegacy6(self, actor, r, sourceUnit, sourcesPending, fromBattle))
+
+        case FBCyclopeanGazeSkipActionLegacy6(self, actor, r, sourceUnit, sourcesPending, fromBattle) =>
+            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + " in " + r + ": skipped")
+            Force(FBCyclopeanGazePhaseActionLegacy4(self, actor, sourcesPending, fromBattle))
+
+        case FBCyclopeanGazeAssignPainActionLegacy6(self, actor, r, sourceUnit, sourcesPending, fromBattle) =>
+            val units = actor.at(r).%(u => u.uclass.utype != Building)
+            if (units.any)
+                Ask(actor).each(units)(u => FBCyclopeanGazePainUnitActionLegacy7(actor, actor, u.ref, r, sourceUnit, sourcesPending, fromBattle))
+            else
+                Force(FBCyclopeanGazePhaseActionLegacy4(self, actor, sourcesPending, fromBattle))
+
+        case FBCyclopeanGazePainUnitActionLegacy7(self, actor, uRef, r, sourceUnit, sourcesPending, fromBattle) =>
+            val u = game.unit(uRef)
+            // BB Bullet 44 fix: a BB-owned unit pained by Cyclopean Gaze can retreat to the
+            // Moon — preserved here exactly as the pre-batching code had it.
+            val moonDest = (u.faction == BB && u.region != BB.moon).??($(BB.moon))
+            val destinations = (game.board.connectedForRetreat(u.region).%(_.glyph.onMap).%(d => FB.at(d).%(_.uclass.utype != Building).none) ++ moonDest).distinct
+            if (destinations.any)
+                Ask(FB).each(destinations)(dest => FBCyclopeanGazeDestinationActionLegacy7(FB, uRef, dest, sourceUnit, sourcesPending, actor, fromBattle))
+            else {
+                val painedFaction = u.faction
+                val killCandidates = painedFaction.at(r).%(_.uclass.utype != Building)
+                if (killCandidates.num <= 1) {
+                    val from = u.region
+                    game.eliminate(u)
+                    self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + u.uclass.styled(painedFaction) + " in " + from + " had nowhere to retreat and was eliminated")
+                    Force(FBCyclopeanGazePhaseActionLegacy4(self, actor, sourcesPending, fromBattle))
+                } else {
+                    Ask(painedFaction).each(killCandidates)(k => FBCyclopeanGazeKillChoiceActionLegacy8(self, painedFaction, k.ref, r, sourceUnit, sourcesPending, actor, fromBattle))
+                }
+            }
+
+        case FBCyclopeanGazeKillChoiceActionLegacy8(self, painedFaction, killRef, r, sourceUnit, sourcesPending, actor, fromBattle) =>
+            val k = game.unit(killRef)
+            val ucName = k.uclass.styled(painedFaction)
+            game.eliminate(k)
+            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + ucName + " in " + r + " had nowhere to retreat and was eliminated")
+            Force(FBCyclopeanGazePhaseActionLegacy4(self, actor, sourcesPending, fromBattle))
+
+        case FBCyclopeanGazeDestinationActionLegacy7(self, uRef, dest, sourceUnit, sourcesPending, actor, fromBattle) =>
+            val u = game.unit(uRef)
+            val from = u.region
+            game.fbSuppressCGForPlacement = true
+            u.region = dest
+            game.fbSuppressCGForPlacement = false
+            u.onGate = false
+            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": pained", u.uclass.styled(u.faction), "from", from, "to", dest)
+            Force(FBCyclopeanGazePhaseActionLegacy4(self, actor, sourcesPending, fromBattle))
 
         // ── CARNAGE (handled in Battle.scala post-battle phase) ──
         case FBCarnagePostBattleAction(self) =>

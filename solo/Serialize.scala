@@ -171,6 +171,30 @@ class Serialize(val game : Game) {
         case EApply("FBEyeOpensTarget", ps) => FBEyeOpensTarget(parseExpr(ps(0)).asInstanceOf[Region], parseExpr(ps(1)).asInstanceOf[Faction], parseExpr(ps(2)).asInstanceOf[UnitRef])
         case EApply("FBCyclopeanGazeSource", ps) => FBCyclopeanGazeSource(parseExpr(ps(0)).asInstanceOf[Region], parseExpr(ps(1)).asInstanceOf[UnitClass])
         case EApply("FBCyclopeanGazePainAssignment", ps) => FBCyclopeanGazePainAssignment(parseExpr(ps(0)).asInstanceOf[FBCyclopeanGazeSource], parseExpr(ps(1)).asInstanceOf[UnitRef])
+        // [LEGACY REPLAY] Cyclopean Gaze batching fix widened several of these actions'
+        // arity (added usedSources/appliedPending accumulator fields) and repurposed
+        // FBCyclopeanGazeDestinationAction/KillChoiceAction's list field from a list of
+        // not-yet-decided sources to a list of already-decided pain assignments. Old
+        // games have the pre-fix shapes baked into their permanent action history, so
+        // route those exact old shapes to the frozen Legacy classes (see FactionFB.scala)
+        // instead of the current ones. FBCyclopeanGazeAssignPainAction was removed
+        // outright by the fix — any sighting of it is always the old 6-param shape.
+        // Destination/KillChoice keep the SAME arity in both shapes, so disambiguate by
+        // peeking at whether their list argument holds Source or PainAssignment elements.
+        case EApply("FBCyclopeanGazePhaseAction", ps) if ps.num == 4 =>
+            FBCyclopeanGazePhaseActionLegacy4(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Faction], parseExpr(ps(2)).asInstanceOf[$[FBCyclopeanGazeSource]], parseExpr(ps(3)).asInstanceOf[Boolean])
+        case EApply("FBCyclopeanGazeUseAction", ps) if ps.num == 6 =>
+            FBCyclopeanGazeUseActionLegacy6(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Faction], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[UnitClass], parseExpr(ps(4)).asInstanceOf[$[FBCyclopeanGazeSource]], parseExpr(ps(5)).asInstanceOf[Boolean])
+        case EApply("FBCyclopeanGazeSkipAction", ps) if ps.num == 6 =>
+            FBCyclopeanGazeSkipActionLegacy6(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Faction], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[UnitClass], parseExpr(ps(4)).asInstanceOf[$[FBCyclopeanGazeSource]], parseExpr(ps(5)).asInstanceOf[Boolean])
+        case EApply("FBCyclopeanGazeAssignPainAction", ps) =>
+            FBCyclopeanGazeAssignPainActionLegacy6(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Faction], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[UnitClass], parseExpr(ps(4)).asInstanceOf[$[FBCyclopeanGazeSource]], parseExpr(ps(5)).asInstanceOf[Boolean])
+        case EApply("FBCyclopeanGazePainUnitAction", ps) if ps.num == 7 =>
+            FBCyclopeanGazePainUnitActionLegacy7(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Faction], parseExpr(ps(2)).asInstanceOf[UnitRef], parseExpr(ps(3)).asInstanceOf[Region], parseExpr(ps(4)).asInstanceOf[UnitClass], parseExpr(ps(5)).asInstanceOf[$[FBCyclopeanGazeSource]], parseExpr(ps(6)).asInstanceOf[Boolean])
+        case EApply("FBCyclopeanGazeDestinationAction", ps) if ps.num == 7 && (ps(4) match { case EList(e) => e.headOption.exists { case EApply("FBCyclopeanGazeSource", _) => true; case _ => false }; case _ => false }) =>
+            FBCyclopeanGazeDestinationActionLegacy7(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], parseExpr(ps(3)).asInstanceOf[UnitClass], parseExpr(ps(4)).asInstanceOf[$[FBCyclopeanGazeSource]], parseExpr(ps(5)).asInstanceOf[Faction], parseExpr(ps(6)).asInstanceOf[Boolean])
+        case EApply("FBCyclopeanGazeKillChoiceAction", ps) if ps.num == 8 && (ps(5) match { case EList(e) => e.headOption.exists { case EApply("FBCyclopeanGazeSource", _) => true; case _ => false }; case _ => false }) =>
+            FBCyclopeanGazeKillChoiceActionLegacy8(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[Faction], parseExpr(ps(2)).asInstanceOf[UnitRef], parseExpr(ps(3)).asInstanceOf[Region], parseExpr(ps(4)).asInstanceOf[UnitClass], parseExpr(ps(5)).asInstanceOf[$[FBCyclopeanGazeSource]], parseExpr(ps(6)).asInstanceOf[Faction], parseExpr(ps(7)).asInstanceOf[Boolean])
         case EApply("FBWritheKillEntry", ps) => FBWritheKillEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[UnitClass], parseExpr(ps(3)).asInstanceOf[|[UnitRef]])
         case EApply("FBWrithePainEntry", ps) => FBWrithePainEntry(parseExpr(ps(0)).asInstanceOf[UnitRef], parseExpr(ps(1)).asInstanceOf[Region], parseExpr(ps(2)).asInstanceOf[Region])
         // [LEGACY REPLAY] The abandoned MNU v2.0.1 engine (commit a779f68) logged a 5-param
