@@ -29,14 +29,17 @@ trait WhateleyClanUnit
 case object LaviniaWhateley extends UnitClass("Lavinia Whateley", Cultist, 2) with WhateleyClanUnit {
     override def canBeRecruited(f : Faction)(implicit game : Game) = false
     override def canBeSummoned(f : Faction)(implicit game : Game) = false
+    override def canControlGate(u : UnitFigure)(implicit game : Game) = true
 }
 case object WilburWhateley extends UnitClass("Wilbur Whateley", Cultist, 3) with WhateleyClanUnit {
     override def canBeRecruited(f : Faction)(implicit game : Game) = false
     override def canBeSummoned(f : Faction)(implicit game : Game) = false
+    override def canControlGate(u : UnitFigure)(implicit game : Game) = true
 }
 case object WizardWhateley extends UnitClass("Wizard Whateley", Cultist, 2) with WhateleyClanUnit {
     override def canBeRecruited(f : Faction)(implicit game : Game) = false
     override def canBeSummoned(f : Faction)(implicit game : Game) = false
+    override def canControlGate(u : UnitFigure)(implicit game : Game) = true
 }
 case object JuniorWhateley extends UnitClass("Junior Whateley", Terror, 4) with WhateleyClanUnit {
     override def canBeRecruited(f : Faction)(implicit game : Game) = false
