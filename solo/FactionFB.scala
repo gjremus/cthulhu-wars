@@ -226,6 +226,11 @@ case class FBAwakenGhatanothoaAction(self : Faction, cost : Int) extends OptionF
 // writer in Serialize.scala.
 case class FBEyeOpensTarget(region : Region, faction : Faction, unit : UnitRef)
 case class FBCyclopeanGazeSource(region : Region, unit : UnitClass)
+// Bug fix (CG batching): pairs a decided pain source with the specific enemy unit
+// chosen to receive that pain, once Phase 2 (pain-unit assignment) has run for it.
+// Needs its own named case class (not a bare tuple) — see note above on why tuples
+// don't serialize correctly through Serialize.write.
+case class FBCyclopeanGazePainAssignment(source : FBCyclopeanGazeSource, unitRef : UnitRef)
 case class FBWritheKillEntry(unit : UnitRef, region : Region, origClass : UnitClass, replacement : |[UnitRef])
 case class FBWrithePainEntry(unit : UnitRef, fromRegion : Region, toRegion : Region)
 
@@ -293,32 +298,46 @@ case class FBTheEyeOpensCommitAction(self : Faction, pending : $[FBEyeOpensTarge
 // `fromBattle` indicates this chain was triggered from a post-battle hook (Battle.scala) rather
 // than from the AfterAction expansion handler — when true the chain ends with FBCyclopeanGazeBattleDoneAction
 // which Battle.scala catches to resume battle flow via proceed().
-case class FBCyclopeanGazePhaseAction(self : Faction, actor : Faction, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends ForcedAction with PowerNeutral
+//
+// Batching fix: CG now runs in three separate batched passes instead of interleaving
+// per-source. Phase 1 (this action) asks FB use/skip for EVERY pending source first,
+// collecting the ones FB chose to use into `usedSources`. Once decided, it hands off to
+// Phase 2 (FBCyclopeanGazePainQueueAction), which asks the painted faction(s) to choose
+// a unit for EVERY used source. Only after all pain targets are chosen does Phase 3
+// (FBCyclopeanGazeApplyPainAction) ask FB where to retreat each one. This matches how
+// other multi-unit prompts (e.g. WW Howl) keep the menu with one chooser until that
+// chooser's whole decision is done, rather than ping-ponging per unit.
+case class FBCyclopeanGazePhaseAction(self : Faction, actor : Faction, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean, usedSources : $[FBCyclopeanGazeSource] = $) extends ForcedAction with PowerNeutral
 // CG is now optional for FB — prompted per source whether to use or skip
-case class FBCyclopeanGazeUseAction(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends OptionFactionAction(
+case class FBCyclopeanGazeUseAction(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean, usedSources : $[FBCyclopeanGazeSource]) extends OptionFactionAction(
     implicit g => "Use " + CyclopeanGaze.styled(FB) + " (" + sourceUnit.styled(FB) + " in " + r + ")"
 ) with PowerNeutral { def question(implicit game : Game) = CyclopeanGaze.styled(FB) }
-case class FBCyclopeanGazeSkipAction(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends OptionFactionAction(
+case class FBCyclopeanGazeSkipAction(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean, usedSources : $[FBCyclopeanGazeSource]) extends OptionFactionAction(
     implicit g => "Skip " + CyclopeanGaze.styled(FB) + " (" + sourceUnit.styled(FB) + " in " + r + ")"
 ) with PowerNeutral { def question(implicit game : Game) = CyclopeanGaze.styled(FB) }
-case class FBCyclopeanGazeAssignPainAction(self : Faction, actor : Faction, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends ForcedAction with PowerNeutral
+// Phase 2: once FB has decided use/skip for every source, loop through the ones used
+// and ask the painted faction to choose a unit for each — menu stays with the painted
+// faction(s) across all of them before Phase 3 ever asks FB about destinations.
+case class FBCyclopeanGazePainQueueAction(self : Faction, actor : Faction, painPending : $[FBCyclopeanGazeSource], fromBattle : Boolean, appliedPending : $[FBCyclopeanGazePainAssignment] = $) extends ForcedAction with PowerNeutral
 // Firstborn (FB): Cyclopean Gaze — actor chooses which of their units to pain.
 // Round 8 Bug 57: the painted faction (NOT FB) picks which of their units to pain.
 // `self` is set to the painted faction so:
-//   - The Ask in the dispatcher (FBCyclopeanGazeAssignPainAction) targets the painted
+//   - The Ask in the dispatcher (FBCyclopeanGazePainQueueAction) targets the painted
 //     faction → menu border colored in painted faction's color.
 //   - The action's `self.style` matches the menu styling.
 // Title format includes the painted faction name styled in their color so it's
 // visually obvious WHO is being asked to choose.
-case class FBCyclopeanGazePainUnitAction(self : Faction, actor : Faction, u : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], fromBattle : Boolean) extends BaseFactionAction(
+case class FBCyclopeanGazePainUnitAction(self : Faction, actor : Faction, u : UnitRef, r : Region, sourceUnit : UnitClass, painPending : $[FBCyclopeanGazeSource], fromBattle : Boolean, appliedPending : $[FBCyclopeanGazePainAssignment]) extends BaseFactionAction(
     implicit g => CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + self.name.styled(self) + " choose unit to pain",
     implicit g => g.unit(u).full + " in " + r
 ) with PowerNeutral
+// Phase 3: once every used source has a pain target assigned, loop through them and ask
+// FB where to retreat (or who gets eliminated if there's nowhere to retreat) each one.
+case class FBCyclopeanGazeApplyPainAction(self : Faction, actor : Faction, applyPending : $[FBCyclopeanGazePainAssignment], fromBattle : Boolean) extends ForcedAction with PowerNeutral
 // Round 8 Bug 61: FIRSTBORN chooses the destination region (the painter directs the pain).
-// `self` is FB (set by the dispatcher in FBCyclopeanGazePainUnitAction), so the menu border
-// is in FB's color and the title is attributed to FB. The title shows the unit being
-// retreated and FB as the chooser.
-case class FBCyclopeanGazeDestinationAction(self : Faction, u : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], actor : Faction, fromBattle : Boolean) extends BaseFactionAction(
+// `self` is FB (set by the dispatcher), so the menu border is in FB's color and the title
+// is attributed to FB. The title shows the unit being retreated and FB as the chooser.
+case class FBCyclopeanGazeDestinationAction(self : Faction, u : UnitRef, r : Region, sourceUnit : UnitClass, applyPending : $[FBCyclopeanGazePainAssignment], actor : Faction, fromBattle : Boolean) extends BaseFactionAction(
     implicit g => CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + FB.name.styled(FB) + " retreat " + g.unit(u).full + " to", r
 ) with PowerNeutral
 // Round 8 Bug 51: when CG pain has no legal destinations, the painted faction's owner
@@ -327,8 +346,8 @@ case class FBCyclopeanGazeDestinationAction(self : Faction, u : UnitRef, r : Reg
 // most valuable unit by sacrificing a cheaper one.
 // Round 8 Bug 57: title format updated for consistency with the unit-pick menu.
 // `self` should be the painted faction so the menu border is in their color (set by
-// the dispatcher in FBCyclopeanGazePainUnitAction's no-destinations branch).
-case class FBCyclopeanGazeKillChoiceAction(self : Faction, painedFaction : Faction, killRef : UnitRef, r : Region, sourceUnit : UnitClass, sourcesPending : $[FBCyclopeanGazeSource], actor : Faction, fromBattle : Boolean) extends BaseFactionAction(
+// the dispatcher in FBCyclopeanGazeApplyPainAction's no-destinations branch).
+case class FBCyclopeanGazeKillChoiceAction(self : Faction, painedFaction : Faction, killRef : UnitRef, r : Region, sourceUnit : UnitClass, applyPending : $[FBCyclopeanGazePainAssignment], actor : Faction, fromBattle : Boolean) extends BaseFactionAction(
     implicit g => CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + painedFaction.name.styled(painedFaction) + " choose unit to eliminate (no retreat)",
     implicit g => g.unit(killRef).full
 ) with PowerNeutral
@@ -1881,18 +1900,114 @@ object FBExpansion extends Expansion {
             }
             UnknownContinue
 
-        case FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle) =>
+        // Phase 1: decide use/skip for EVERY pending source before moving on. The menu
+        // stays with FB across all of them (batched), instead of ping-ponging to the
+        // enemy and back for each source individually.
+        case FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle, usedSources) =>
             if (sourcesPending.any) {
                 val FBCyclopeanGazeSource(r, srcUnit) = sourcesPending.head
                 val rest = sourcesPending.tail
                 val units = actor.at(r).%(u => u.uclass.utype != Building)
                 if (units.any) {
                     implicit val asking = Asking(FB)
-                    + FBCyclopeanGazeUseAction(FB, actor, r, srcUnit, rest, fromBattle)
-                    + FBCyclopeanGazeSkipAction(FB, actor, r, srcUnit, rest, fromBattle)
+                    + FBCyclopeanGazeUseAction(FB, actor, r, srcUnit, rest, fromBattle, usedSources)
+                    + FBCyclopeanGazeSkipAction(FB, actor, r, srcUnit, rest, fromBattle, usedSources)
                     asking
                 } else
-                    Force(FBCyclopeanGazePhaseAction(self, actor, rest, fromBattle))
+                    Force(FBCyclopeanGazePhaseAction(self, actor, rest, fromBattle, usedSources))
+            } else {
+                // Decision phase complete — hand off to Phase 2 (batched pain-unit assignment)
+                // for every source FB chose to use. If none were used, finish the chain.
+                if (usedSources.any)
+                    Force(FBCyclopeanGazePainQueueAction(self, actor, usedSources, fromBattle))
+                else if (fromBattle)
+                    Force(FBCyclopeanGazeBattleDoneAction(self))
+                else
+                    Then(AfterAction(actor))
+            }
+
+        case FBCyclopeanGazeUseAction(self, actor, r, sourceUnit, sourcesPending, fromBattle, usedSources) =>
+            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + " in " + r + ": used")
+            Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle, usedSources :+ FBCyclopeanGazeSource(r, sourceUnit)))
+
+        case FBCyclopeanGazeSkipAction(self, actor, r, sourceUnit, sourcesPending, fromBattle, usedSources) =>
+            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + " in " + r + ": skipped")
+            Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle, usedSources))
+
+        // Phase 2: for every source FB used, ask the painted faction (= the actor) which
+        // unit to pain. The menu stays with the painted faction across all used sources
+        // before Phase 3 ever asks FB about destinations.
+        case FBCyclopeanGazePainQueueAction(self, actor, painPending, fromBattle, appliedPending) =>
+            if (painPending.any) {
+                val FBCyclopeanGazeSource(r, srcUnit) = painPending.head
+                val rest = painPending.tail
+                // Round 8 Bug 58: CG only triggers against the FACTION THAT TOOK THE ACTION
+                // (the actor). Other factions' units in the same gaze region (e.g., a previously-
+                // deployed Dimensional Shambler from another faction) are NOT valid CG targets.
+                // Per the user: "CG should only trigger against the faction that took an action
+                // ending in a CG region." If the actor has no non-Building units in the region,
+                // no CG fires for this source — skip to the next source.
+                //
+                // Round 8 Bug 57: the painted faction (= the actor) chooses which of their units
+                // gets pained. Ask(actor) → menu border in actor's color. Action's self = actor
+                // → menu title styled in actor's color. The painted faction's name appears in
+                // the title.
+                val units = actor.at(r).%(u => u.uclass.utype != Building)
+                if (units.any)
+                    Ask(actor).each(units)(u => FBCyclopeanGazePainUnitAction(actor, actor, u.ref, r, srcUnit, rest, fromBattle, appliedPending))
+                else
+                    // Actor has no paintable units in this region — skip this source
+                    Force(FBCyclopeanGazePainQueueAction(self, actor, rest, fromBattle, appliedPending))
+            } else
+                Force(FBCyclopeanGazeApplyPainAction(self, actor, appliedPending, fromBattle))
+
+        case FBCyclopeanGazePainUnitAction(self, actor, uRef, r, sourceUnit, painPending, fromBattle, appliedPending) =>
+            Force(FBCyclopeanGazePainQueueAction(self, actor, painPending, fromBattle, appliedPending :+ FBCyclopeanGazePainAssignment(FBCyclopeanGazeSource(r, sourceUnit), uRef)))
+
+        // Phase 3: for every pain target chosen in Phase 2, ask FB where to retreat it
+        // (or who gets eliminated if there's nowhere to retreat). Menu stays with FB
+        // across all of them before the chain finishes.
+        case FBCyclopeanGazeApplyPainAction(self, actor, applyPending, fromBattle) =>
+            if (applyPending.any) {
+                val FBCyclopeanGazePainAssignment(FBCyclopeanGazeSource(r, sourceUnit), uRef) = applyPending.head
+                val rest = applyPending.tail
+                // Round 8 Bug 46: CG pains follow standard pain rules — destination region
+                // cannot contain FB (the painer's faction) units (Buildings excepted).
+                // Round 8 Bug 48: if no legal destinations exist, the unit is ELIMINATED
+                // (auto-kill), matching standard battle pain rules (see Battle.scala line ~470
+                // EliminateNoWayAction).
+                // Round 8 Bug 51: if the painted faction has multiple non-Building units in
+                // the region, prompt them to choose which to eliminate (a "soak" choice).
+                // Round 8 Bug 61: FIRSTBORN chooses the destination region (not the painted
+                // faction). This matches CW pain rules where the painter directs the pain
+                // motion. Use Ask(FB) and pass FB as the destination action's `self` so the
+                // menu is bordered in FB's color and the title is attributed to FB.
+                val u = game.unit(uRef)
+                // BB Bullet 44 fix: a BB-owned unit pained by Cyclopean Gaze can retreat
+                // to the Moon (Moon is a valid pain destination for BB units only — see
+                // BB Implementation Guide §Task 3.2.4 / §2.6c "Moon adjacent to all
+                // regions"). Mirrors the Battle.scala retreat() pattern (moonDest).
+                // Non-BB units retain the existing on-map-only filter.
+                val moonDest = (u.faction == BB && u.region != BB.moon).??($(BB.moon))
+                val destinations = (game.board.connectedForRetreat(u.region).%(_.glyph.onMap).%(d => FB.at(d).%(_.uclass.utype != Building).none) ++ moonDest).distinct
+                if (destinations.any)
+                    Ask(FB).each(destinations)(dest => FBCyclopeanGazeDestinationAction(FB, uRef, dest, sourceUnit, rest, actor, fromBattle))
+                else {
+                    // No legal destinations — the painted faction must lose a unit. If they
+                    // have multiple non-Building units in the region, let them choose which.
+                    val painedFaction = u.faction
+                    val killCandidates = painedFaction.at(r).%(_.uclass.utype != Building)
+                    if (killCandidates.num <= 1) {
+                        // Only the FB-selected unit (or no other choices) — eliminate it directly
+                        val from = u.region
+                        game.eliminate(u)
+                        actor.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + u.uclass.styled(painedFaction) + " in " + from + " had nowhere to retreat and was eliminated")
+                        Force(FBCyclopeanGazeApplyPainAction(self, actor, rest, fromBattle))
+                    } else {
+                        // Multiple units — painted faction chooses which to lose
+                        Ask(painedFaction).each(killCandidates)(k => FBCyclopeanGazeKillChoiceAction(painedFaction, painedFaction, k.ref, r, sourceUnit, rest, actor, fromBattle))
+                    }
+                }
             } else {
                 if (fromBattle)
                     Force(FBCyclopeanGazeBattleDoneAction(self))
@@ -1900,83 +2015,17 @@ object FBExpansion extends Expansion {
                     Then(AfterAction(actor))
             }
 
-        case FBCyclopeanGazeUseAction(self, actor, r, sourceUnit, sourcesPending, fromBattle) =>
-            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + " in " + r + ": used")
-            Force(FBCyclopeanGazeAssignPainAction(self, actor, r, sourceUnit, sourcesPending, fromBattle))
-
-        case FBCyclopeanGazeSkipAction(self, actor, r, sourceUnit, sourcesPending, fromBattle) =>
-            self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + " in " + r + ": skipped")
-            Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
-
-        case FBCyclopeanGazeAssignPainAction(self, actor, r, sourceUnit, sourcesPending, fromBattle) =>
-            // Round 8 Bug 58: CG only triggers against the FACTION THAT TOOK THE ACTION
-            // (the actor). Other factions' units in the same gaze region (e.g., a previously-
-            // deployed Dimensional Shambler from another faction) are NOT valid CG targets.
-            // Per the user: "CG should only trigger against the faction that took an action
-            // ending in a CG region." If the actor has no non-Building units in the region,
-            // no CG fires for this source — skip to the next source.
-            //
-            // Round 8 Bug 57: the painted faction (= the actor) chooses which of their units
-            // gets pained. Ask(actor) → menu border in actor's color. Action's self = actor
-            // → menu title styled in actor's color. The painted faction's name appears in
-            // the title.
-            val units = actor.at(r).%(u => u.uclass.utype != Building)
-            if (units.any)
-                Ask(actor).each(units)(u => FBCyclopeanGazePainUnitAction(actor, actor, u.ref, r, sourceUnit, sourcesPending, fromBattle))
-            else
-                // Actor has no paintable units in this region — skip this source
-                Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
-
-        case FBCyclopeanGazePainUnitAction(self, actor, uRef, r, sourceUnit, sourcesPending, fromBattle) =>
-            // Round 8 Bug 46: CG pains follow standard pain rules — destination region
-            // cannot contain FB (the painer's faction) units (Buildings excepted).
-            // Round 8 Bug 48: if no legal destinations exist, the unit is ELIMINATED
-            // (auto-kill), matching standard battle pain rules (see Battle.scala line ~470
-            // EliminateNoWayAction).
-            // Round 8 Bug 51: if the painted faction has multiple non-Building units in
-            // the region, prompt them to choose which to eliminate (a "soak" choice).
-            // Round 8 Bug 61: FIRSTBORN chooses the destination region (not the painted
-            // faction). This matches CW pain rules where the painter directs the pain
-            // motion. Use Ask(FB) and pass FB as the destination action's `self` so the
-            // menu is bordered in FB's color and the title is attributed to FB.
-            val u = game.unit(uRef)
-            // BB Bullet 44 fix: a BB-owned unit pained by Cyclopean Gaze can retreat
-            // to the Moon (Moon is a valid pain destination for BB units only — see
-            // BB Implementation Guide §Task 3.2.4 / §2.6c "Moon adjacent to all
-            // regions"). Mirrors the Battle.scala retreat() pattern (moonDest).
-            // Non-BB units retain the existing on-map-only filter.
-            val moonDest = (u.faction == BB && u.region != BB.moon).??($(BB.moon))
-            val destinations = (game.board.connectedForRetreat(u.region).%(_.glyph.onMap).%(d => FB.at(d).%(_.uclass.utype != Building).none) ++ moonDest).distinct
-            if (destinations.any)
-                Ask(FB).each(destinations)(dest => FBCyclopeanGazeDestinationAction(FB, uRef, dest, sourceUnit, sourcesPending, actor, fromBattle))
-            else {
-                // No legal destinations — the painted faction must lose a unit. If they
-                // have multiple non-Building units in the region, let them choose which.
-                val painedFaction = u.faction
-                val killCandidates = painedFaction.at(r).%(_.uclass.utype != Building)
-                if (killCandidates.num <= 1) {
-                    // Only the FB-selected unit (or no other choices) — eliminate it directly
-                    val from = u.region
-                    game.eliminate(u)
-                    self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + u.uclass.styled(painedFaction) + " in " + from + " had nowhere to retreat and was eliminated")
-                    Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
-                } else {
-                    // Multiple units — painted faction chooses which to lose
-                    Ask(painedFaction).each(killCandidates)(k => FBCyclopeanGazeKillChoiceAction(self, painedFaction, k.ref, r, sourceUnit, sourcesPending, actor, fromBattle))
-                }
-            }
-
-        case FBCyclopeanGazeKillChoiceAction(self, painedFaction, killRef, r, sourceUnit, sourcesPending, actor, fromBattle) =>
+        case FBCyclopeanGazeKillChoiceAction(self, painedFaction, killRef, r, sourceUnit, applyPending, actor, fromBattle) =>
             // Round 8 Bug 51: painted faction's "soak" choice — eliminate the chosen unit
             val k = game.unit(killRef)
             val ucName = k.uclass.styled(painedFaction)
             game.eliminate(k)
             self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": " + ucName + " in " + r + " had nowhere to retreat and was eliminated")
-            Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
+            Force(FBCyclopeanGazeApplyPainAction(FB, actor, applyPending, fromBattle))
 
-        case FBCyclopeanGazeDestinationAction(self, uRef, dest, sourceUnit, sourcesPending, actor, fromBattle) =>
+        case FBCyclopeanGazeDestinationAction(self, uRef, dest, sourceUnit, applyPending, actor, fromBattle) =>
             // Bug fix Round 4: log the source unit class so the player sees which Revenant/Ghatanothoa
-            // caused the pain. After applying, continue with remaining sources via FBCyclopeanGazePhaseAction.
+            // caused the pain. After applying, continue with remaining assignments via FBCyclopeanGazeApplyPainAction.
             val u = game.unit(uRef)
             val from = u.region
             game.fbSuppressCGForPlacement = true
@@ -1984,7 +2033,7 @@ object FBExpansion extends Expansion {
             game.fbSuppressCGForPlacement = false
             u.onGate = false
             self.log(CyclopeanGaze.styled(FB) + " - " + sourceUnit.styled(FB) + ": pained", u.uclass.styled(u.faction), "from", from, "to", dest)
-            Force(FBCyclopeanGazePhaseAction(self, actor, sourcesPending, fromBattle))
+            Force(FBCyclopeanGazeApplyPainAction(self, actor, applyPending, fromBattle))
 
         // Bug fix Round 4: marker that battle-mode Cyclopean Gaze is finished. Battle.scala's
         // action dispatcher catches this and calls proceed(); the FB expansion just acknowledges it.

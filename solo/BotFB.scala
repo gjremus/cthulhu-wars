@@ -2505,13 +2505,13 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             // ──────────────────────────────────────────────────────────────────
             // CYCLOPEAN GAZE
             // ──────────────────────────────────────────────────────────────────
-            case FBCyclopeanGazeUseAction(_, _, _, _, _, _) =>
+            case FBCyclopeanGazeUseAction(_, _, _, _, _, _, _) =>
                 true |=> 5000 -> "always use CG"
 
-            case FBCyclopeanGazeSkipAction(_, _, _, _, _, _) =>
+            case FBCyclopeanGazeSkipAction(_, _, _, _, _, _, _) =>
                 true |=> -5000 -> "avoid skipping CG"
 
-            case FBCyclopeanGazePainUnitAction(_, _, uRef, _, _, _, _) =>
+            case FBCyclopeanGazePainUnitAction(_, _, uRef, _, _, _, _, _) =>
                 val u = game.unit(uRef)
                 (u.goo) |=> 5000 -> "pain enemy GOO"
                 (u.gateKeeper) |=> 4000 -> "pain gate controller"
