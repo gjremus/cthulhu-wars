@@ -199,7 +199,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 val fromOwnGateLow = from.ownGate && power <= 1 &&
                     self.at(from).%(_.cultist).num == 1 && from != to
                 fromOwnGateLow |=> -100000 -> "HARD BLOCK: don't undulate off 1-cultist own gate at 1 power"
-            case FBCyclopeanGazePainUnitAction(_, _, uRef, _, _, _, _) =>
+            case FBCyclopeanGazePainUnitAction(_, _, uRef, _, _, _, _, _) =>
                 val u = game.unit(uRef)
                 val onWater = u.region.glyph == Ocean
                 (u.uclass == DeepTendril && !onWater) |=> 3000 -> "TS CG: pain Tendril on land"

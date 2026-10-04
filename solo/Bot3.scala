@@ -848,7 +848,7 @@ case class Bot3(faction : Faction) {
                 // cheap off-gate units. See `BotX.fbPromptedEvals` for the
                 // canonical version.
                 // ────────────────────────────────────────────────────────────
-                case FBCyclopeanGazePainUnitAction(_, _, uRef, _, _, _, _) =>
+                case FBCyclopeanGazePainUnitAction(_, _, uRef, _, _, _, _, _) =>
                     val u = game.unit(uRef)
                     u.goo                                  |=> -5000 -> "don't pain own GOO"
                     (u.uclass == HighPriest)               |=> -3000 -> "don't pain own HP"

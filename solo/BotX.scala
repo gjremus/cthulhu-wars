@@ -626,7 +626,7 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
         def add(w : Int, d : String) { r +:= Evaluation(w, d) }
 
         a.unwrap match {
-            case FBCyclopeanGazePainUnitAction(_, _, uRef, _, _, _, _) =>
+            case FBCyclopeanGazePainUnitAction(_, _, uRef, _, _, _, _, _) =>
                 val u = game.unit(uRef)
                 if (u.goo)                              add(-5000, "don't pain own GOO")
                 if (u.uclass == HighPriest)             add(-3000, "don't pain own HP")
