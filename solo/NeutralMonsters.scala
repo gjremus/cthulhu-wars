@@ -406,7 +406,7 @@ object NeutralMonstersExpansion extends Expansion {
 
             // Shadow Pharaoh CC special: 0 Doom + 2 Power, others gain 1 ES
             if (lc.unit == ShadowPharaoh && self == CC) {
-                self.power -= lc.power
+                self.payPower(lc.power, "on hire")
                 self.log("obtained the", lc.short, "Loyalty Card".styled("nt"), "for", lc.power.power, "(CC special)")
                 factions.but(self).foreach { f =>
                     f.takeES(1)
@@ -414,7 +414,7 @@ object NeutralMonstersExpansion extends Expansion {
                 }
             } else {
                 self.doom -= lc.doom
-                self.power -= lc.power
+                self.payPower(lc.power, "on hire")
                 self.log("obtained the", lc.short, "Loyalty Card".styled("nt"), "for", $((lc.doom > 0).??(lc.doom.doom), (lc.power > 0).??(lc.power.power)).but("").mkString(" and "))
             }
 
@@ -449,7 +449,7 @@ object NeutralMonstersExpansion extends Expansion {
             self.hired = true
 
             self.doom -= d
-            self.power -= pw
+            self.payPower(pw, "on Mother of Monsters")
             self.log("used", "Mother of Monsters".styled("nt") + ": obtained the", lc.short, "Loyalty Card".styled("nt"), "for", $((d > 0).??(d.doom), (pw > 0).??(pw.power)).but("").mkString(" and "), "(half cost)")
 
             // Shadow Pharaoh CC special still hands the others 1 Elder Sign each.
@@ -474,7 +474,7 @@ object NeutralMonstersExpansion extends Expansion {
             val cost = game.laviniaCost(self, card.cost, true)
             val prior = factions.find(_.loyaltyCards.has(card))
 
-            self.power -= cost
+            self.payPower(cost, "on Whateley recruit")
             factions.foreach(o => o.loyaltyCards :-= card)   // take from any prior owner
             game.loyaltyCards :-= card                        // or from the unclaimed pool
             self.loyaltyCards :+= card                        // card (+ banked tokens/gates) moves
@@ -599,7 +599,7 @@ object NeutralMonstersExpansion extends Expansion {
             }
 
         case BrownJenkinFamiliarPlaceAction(self, r, then) =>
-            self.power -= 2
+            self.payPower(2, "on Familiar")
             self.place(BrownJenkin, r)
             self.log("Familiar".styled("nt") + ":", BrownJenkin.styled(self), "returned to", r, "for", 2.power)
             Force(then)
@@ -666,7 +666,7 @@ object NeutralMonstersExpansion extends Expansion {
             Ask(self).add(ShamblerSummonAction(self)).cancel
 
         case ShamblerSummonAction(self) =>
-            self.power -= self.summonCost(DimensionalShamblerUnit, self.reserve)
+            self.payPower(self.summonCost(DimensionalShamblerUnit, self.reserve), "on summon")
             self.pool(DimensionalShamblerUnit).head.region = ShamblerHold(self)
             self.log("summoned", DimensionalShamblerUnit.styled(self), "to Faction Card")
             EndAction(self)
@@ -812,7 +812,7 @@ object NeutralMonstersExpansion extends Expansion {
 
         // Moonbeast: summon action (costs 2 Power)
         case MoonbeastChooseSpellbookAction(self, target, sb) =>
-            self.power -= 2
+            self.payPower(2, "on summon")
             val mb = self.pool(MoonbeastUnit).%(u => !game.moonbeastOnSpellbook.contains(u.ref)).head
             game.moonbeastOnSpellbook = game.moonbeastOnSpellbook + (mb.ref -> (target, sb))
             if (target.spellbooks.has(sb))

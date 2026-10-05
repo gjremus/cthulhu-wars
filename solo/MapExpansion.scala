@@ -698,7 +698,7 @@ object LibraryExpansion extends Expansion {
                 UseTomeGuardianDestAction(self, source, target, dest)).cancel
 
         case UseTomeGuardianDestAction(self, source, target, dest) =>
-            self.power -= 1
+            self.payPower(1, "on Guardian under the Lake")
             game.tomeFaceUp = game.tomeFaceUp + (TomeGuardian -> false)
             // Parallel-guide Fix 40: Library Guardian tome forcibly relocates enemy units.
             // This must NOT trigger FB Cyclopean Gaze.
@@ -713,7 +713,7 @@ object LibraryExpansion extends Expansion {
 
         // ── LARVAE OF THE OUTER GODS — gain ES ──
         case UseTomeLarvaeAction(self) =>
-            self.power -= 1
+            self.payPower(1, "on Larvae of the Outer Gods")
             game.tomeFaceUp = game.tomeFaceUp + (TomeLarvae -> false)
             if (factions.but(self).exists(_.power > self.power)) {
                 self.takeES(1)
@@ -737,7 +737,7 @@ object LibraryExpansion extends Expansion {
             Ask(self).each(monsters./~(uc => gates./(r => UseTomeYrMonsterChooseAction(self, uc, r))))(identity).cancel
 
         case UseTomeYrMonsterChooseAction(self, uc, r) =>
-            self.power -= 1
+            self.payPower(1, "on Yr and the Nhhngr")
             game.tomeFaceUp = game.tomeFaceUp + (TomeYr -> false)
             val u = self.pool.%(_.uclass == uc).head
             u.region = r
@@ -745,7 +745,7 @@ object LibraryExpansion extends Expansion {
             EndAction(self)
 
         case UseTomeYrPowerAction(self) =>
-            self.power -= 1
+            self.payPower(1, "on Yr and the Nhhngr")
             game.tomeFaceUp = game.tomeFaceUp + (TomeYr -> false)
             self.power += 2 // net +1
             self.log("used", TomeYr.elem, "and gained", 2.power)

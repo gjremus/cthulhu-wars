@@ -635,6 +635,7 @@ object FBExpansion extends Expansion {
             val ipBoost = game.fbEffectiveIPDiscount
             if (ipBoost > 0)
                 f.power += ipBoost
+            game.fbIPMenuBoost = true
 
             game.rituals(f)
 
@@ -669,6 +670,7 @@ object FBExpansion extends Expansion {
 
             if (ipBoost > 0)
                 f.power -= ipBoost
+            game.fbIPMenuBoost = false
 
             asking
 
@@ -765,6 +767,7 @@ object FBExpansion extends Expansion {
             val ipBoost = game.fbEffectiveIPDiscount
             if (ipBoost > 0)
                 f.power += ipBoost
+            game.fbIPMenuBoost = true
 
             game.controls(f)
 
@@ -800,6 +803,7 @@ object FBExpansion extends Expansion {
 
             if (ipBoost > 0)
                 f.power -= ipBoost
+            game.fbIPMenuBoost = false
 
             asking
 
@@ -839,6 +843,7 @@ object FBExpansion extends Expansion {
             val ipBoost = game.fbEffectiveIPDiscount
             if (ipBoost > 0)
                 f.power += ipBoost
+            game.fbIPMenuBoost = true
 
             game.moves(f)
 
@@ -905,6 +910,7 @@ object FBExpansion extends Expansion {
             // before real power.
             if (ipBoost > 0)
                 f.power -= ipBoost
+            game.fbIPMenuBoost = false
 
             asking
 
@@ -2097,198 +2103,10 @@ object FBExpansion extends Expansion {
         case FBAuguryBattleCancelAction(self) =>
             UnknownContinue
 
-        // ── Round 8 Bug 75: FB cost-bearing action intercepts (transient boost) ──
-        // IP discount is a separate pool from power. Shared cost-bearing actions
-        // in Game.scala (RitualAction, BuildGateAction, RecruitAction, SummonAction,
-        // MoveAction, AttackAction) do `f.power -= cost` directly and don't know
-        // about the discount pool. To make FB pay from discount FIRST, we intercept
-        // each action in FBExpansion, consume discount up to `cost`, pre-add the
-        // consumed amount to `f.power` as a transient boost, and return
-        // UnknownContinue so the base handler's `f.power -= cost` runs. Net result:
-        //     f.power = original + consumed - cost = original - (cost - consumed)
-        // i.e. FB paid `cost - consumed` from real power, with `consumed` coming
-        // from the discount pool.
-        //
-        // The guard `game.fbInfernalPactDiscount > 0` is the only condition —
-        // when there's no discount the base handler runs unchanged. Each
-        // intercept logs the consumed amount for traceability.
-        //
-        // Generic helper captured locally (can't be a class method because it
-        // needs to appear inside the case-match flow).
-        case RitualAction(f, cost, k) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val consumed = min(game.fbInfernalPactDiscount, cost)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on ritual")
-            UnknownContinue
-
-        case BuildGateAction(f, r) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val baseCost = 3 - f.has(UmrAtTawil).??(1)
-            val consumed = min(game.fbInfernalPactDiscount, baseCost)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on build gate")
-            UnknownContinue
-
-        case RecruitAction(f, uc, r) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val baseCost = f.recruitCost(uc, r)
-            val consumed = min(game.fbInfernalPactDiscount, baseCost)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on recruit")
-            UnknownContinue
-
-        case SummonAction(f, uc, r) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val baseCost = f.summonCost(uc, r)
-            val consumed = min(game.fbInfernalPactDiscount, baseCost)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on summon")
-            UnknownContinue
-
-        // dac9973 split Summon into SummonFromPoolAction / SummonFromVelvetFanAction
-        // (source picker for pool vs Bloated Woman's Velvet Fan) — that split never
-        // got its own IP intercept, so a summon routed through either of these two
-        // silently paid full power with no discount. Same pattern as SummonAction above.
-        case SummonFromPoolAction(f, uc, r) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val baseCost = f.summonCost(uc, r)
-            val consumed = min(game.fbInfernalPactDiscount, baseCost)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on summon")
-            UnknownContinue
-
-        case SummonFromVelvetFanAction(f, uc, r) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val baseCost = f.summonCost(uc, r)
-            val consumed = min(game.fbInfernalPactDiscount, baseCost)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on summon")
-            UnknownContinue
-
-        case MoveAction(f, u, from, to, cost) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val consumed = min(game.fbInfernalPactDiscount, cost)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            if (consumed > 0)
-                FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on move")
-            UnknownContinue
-
-        case AttackAction(f, r, fe, effect) if f == FB && game.fbInfernalPactDiscount > 0 && effect.has(FromBelow).not =>
-            // Attack costs 1 power (skipped when FromBelow effect is in play)
-            val consumed = min(game.fbInfernalPactDiscount, 1)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on attack")
-            UnknownContinue
-
-        case CaptureAction(f, r, fe, effect) if f == FB && game.fbInfernalPactDiscount > 0 && effect.has(FromBelow).not =>
-            // Capture costs 1 power (+ tax). Base cost is 1 power; the tax is
-            // region-specific and handled inside the base handler via payTax.
-            val consumed = min(game.fbInfernalPactDiscount, 1)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on capture")
-            UnknownContinue
-
-        // 2026-05-22: extend IP intercept to every action-phase power-costing
-        // action that fires outside Game.scala's shared cost handlers. Pattern
-        // is identical to the seven intercepts above: pre-consume IP discount,
-        // pre-add the consumed amount to f.power, return UnknownContinue so
-        // the base handler's `self.power -= cost` runs against the boosted
-        // value. Net effect: real power loses (cost - consumed); IP pool
-        // loses consumed. Per design rule: NOT applied to FBAwakenGhatanothoaAction
-        // (IP requires Ghatanothoa on-map and would create a chicken-and-egg
-        // ramp into Ghatanothoa's own awaken).
-
-        // iGOO awaken (Abhoth, Daoloth, Tulzscha, Nyogtha-via-IndependentGOOAction,
-        // Byatis, Ygolonac, Yog-Sothoth, Hastur). Cost = lc.power.
-        case IndependentGOOAction(f, lc, r, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val consumed = min(game.fbInfernalPactDiscount, lc.power)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on iGOO awaken")
-            UnknownContinue
-
-        // Byatis God of Forgetfulness — 1 power
-        case GodOfForgetfulnessAction(f, _, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val consumed = min(game.fbInfernalPactDiscount, 1)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on God of Forgetfulness")
-            UnknownContinue
-
-        // Abhoth Filth placement — 1 power
-        case FilthAction(f, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val consumed = min(game.fbInfernalPactDiscount, 1)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Filth")
-            UnknownContinue
-
-        // Nightmare Web Nyogtha awaken — 2 power
-        case NightmareWebAction(f, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val consumed = min(game.fbInfernalPactDiscount, 2)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Nightmare Web")
-            UnknownContinue
-
-        // Library tomes (Guardian / Larvae / Yr) — 1 power each
-        case UseTomeGuardianDestAction(f, _, _, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val consumed = min(game.fbInfernalPactDiscount, 1)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Guardian under the Lake")
-            UnknownContinue
-
-        case UseTomeLarvaeAction(f) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val consumed = min(game.fbInfernalPactDiscount, 1)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Larvae of the Outer Gods")
-            UnknownContinue
-
-        case UseTomeYrMonsterChooseAction(f, _, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val consumed = min(game.fbInfernalPactDiscount, 1)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Yr and the Nhhngr")
-            UnknownContinue
-
-        case UseTomeYrPowerAction(f) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val consumed = min(game.fbInfernalPactDiscount, 1)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Yr and the Nhhngr")
-            UnknownContinue
-
-        // Neutral spellbook actions — 1 / 2 power
-        case RecriminationsAction(f, _) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val consumed = min(game.fbInfernalPactDiscount, 1)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Recriminations")
-            UnknownContinue
-
-        // Undimensioned pays 2 power only on the first move of the chain
-        // (when no FB units are tagged Moved). Match that gate exactly so the
-        // discount fires once.
-        case UndimensionedAction(f, _, _, _, _) if f == FB && game.fbInfernalPactDiscount > 0 && f.units.onMap.tag(Moved).none =>
-            val consumed = min(game.fbInfernalPactDiscount, 2)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Undimensioned")
-            UnknownContinue
-
-        // Dimensional Shambler summon to faction card — variable cost
-        case ShamblerSummonAction(f) if f == FB && game.fbInfernalPactDiscount > 0 =>
-            val baseCost = f.summonCost(DimensionalShamblerUnit, f.reserve)
-            val consumed = min(game.fbInfernalPactDiscount, baseCost)
-            game.fbInfernalPactDiscount -= consumed
-            f.power += consumed
-            FB.log("Infernal Pact".styled(FB), "discounted", consumed.power, "on Dimensional Shambler summon")
-            UnknownContinue
+        // Infernal Pact on other Actions: no intercepts here. Every Action handler
+        // pays through Player.payPower (discount first, real Power for the rest —
+        // the Writhe pattern), and affords/canSpend count the unspent discount.
+        // FB's Power is never inflated by the discount.
 
         // ── Round 8 Bug 73: end-of-doom-phase IP cleanup for FB ──
         // DoomDoneAction in Game.scala does not clear FB's IP session state.

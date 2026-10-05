@@ -1198,7 +1198,27 @@ class Player(private val f : Faction)(implicit game : Game) {
 
     def taxIn(r : Region) : Int = f.iced(r).tax
 
-    def affords(n : Int)(r : Region) = f.power >= f.taxIn(r) + n
+    // Firstborn Infernal Pact: unspent discount this faction may put toward a cost.
+    // The discount is its own pool — it is never added to Power. Zero inside FB's
+    // menu-building blocks, which already count it once (fbIPMenuBoost).
+    def ipCredit : Int = (f == FB && !game.fbIPMenuBoost).??(game.fbEffectiveIPDiscount)
+
+    def affords(n : Int)(r : Region) = f.power + min(ipCredit, max(0, n)) >= f.taxIn(r) + n
+
+    // Power check for costs with no region tax
+    def canSpend(n : Int) = f.power + min(ipCredit, max(0, n)) >= n
+
+    // Pay an Action's Power cost the Writhe way: Infernal Pact discount first,
+    // real Power covers the rest. Returns the discount used.
+    def payPower(n : Int, what : String) : Int = {
+        val used = (f == FB).??(min(game.fbEffectiveIPDiscount, max(0, n)))
+        if (used > 0) {
+            game.fbInfernalPactDiscount -= used
+            FB.log("Infernal Pact".styled(FB), "discounted", used.power, what)
+        }
+        f.power -= n - used
+        used
+    }
 
     def payTax(r : Region) : Int = {
         val s = iced(r)
@@ -1564,9 +1584,7 @@ case class AttackAction(self : Faction, r : Region, f : Faction, effect : |[Spel
 case class BuildGateMainAction(self : Faction, l : $[Region]) extends OptionFactionAction("Build Gate") with MainQuestion with Soft
 case class BuildGateAction(self : Faction, r : Region) extends BaseFactionAction(implicit g => {
     val baseCost = 3 - self.has(UmrAtTawil).??(1)
-    val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, baseCost) else 0
-    "Build gate" + g.forNPowerWithTax(r, self, baseCost - ipDiscount) +
-        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")") + " in"
+    "Build gate" + g.forNPowerWithTax(r, self, baseCost) + " in"
 }, r)
 
 case class CaptureMainAction(self : Faction, l : $[Region], effect : |[Spellbook]) extends OptionFactionAction("Capture") with MainQuestion with Soft
@@ -1582,29 +1600,21 @@ case class MindParasiteAllowCaptureAction(self : Faction, captor : Faction, r : 
 case class RecruitMainAction(self : Faction, uc : UnitClass, l : $[Region]) extends OptionFactionAction("Recruit " + uc.styled(self)) with MainQuestion with Soft
 case class RecruitAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => {
     val baseCost = self.recruitCost(uc, r)
-    val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, baseCost) else 0
-    "Recruit " + uc.styled(self) + g.forNPowerWithTax(r, self, baseCost - ipDiscount) +
-        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")") + " in"
+    "Recruit " + uc.styled(self) + g.forNPowerWithTax(r, self, baseCost) + " in"
 }, implicit g => r + self.iced(r))
 
 case class SummonMainAction(self : Faction, uc : UnitClass, l : $[Region], suffix : String = "") extends OptionFactionAction("Summon " + uc.styled(self) + suffix) with MainQuestion with Soft
 case class SummonAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => {
     val baseCost = self.summonCost(uc, r)
-    val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, baseCost) else 0
-    "Summon " + uc.styled(self) + g.forNPowerWithTax(r, self, baseCost - ipDiscount) +
-        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")") + " in"
+    "Summon " + uc.styled(self) + g.forNPowerWithTax(r, self, baseCost) + " in"
 }, implicit g => r + self.iced(r))
 case class SummonFromPoolAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => {
     val baseCost = self.summonCost(uc, r)
-    val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, baseCost) else 0
-    "Summon " + uc.styled(self) + " from pool" + g.forNPowerWithTax(r, self, baseCost - ipDiscount) +
-        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")") + " in"
+    "Summon " + uc.styled(self) + " from pool" + g.forNPowerWithTax(r, self, baseCost) + " in"
 }, implicit g => r + self.iced(r))
 case class SummonFromVelvetFanAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => {
     val baseCost = self.summonCost(uc, r)
-    val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, baseCost) else 0
-    "Summon " + uc.styled(self) + " from Velvet Fan" + g.forNPowerWithTax(r, self, baseCost - ipDiscount) +
-        (ipDiscount > 0).??(" (" + "IP discounted".styled(FB.style) + ")") + " in"
+    "Summon " + uc.styled(self) + " from Velvet Fan" + g.forNPowerWithTax(r, self, baseCost) + " in"
 }, implicit g => r + self.iced(r))
 case class SummonedAction(self : Faction, uc : UnitClass, r : Region, l : $[Region]) extends ForcedAction
 
@@ -2089,6 +2099,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var fbGhatnothoaAwakenings : Int = 0
     var fbCraters : $[Region] = $
     var fbInfernalPactDiscount : Int = 0
+    // True only while FB's menu is being built with the discount folded into FB.power
+    var fbIPMenuBoost : Boolean = false
     // Elder Thing Mind Control: effective discount is 0 if Ghatanothoa suppressed
     def fbEffectiveIPDiscount : Int =
         if (factions.has(FB) && FB.has(Ghatanothoa) && FB.all(Ghatanothoa).any && ElderThingMindControl.suppresses(FB.goo(Ghatanothoa))(this)) 0
@@ -2279,14 +2291,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def forNPowerWithTax(r : Region, f : Faction, n : Int) : String = {
-        val p = n + f.taxIn(r)
+        // Firstborn Infernal Pact: show the price after the unspent discount
+        val ip = min(f.ipCredit, max(0, n))
+        val p = n - ip + f.taxIn(r)
         // HB Fix 109 (2026-06-11): When rendering inside a Tenebrosum repeat
         // (dcTenebrosumGuard), display cost as Sin (styled "dc") instead of Power.
         // Tax is waived under Tenebrosum (payTax returns 0), so show raw n only.
         if (dcTenebrosumGuard && (f == DC || f == SL))
             " for " + n.toString.styled("dc") + " Sin"
         else
-            " for " + p.power
+            " for " + p.power + (ip > 0).??(" (" + "IP discounted".styled(FB.style) + ")")
     }
     def for1PowerWithTax(r : Region, f : Faction) : String = {
         val p = 1 + f.taxIn(r)
@@ -3175,7 +3189,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         (f.allInPlay.goos.any && victims.any).??({
             val maxCost = victims./(_.uclass.cost).max
             val cost = 10 - maxCost
-            (f.power >= cost).??(victims.%(_.uclass.cost == maxCost)./(u => (u.region, u.uclass, cost)).distinct)
+            f.canSpend(cost).??(victims.%(_.uclass.cost == maxCost)./(u => (u.region, u.uclass, cost)).distinct)
         })
     })
 
@@ -4608,7 +4622,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip the
             // power debit — Sin was already debited in DCTenebrosumRepeatAction.
             if (!dcTenebrosumGuard)
-                f.power -= cost
+                f.payPower(cost, "on ritual")
 
             // Round 8 Bug 40: also check facedown state for IGOO spellbooks
             val brood = f.enemies.%(e => e.has(TheBrood) && !e.oncePerGame.has(TheBrood))
@@ -5400,7 +5414,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // moves once the casting faction's Sin is exhausted. Otherwise use
             // the normal Power==0 stop condition.
             val tenebrosumMoveSin = dcTenebrosumGuard && dcTenebrosumMovePerUnit
-            val outOfFunds = if (tenebrosumMoveSin) ((if (self == SL) slSin else dcSin) < 1) else (self.power == 0)
+            val outOfFunds = if (tenebrosumMoveSin) ((if (self == SL) slSin else dcSin) < 1) else self.canSpend(1).not
             if (outOfFunds)
                 Then(MoveDoneAction(self))
             else {
@@ -5544,7 +5558,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case MoveAction(self, u, o, r, cost) if u.region.glyph == Prison =>
             println(s"[PRISON-GUARD-TRACE] Blocked move of ${u.ref} from prison to ${r}. Unit is in ${u.region}.")
             if (cost > 0 && !dcTenebrosumGuard)
-                self.power -= cost
+                self.payPower(cost, "on move")
             MoveContinueAction(self, true)
 
         // future spell/ability that constructs a MoveAction directly cannot
@@ -5567,7 +5581,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
             // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
             if (cost > 0 && !dcTenebrosumGuard)
-                self.power -= cost
+                self.payPower(cost, "on move")
 
             // HB Fix 108 (2026-06-10): Tenebrosum Move repeat charges 1 Sin PER
             // UNIT moved (not a flat 1 Sin for all units). Debit here, once per
@@ -5680,7 +5694,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     self.doom -= 1
                     self.log(UnquenchableThirst.styled(TI) + ": paid", 1.doom, "to Attack in", r)
                 } else
-                    self.power -= 1
+                    self.payPower(1, "on attack")
             }
 
             if (crusadeFreeBattle)
@@ -5834,7 +5848,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     self.doom -= 1
                     self.log(UnquenchableThirst.styled(TI) + ": paid", 1.doom, "to Capture in", r)
                 } else
-                    self.power -= 1
+                    self.payPower(1, "on capture")
             }
 
             if (effect.has(FromBelow).not || self.all(Nyogtha)./(_.region).but(r).any)
@@ -5958,7 +5972,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
             // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
             if (!dcTenebrosumGuard)
-                self.power -= 3 - self.has(UmrAtTawil).??(1)
+                self.payPower(3 - self.has(UmrAtTawil).??(1), "on build gate")
             self.payTax(r)
             gates :+= r
             self.oncePerAction :+= UmrAtTawil
@@ -5999,11 +6013,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Sin for — so debit Sin HERE at the actual picked unit's cost
             // instead, and set the log-prefix cost so the one-line log shows
             // the real Sin spent.
-            if (!dcTenebrosumGuard)
-                self.power -= cost
+            val ipUsed = if (!dcTenebrosumGuard)
+                self.payPower(cost, "on recruit")
             else {
                 if (self == SL) slSin -= cost else dcSin -= cost
                 dcTenebrosumPrefixCost = cost
+                0
             }
             self.payTax(r)
             // Bloated Woman: check if unit is on a VelvetFanHold — pay BW owner instead
@@ -6025,7 +6040,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             } else {
                 if (self.pool(uc).none) {
                     self.log("recruit failed:", uc.styled(self), "— none in pool")
-                    self.power += cost
+                    self.power += cost - ipUsed
+                    fbInfernalPactDiscount += ipUsed
                 } else {
                     self.place(uc, r)
                     self.log("recruited", uc.styled(self), "in", r)
@@ -6079,7 +6095,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 EndAction(self)
             else {
                 val cost = self.summonCost(uc, r)
-                self.power -= cost
+                self.payPower(cost, "on summon")
                 self.payTax(r)
                 self.place(uc, r)
                 self.log("summoned", uc.styled(self), "in", r, "from pool")
@@ -6099,7 +6115,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 EndAction(self)
             else {
                 val cost = self.summonCost(uc, r)
-                self.power -= cost
+                self.payPower(cost, "on summon")
                 self.payTax(r)
                 val u = onCard.head
                 val bwOwner = u.region.asInstanceOf[VelvetFanHold].faction
@@ -6146,7 +6162,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // cost), debit Sin HERE at the actual picked unit's cost and set
                 // the log-prefix cost so the one-line log shows the real Sin spent.
                 if (!dcTenebrosumGuard)
-                    self.power -= cost
+                    self.payPower(cost, "on summon")
                 else {
                     if (self == SL) slSin -= cost else dcSin -= cost
                     dcTenebrosumPrefixCost = cost
