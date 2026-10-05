@@ -189,7 +189,7 @@ case class TIHellgateLoopAction(src : Region, dst : Region) extends ForcedAction
 case class TIHellgateMoveAction(src : Region, dst : Region, uc : UnitClass) extends BaseFactionAction(
     g => "Hellgate move " + uc + " from " + src + " to " + dst,
     implicit g => uc.styled(TI)) { override def self = TI }
-case class TIHellgateDoneAction() extends BaseFactionAction(None, "Done") { override def self = TI }
+case class TIHellgateDoneAction() extends BaseFactionAction(None, "Done".styled("power")) { override def self = TI }
 
 // Eclipse (library Spellbook, Only Once, §1.10/§2.7): play at any time before the Doom
 // Phase; a FREE play (no "Action" cost on the card — it does not consume TI's turn), so
