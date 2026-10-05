@@ -304,6 +304,11 @@ case class CthughaAwakenAction(self : Faction, r : Region, replacedGOO : UnitCla
 case class AwakenDireYogViaSpawnAction(self : Faction, cost : Int) extends BaseFactionAction(
     implicit g => "Replace " + SpawnOW.styled(self) + " with " + DireYogSothoth.styled(self),
     implicit g => cost + " " + "Power".styled("power") + " — Opener of the Way")
+// [owner 2026-10-05] Region-specific Opener route, offered for every Area with a Spawn.
+// The region-less AwakenDireYogViaSpawnAction above stays only so saved games replay.
+case class AwakenDireYogViaSpawnAtAction(self : Faction, r : Region, cost : Int) extends BaseFactionAction(
+    implicit g => "Replace " + SpawnOW.styled(self) + " with " + DireYogSothoth.styled(self),
+    implicit g => SpawnOW.styled(self) + " in " + r + " — " + cost + " " + "Power".styled("power") + " — Opener of the Way")
 // Route 2 — All other factions: replace your most expensive Monster or Terror; cost = 10
 // minus that unit's cost (may be negative → gain Power, like Cthugha).
 case class AwakenDireYogGenericAction(self : Faction, r : Region, victim : UnitClass, cost : Int) extends BaseFactionAction(
@@ -874,6 +879,32 @@ object IGOOsExpansion extends Expansion {
                 EndAction(self)
             }
 
+        case AwakenDireYogViaSpawnAtAction(self, r, cost) =>
+            val spawns = self.at(r).%(_.uclass == SpawnOW)
+            if (spawns.none || !game.loyaltyCards.has(DireYogSothothCard) || self.affords(cost)(r).not) {
+                self.log("cannot awaken", DireYogSothoth.name.styled("nt"), "— no", SpawnOW.styled(self), "in", r)
+                EndAction(self)
+            } else {
+                self.loyaltyCards :+= DireYogSothothCard
+                game.loyaltyCards :-= DireYogSothothCard
+                self.power -= cost
+                self.payTax(r)
+                game.eliminate(spawns.head)
+                self.units :+= new UnitFigure(self, DireYogSothoth, 1, r)
+                self.log("awakened", DireYogSothoth.name.styled("nt"), "in", r, "for", cost.power, "— Opener of the Way (replacing", SpawnOW.styled(self) + ")")
+                if (self.needs(AwakenYogSothoth))
+                    self.satisfy(AwakenYogSothoth, "Awaken Yog-Sothoth")
+                factions.but(self).foreach { e =>
+                    e.takeES(1)
+                    e.log("gained", 1.es, "from", DireYogSothoth.name.styled("nt") + " (Opener of the Way)")
+                }
+                if (self.has(Immortal)) {
+                    self.log("gained", 1.es, "as", Immortal)
+                    self.takeES(1)
+                }
+                EndAction(self)
+            }
+
         // Route 2 — All other factions: replace your most expensive Monster or Terror,
         // cost = 10 - that unit's cost (may be negative → gain Power, like Cthugha).
         case AwakenDireYogGenericAction(self, r, victimClass, cost) =>
@@ -1007,25 +1038,13 @@ object IGOOsExpansion extends Expansion {
             // accounting) — gated on !dcTenebrosumGuard, matching the availability
             // check in Game.independents / tenebrosumIndependentAwakensOnly.
             val direYogAvailable = game.loyaltyCards.has(DireYogSothothCard) && !game.dcTenebrosumGuard
-            // Route 1 — Opener of the Way: a Spawn of Yog-Sothoth on the map, pay 6.
+            // Route 1 — Opener of the Way: same requirements as awakening Yog-Sothoth.
             val direYogSpawnEntry : $[IGOOEntry] =
-                (direYogAvailable && self.allInPlay.%(_.uclass == SpawnOW).any && self.power >= 6)
-                    .?($(IGOOEntry("Dire Yog-Sothoth", AwakenDireYogViaSpawnAction(self, 6)))).|($)
+                direYogAvailable.??(game.direYogOpenerRegions(self)./(r => IGOOEntry("Dire Yog-Sothoth", AwakenDireYogViaSpawnAtAction(self, r, 6))))
             // Route 2 — All other factions: a GOO in play + your most expensive Monster
-            // or Terror; cost = 10 - that unit's cost (may be negative → gain Power).
-            // [owner 2026-10-05] Offered in ANY Area holding one of those most expensive
-            // units AND a Gate you Control — one entry per such Area/unit type.
-            val direYogGenericEntry : $[IGOOEntry] = {
-                val victims = self.allInPlay.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror)
-                if (direYogAvailable && self.allInPlay.goos.any && victims.any) {
-                    val maxCost = victims./(_.uclass.cost).max
-                    val cost = 10 - maxCost
-                    if (self.power >= cost)
-                        victims.%(_.uclass.cost == maxCost).%(u => self.gates.has(u.region))./(u => (u.region, u.uclass)).distinct
-                            ./ { case (r, uc) => IGOOEntry("Dire Yog-Sothoth", AwakenDireYogGenericAction(self, r, uc, cost)) }
-                    else $
-                } else $
-            }
+            // or Terror in play, in any Area holding one; cost = 10 - that unit's cost.
+            val direYogGenericEntry : $[IGOOEntry] =
+                direYogAvailable.??(game.direYogGenericOptions(self)./ { case (r, uc, cost) => IGOOEntry("Dire Yog-Sothoth", AwakenDireYogGenericAction(self, r, uc, cost)) })
 
             val sorted = (standardEntries ++ cthughaEntry ++ azathothEntry ++ bokrugEntry ++ direYogSpawnEntry ++ direYogGenericEntry).sortBy(_.name)
 

@@ -3161,6 +3161,24 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         (igoos ++ held ++ neutralCards ++ whateleys).distinctBy(_._1).sortBy(_._1.name)
     }
 
+    // Dire Yog-Sothoth (Dunwich) awaken routes — shared by the Awaken iGOO button and its menu.
+    // [owner 2026-10-05] Opener of the Way: same requirements as awakening Yog-Sothoth —
+    // a Spawn of Yog-Sothoth in the Area and 6 Power (plus tax there); any such Area.
+    def direYogOpenerRegions(f : Faction) : $[Region] =
+        (f == OW).??(areas.nex.%(r => f.at(r, SpawnOW).any && f.affords(6)(r)))
+
+    // [owner 2026-10-05] All other Factions: a Great Old One in play plus your most expensive
+    // Monster or Terror in play; awaken in any Area holding one of those. No Gate needed.
+    // Cost = 10 - that unit's cost (may be negative → gain Power).
+    def direYogGenericOptions(f : Faction) : $[(Region, UnitClass, Int)] = (f != OW).??({
+        val victims = f.allInPlay.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror)
+        (f.allInPlay.goos.any && victims.any).??({
+            val maxCost = victims./(_.uclass.cost).max
+            val cost = 10 - maxCost
+            (f.power >= cost).??(victims.%(_.uclass.cost == maxCost)./(u => (u.region, u.uclass, cost)).distinct)
+        })
+    })
+
     def independents(f : Faction)(implicit w : AskWrapper) {
         // [2026-05-23] All awakenable iGOOs — including Azathoth and Cthugha
         // (which used to be top-level menu entries) — are routed through the
@@ -3199,21 +3217,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             f.allGates.onMapOrMoon.%(r => f.at(r).goos.any).any
 
         // Dire Yog-Sothoth (Dunwich): custom awaken routes (built inside AwakenIGOOMainAction).
-        // Route 1 (Opener of the Way): a Spawn of Yog-Sothoth on the map + 6 Power. Route 2
-        // (all others): a GOO in play + a most-expensive Monster/Terror in an Area with a Gate
-        // you Control (any such Area, not just one); cost = 10 - unit.cost
-        // (may be ≤ 0 → always affordable). Not offered under a Tenebrosum (Sin-paid) repeat.
-        val direYogAvailable = loyaltyCards.has(DireYogSothothCard) && !dcTenebrosumGuard && {
-            val route1 = f.allInPlay.%(_.uclass == SpawnOW).any && f.power >= 6
-            val route2 = f.allInPlay.goos.any && {
-                val victims = f.allInPlay.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror)
-                victims.any && f.power >= (10 - victims./(_.uclass.cost).max) && {
-                    val maxCost = victims./(_.uclass.cost).max
-                    victims.%(_.uclass.cost == maxCost).exists(u => f.gates.has(u.region))
-                }
-            }
-            route1 || route2
-        }
+        // Same helpers as the menu, so the button only shows when a route is really open.
+        // Not offered under a Tenebrosum (Sin-paid) repeat.
+        val direYogAvailable = loyaltyCards.has(DireYogSothothCard) && !dcTenebrosumGuard &&
+            (direYogOpenerRegions(f).any || direYogGenericOptions(f).any)
 
         if (availableStandardIGOOs.any || cthughaAvailable || azathothAvailable || direYogAvailable)
             + AwakenIGOOMainAction(f)
