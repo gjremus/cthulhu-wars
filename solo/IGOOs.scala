@@ -1013,13 +1013,16 @@ object IGOOsExpansion extends Expansion {
                     .?($(IGOOEntry("Dire Yog-Sothoth", AwakenDireYogViaSpawnAction(self, 6)))).|($)
             // Route 2 — All other factions: a GOO in play + your most expensive Monster
             // or Terror; cost = 10 - that unit's cost (may be negative → gain Power).
+            // [owner 2026-10-05] Offered in ANY Area holding one of those most expensive
+            // units AND a Gate you Control — one entry per such Area/unit type.
             val direYogGenericEntry : $[IGOOEntry] = {
                 val victims = self.allInPlay.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror)
                 if (direYogAvailable && self.allInPlay.goos.any && victims.any) {
-                    val victim = victims.sortBy(-_.uclass.cost).head
-                    val cost = 10 - victim.uclass.cost
+                    val maxCost = victims./(_.uclass.cost).max
+                    val cost = 10 - maxCost
                     if (self.power >= cost)
-                        $(IGOOEntry("Dire Yog-Sothoth", AwakenDireYogGenericAction(self, victim.region, victim.uclass, cost)))
+                        victims.%(_.uclass.cost == maxCost).%(u => self.gates.has(u.region))./(u => (u.region, u.uclass)).distinct
+                            ./ { case (r, uc) => IGOOEntry("Dire Yog-Sothoth", AwakenDireYogGenericAction(self, r, uc, cost)) }
                     else $
                 } else $
             }

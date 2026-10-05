@@ -3200,13 +3200,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // Dire Yog-Sothoth (Dunwich): custom awaken routes (built inside AwakenIGOOMainAction).
         // Route 1 (Opener of the Way): a Spawn of Yog-Sothoth on the map + 6 Power. Route 2
-        // (all others): a GOO in play + a Monster/Terror to replace; cost = 10 - unit.cost
+        // (all others): a GOO in play + a most-expensive Monster/Terror in an Area with a Gate
+        // you Control (any such Area, not just one); cost = 10 - unit.cost
         // (may be ≤ 0 → always affordable). Not offered under a Tenebrosum (Sin-paid) repeat.
         val direYogAvailable = loyaltyCards.has(DireYogSothothCard) && !dcTenebrosumGuard && {
             val route1 = f.allInPlay.%(_.uclass == SpawnOW).any && f.power >= 6
             val route2 = f.allInPlay.goos.any && {
                 val victims = f.allInPlay.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror)
-                victims.any && f.power >= (10 - victims./(_.uclass.cost).max)
+                victims.any && f.power >= (10 - victims./(_.uclass.cost).max) && {
+                    val maxCost = victims./(_.uclass.cost).max
+                    victims.%(_.uclass.cost == maxCost).exists(u => f.gates.has(u.region))
+                }
             }
             route1 || route2
         }
