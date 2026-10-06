@@ -1060,7 +1060,27 @@ class Player(private val f : Faction)(implicit game : Game) {
 
     def taxIn(r : Region) : Int = f.iced(r).tax
 
-    def affords(n : Int)(r : Region) = f.power >= f.taxIn(r) + n
+    // Firstborn Infernal Pact: unspent discount this faction may put toward a cost.
+    // The discount is its own pool — it is never added to Power. Zero inside FB's
+    // menu-building blocks, which already count it once (fbIPMenuBoost).
+    def ipCredit : Int = (f == FB && !game.fbIPMenuBoost).??(game.fbEffectiveIPDiscount)
+
+    def affords(n : Int)(r : Region) = f.power + min(ipCredit, max(0, n)) >= f.taxIn(r) + n
+
+    // Power check for costs with no region tax
+    def canSpend(n : Int) = f.power + min(ipCredit, max(0, n)) >= n
+
+    // Pay an Action's Power cost the Writhe way: Infernal Pact discount first,
+    // real Power covers the rest. Returns the discount used.
+    def payPower(n : Int, what : String) : Int = {
+        val used = (f == FB).??(min(game.fbEffectiveIPDiscount, max(0, n)))
+        if (used > 0) {
+            game.fbInfernalPactDiscount -= used
+            FB.log("Infernal Pact".styled(FB), "discounted", used.power, what)
+        }
+        f.power -= n - used
+        used
+    }
 
     def payTax(r : Region) : Int = {
         val s = iced(r)
@@ -1571,6 +1591,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var fbGhatnothoaAwakenings : Int = 0
     var fbCraters : $[Region] = $
     var fbInfernalPactDiscount : Int = 0
+    // True only while FB's menu is being built with the discount folded into FB.power
+    var fbIPMenuBoost : Boolean = false
     // Elder Thing Mind Control: effective discount is 0 if Ghatanothoa suppressed
     def fbEffectiveIPDiscount : Int =
         if (factions.has(FB) && FB.has(Ghatanothoa) && FB.all(Ghatanothoa).any && ElderThingMindControl.suppresses(FB.goo(Ghatanothoa))(this)) 0
@@ -1867,13 +1889,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def forNPowerWithTax(r : Region, f : Faction, n : Int, ip : Boolean = true) : String = {
-        val p = n + f.taxIn(r)
-        // Firstborn Infernal Pact: show the price after the banked discount (the discount
-        // covers the base cost only, not tax), matching the FBExpansion cost intercepts.
-        if (ip && f == FB && fbInfernalPactDiscount > 0 && n > 0)
-            " for " + (max(0, n - fbInfernalPactDiscount) + f.taxIn(r)).power + " (" + "IP discounted".styled(FB.style) + ")"
-        else
-            " for " + p.power
+        // Firstborn Infernal Pact: show the price after the unspent discount
+        // (the discount covers the base cost only, not tax)
+        val d = ip.??(min(f.ipCredit, max(0, n)))
+        " for " + (n - d + f.taxIn(r)).power + (d > 0).??(" (" + "IP discounted".styled(FB.style) + ")")
     }
     def for1PowerWithTax(r : Region, f : Faction) : String = { val p = 1 + f.taxIn(r) ; if (p != 1) " for " + p.power else "" }
 
@@ -3581,7 +3600,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // RITUAL
         case RitualAction(f, cost, k) =>
-            f.power -= cost
+            f.payPower(cost, "on ritual")
 
             // Round 8 Bug 40: also check facedown state for IGOO spellbooks
             val brood = f.enemies.%(e => e.has(TheBrood) && !e.oncePerGame.has(TheBrood))
@@ -4233,7 +4252,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             MoveContinueAction(self, false)
 
         case MoveContinueAction(self, moved) =>
-            if (self.power == 0)
+            if (self.canSpend(1).not)
                 Then(MoveDoneAction(self))
             else {
                 // Fix 52 (v2.4.19): see `moves` above — any faction with units on the
@@ -4334,7 +4353,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val t = self.payTax(r)
 
             if (cost > 0)
-                self.power -= cost
+                self.payPower(cost, "on move")
 
             u.region = r
             u.add(Moved)
@@ -4415,7 +4434,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
 
             if (effect.has(FromBelow).not)
-                self.power -= 1
+                self.payPower(1, "on attack")
 
             self.payTax(r)
 
@@ -4507,7 +4526,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case CaptureAction(self, r, f, effect) =>
             if (effect.has(FromBelow).not)
-                self.power -= 1
+                self.payPower(1, "on capture")
 
             if (effect.has(FromBelow).not || self.all(Nyogtha)./(_.region).but(r).any)
                 self.payTax(r)
@@ -4626,7 +4645,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Ask(self).each(locations.sortBy(self.taxIn))(r => BuildGateAction(self, r)).cancel
 
         case BuildGateAction(self, r) if r != BB.moon =>
-            self.power -= 3 - self.has(UmrAtTawil).??(1)
+            self.payPower(3 - self.has(UmrAtTawil).??(1), "on build gate")
             self.payTax(r)
             gates :+= r
             self.oncePerAction :+= UmrAtTawil
@@ -4648,7 +4667,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         case RecruitAction(self, uc, r) =>
             val cost = self.recruitCost(uc, r)
-            self.power -= cost
+            self.payPower(cost, "on recruit")
             self.payTax(r)
             // Bloated Woman: check if unit is on a VelvetFanHold — pay BW owner instead
             val onCard = self.units.%(u => u.uclass == uc && u.region.is[VelvetFanHold])
@@ -4705,7 +4724,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 EndAction(self)
             else {
                 val cost = self.summonCost(uc, r)
-                self.power -= cost
+                self.payPower(cost, "on summon")
                 self.payTax(r)
                 self.place(uc, r)
                 self.log("summoned", uc.styled(self), "in", r, "from pool")
@@ -4725,7 +4744,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 EndAction(self)
             else {
                 val cost = self.summonCost(uc, r)
-                self.power -= cost
+                self.payPower(cost, "on summon")
                 self.payTax(r)
                 val u = onCard.head
                 val bwOwner = u.region.asInstanceOf[VelvetFanHold].faction
@@ -4755,7 +4774,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 EndAction(self)
             else {
                 val cost = self.summonCost(uc, r)
-                self.power -= cost
+                self.payPower(cost, "on summon")
                 self.payTax(r)
                 // Bloated Woman: check if unit is on a VelvetFanHold — pay BW owner instead
                 val onCard = self.units.%(u => u.uclass == uc && u.region.is[VelvetFanHold])

@@ -58,7 +58,7 @@ object NeutralSpellbooksExpansion extends Expansion {
             Ask(self).each(self.spellbooks)(b => RecriminationsAction(self, b))
 
         case RecriminationsAction(self, sb) =>
-            self.power -= 1
+            self.payPower(1, "on Recriminations")
             self.spellbooks = self.spellbooks.but(sb)
 
             if (sb.is[NeutralSpellbook])
@@ -115,7 +115,7 @@ object NeutralSpellbooksExpansion extends Expansion {
         case UndimensionedAction(self, destinations, uc, o, r) =>
             if (self.units.onMap.tag(Moved).none) {
                 self.log("units are", Undimensioned)
-                self.power -= 2
+                self.payPower(2, "on Undimensioned")
             }
 
             self.payTax(r)

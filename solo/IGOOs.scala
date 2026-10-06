@@ -725,7 +725,7 @@ object IGOOsExpansion extends Expansion {
             allGOOs.foreach { goo =>
                 val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) self.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
                 val cthughaCost = 6 - gooCost
-                if (self.power >= cthughaCost && self.gates.has(goo.region))
+                if (self.canSpend(cthughaCost) && self.gates.has(goo.region))
                     ask = ask.add(CthughaAwakenAction(self, goo.region, goo.uclass, cthughaCost))
             }
             ask.cancel
@@ -740,7 +740,7 @@ object IGOOsExpansion extends Expansion {
             else {
             self.loyaltyCards :+= CthughaCard
             game.loyaltyCards :-= CthughaCard
-            self.power -= cost
+            self.payPower(cost, "on iGOO awaken")
             self.units :+= new UnitFigure(self, Cthugha, 1, r)
             self.log("awakened", "Cthugha".styled("nt"), "in", r, (if (cost >= 0) "for" else "gaining"), (if (cost >= 0) cost else -cost).power, "(replacing", replacedGOO.styled(self) + ")")
 
@@ -777,7 +777,7 @@ object IGOOsExpansion extends Expansion {
             // used to be top-level entries — now ride here too, sorted by
             // name alongside the others.
             val standardAvailable = game.loyaltyCards.of[IGOOLoyaltyCard]
-                .%(igoo => game.igooCost(self, igoo) <= self.power)
+                .%(igoo => self.canSpend(game.igooCost(self, igoo)))
                 .%(igoo => igoo != AzathothIGOOCard)
                 .%(igoo => igoo != CthughaCard)
                 .%(igoo => {
@@ -790,11 +790,11 @@ object IGOOsExpansion extends Expansion {
                 allGOOs.%(goo => {
                     val gooCost = if (goo.uclass.isInstanceOf[FactionUnitClass]) self.awakenCost(goo.uclass, goo.region).|(goo.uclass.cost) else goo.uclass.cost
                     val cthughaCost = 6 - gooCost
-                    self.power >= cthughaCost && self.gates.has(goo.region)
+                    self.canSpend(cthughaCost) && self.gates.has(goo.region)
                 }).any
             }
 
-            val azathothAvailable = game.loyaltyCards.has(AzathothIGOOCard) && self.power >= 8 &&
+            val azathothAvailable = game.loyaltyCards.has(AzathothIGOOCard) && self.canSpend(8) &&
                 self.allGates.onMap.%(r => self.at(r).goos.any).any
 
             // Build name-keyed entries (Entry case class) and sort by name.
@@ -842,7 +842,7 @@ object IGOOsExpansion extends Expansion {
                 game.loyaltyCards :-= lc
             }
 
-            self.power -= cost
+            self.payPower(cost, "on iGOO awaken")
 
             self.log("awakened", lc.unit.name.styled("nt"), "in", r, "for", cost.power)
 
@@ -891,7 +891,7 @@ object IGOOsExpansion extends Expansion {
             Ask(self).each(l)(r => GodOfForgetfulnessAction(self, d, r)).cancel
 
         case GodOfForgetfulnessAction(self, d, r) =>
-            self.power -= 1
+            self.payPower(1, "on God of Forgetfulness")
             self.payTax(r)
 
             self.enemies.foreach { f =>
@@ -909,7 +909,7 @@ object IGOOsExpansion extends Expansion {
             Ask(self).each(l)(r => FilthAction(self, r)).cancel
 
         case FilthAction(self, r) =>
-            self.power -= 1
+            self.payPower(1, "on Filth")
             self.payTax(r)
 
             self.place(Filth, r)
@@ -941,7 +941,7 @@ object IGOOsExpansion extends Expansion {
             Ask(self).each(regions)(r => NightmareWebAction(self, r)).cancel
 
         case NightmareWebAction(self, r) =>
-            self.power -= 2
+            self.payPower(2, "on Nightmare Web")
             self.payTax(r)
 
             val ny = self.pool.one(Nyogtha)
@@ -1059,7 +1059,7 @@ object IGOOsExpansion extends Expansion {
             Ask(self).each(landNearOcean)(r => FatherDagonTsunamiTargetAction(self, r)).cancel
 
         case FatherDagonTsunamiTargetAction(self, r) =>
-            self.power -= 1
+            self.payPower(1, "on Tsunami")
             // Tsunami affects ALL Cultists in the area, but attribution follows the
             // cultist's TRUE (original) owner, not Mind Parasite control (task #110).
             // A parasitized cultist's figure lives under the insect controller, so we
@@ -1083,7 +1083,7 @@ object IGOOsExpansion extends Expansion {
             Ask(self).each(oceanAreas)(r => MotherHydraAgonyStingTargetAction(self, r)).cancel
 
         case MotherHydraAgonyStingTargetAction(self, r) =>
-            self.power -= 1
+            self.payPower(1, "on The Agony Sting")
             // Only cultists whose TRUE (original) owner is an enemy of self are moved
             // (task #110). Self's OWN cultists are immune even while parasitized by an
             // enemy insect faction, since original ownership governs — and a cultist self
@@ -1151,7 +1151,7 @@ object IGOOsExpansion extends Expansion {
 
         // Ghatanothoa IGOO: Mummify
         case GhatanotoaMummifyAction(self) =>
-            self.power -= 1
+            self.payPower(1, "on Mummify")
             val ghat = self.allInPlay.%(_.uclass == GhatanotoaIGOO).head
             val r = ghat.region
             val targets = self.enemies./~(_.at(r).%(u => u.uclass.utype == Cultist || (u.faction == BB && u.uclass == EarthCat)).%(u => !game.mummifiedCultists.has(u.ref)))   // Earth Cats = BB Cultists
@@ -1163,7 +1163,7 @@ object IGOOsExpansion extends Expansion {
 
         // Atlach-Nacha: Place Spinneret — place web token
         case PlaceSpinneretMainAction(self) =>
-            self.power -= 1
+            self.payPower(1, "on Place Spinneret")
             val an = self.allInPlay.%(_.uclass == AtlachNacha).head
             val r = an.region
             game.webTokens :+= r
@@ -1213,7 +1213,7 @@ object IGOOsExpansion extends Expansion {
 
         // Mother Hydra: The Zygote spellbook — place Acolytes from Pool one by one
         case TheZygoteMainAction(self) =>
-            self.power -= 1
+            self.payPower(1, "on The Zygote")
             Force(TheZygoteContinueAction(self))
 
         case TheZygoteContinueAction(self) =>
@@ -1263,7 +1263,7 @@ object IGOOsExpansion extends Expansion {
 
         // ── GHATANOTHOA IGOO SBR: pay 3 Power ──
         case GhatanotoaSBRPayAction(self) =>
-            self.power -= 4
+            self.payPower(4, "on Execration of Mu")
             self.upgrades :+= ExecrationOfMu
             self.log("paid", 4.power, "for", ExecrationOfMu.styled(self), "for", GhatanotoaIGOO.styled(self))
             EndAction(self)
@@ -1334,7 +1334,7 @@ object IGOOsExpansion extends Expansion {
             // Roll 1d6+2 for Power cost
             RollD6("Azathoth Awakening — roll for Power cost", roll => {
                 val powerCost = roll + 2
-                self.power -= powerCost
+                self.payPower(powerCost, "on iGOO awaken")
                 self.log("rolled", roll, "+ 2 =", powerCost.power, "to awaken", "Azathoth".styled("nt"))
                 // Start enemy choice loop
                 val enemies = factions.but(self)

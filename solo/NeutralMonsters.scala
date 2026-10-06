@@ -243,7 +243,7 @@ object NeutralMonstersExpansion extends Expansion {
 
             // Shadow Pharaoh CC special: 0 Doom + 2 Power, others gain 1 ES
             if (lc.unit == ShadowPharaoh && self == CC) {
-                self.power -= lc.power
+                self.payPower(lc.power, "on hire")
                 self.log("obtained the", lc.short, "Loyalty Card".styled("nt"), "for", lc.power.power, "(CC special)")
                 factions.but(self).foreach { f =>
                     f.takeES(1)
@@ -251,7 +251,7 @@ object NeutralMonstersExpansion extends Expansion {
                 }
             } else {
                 self.doom -= lc.doom
-                self.power -= lc.power
+                self.payPower(lc.power, "on hire")
                 self.log("obtained the", lc.short, "Loyalty Card".styled("nt"), "for", $((lc.doom > 0).??(lc.doom.doom), (lc.power > 0).??(lc.power.power)).but("").mkString(" and "))
             }
 
@@ -379,7 +379,7 @@ object NeutralMonstersExpansion extends Expansion {
             }
 
         case BrownJenkinFamiliarPlaceAction(self, r, then) =>
-            self.power -= 2
+            self.payPower(2, "on Familiar")
             self.place(BrownJenkin, r)
             self.log("Familiar".styled("nt") + ":", BrownJenkin.styled(self), "returned to", r, "for", 2.power)
             Force(then)
@@ -446,7 +446,7 @@ object NeutralMonstersExpansion extends Expansion {
             Ask(self).add(ShamblerSummonAction(self)).cancel
 
         case ShamblerSummonAction(self) =>
-            self.power -= self.summonCost(DimensionalShamblerUnit, self.reserve)
+            self.payPower(self.summonCost(DimensionalShamblerUnit, self.reserve), "on summon")
             self.pool(DimensionalShamblerUnit).head.region = ShamblerHold(self)
             self.log("summoned", DimensionalShamblerUnit.styled(self), "to Faction Card")
             EndAction(self)
@@ -606,7 +606,7 @@ object NeutralMonstersExpansion extends Expansion {
 
         // Moonbeast: summon action (costs 2 Power)
         case MoonbeastChooseSpellbookAction(self, target, sb) =>
-            self.power -= 2
+            self.payPower(2, "on summon")
             val mb = self.pool(MoonbeastUnit).%(u => !game.moonbeastOnSpellbook.contains(u.ref)).head
             game.moonbeastOnSpellbook = game.moonbeastOnSpellbook + (mb.ref -> (target, sb))
             if (target.spellbooks.has(sb))
