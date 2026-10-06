@@ -669,7 +669,16 @@ object NeutralMonstersExpansion extends Expansion {
             self.payPower(self.summonCost(DimensionalShamblerUnit, self.reserve), "on summon")
             self.pool(DimensionalShamblerUnit).head.region = ShamblerHold(self)
             self.log("summoned", DimensionalShamblerUnit.styled(self), "to Faction Card")
-            EndAction(self)
+            // BG Fertility Cult: a neutral Monster summon is an Unlimited Action too
+            if (self == BG && self.has(Fertility)) {
+                if (self.oncePerRound.has(Fertility).not)
+                    self.oncePerRound :+= Fertility
+                game.mindParasiteCaptureRejected = $
+                game.elderThingBlockGuard = $
+                AfterAction(self)
+            }
+            else
+                EndAction(self)
 
         // DIMENSIONAL SHAMBLER - deploy from faction card
         case ShamblerDeployCommandsAction(f, then) =>
@@ -818,7 +827,16 @@ object NeutralMonstersExpansion extends Expansion {
             if (target.spellbooks.has(sb))
                 target.oncePerGame :+= sb
             self.log("Summoned", MoonbeastUnit.styled(self), "onto", sb.styled(target), "of", target.full, "(blocked)")
-            EndAction(self)
+            // BG Fertility Cult: a neutral Monster summon is an Unlimited Action too
+            if (self == BG && self.has(Fertility)) {
+                if (self.oncePerRound.has(Fertility).not)
+                    self.oncePerRound :+= Fertility
+                game.mindParasiteCaptureRejected = $
+                game.elderThingBlockGuard = $
+                AfterAction(self)
+            }
+            else
+                EndAction(self)
 
         case CronophageTeleportAction(self, houndRef, dest, then) =>
             val hound = game.unit(houndRef)
