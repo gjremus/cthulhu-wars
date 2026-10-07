@@ -2878,10 +2878,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // from tcho-tcho before BB's moon-battle fix and cd4b011 later rewrote
         // this line for the Mantle without restoring the BB.moon clause.)
         val battleAreas = areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ tbMantleInPlay.??($(TB.mantle))
-        battleAreas.%(r => tiAffordsUnit1(f, r)).diff(enough).%(r => factionlike.but(f).exists(f.canAttack(r))).some.foreach { r =>
+        battleAreas.diff(enough).%(r => factionlike.but(f).exists(e => f.canAttack(r)(e) && affordsAttack(f, r, e))).some.foreach { r =>
             + AttackMainAction(f, r, nexed.any.?(EnergyNexus))
         }
     }
+
+    // Alt Ancients Crusade: declaring Battle against a player with equal or more Power
+    // costs 0, so it stays on offer when AN can't pay 1 Power (e.g. at 0 Power).
+    def crusadeFreeBattle(self : Faction, e : Faction) : Boolean = self == AN && AN.can(Crusade) && e.power >= self.power
+    def affordsAttack(self : Faction, r : Region, e : Faction) : Boolean =
+        tiAffordsUnit1(self, r) || (crusadeFreeBattle(self, e) && self.affords(0)(r))
 
     def moves(f : Faction)(implicit w : AskWrapper) {
         // Include own units + parasitized enemy acolytes that this faction controls via Mind Parasite
@@ -5656,7 +5662,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val ee = factionlike.but(f)
             val ll = l.sortBy(r => ee.%(_.present(r))./(e => f.strength(f.at(r), e)).maxOr(0)).reverse
 
-            val variants = ll./~(r => ee.%(_.present(r)).%(f.canAttack(r)).sortBy(e => -e.strength(e.at(r), f))./(e => r -> e))
+            val variants = ll./~(r => ee.%(_.present(r)).%(f.canAttack(r)).%(e => effect.any || affordsAttack(f, r, e)).sortBy(e => -e.strength(e.at(r), f))./(e => r -> e))
 
             Ask(f)
                 .each(variants)((r, e) =>
@@ -5683,7 +5689,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
 
             // Alt Ancients Crusade: battle declaration costs 0 when defending player has >= attacker's power
-            val crusadeFreeBattle = self == AN && AN.can(Crusade) && f.power >= self.power
+            val crusadeFreeBattle = this.crusadeFreeBattle(self, f)
 
             // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
             // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
