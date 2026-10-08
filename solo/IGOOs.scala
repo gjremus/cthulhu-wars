@@ -1456,9 +1456,10 @@ object IGOOsExpansion extends Expansion {
 
         // Messenger of Yig doom menu action — shows donate/refuse choice
         case MessengerOfYigDoomAction(self, yigOwner) =>
+            // Only offer what the responder can actually give: Donate needs 1 Power, Refuse needs 1 Doom
             Ask(self)
-                .add(MessengerOfYigDonateAction(self, yigOwner))
-                .add(MessengerOfYigRefuseAction(self, yigOwner))
+                .when(self.power > 0)(MessengerOfYigDonateAction(self, yigOwner))
+                .when(self.doom > 0)(MessengerOfYigRefuseAction(self, yigOwner))
 
         // Father Dagon: The Innsmouth Look — forced Acolyte removal (player chooses which)
         case InnsmouthLookRemoveAction(self, then) =>
