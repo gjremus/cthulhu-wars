@@ -267,7 +267,7 @@ object DSExpansion extends Expansion {
                 + TraitorsAction(f)
 
             // Alternate spellbook: Omnipotence (Action Cost 1) — move Avatars
-            if (f.can(Omnipotence) && f.power >= 1 && f.allInPlay.%(u => u.uclass == AvatarThesis || u.uclass == AvatarAntithesis || u.uclass == AvatarSynthesis).any)
+            if (f.can(Omnipotence) && f.power >= 1 && f.allInPlay.%(u => u.uclass == AvatarThesis || u.uclass == AvatarAntithesis || u.uclass == AvatarSynthesis).exists(u => DS.omnipotenceAreas.but(u.region).any))
                 + OmnipotenceMainAction(f)
 
             game.neutralSpellbooks(f)
@@ -722,14 +722,14 @@ object DSExpansion extends Expansion {
             if (selected.num == 1) {
                 // Single avatar — just pick destination
                 val u = game.unit(selected.head)
-                Ask(self).each(areas.nex)(r => OmnipotenceMoveOneAction(self, selected.head, r, $)).add(OmnipotenceCancelAction(self))
+                Ask(self).each(DS.omnipotenceAreas)(r => OmnipotenceMoveOneAction(self, selected.head, r, $)).add(OmnipotenceCancelAction(self))
             } else {
                 // Multiple avatars — move all together or separately
-                val dsUnits = self.allInPlay./(_.region).distinct.%(r => self.at(r).any)
+                val dsUnits = self.allInPlay./(_.region).distinct.%(r => self.at(r).any).%(r => DS.omnipotenceAreas.has(r))
                 var ask = Ask(self)
                 ask = ask.add(OmnipotenceMoveSeparatelyAction(self, selected))
                 dsUnits.foreach(r => ask = ask.add(OmnipotenceJoinAction(self, selected, r)))
-                areas.nex.foreach(r => ask = ask.add(OmnipotenceMoveAllAction(self, selected, r)))
+                DS.omnipotenceAreas.diff(dsUnits).foreach(r => ask = ask.add(OmnipotenceMoveAllAction(self, selected, r)))
                 ask = ask.add(OmnipotenceCancelAction(self))
                 ask
             }
@@ -778,12 +778,12 @@ object DSExpansion extends Expansion {
                 CronophageAfterMoveAction(self, EndAction(self))
             } else {
                 val ref = selected.head
-                val dsUnits = self.allInPlay./(_.region).distinct.%(r => self.at(r).any)
+                val dsUnits = self.allInPlay./(_.region).distinct.%(r => self.at(r).any).%(r => DS.omnipotenceAreas.has(r))
                 var ask = Ask(self)
                 // Join options at top
                 dsUnits.foreach(r => ask = ask.add(OmnipotenceMoveOneAction(self, ref, r, selected.tail)))
-                // All regions
-                areas.nex.diff(dsUnits).foreach(r => ask = ask.add(OmnipotenceMoveOneAction(self, ref, r, selected.tail)))
+                // Every other Area adjacent to a Chaos Gate
+                DS.omnipotenceAreas.diff(dsUnits).foreach(r => ask = ask.add(OmnipotenceMoveOneAction(self, ref, r, selected.tail)))
                 ask
             }
 
@@ -825,6 +825,17 @@ case object DS extends Faction { f =>
     var azathothTrack : Int = 0
     var azathothDieRoll : Int = 0
     var chaosGateRegions : $[Region] = $
+
+    // Alternate Spellbooks V2 amounts, from the Azathoth marker (halves rounded up)
+    def directedEnergyPower : Int = (azathothTrack.max(0) + 1) / 2
+    def fiendishSpawnCount : Int = ((8 - azathothTrack).max(0) + 1) / 2
+    // Fiendish Spawn may place any Monster or Acolyte from the pool (incl. neutral Monsters DS owns)
+    def fiendishSpawnPool(self : Faction)(implicit game : Game) : $[UnitFigure] =
+        self.pool.%(u => u.uclass.utype == Monster || u.uclass == Acolyte)
+    // Omnipotence destinations: every Area adjacent to one of DS's Chaos Gates. A Chaos Gate's
+    // own Area only qualifies when it is adjacent to another Chaos Gate.
+    def omnipotenceAreas(implicit game : Game) : $[Region] =
+        chaosGateRegions.distinct.%(r => game.gates.has(r))./~(r => game.board.connected(r)).distinct
     var startingDecided : Boolean = false
 
     override def abilities = $(Psychosis, CosmicRuler)

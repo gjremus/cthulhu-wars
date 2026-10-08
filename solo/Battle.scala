@@ -708,8 +708,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if ((s.can(EnergyNexus) || s.can(EnergyNexusPB)) && s.at(arena)(Wizard).any && game.nexed.none)
             options :+= EnergyNexusPreBattleAction(s)
 
-        // Fiendish Spawn (DS alternate) — pre-battle, requires Avatar Antithesis in battle + larva in pool
-        if (s.can(FiendishSpawn) && s.tag(FiendishSpawn).not && s.forces(AvatarAntithesis).any && (s.pool(LarvaThesis) ++ s.pool(LarvaAntithesis) ++ s.pool(LarvaSynthesis)).any)
+        // Fiendish Spawn (DS alternate V2) — pre-battle, requires Avatar Antithesis in battle, a Monster or
+        // Acolyte in pool, and a non-zero count (half of 8 minus the Azathoth marker, rounded up)
+        if (s.can(FiendishSpawn) && s.tag(FiendishSpawn).not && s.forces(AvatarAntithesis).any && DS.fiendishSpawnPool(s).any && DS.fiendishSpawnCount > 0)
             options :+= FiendishSpawnPreBattleAction(s)
 
         // Round 8 Bug 40: also check facedown state for IGOO spellbooks
@@ -2551,10 +2552,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     // unaffected, so it still fires going forward.
                     val replayBlocksDE = game.nextReplayActionHint.exists(h =>
                         !h.startsWith("DirectedEnergyPostBattleAction") && !h.startsWith("DirectedEnergySkipAction"))
-                    if (thesisSurvived && !replayBlocksDE) {
-                        val chaosGates = DS.chaosGateRegions.%(r => DS.gates.has(r)).num
+                    // V2: gain half of the Azathoth marker's position, rounded up (nothing to offer at 0).
+                    // A replay that recorded a response still gets the prompt so it stays in step.
+                    val dePower = DS.directedEnergyPower
+                    val replayExpectsDE = game.nextReplayActionHint.exists(h =>
+                        h.startsWith("DirectedEnergyPostBattleAction") || h.startsWith("DirectedEnergySkipAction"))
+                    if (thesisSurvived && !replayBlocksDE && (dePower > 0 || replayExpectsDE)) {
                         DS.add(DirectedEnergy)
-                        return Ask(DS).add(DirectedEnergyPostBattleAction(DS, chaosGates)).add(DirectedEnergySkipAction(DS))
+                        return Ask(DS).add(DirectedEnergyPostBattleAction(DS, dePower)).add(DirectedEnergySkipAction(DS))
                     }
                 }
 
@@ -3539,18 +3544,24 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case DirectedEnergyPostBattleAction(self, n) =>
             self.power += n
             self.oncePerTurn :+= DirectedEnergy
-            self.log("gained", n.power, "from", DirectedEnergy.styled(self), "(" + n + " Chaos Gates)")
+            // Older games recorded the V1 amount (1 per Chaos Gate); only cite the marker when it set the amount
+            if (n == DS.directedEnergyPower)
+                self.log("gained", n.power, "from", DirectedEnergy.styled(self), "(Azathoth marker " + DS.azathothTrack + ")")
+            else
+                self.log("gained", n.power, "from", DirectedEnergy.styled(self))
             proceed()
 
+        // Skipping does NOT flip the spellbook facedown; flipping is the cost of using it.
+        // The per-battle guard is the Side tag added at the offer site (DS.add(DirectedEnergy)).
         case DirectedEnergySkipAction(self) =>
-            self.oncePerTurn :+= DirectedEnergy
             proceed()
 
         // FIENDISH SPAWN (DS alternate pre-battle)
+        // V2: place exactly half of (8 minus the Azathoth marker), rounded up, Monsters or Acolytes
+        // of your choice (fewer only if the pool runs out). No "Done" until all are placed.
         case FiendishSpawnPreBattleAction(self) =>
-            val pool = self.pool(LarvaThesis) ++ self.pool(LarvaAntithesis) ++ self.pool(LarvaSynthesis)
-            val types = pool./(_.uclass).distinct
-            Ask(self).each(types)(uc => FiendishSpawnChooseAction(self, uc, 0)).add(FiendishSpawnDoneAction(self))
+            val types = DS.fiendishSpawnPool(self)./(_.uclass).distinct
+            Ask(self).each(types)(uc => FiendishSpawnChooseAction(self, uc, 0))
 
         case FiendishSpawnChooseAction(self, uc, placed) =>
             val u = self.pool(uc).head
@@ -3559,17 +3570,18 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             self.forces :+= u
             self.log("placed", uc.styled(self), "in", arena, "via", FiendishSpawn.styled(self))
             val totalPlaced = placed + 1
-            if (totalPlaced >= 2) {
-                // Max 2 larva placed
+            // Older games (V1: up to 2 Larvae, with a Done button) recorded fewer placements;
+            // when replaying and the next recorded action is not another placement, stop here.
+            val replayStops = game.nextReplayActionHint.exists(h => !h.startsWith("FiendishSpawnChooseAction"))
+            if (totalPlaced >= DS.fiendishSpawnCount || replayStops) {
                 self.add(FiendishSpawn)
                 self.oncePerTurn :+= FiendishSpawn
                 proceed()
             } else {
-                // Can place one more
-                val pool = self.pool(LarvaThesis) ++ self.pool(LarvaAntithesis) ++ self.pool(LarvaSynthesis)
+                val pool = DS.fiendishSpawnPool(self)
                 if (pool.any) {
                     val types = pool./(_.uclass).distinct
-                    Ask(self).each(types)(uc2 => FiendishSpawnChooseAction(self, uc2, totalPlaced)).add(FiendishSpawnDoneAction(self))
+                    Ask(self).each(types)(uc2 => FiendishSpawnChooseAction(self, uc2, totalPlaced))
                 } else {
                     self.add(FiendishSpawn)
                     self.oncePerTurn :+= FiendishSpawn
