@@ -392,23 +392,25 @@ class GameEvaluationDS(implicit game : Game) extends GameEvaluation(DS)(game) {
                 true |=> -1000 -> "dont cancel omnipotence"
 
             // Fiendish Spawn — mirrors Fiendish Growth scoring (pre-battle unit placement)
+            // V2: places min(count, pool) Monsters or Acolytes; score by how many it adds
             case FiendishSpawnPreBattleAction(_) =>
-                val pool = self.pool(LarvaThesis) ++ self.pool(LarvaAntithesis) ++ self.pool(LarvaSynthesis)
-                pool.num >= 2 |=> 2000 -> "fiendish spawn place 2 larvae"
-                pool.num == 1 |=> 800 -> "fiendish spawn place 1 larva"
+                val n = DS.fiendishSpawnCount.min(DS.fiendishSpawnPool(self).num)
+                n >= 2 |=> 2000 -> "fiendish spawn place 2+ units"
+                n == 1 |=> 800 -> "fiendish spawn place 1 unit"
 
             case FiendishSpawnChooseAction(_, uc, placed) =>
-                true |=> 1000 -> "place larva in battle"
+                true |=> 1000 -> "place unit in battle"
+                (uc.utype == Monster) |=> 300 -> "monsters fight better than acolytes"
 
             case FiendishSpawnDoneAction(_) =>
                 true |=> -500 -> "prefer placing larvae over done"
 
             // Directed Energy — mirrors Undirected Energy scoring (post-battle power gain)
             case DirectedEnergyPostBattleAction(_, n) =>
-                n >= 3 |=> 2000 -> "directed energy 3+ chaos gates"
-                n == 2 |=> 1200 -> "directed energy 2 chaos gates"
-                n == 1 |=> 600 -> "directed energy 1 chaos gate"
-                n == 0 |=> 100 -> "directed energy 0 gates still flip"
+                n >= 3 |=> 2000 -> "directed energy 3+ power"
+                n == 2 |=> 1200 -> "directed energy 2 power"
+                n == 1 |=> 600 -> "directed energy 1 power"
+                n == 0 |=> 100 -> "directed energy 0 power"
                 true |=> 500 -> "always take directed energy"
 
             case DirectedEnergySkipAction(_) =>
