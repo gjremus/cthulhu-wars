@@ -4032,7 +4032,14 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 {
                                     implicit val ig : Game = game
                                     val sbOwed = game.factions.%(f => f.unfulfilled.num + f.spellbooks.num < f.library.num)
-                                    if (sbOwed.any && game.battle.none) {
+                                    // Paused on the play-direction choice: "Become First Player" was just
+                                    // achieved and PlayDirectionAction awards it via CheckSpellbooksAction(DoomPhaseAction).
+                                    // Replacing this Ask skipped the whole Doom Phase (Glory versus Blindness).
+                                    val awaitingPlayDirection = cc.get match {
+                                        case Ask(_, actions) => actions.exists(_.unwrap.isInstanceOf[PlayDirectionAction])
+                                        case _ => false
+                                    }
+                                    if (sbOwed.any && game.battle.none && !awaitingPlayDirection) {
                                         val f = sbOwed(0)
                                         val effectiveLibrary = f.library.map { sb => (f, sb) match {
                                             case (DS, Traitors) if game.options.has(DSAlternateSpellbooks) => Omnipotence
