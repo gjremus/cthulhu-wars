@@ -1040,6 +1040,16 @@ object IGOOsExpansion extends Expansion {
 
         // ...
         // Yig: Messenger of Yig choices — re-enter DoomDoneAction to ask next enemy
+        // Already answered (e.g. auto-refused at 0 Power): an older recorded click does nothing
+        case MessengerOfYigDonateAction(self, _) if self.oncePerTurn.has(MessengerOfYig) =>
+            Force(DoomAction(self))
+
+        case MessengerOfYigRefuseAction(self, _) if self.oncePerTurn.has(MessengerOfYig) =>
+            Force(DoomAction(self))
+
+        case MessengerOfYigDoomAction(self, _) if self.oncePerTurn.has(MessengerOfYig) =>
+            Force(DoomAction(self))
+
         case MessengerOfYigDonateAction(self, yigOwner) =>
             self.power -= 1
             yigOwner.power += 1
@@ -1191,10 +1201,10 @@ object IGOOsExpansion extends Expansion {
 
         // Messenger of Yig doom menu action — shows donate/refuse choice
         case MessengerOfYigDoomAction(self, yigOwner) =>
-            // Only offer what the responder can actually give: Donate needs 1 Power, Refuse needs 1 Doom
+            // Donate needs 1 Power; Refuse is always offered (0-Power responders are auto-refused in doomDone)
             Ask(self)
                 .when(self.power > 0)(MessengerOfYigDonateAction(self, yigOwner))
-                .when(self.doom > 0)(MessengerOfYigRefuseAction(self, yigOwner))
+                .add(MessengerOfYigRefuseAction(self, yigOwner))
 
         // Father Dagon: The Innsmouth Look — forced Acolyte removal (player chooses which)
         case InnsmouthLookRemoveAction(self, then) =>
