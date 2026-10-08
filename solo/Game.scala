@@ -3578,8 +3578,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             + InnsmouthLookDoomAction(f)
 
         val yigOwner = factions.but(f).find(yf => yf.has(MessengerOfYig) && !yf.oncePerGame.has(MessengerOfYig) && yf.has(Yig))
-        // Messenger of Yig: a responder with 0 Power AND 0 Doom has nothing to give, so is skipped
-        val hasMessenger = yigOwner.isDefined && !f.oncePerTurn.has(MessengerOfYig) && (f.power > 0 || f.doom > 0)
+        // Messenger of Yig: a responder with 0 Power can't donate, so it's an automatic refuse (Yig owner gains 1 Doom)
+        if (yigOwner.isDefined && !f.oncePerTurn.has(MessengerOfYig) && f.power <= 0) {
+            yigOwner.get.doom += 1
+            f.oncePerTurn :+= MessengerOfYig
+            log("Yig Messenger".styled("nt"), "-", f.full, "had no power to donate,", yigOwner.get.full, "gained", 1.doom)
+        }
+        val hasMessenger = yigOwner.isDefined && !f.oncePerTurn.has(MessengerOfYig)
         if (hasMessenger)
             + MessengerOfYigDoomAction(f, yigOwner.get)
 
