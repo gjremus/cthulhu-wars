@@ -3559,9 +3559,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // FIENDISH SPAWN (DS alternate pre-battle)
         // V2: place exactly half of (8 minus the Azathoth marker), rounded up, Monsters or Acolytes
         // of your choice (fewer only if the pool runs out). No "Done" until all are placed.
+        // Replay-safe: old V1 games had a Done button; provide it for compatibility.
         case FiendishSpawnPreBattleAction(self) =>
             val types = DS.fiendishSpawnPool(self)./(_.uclass).distinct
-            Ask(self).each(types)(uc => FiendishSpawnChooseAction(self, uc, 0))
+            Ask(self).each(types)(uc => FiendishSpawnChooseAction(self, uc, 0)).add(FiendishSpawnDoneAction(self))
 
         case FiendishSpawnChooseAction(self, uc, placed) =>
             val u = self.pool(uc).head
