@@ -4032,14 +4032,19 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 {
                                     implicit val ig : Game = game
                                     val sbOwed = game.factions.%(f => f.unfulfilled.num + f.spellbooks.num < f.library.num)
-                                    // Paused on the play-direction choice: "Become First Player" was just
-                                    // achieved and PlayDirectionAction awards it via CheckSpellbooksAction(DoomPhaseAction).
-                                    // Replacing this Ask skipped the whole Doom Phase (Glory versus Blindness).
-                                    val awaitingPlayDirection = cc.get match {
-                                        case Ask(_, actions) => actions.exists(_.unwrap.isInstanceOf[PlayDirectionAction])
+                                    // Only step in at a resting point (main menu, Doom menu, or an existing
+                                    // spellbook prompt), where the pending CheckSpellbooksAction has already run.
+                                    // Mid-action prompts still owe their book through their own flow; replacing them
+                                    // skipped the Doom Phase (play direction) and DS Avatar Thesis's Power gift + turn end
+                                    // (Glory versus Blindness).
+                                    val atRestingPoint = cc.get match {
+                                        case Ask(_, actions) => actions.exists(a => a.unwrap match {
+                                            case _ : MainQuestion | _ : DoomQuestion | _ : SpellbookAction => true
+                                            case _ => false
+                                        })
                                         case _ => false
                                     }
-                                    if (sbOwed.any && game.battle.none && !awaitingPlayDirection) {
+                                    if (sbOwed.any && game.battle.none && atRestingPoint) {
                                         val f = sbOwed(0)
                                         val effectiveLibrary = f.library.map { sb => (f, sb) match {
                                             case (DS, Traitors) if game.options.has(DSAlternateSpellbooks) => Omnipotence
