@@ -278,7 +278,9 @@ object DSExpansion extends Expansion {
             Ask(self).list(l./(r => DSAvatarThesisRegionAction(self, r))).cancel
 
         case DSAvatarThesisRegionAction(self, r) =>
-            Ask(self).list((0 to 8).toList.%(track => self.affords(track)(r))./(track => DSAvatarThesisCostAction(self, r, track)))
+            // Never show an empty menu (it would leave DS stuck): fall back to the 0 track.
+            val affordable = (0 to 8).toList.%(track => self.affords(track)(r))./(track => DSAvatarThesisCostAction(self, r, track))
+            Ask(self).list(if (affordable.any) affordable else $(DSAvatarThesisCostAction(self, r, 0)))
 
         case DSAvatarThesisCostAction(self, r, track) =>
             DS.azathothTrack = track
@@ -730,6 +732,8 @@ object DSExpansion extends Expansion {
                 val u = game.unit(ref)
                 val from = u.region
                 u.region = r
+                // Forced move: never carry a gate-control flag to the new Area (HB Fix 112)
+                u.onGate = false
                 self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
                 // Catnapping: flat 1 Power per activation; credit BB once if any Avatar leaves the Moon.
                 if (from == BB.moon && !game.dsOmnipotenceMoonCredited) {
@@ -746,6 +750,8 @@ object DSExpansion extends Expansion {
                 val u = game.unit(ref)
                 val from = u.region
                 u.region = r
+                // Forced move: never carry a gate-control flag to the new Area (HB Fix 112)
+                u.onGate = false
                 self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
                 // Catnapping: flat 1 Power per activation; credit BB once if any Avatar leaves the Moon.
                 if (from == BB.moon && !game.dsOmnipotenceMoonCredited) {
@@ -777,6 +783,8 @@ object DSExpansion extends Expansion {
             val u = game.unit(uRef)
             val from = u.region
             u.region = r
+            // Forced move: never carry a gate-control flag to the new Area (HB Fix 112)
+            u.onGate = false
             self.log("moved", u.uclass.styled(self), "from", from, "to", r, "via", Omnipotence.styled(self))
             // Catnapping: flat 1 Power per activation; credit BB once if any Avatar leaves the Moon.
             if (from == BB.moon && !game.dsOmnipotenceMoonCredited) {
