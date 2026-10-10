@@ -2455,6 +2455,23 @@ object Overlays {
         ))
     }
 
+    // Avatar combat as DS.strength counts it: Thesis = the Azathoth marker, Antithesis = 8 minus it
+    // (both "?" until Avatar Thesis sets the marker); Synthesis = this Battle's Azathoth die once rolled, else 3-8.
+    def dsAvatarCombat(u : UnitClass) : String = Overlays.currentGame match {
+        case Some(g) if g.factions.has(DS) =>
+            implicit val gg : Game = g
+            val markerSet = DS.needs(AwakenAvatarThesis).not
+            u match {
+                case AvatarThesis if markerSet => DS.azathothTrack.toString
+                case AvatarAntithesis if markerSet => (8 - DS.azathothTrack).toString
+                case AvatarSynthesis =>
+                    val rolled = g.battle.exists(b => b.phase != AzathothCombatDiePhase && b.sides.has(DS) && DS.at(b.arena).exists(_.uclass == AvatarSynthesis))
+                    if (rolled) DS.azathothDieRoll.max(1).toString else "3-8"
+                case _ => "?"
+            }
+        case _ => "?"
+    }
+
     def dsFactionOverlay(altSB : Boolean) = {
         val thesisSB = if (altSB) reference(DS, DirectedEnergy) else reference(DS, UndirectedEnergy)
         val antithesisSB = if (altSB) reference(DS, FiendishSpawn) else reference(DS, FiendishGrowth)
@@ -2465,7 +2482,7 @@ object Overlays {
             (LarvaAntithesis, 3, "1", "0", s"<div class=p>${combat} 2 if Avatar Antithesis is in play.</div>"),
             (LarvaSynthesis, 3, "1", "0", s"<div class=p>${combat} 2 if Avatar Synthesis is in play.</div>"),
             (ChaosGate, 1, "n/a", "n/a", s"<div class=p>Spellbook: ${reference(DS, ChaosGateSB)}</div>"),
-            (AvatarThesis, 1, "?", "?", s"""
+            (AvatarThesis, 1, "?", dsAvatarCombat(AvatarThesis), s"""
                 <div class=p>${cost("How to Awaken Avatar Thesis:")}</div>
                 <div class=p>${cost("1)")} Set the Azathoth marker on the Doom track on any desired spot from 0 to 8.</div>
                 <div class=p>${cost("2)")} Pay Power equal to the Azathoth marker's setting.</div>
@@ -2473,7 +2490,7 @@ object Overlays {
                 <div class=p>${combat} Equals the Azathoth marker's position.</div>
                 <div class=p>Spellbooks: ${thesisSB}</div>
             """),
-            (AvatarAntithesis, 1, "?", "?", s"""
+            (AvatarAntithesis, 1, "?", dsAvatarCombat(AvatarAntithesis), s"""
                 <div class=p>${cost("How to Awaken Avatar Antithesis:")}</div>
                 <div class=p>${cost("1)")} Avatar Thesis must have been Awakened (it need not be in play).</div>
                 <div class=p>${cost("2)")} Pay Power equal to 8 minus the Azathoth marker's setting.</div>
@@ -2481,7 +2498,7 @@ object Overlays {
                 <div class=p>${combat} Equals 8 minus the Azathoth marker's position.</div>
                 <div class=p>Spellbooks: ${antithesisSB}</div>
             """),
-            (AvatarSynthesis, 1, "8", "?", s"""
+            (AvatarSynthesis, 1, "8", dsAvatarCombat(AvatarSynthesis), s"""
                 <div class=p>${cost(s"How to Awaken ${AvatarSynthesis.name}:")}</div>
                 <div class=p>${cost("1)")} Both ${AvatarThesis.name} and ${AvatarAntithesis.name} must have been Awakened (they need not be in play).</div>
                 <div class=p>${cost("2)")} Pay ${power(8)}.</div>
