@@ -2054,6 +2054,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // repeat-button label can show "Repeat <name>" verbatim per user spec.
     var dcLastActionForTenebrosum : Option[(Action, Int, String)] = None
     var dcTenebrosumGuard : Boolean = false
+    // Cat from Neptune: The Final Ritual — set when performing a mid-battle ritual so
+    // TTSycophancyResumeRitualAction returns to the battle instead of continuing doom phase
+    var theFinalRitualInProgress : Boolean = false
     // HB Fix 101 (2026-06-08): one-shot log-prefix flag. When set, the very next
     // appendLog call prefixes the line with "Defilers Court used Tenebrosum to "
     // and then clears the flag. Per user spec: "the game log for tenbrosum needs
@@ -4732,14 +4735,21 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             f.satisfy(PerformRitual, "Perform Ritual of Annihilation")
 
-            val faceDownTomes = if (f == TS) Nil else cursedTomesOwned.get(f).|(Nil).filter { case (_, fd) => fd }
-            if (faceDownTomes.any) {
-                implicit val asking = Asking(f)
-                faceDownTomes.foreach { case (n, _) => + TSRemoveTomeAction(f, n) }
-                + TSSkipRemoveTomeAction(f)
-                asking
-            } else
-                CheckSpellbooksAction(DoomAction(f))
+            // Cat from Neptune: The Final Ritual — if this ritual was invoked mid-battle,
+            // clear the flag and return to the battle flow instead of continuing doom phase
+            if (theFinalRitualInProgress) {
+                theFinalRitualInProgress = false
+                BattleDoneAction(f)
+            } else {
+                val faceDownTomes = if (f == TS) Nil else cursedTomesOwned.get(f).|(Nil).filter { case (_, fd) => fd }
+                if (faceDownTomes.any) {
+                    implicit val asking = Asking(f)
+                    faceDownTomes.foreach { case (n, _) => + TSRemoveTomeAction(f, n) }
+                    + TSSkipRemoveTomeAction(f)
+                    asking
+                } else
+                    CheckSpellbooksAction(DoomAction(f))
+            }
 
         // Bubastis Requires Attention: doom-phase ritual via Bastet + enemy Cultist
         case RequiresAttentionMainAction(self) =>
