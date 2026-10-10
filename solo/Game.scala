@@ -4421,18 +4421,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             } else {
                 // No Hagarg in play: proceed to Doom Phase start (or skip to Action Phase on turn 1)
                 if (turn == 1)
-                    Then(ActionPhaseAction)
+                    ActionPhaseAction // Then(...)
                 else
-                    Then(DoomPhaseStartAction)
+                    DoomPhaseStartAction
             }
 
         case HagargSubversionChooseAction(self, f) =>
             hagargSubversionTarget = Some(f)
             self.log("Subversion".styled("nt") + ":", HagargRyonis.styled(self), "targets", f)
             if (turn == 1)
-                Then(ActionPhaseAction)
+                ActionPhaseAction // Then(...)
             else
-                Then(DoomPhaseStartAction)
+                DoomPhaseStartAction
 
         case DoomPhaseStartAction =>
             log(CthulhuWarsSolo.DottedLine)
@@ -4460,7 +4460,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 return Force(MoonbeastReturnLoopAction(refs, CheckSpellbooksAction(DoomPhaseAction)))
             }
 
-            Then(CheckSpellbooksAction(DoomPhaseAction))
+            CheckSpellbooksAction(DoomPhaseAction) // Then(...)
 
         // SPELLBOOK
         case CheckSpellbooksAction(next) =>
