@@ -169,6 +169,17 @@ trait PostBattleQuestion extends FactionAction {
 }
 
 case class BattleDoneAction(self : Faction) extends ForcedAction
+
+// Cat from Neptune — The Final Ritual (Post-Battle): perform ritual if killed
+case class TheFinalRitualPostBattleAction(self : Faction, cost : Int) extends BaseFactionAction(
+    implicit g => "The Final Ritual".styled("nt") + " — perform Ritual of Annihilation",
+    implicit g => "Pay " + cost.power) {
+    override def question(implicit game : Game) = (game.battle./(_.attacker).has(self)).?("Attacker").|("Defender") + " post-battle"
+}
+case class TheFinalRitualSkipAction(self : Faction) extends BaseFactionAction(
+    "The Final Ritual".styled("nt") + " — perform Ritual of Annihilation", "Skip") {
+    override def question(implicit game : Game) = (game.battle./(_.attacker).has(self)).?("Attacker").|("Defender") + " post-battle"
+}
 // Dhole: Planetary Destruction — owner chooses whether opponent gains 2 Doom or 2 Power
 case class DholePlanetaryDestructionDoomAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => 2.doom) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
 case class DholePlanetaryDestructionPowerAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "2 Power".styled("power")) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
@@ -241,6 +252,11 @@ case class InvisibilityAction(self : Faction, ur : UnitRef, tr : UnitRef) extend
 
 case class SeekAndDestroyPreBattleAction(self : Faction) extends OptionFactionAction(SeekAndDestroy) with PreBattleQuestion with Soft
 case class SeekAndDestroyAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction("Bring with " + SeekAndDestroy, uc.styled(self) + " from " + r)
+
+// Cat from Mercury — Needs Affection (Pre-Battle): replace monsters with acolytes
+case class NeedsAffectionPreBattleAction(self : Faction) extends OptionFactionAction("Needs Affection".styled("nt") + " — " + CatFromMercury.styled(self)) with PreBattleQuestion with Soft
+case class NeedsAffectionReplaceAction(self : Faction, uRef : UnitRef) extends BaseFactionAction(
+    implicit g => "Needs Affection".styled("nt"), implicit g => "Replace " + g.unit(uRef).uclass.styled(self) + " with Acolyte")
 
 // Chronophage battle-join: when a pre-battle movement power moves a unit INTO the
 // arena, the owning faction's Hound of Tindalos may teleport into the same battle
@@ -384,6 +400,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     var houndJoinedThisBattle : $[Faction] = $
     // Dunwich: factions that have already used Wizard "Magician" this battle (one muster per battle).
     var magicianMusteredThisBattle : $[Faction] = $
+    // Cat from Neptune: The Final Ritual — factions that have already resolved this post-battle
+    var theFinalRitualResolvedThisBattle : $[Faction] = $
     // Post-battle Chronophage: powers that move a unit MID-battle (e.g. Necrophagy) arm this;
     // the Hound teleport offer fires after the battle is fully resolved (at BattleEnd).
     var houndPostBattleMoveArmed : $[Faction] = $
@@ -761,6 +779,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             options :+= StaticAccumulatorPreBattleMainAction(XSS)
             options :+= StaticAccumulatorSkipAction(XSS)
         }
+
+        // Cat from Mercury — Needs Affection (Pre-Battle): if a Cat from Mercury is in battle,
+        // the owner can replace one or more of their Monsters with Acolytes from pool.
+        if (s.loyaltyCards.has(CatFromMercuryCard) && s.forces.%(_.uclass == CatFromMercury).any &&
+            s.forces.%(_.uclass.utype == Monster).any && s.pool(Acolyte).any)
+            options :+= NeedsAffectionPreBattleAction(s)
 
         Ask(s).list(options).add(PreBattleDoneAction(s, next))
     }
@@ -2622,6 +2646,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         XSS.satisfy(PetrichorBattlesAloneReq, "Petrichor battles alone")
                 }
 
+                // Cat from Neptune — The Final Ritual (Post-Battle): if Cat from Neptune was
+                // killed in battle, owner may immediately perform a Ritual of Annihilation
+                val catOwner = sides.find(s =>
+                    !theFinalRitualResolvedThisBattle.has(s) &&
+                    s.loyaltyCards.has(CatFromNeptuneCard) &&
+                    eliminated.%(u => u.faction == s && u.uclass == CatFromNeptune && u.health == Killed).any &&
+                    s.power >= game.ritualCost)
+                if (catOwner.any) {
+                    val s = catOwner.get
+                    val cost = game.ritualCost
+                    return Ask(s).add(TheFinalRitualPostBattleAction(s, cost)).add(TheFinalRitualSkipAction(s))
+                }
+
                 // Xyrious Storm (XSS) — Distant Thunderclap ES check (§3.4.3, independent):
                 // If Petrichor participated AND no participants from either side remain in the
                 // battle area AND opponent had a non-Cultist unit, XSS gains 1 Elder Sign.
@@ -2886,7 +2923,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 }
 
                 val battleTerminus : ForcedAction =
-                    if (game.csCorruptedRendingActor.any) {
+                    // Cat from Neptune: The Final Ritual — if ritual reached Instant Death, end game
+                    if (game.ritualTrack(game.ritualMarker) == 999)
+                        GameOverPhaseAction
+                    else if (game.csCorruptedRendingActor.any) {
                         // Corrupted Rending (§1.8): this battle was FORCED by CS between two other
                         // factions. Post-battle control returns to CS's own turn, not the declarant.
                         val cs = game.csCorruptedRendingActor.get
@@ -3239,6 +3279,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case BattleRollAction(f, rolls, next) =>
             f.rolls ++= rolls
 
+            // Hagarg Ryonis: adds 3 Pains automatically (rolls no dice)
+            val hr = f.forces(HagargRyonis).not(Zeroed)
+            if (hr.any) {
+                val pains = $(Pain, Pain, Pain)
+                f.rolls ++= pains
+                log(HagargRyonis.styled(f), "adds", pains.mkString(" "))
+            }
+
             val sv = f.forces(StarVampire)
 
             if (rolls.num > sv.num)
@@ -3492,6 +3540,30 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             houndPreBattleMoveArmed = (houndPreBattleMoveArmed :+ self).distinct
             proceed()
 
+        // CAT FROM MERCURY — NEEDS AFFECTION (Pre-Battle)
+        case NeedsAffectionPreBattleAction(self) =>
+            val monsters = self.forces.%(_.uclass.utype == Monster)
+            Ask(self).each(monsters)(m => NeedsAffectionReplaceAction(self, m.ref)).cancel
+
+        case NeedsAffectionReplaceAction(self, uRef) =>
+            val monster = self.forces.%(_.ref == uRef).head
+            eliminate(monster)
+            log("Needs Affection".styled("nt") + ":", monster.uclass.styled(self), "in", arena, "eliminated")
+
+            // Place acolyte from pool into battle, mirroring Magician pattern
+            if (self.pool(Acolyte).none)
+                self.units :+= new UnitFigure(self, Acolyte, self.units.%(_.uclass == Acolyte).num + 1, self.reserve)
+            val acolyte = self.pool(Acolyte).head
+            acolyte.region = arena
+            self.forces :+= acolyte
+            log("Needs Affection".styled("nt") + ":", Acolyte.styled(self), "placed in", arena)
+
+            // Re-offer if more monsters and acolytes available
+            if (self.forces.%(_.uclass.utype == Monster).any && self.pool(Acolyte).any)
+                Force(NeedsAffectionPreBattleAction(self))
+            else
+                proceed()
+
         // Chronophage: teleport the owner's Hound into this battle (Gate→Gate). Mirrors
         // Seek & Destroy's join: set region, add to that side's forces, resume. `self` is
         // the side of the battle that owns the Hound card.
@@ -3554,6 +3626,18 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Skipping does NOT flip the spellbook facedown; flipping is the cost of using it.
         // The per-battle guard is the Side tag added at the offer site (DS.add(DirectedEnergy)).
         case DirectedEnergySkipAction(self) =>
+            proceed()
+
+        // CAT FROM NEPTUNE — THE FINAL RITUAL (Post-Battle)
+        case TheFinalRitualPostBattleAction(self, cost) =>
+            theFinalRitualResolvedThisBattle = (theFinalRitualResolvedThisBattle :+ self).distinct
+            game.theFinalRitualInProgress = true
+            log("The Final Ritual".styled("nt") + ":", self, "performs Ritual of Annihilation")
+            Force(RitualAction(self, cost, 1))
+
+        case TheFinalRitualSkipAction(self) =>
+            theFinalRitualResolvedThisBattle = (theFinalRitualResolvedThisBattle :+ self).distinct
+            log("The Final Ritual".styled("nt") + ":", self, "declined the ritual")
             proceed()
 
         // FIENDISH SPAWN (DS alternate pre-battle)
