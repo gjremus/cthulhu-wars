@@ -1491,6 +1491,7 @@ case object FirstPlayerDeterminationAction extends ForcedAction
 case object PlayOrderAction extends ForcedAction
 case object HagargSubversionPhaseAction extends ForcedAction
 case class HagargSubversionChooseAction(self : Faction, f : Faction) extends BaseFactionAction("Subversion".hl, "Target " + f.name)
+case object DoomPhaseStartAction extends ForcedAction
 case class PowerGatherAction(then : Faction) extends ForcedAction
 case object DoomPhaseAction extends ForcedAction
 case object ActionPhaseAction extends ForcedAction
@@ -4418,71 +4419,48 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val owner = hagargOwners.head
                 Ask(owner).each(owner.enemies)(f => HagargSubversionChooseAction(owner, f))
             } else {
+                // No Hagarg in play: proceed to Doom Phase start (or skip to Action Phase on turn 1)
                 if (turn == 1)
-                    ActionPhaseAction // Then(...)
-                else {
-                    log(CthulhuWarsSolo.DottedLine)
-                    log("DOOM PHASE")
-
-                    // Clear moonbeast placed-this-doom tracker at start of doom phase
-                    moonbeastPlacedThisDoom = Set()
-
-                    // Ghatanothoa IGOO: un-mummify all cultists at Doom Phase
-                    if (mummifiedCultists.any) {
-                        mummifiedCultists = $
-                        log("Mummify".styled("nt") + ": all mummified cultists are freed at Doom Phase")
-                    }
-
-                    factions.foreach(f => f.satisfyIf(FirstDoomPhase, "The first Doom phase", turn == 2))
-                    factions.foreach(f => f.satisfyIf(FiveSpellbooks, "Have five spellbooks", f.unfulfilled.num == 1))
-
-                    // Moonbeast: return blocking moonbeasts from spellbooks to the map at the START
-                    // of the Doom phase, before anyone's turn. Only for live play — replaying an
-                    // existing game keeps its recorded end-of-doom return so old game logs stay valid.
-                    // moonbeastPlacedThisDoom was just cleared above, so every blocked spellbook qualifies;
-                    // moonbeasts placed during this same Doom phase are added afterward and so wait for next Doom.
-                    if (!nextReplayActionHint.any && moonbeastOnSpellbook.any) {
-                        val refs = moonbeastOnSpellbook.keys.toList
-                        return Force(MoonbeastReturnLoopAction(refs, CheckSpellbooksAction(DoomPhaseAction)))
-                    }
-
-                    CheckSpellbooksAction(DoomPhaseAction) // Then(...)
-                }
+                    Then(ActionPhaseAction)
+                else
+                    Then(DoomPhaseStartAction)
             }
 
         case HagargSubversionChooseAction(self, f) =>
             hagargSubversionTarget = Some(f)
             self.log("Subversion".styled("nt") + ":", HagargRyonis.styled(self), "targets", f)
             if (turn == 1)
-                ActionPhaseAction // Then(...)
-            else {
-                log(CthulhuWarsSolo.DottedLine)
-                log("DOOM PHASE")
+                Then(ActionPhaseAction)
+            else
+                Then(DoomPhaseStartAction)
 
-                // Clear moonbeast placed-this-doom tracker at start of doom phase
-                moonbeastPlacedThisDoom = Set()
+        case DoomPhaseStartAction =>
+            log(CthulhuWarsSolo.DottedLine)
+            log("DOOM PHASE")
 
-                // Ghatanothoa IGOO: un-mummify all cultists at Doom Phase
-                if (mummifiedCultists.any) {
-                    mummifiedCultists = $
-                    log("Mummify".styled("nt") + ": all mummified cultists are freed at Doom Phase")
-                }
+            // Clear moonbeast placed-this-doom tracker at start of doom phase
+            moonbeastPlacedThisDoom = Set()
 
-                factions.foreach(f => f.satisfyIf(FirstDoomPhase, "The first Doom phase", turn == 2))
-                factions.foreach(f => f.satisfyIf(FiveSpellbooks, "Have five spellbooks", f.unfulfilled.num == 1))
-
-                // Moonbeast: return blocking moonbeasts from spellbooks to the map at the START
-                // of the Doom phase, before anyone's turn. Only for live play — replaying an
-                // existing game keeps its recorded end-of-doom return so old game logs stay valid.
-                // moonbeastPlacedThisDoom was just cleared above, so every blocked spellbook qualifies;
-                // moonbeasts placed during this same Doom phase are added afterward and so wait for next Doom.
-                if (!nextReplayActionHint.any && moonbeastOnSpellbook.any) {
-                    val refs = moonbeastOnSpellbook.keys.toList
-                    return Force(MoonbeastReturnLoopAction(refs, CheckSpellbooksAction(DoomPhaseAction)))
-                }
-
-                CheckSpellbooksAction(DoomPhaseAction) // Then(...)
+            // Ghatanothoa IGOO: un-mummify all cultists at Doom Phase
+            if (mummifiedCultists.any) {
+                mummifiedCultists = $
+                log("Mummify".styled("nt") + ": all mummified cultists are freed at Doom Phase")
             }
+
+            factions.foreach(f => f.satisfyIf(FirstDoomPhase, "The first Doom phase", turn == 2))
+            factions.foreach(f => f.satisfyIf(FiveSpellbooks, "Have five spellbooks", f.unfulfilled.num == 1))
+
+            // Moonbeast: return blocking moonbeasts from spellbooks to the map at the START
+            // of the Doom phase, before anyone's turn. Only for live play — replaying an
+            // existing game keeps its recorded end-of-doom return so old game logs stay valid.
+            // moonbeastPlacedThisDoom was just cleared above, so every blocked spellbook qualifies;
+            // moonbeasts placed during this same Doom phase are added afterward and so wait for next Doom.
+            if (!nextReplayActionHint.any && moonbeastOnSpellbook.any) {
+                val refs = moonbeastOnSpellbook.keys.toList
+                return Force(MoonbeastReturnLoopAction(refs, CheckSpellbooksAction(DoomPhaseAction)))
+            }
+
+            Then(CheckSpellbooksAction(DoomPhaseAction))
 
         // SPELLBOOK
         case CheckSpellbooksAction(next) =>
@@ -4773,6 +4751,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             log(CthulhuWarsSolo.DottedLine)
             f.log("performed the ritual and gained", doom.doom, (es > 0).??("and " + es.es))
 
+            // Hagarg Ryonis: Subversion — snapshot ES before takeES to steal from JUST EARNED
+            val esBeforeRitual = f.es
+
             f.takeES(es)
 
             // Dunwich: Wilbur Whateley "Yr and Nhnngr" — his controller banks a Gate on his
@@ -4808,12 +4789,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Card text: "If that player performs a Ritual of Annihilation in the Doom Phase"
             if (doomPhase && hagargSubversionTarget.has(f)) {
                 val hagargOwner = factions.find(owner => owner.loyaltyCards.has(HagargRyonisCard) && owner.allInPlay.exists(_.uclass == HagargRyonis))
-                if (hagargOwner.any && f.es.any) {
-                    // Steal 1 ES (randomly chosen if multiple, to be replay-safe)
-                    val stolenES = f.es.head
-                    f.es = f.es.tail
-                    hagargOwner.get.es :+= stolenES
-                    hagargOwner.get.log("Subversion".styled("nt") + ":", HagargRyonis.styled(hagargOwner.get), "stole", 1.es, "from", f)
+                if (hagargOwner.any) {
+                    // Find newly earned ES: those in f.es but not in esBeforeRitual
+                    // takeES appends to the end, so newly earned ES are at the end of the list
+                    val earnedCount = f.es.num - esBeforeRitual.num
+                    if (earnedCount > 0) {
+                        // Steal the most recent newly earned ES (last one added)
+                        val stolenES = f.es.last
+                        f.es = f.es.dropRight(1)
+                        hagargOwner.get.es :+= stolenES
+                        hagargOwner.get.log("Subversion".styled("nt") + ":", HagargRyonis.styled(hagargOwner.get), "steals", 1.es, "from", f)
+                    }
                 }
             }
 
@@ -6102,13 +6088,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // CAT FROM VENUS — HONEYMOON
         case CatFromVenusCaptureMainAction(self) =>
-            val venusRegions = self.all(CatFromVenus)./(_.region).distinct
-            val variants = venusRegions.filter(r => self.enemies.exists(self.canCapture(r))).flatMap { r =>
+            val venusRegions = self.all(CatFromVenus)./(_.region).distinct.%(_.onMapOrMoon)
+            val variants = venusRegions.filter(r => self.enemies.exists(e => self.canCapture(r)(e))).flatMap { r =>
                 self.enemies.filter(self.canCapture(r)).flatMap { f =>
                     val cultists = f.at(r).cultists.%(u => u.uclass.canBeCaptured(u))
-                    cultists./(_.uclass).distinct.map(uc =>
-                        CatFromVenusCaptureAction(self, r, f).as(uc.name.styled(f))(r.toString)
-                    )
+                    if (cultists.any)
+                        Some(CatFromVenusCaptureAction(self, r, f).as(f.name.styled(f))(r.toString))
+                    else
+                        None
                 }
             }
             if (variants.size == 1)
