@@ -3277,6 +3277,16 @@ object CthulhuWarsSolo {
                         val tintedSrc = getTintedAsset("n-moonbeast", tint).toDataURL("image/png")
                         s"<img src='${tintedSrc}' style='height:1.4em;vertical-align:middle;opacity:0.9;margin-right:0.3em;' />"
                     } else ""
+                    // Asteroid Cat: check if a cat is on this requirement
+                    val asteroidCatOnReq = displayGame.asteroidCatOnSpellbook.values.exists(t => t._1 == f && t._2 == r)
+                    val acImg = if (asteroidCatOnReq) {
+                        // Find the cat owner for tinting
+                        val acEntry = displayGame.asteroidCatOnSpellbook.find { case (_, (target, req)) => target == f && req == r }
+                        val acOwner = acEntry./(e => displayGame.unit(e._1).faction).|(f)
+                        val tint = DrawItem(null, acOwner, AsteroidCat, Alive, $, 0, 0).neutralTint
+                        val tintedSrc = getTintedAsset("n-asteroid-cat", tint).toDataURL("image/png")
+                        s"<img src='${tintedSrc}' style='height:1.4em;vertical-align:middle;opacity:0.9;margin-right:0.3em;' />"
+                    } else ""
                     // Fix HB-77 (2026-06-06): Defilers Court reserved-Acolyte
                     // marker. Each SBR slot holding a reserved Acolyte gets a
                     // small DC-tinted acolyte icon next to it (per user spec —
@@ -3306,7 +3316,7 @@ object CthulhuWarsSolo {
                         onclick='event.stopPropagation(); onExternalClick("${f.short}", "${s}")'
                         onpointerover='event.stopPropagation(); onExternalOver("${f.short}", "${s}")'
                         onpointerout='event.stopPropagation(); onExternalOut("${f.short}", "${s}")'
-                        >${mbImg}${dcReservedImg}${displayText}</div>"""
+                        >${mbImg}${acImg}${dcReservedImg}${displayText}</div>"""
                     d
                 }.mkString("")
 
