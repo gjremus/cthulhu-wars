@@ -12,11 +12,21 @@ case object ShantakCard extends NeutralMonsterLoyaltyCard(ShantakIcon, Shantak, 
 case object StarVampireCard extends NeutralMonsterLoyaltyCard(StarVampireIcon, StarVampire, cost = 2, quantity = 3, combat = 1)
 case object VoonithCard extends NeutralMonsterLoyaltyCard(VoonithIcon, Voonith, cost = 3, quantity = 2, combat = 1)
 
+// ── SOMETHING ABOUT CATS — NEUTRAL MONSTERS ──
+case object AsteroidCatCard extends NeutralMonsterLoyaltyCard(AsteroidCatIcon, AsteroidCat, cost = 1, quantity = 2, combat = 1)
+case object CatFromMercuryCard extends NeutralMonsterLoyaltyCard(CatFromMercuryIcon, CatFromMercury, cost = 1, quantity = 2, combat = 1)
+case object CatFromVenusCard extends NeutralMonsterLoyaltyCard(CatFromVenusIcon, CatFromVenus, cost = 1, quantity = 2, combat = 1)
+
 case object GhastIcon extends UnitClass(Ghast.name + " Icon", Token, 0)
 case object GugIcon extends UnitClass(Gug.name + " Icon", Token, 0)
 case object ShantakIcon extends UnitClass(Shantak.name + " Icon", Token, 0)
 case object StarVampireIcon extends UnitClass(StarVampire.name + " Icon", Token, 0)
 case object VoonithIcon extends UnitClass(Voonith.name + " Icon", Token, 0)
+
+// ── SOMETHING ABOUT CATS — MONSTER ICONS ──
+case object AsteroidCatIcon extends UnitClass("Asteroid Cat Icon", Token, 0)
+case object CatFromMercuryIcon extends UnitClass("Cat from Mercury Icon", Token, 0)
+case object CatFromVenusIcon extends UnitClass("Cat from Venus Icon", Token, 0)
 
 trait NeutralMonster
 
@@ -73,6 +83,11 @@ case object DimensionalShamblerHold extends UnitClass("Dimensional Shambler (Hol
 case object GnorriCard extends NeutralMonsterLoyaltyCard(GnorriIcon, Gnorri, cost = 3, quantity = 3, combat = 2)
 case object GnorriIcon extends UnitClass(Gnorri.name + " Icon", Token, 0)
 case object Gnorri extends UnitClass("Gnorri", Monster, 3) with NeutralMonster
+
+// ── SOMETHING ABOUT CATS — MONSTER UNIT CLASSES ──
+case object AsteroidCat extends UnitClass("Asteroid Cat", Monster, 1) with NeutralMonster
+case object CatFromMercury extends UnitClass("Cat from Mercury", Monster, 1) with NeutralMonster
+case object CatFromVenus extends UnitClass("Cat from Venus", Monster, 1) with NeutralMonster
 
 // ── NEW TERRORS ──
 // DHOLE — Cost 4, Combat 5, Terror, Pool 1, Card Cost 2 Doom + 2 Power
@@ -137,6 +152,11 @@ case object BrownJenkin extends UnitClass("Brown Jenkin", Terror, 2) with Neutra
 case object ElderShoggothCard extends NeutralTerrorLoyaltyCard(ElderShoggothIcon, ElderShoggoth, cost = 2, powerCost = 2, quantity = 1, combat = 2)
 case object ElderShoggothIcon extends UnitClass(ElderShoggoth.name + " Icon", Token, 0)
 case object ElderShoggoth extends UnitClass("Elder Shoggoth", Terror, 4) with NeutralMonster
+
+// ── SOMETHING ABOUT CATS — TERROR ──
+case object CatFromNeptuneCard extends NeutralTerrorLoyaltyCard(CatFromNeptuneIcon, CatFromNeptune, cost = 2, powerCost = 2, quantity = 1, combat = 1)
+case object CatFromNeptuneIcon extends UnitClass("Cat from Neptune Icon", Token, 0)
+case object CatFromNeptune extends UnitClass("Cat from Neptune", Terror, 1) with NeutralMonster
 
 // ── NEW MONSTERS ──
 case object MoonbeastCard extends NeutralMonsterLoyaltyCard(MoonbeastIcon, MoonbeastUnit, cost = 2, quantity = 4, combat = 0)

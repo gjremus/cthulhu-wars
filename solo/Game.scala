@@ -453,6 +453,12 @@ trait Faction { f =>
         units(LengSpiderUnit).num * 1 +
         units(Satyr).num * 1 +
         units(ServitorUnit).num * -1 +
+        // Something About Cats — Monsters
+        units(AsteroidCat).num * 1 +
+        units(CatFromMercury).num * 1 +
+        units(CatFromVenus).num * 1 +
+        // Something About Cats — Terror
+        units(CatFromNeptune).not(Zeroed).num * 1 +
         // New IGOOs
         units(Yig).not(Zeroed).num * 2 +
         units(BloatedWoman).not(Zeroed).num * 1 +
@@ -473,6 +479,8 @@ trait Faction { f =>
         units(Bokrug).not(Zeroed).num * 0 +
         // Gla'aki IGOO: combat 0
         units(GlaakiIGOO).not(Zeroed).num * 0 +
+        // Hagarg Ryonis: combat 3 Pains (no dice)
+        units(HagargRyonis).not(Zeroed).num * 3 +
         // Azathoth IGOO: = glyph position
         units(AzathothIGOO).not(Zeroed).num * game.azathothGlyphPosition +
         // Dunwich — Dire Yog-Sothoth: = number of enemy-controlled faction Great Old Ones in play
@@ -1311,6 +1319,11 @@ case object UseVoonith extends LoyaltyCardGameOption(VoonithCard) with NeutralMo
 case object UseDimensionalShamblers extends LoyaltyCardGameOption(DimensionalShamblerCard) with NeutralMonsterOption
 case object UseGnorri extends LoyaltyCardGameOption(GnorriCard) with NeutralMonsterOption
 
+// Something About Cats — Neutral Monsters
+case object UseAsteroidCat extends LoyaltyCardGameOption(AsteroidCatCard) with NeutralMonsterOption
+case object UseCatFromMercury extends LoyaltyCardGameOption(CatFromMercuryCard) with NeutralMonsterOption
+case object UseCatFromVenus extends LoyaltyCardGameOption(CatFromVenusCard) with NeutralMonsterOption
+
 // New Terrors
 sealed trait NeutralTerrorOption extends LoyaltyCardGameOption
 case object UseDhole extends LoyaltyCardGameOption(DholeCard) with NeutralTerrorOption
@@ -1320,6 +1333,9 @@ case object UseShadowPharaoh extends LoyaltyCardGameOption(ShadowPharaohCard) wi
 case object UseHoundOfTindalos extends LoyaltyCardGameOption(HoundOfTindalosCard) with NeutralTerrorOption
 case object UseBrownJenkin extends LoyaltyCardGameOption(BrownJenkinCard) with NeutralTerrorOption
 case object UseElderShoggoth extends LoyaltyCardGameOption(ElderShoggothCard) with NeutralTerrorOption
+
+// Something About Cats — Terror
+case object UseCatFromNeptune extends LoyaltyCardGameOption(CatFromNeptuneCard) with NeutralTerrorOption
 
 // New Monsters
 case object UseMoonbeast extends LoyaltyCardGameOption(MoonbeastCard) with NeutralMonsterOption
@@ -1347,6 +1363,8 @@ case object UseBloatedWoman extends LoyaltyCardGameOption(BloatedWomanCard) with
 case object UseAtlachNacha extends LoyaltyCardGameOption(AtlachNachaCard) with IGOOOption
 case object UseBokrug extends LoyaltyCardGameOption(BokrugCard) with IGOOOption
 case object UseGlaakiIGOO extends LoyaltyCardGameOption(GlaakiIGOOCard) with IGOOOption
+// Something About Cats — Hagarg Ryonis (Independent Elder God)
+case object UseHagargRyonis extends LoyaltyCardGameOption(HagargRyonisCard) with IGOOOption
 // Dunwich Horror — Dire Yog-Sothoth is an Independent Great Old One.
 case object UseDireYogSothoth extends LoyaltyCardGameOption(DireYogSothothCard) with IGOOOption
 
@@ -1402,6 +1420,9 @@ object GameOptions {
 	UseVoonith,
         UseDimensionalShamblers,
         UseGnorri,
+        UseAsteroidCat,
+        UseCatFromMercury,
+        UseCatFromVenus,
         UseDhole,
         UseGreatRaceOfYith,
         UseQuachilUttaus,
@@ -1409,6 +1430,7 @@ object GameOptions {
         UseHoundOfTindalos,
         UseBrownJenkin,
         UseElderShoggoth,
+        UseCatFromNeptune,
         UseMoonbeast,
         UseAlbinoPenguins,
         UseElderThing,
@@ -1432,6 +1454,7 @@ object GameOptions {
         UseAtlachNacha,
         UseBokrug,
         UseGlaakiIGOO,
+        UseHagargRyonis,
         UseDireYogSothoth,
         UseLaviniaWhateley,
         UseWilburWhateley,

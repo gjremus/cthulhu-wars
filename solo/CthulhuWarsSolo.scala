@@ -1401,6 +1401,12 @@ object CthulhuWarsSolo {
                     case Satyr             => DrawRect("n-satyr", |(neutralTint), x - 44, y - 88, 88, 98)
                     case InsectsFromShaggai => DrawRect("n-insects-from-shaggai", |(neutralTint), x - 38, y - 97, 76, 107)
                     case ServitorUnit      => DrawRect("n-servitor-of-the-outer-gods", |(neutralTint), x - 35, y - 75, 70, 85)
+                    // Something About Cats — Monsters
+                    case AsteroidCat       => DrawRect("n-asteroid-cat", |(neutralTint), x - 25, y - 60, 50, 70)
+                    case CatFromMercury    => DrawRect("n-cat-from-mercury", |(neutralTint), x - 25, y - 60, 50, 70)
+                    case CatFromVenus      => DrawRect("n-cat-from-venus", |(neutralTint), x - 25, y - 60, 50, 70)
+                    // Something About Cats — Terror
+                    case CatFromNeptune    => DrawRect("n-cat-from-neptune", |(neutralTint), x - 30, y - 70, 60, 80)
                     // IGOOs (sized relative to cultist from docx thumbnails)
                     case AzathothIGOO      => DrawRect("n-azathoth", |(neutralTint), x - 59, y - 128, 119, 138)
                     case Cthugha           => DrawRect("n-cthugha", |(neutralTint), x - 52, y - 112, 105, 122)
@@ -1412,6 +1418,8 @@ object CthulhuWarsSolo {
                     case AtlachNacha       => DrawRect("n-atlach-nacha", |(neutralTint), x - 62, y - 110, 125, 110)
                     case Bokrug            => DrawRect("n-bokrug", |(neutralTint), x - 55, y - 115, 110, 125)
                     case GlaakiIGOO        => DrawRect("n-glaaki-igoo", |(neutralTint), x - 55, y - 115, 110, 125)
+                    // Something About Cats — Hagarg Ryonis
+                    case HagargRyonis      => DrawRect("n-hagarg-ryonis", |(neutralTint), x - 55, y - 115, 110, 125)
 
                     // Dunwich Horror — Whateley Clan + Dire Yog-Sothoth
                     case LaviniaWhateley   => DrawRect("n-lavinia-whateley-dunwich", |(neutralTint), x - 13, y - 53, 26, 60)
@@ -1450,6 +1458,12 @@ object CthulhuWarsSolo {
                     case SatyrIcon               => DrawRect("satyr-icon", None, x - 17, y - 55, 50, 50)
                     case InsectsFromShaggaiIcon  => DrawRect("insects-from-shaggai-icon", None, x - 17, y - 55, 50, 50)
                     case ServitorIcon            => DrawRect("servitor-of-the-outer-gods-icon", None, x - 17, y - 55, 50, 50)
+                    // Something About Cats — Monster icons
+                    case AsteroidCatIcon         => DrawRect("asteroid-cat-icon", None, x - 17, y - 55, 50, 50)
+                    case CatFromMercuryIcon      => DrawRect("cat-from-mercury-icon", None, x - 17, y - 55, 50, 50)
+                    case CatFromVenusIcon        => DrawRect("cat-from-venus-icon", None, x - 17, y - 55, 50, 50)
+                    // Something About Cats — Terror icon
+                    case CatFromNeptuneIcon      => DrawRect("cat-from-neptune-icon", None, x - 17, y - 55, 50, 50)
                     // New IGOO icons
                     case AzathothIGOOIcon        => DrawRect("azathoth-icon", None, x - 17, y - 55, 50, 50)
                     case CthughaIcon             => DrawRect("cthugha-icon", None, x - 17, y - 55, 50, 50)
@@ -1461,6 +1475,8 @@ object CthulhuWarsSolo {
                     case AtlachNachaIcon         => DrawRect("atlach-nacha-icon", None, x - 17, y - 55, 50, 50)
                     case BokrugIcon              => DrawRect("bokrug-icon", None, x - 17, y - 55, 50, 50)
                     case GlaakiIGOOIcon          => DrawRect("glaaki-igoo-icon", None, x - 17, y - 55, 50, 50)
+                    // Something About Cats — Hagarg Ryonis icon
+                    case HagargRyonisIcon        => DrawRect("hagarg-ryonis-icon", None, x - 17, y - 55, 50, 50)
                     // Dunwich Horror icons
                     case LaviniaWhateleyIcon     => DrawRect("lavinia-whateley-icon", None, x - 17, y - 55, 50, 50)
                     case WilburWhateleyIcon      => DrawRect("wilbur-whateley-icon", None, x - 17, y - 55, 50, 50)
@@ -5153,6 +5169,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, ElderThingCard, UseElderThing, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, GhastCard, UseGhast, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, AlbinoPenguinsCard, UseAlbinoPenguins, setup.options.has(NeutralMonsters)) ++
+                    useWith(setup, AsteroidCatCard, UseAsteroidCat, setup.options.has(NeutralMonsters)) ++
+                    useWith(setup, CatFromMercuryCard, UseCatFromMercury, setup.options.has(NeutralMonsters)) ++
+                    useWith(setup, CatFromVenusCard, UseCatFromVenus, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, GnorriCard, UseGnorri, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, GugCard, UseGug, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, InsectsFromShaggaiCard, UseInsectsFromShaggai, setup.options.has(NeutralMonsters)) ++
@@ -5166,6 +5185,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     // Terrors (alphabetical)
                     $("Variants" -> ("Neutral".styled("neutral") + " terrors (" + setup.get(NeutralTerrors).?("yes").|("no").hl + ")")) ++
                     useWith(setup, BrownJenkinCard, UseBrownJenkin, setup.options.has(NeutralTerrors)) ++
+                    useWith(setup, CatFromNeptuneCard, UseCatFromNeptune, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, DholeCard, UseDhole, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, ElderShoggothCard, UseElderShoggoth, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, GreatRaceOfYithCard, UseGreatRaceOfYith, setup.options.has(NeutralTerrors)) ++
@@ -5186,6 +5206,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, FatherDagonCard, UseFatherDagon, setup.options.has(IGOOs)) ++
                     useWith(setup, GhatanotoaIGOOCard, UseGhatanotoaIGOO, setup.options.has(IGOOs)) ++
                     useWith(setup, GlaakiIGOOCard, UseGlaakiIGOO, setup.options.has(IGOOs)) ++
+                    useWith(setup, HagargRyonisCard, UseHagargRyonis, setup.options.has(IGOOs)) ++
                     useWith(setup, MotherHydraCard, UseMotherHydra, setup.options.has(IGOOs)) ++
                     useWith(setup, NyogthaCard, UseNyogtha, setup.options.has(IGOOs)) ++
                     useWith(setup, BloatedWomanCard, UseBloatedWoman, setup.options.has(IGOOs)) ++
@@ -5264,11 +5285,14 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             setupQuestions()
                         }
                         if (setup.options.has(NeutralMonsters)) {
-                            // Monsters (alphabetical): DimensionalShambler, ElderThing, Ghast, AlbinoPenguins, Gnorri, Gug, InsectsFromShaggai, LengSpider, Moonbeast, Satyr, Servitor, Shantak, StarVampire, Voonith
+                            // Monsters (alphabetical): DimensionalShambler, ElderThing, Ghast, AlbinoPenguins, AsteroidCat, CatFromMercury, CatFromVenus, Gnorri, Gug, InsectsFromShaggai, LengSpider, Moonbeast, Satyr, Servitor, Shantak, StarVampire, Voonith
                             n -= 1; if (n == 0) { setup.toggle(UseDimensionalShamblers); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseElderThing); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGhast); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseAlbinoPenguins); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseAsteroidCat); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseCatFromMercury); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseCatFromVenus); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGnorri); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGug); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseInsectsFromShaggai); setupQuestions() }
@@ -5284,14 +5308,15 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         if (n == 0) {
                             setup.toggle(NeutralTerrors)
                             if (setup.options.has(NeutralTerrors))
-                                setup.options ++= $(UseBrownJenkin, UseDhole, UseElderShoggoth, UseGreatRaceOfYith, UseHoundOfTindalos, UseJuniorWhateley, UseQuachilUttaus, UseShadowPharaoh)
+                                setup.options ++= $(UseBrownJenkin, UseCatFromNeptune, UseDhole, UseElderShoggoth, UseGreatRaceOfYith, UseHoundOfTindalos, UseJuniorWhateley, UseQuachilUttaus, UseShadowPharaoh)
                             else
                                 setup.options = setup.options.notOf[NeutralTerrorOption]
                             setupQuestions()
                         }
                         if (setup.options.has(NeutralTerrors)) {
-                            // Terrors (alphabetical): BrownJenkin, Dhole, ElderShoggoth, GreatRaceOfYith, HoundOfTindalos, QuachilUttaus, ShadowPharaoh
+                            // Terrors (alphabetical): BrownJenkin, CatFromNeptune, Dhole, ElderShoggoth, GreatRaceOfYith, HoundOfTindalos, QuachilUttaus, ShadowPharaoh
                             n -= 1; if (n == 0) { setup.toggle(UseBrownJenkin); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseCatFromNeptune); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseDhole); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseElderShoggoth); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGreatRaceOfYith); setupQuestions() }
@@ -5305,14 +5330,14 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             setup.toggle(IGOOs)
 
                             if (setup.options.has(IGOOs))
-                                setup.options ++= $(UseAbhoth, UseAtlachNacha, UseAzathothIGOO, UseBokrug, UseByatis, UseCthugha, UseDaoloth, UseDireYogSothoth, UseFatherDagon, UseGhatanotoaIGOO, UseGlaakiIGOO, UseMotherHydra, UseNyogtha, UseBloatedWoman, UseTulzscha, UseYgolonac, UseYig)
+                                setup.options ++= $(UseAbhoth, UseAtlachNacha, UseAzathothIGOO, UseBokrug, UseByatis, UseCthugha, UseDaoloth, UseDireYogSothoth, UseFatherDagon, UseGhatanotoaIGOO, UseGlaakiIGOO, UseHagargRyonis, UseMotherHydra, UseNyogtha, UseBloatedWoman, UseTulzscha, UseYgolonac, UseYig)
                             else
                                 setup.options = setup.options.notOf[IGOOOption]
 
                             setupQuestions()
                         }
                         if (setup.options.has(IGOOs)) {
-                            // iGOOs (alphabetical): Abhoth, Atlach-Nacha, Azathoth, Bokrug, Byatis, Cthugha, Daoloth, Father Dagon, Ghatanothoa, Gla'aki, Mother Hydra, Nyogtha, The Bloated Woman, Tulzscha, Y'Golonac, Yig
+                            // iGOOs (alphabetical): Abhoth, Atlach-Nacha, Azathoth, Bokrug, Byatis, Cthugha, Daoloth, Father Dagon, Ghatanothoa, Gla'aki, Hagarg Ryonis, Mother Hydra, Nyogtha, The Bloated Woman, Tulzscha, Y'Golonac, Yig
                             n -= 1; if (n == 0) { setup.toggle(UseAbhoth); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseAtlachNacha); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseAzathothIGOO); setupQuestions() }
@@ -5324,6 +5349,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1; if (n == 0) { setup.toggle(UseFatherDagon); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGhatanotoaIGOO); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGlaakiIGOO); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseHagargRyonis); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseMotherHydra); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseNyogtha); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseBloatedWoman); setupQuestions() }
@@ -5528,6 +5554,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, ElderThingCard, UseElderThing, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, GhastCard, UseGhast, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, AlbinoPenguinsCard, UseAlbinoPenguins, setup.options.has(NeutralMonsters)) ++
+                    useWith(setup, AsteroidCatCard, UseAsteroidCat, setup.options.has(NeutralMonsters)) ++
+                    useWith(setup, CatFromMercuryCard, UseCatFromMercury, setup.options.has(NeutralMonsters)) ++
+                    useWith(setup, CatFromVenusCard, UseCatFromVenus, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, GnorriCard, UseGnorri, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, GugCard, UseGug, setup.options.has(NeutralMonsters)) ++
                     useWith(setup, InsectsFromShaggaiCard, UseInsectsFromShaggai, setup.options.has(NeutralMonsters)) ++
@@ -5541,6 +5570,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     // Terrors (alphabetical)
                     $("Variants" -> ("Neutral".styled("neutral") + " terrors (" + setup.get(NeutralTerrors).?("yes").|("no").hl + ")")) ++
                     useWith(setup, BrownJenkinCard, UseBrownJenkin, setup.options.has(NeutralTerrors)) ++
+                    useWith(setup, CatFromNeptuneCard, UseCatFromNeptune, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, DholeCard, UseDhole, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, ElderShoggothCard, UseElderShoggoth, setup.options.has(NeutralTerrors)) ++
                     useWith(setup, GreatRaceOfYithCard, UseGreatRaceOfYith, setup.options.has(NeutralTerrors)) ++
@@ -5561,6 +5591,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, FatherDagonCard, UseFatherDagon, setup.options.has(IGOOs)) ++
                     useWith(setup, GhatanotoaIGOOCard, UseGhatanotoaIGOO, setup.options.has(IGOOs)) ++
                     useWith(setup, GlaakiIGOOCard, UseGlaakiIGOO, setup.options.has(IGOOs)) ++
+                    useWith(setup, HagargRyonisCard, UseHagargRyonis, setup.options.has(IGOOs)) ++
                     useWith(setup, MotherHydraCard, UseMotherHydra, setup.options.has(IGOOs)) ++
                     useWith(setup, NyogthaCard, UseNyogtha, setup.options.has(IGOOs)) ++
                     useWith(setup, BloatedWomanCard, UseBloatedWoman, setup.options.has(IGOOs)) ++
@@ -5642,11 +5673,14 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             setupQuestions()
                         }
                         if (setup.options.has(NeutralMonsters)) {
-                            // Monsters (alphabetical): DimensionalShambler, ElderThing, Ghast, AlbinoPenguins, Gnorri, Gug, InsectsFromShaggai, LengSpider, Moonbeast, Satyr, Servitor, Shantak, StarVampire, Voonith
+                            // Monsters (alphabetical): DimensionalShambler, ElderThing, Ghast, AlbinoPenguins, AsteroidCat, CatFromMercury, CatFromVenus, Gnorri, Gug, InsectsFromShaggai, LengSpider, Moonbeast, Satyr, Servitor, Shantak, StarVampire, Voonith
                             n -= 1; if (n == 0) { setup.toggle(UseDimensionalShamblers); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseElderThing); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGhast); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseAlbinoPenguins); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseAsteroidCat); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseCatFromMercury); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseCatFromVenus); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGnorri); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGug); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseInsectsFromShaggai); setupQuestions() }
@@ -5662,14 +5696,15 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         if (n == 0) {
                             setup.toggle(NeutralTerrors)
                             if (setup.options.has(NeutralTerrors))
-                                setup.options ++= $(UseBrownJenkin, UseDhole, UseElderShoggoth, UseGreatRaceOfYith, UseHoundOfTindalos, UseJuniorWhateley, UseQuachilUttaus, UseShadowPharaoh)
+                                setup.options ++= $(UseBrownJenkin, UseCatFromNeptune, UseDhole, UseElderShoggoth, UseGreatRaceOfYith, UseHoundOfTindalos, UseJuniorWhateley, UseQuachilUttaus, UseShadowPharaoh)
                             else
                                 setup.options = setup.options.notOf[NeutralTerrorOption]
                             setupQuestions()
                         }
                         if (setup.options.has(NeutralTerrors)) {
-                            // Terrors (alphabetical): BrownJenkin, Dhole, ElderShoggoth, GreatRaceOfYith, HoundOfTindalos, QuachilUttaus, ShadowPharaoh
+                            // Terrors (alphabetical): BrownJenkin, CatFromNeptune, Dhole, ElderShoggoth, GreatRaceOfYith, HoundOfTindalos, QuachilUttaus, ShadowPharaoh
                             n -= 1; if (n == 0) { setup.toggle(UseBrownJenkin); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseCatFromNeptune); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseDhole); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseElderShoggoth); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGreatRaceOfYith); setupQuestions() }
@@ -5683,14 +5718,14 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             setup.toggle(IGOOs)
 
                             if (setup.options.has(IGOOs))
-                                setup.options ++= $(UseAbhoth, UseAtlachNacha, UseAzathothIGOO, UseBokrug, UseByatis, UseCthugha, UseDaoloth, UseDireYogSothoth, UseFatherDagon, UseGhatanotoaIGOO, UseGlaakiIGOO, UseMotherHydra, UseNyogtha, UseBloatedWoman, UseTulzscha, UseYgolonac, UseYig)
+                                setup.options ++= $(UseAbhoth, UseAtlachNacha, UseAzathothIGOO, UseBokrug, UseByatis, UseCthugha, UseDaoloth, UseDireYogSothoth, UseFatherDagon, UseGhatanotoaIGOO, UseGlaakiIGOO, UseHagargRyonis, UseMotherHydra, UseNyogtha, UseBloatedWoman, UseTulzscha, UseYgolonac, UseYig)
                             else
                                 setup.options = setup.options.notOf[IGOOOption]
 
                             setupQuestions()
                         }
                         if (setup.options.has(IGOOs)) {
-                            // iGOOs (alphabetical): Abhoth, Atlach-Nacha, Azathoth, Bokrug, Byatis, Cthugha, Daoloth, Father Dagon, Ghatanothoa, Gla'aki, Mother Hydra, Nyogtha, The Bloated Woman, Tulzscha, Y'Golonac, Yig
+                            // iGOOs (alphabetical): Abhoth, Atlach-Nacha, Azathoth, Bokrug, Byatis, Cthugha, Daoloth, Father Dagon, Ghatanothoa, Gla'aki, Hagarg Ryonis, Mother Hydra, Nyogtha, The Bloated Woman, Tulzscha, Y'Golonac, Yig
                             n -= 1; if (n == 0) { setup.toggle(UseAbhoth); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseAtlachNacha); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseAzathothIGOO); setupQuestions() }
@@ -5702,6 +5737,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1; if (n == 0) { setup.toggle(UseFatherDagon); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGhatanotoaIGOO); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseGlaakiIGOO); setupQuestions() }
+                            n -= 1; if (n == 0) { setup.toggle(UseHagargRyonis); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseMotherHydra); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseNyogtha); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseBloatedWoman); setupQuestions() }

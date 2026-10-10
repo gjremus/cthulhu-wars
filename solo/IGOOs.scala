@@ -88,6 +88,14 @@ case object GlaakiIGOOCard extends IGOOLoyaltyCard(GlaakiIGOOIcon, GlaakiIGOO, p
 case object GlaakiIGOOIcon extends UnitClass("Gla'aki (IGOO) Icon", Token, 0)
 case object GlaakiIGOO extends UnitClass("Gla'aki", GOO, 6) with IGOO  // combat = 0 (Tomb Herd provides power, not combat)
 
+// ── SOMETHING ABOUT CATS — HAGARG RYONIS (Independent Elder God) ──
+// Awaken cost 4. Combat: rolls NO dice, adds 3 Pains to combat total instead.
+// Subversion (First Player Phase): Choose a player. If that player performs a Ritual of
+// Annihilation in the Doom Phase, steal 1 of the Elder Signs he earns (if any).
+case object HagargRyonisCard extends IGOOLoyaltyCard(HagargRyonisIcon, HagargRyonis, power = 4, combat = 0)
+case object HagargRyonisIcon extends UnitClass("Hagarg Ryonis Icon", Token, 0)
+case object HagargRyonis extends UnitClass("Hagarg Ryonis", GOO, 4) with IGOO  // combat = 3 Pains (computed in Game.neutralStrength)
+
 // ── DUNWICH HORROR — DIRE YOG-SOTHOTH (Independent Great Old One) ──
 // Awaken cost 6 (via Opener of the Way) or 10 - unit cost (all other factions).
 // Combat = number of enemy-Controlled faction Great Old Ones in play (computed live).
