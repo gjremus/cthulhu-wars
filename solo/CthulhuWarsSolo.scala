@@ -3341,6 +3341,7 @@ object CthulhuWarsSolo {
                         case AzathothIGOOCard => |(f.upgrades.has(NuclearChaos))
                         case BokrugCard => |(f.upgrades.has(DoomThatCameToSarnath))
                         case GlaakiIGOOCard => |(f.upgrades.has(GlaakiGreenDecay))
+                        case HagargRyonisCard => |(f.upgrades.has(Laziness))
                         case _ => None
                     }
 
@@ -3363,6 +3364,7 @@ object CthulhuWarsSolo {
                         case AzathothIGOOCard => f.oncePerGame.has(NuclearChaos)
                         case BokrugCard => f.oncePerGame.has(DoomThatCameToSarnath)
                         case GlaakiIGOOCard => f.oncePerGame.has(GlaakiGreenDecay)
+                        case HagargRyonisCard => f.oncePerGame.has(Laziness)
                         case _ => false
                     })
 

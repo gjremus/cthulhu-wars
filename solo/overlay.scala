@@ -628,7 +628,7 @@ object Overlays {
         case $("Cat from Neptune") => loyaltyCard("Cat from Neptune", 1, 1, 1, "Pay 2 Doom + 2 Power. Place at your Controlled Gate.", "The Final Ritual", "Post-Battle", "If the Cat from Neptune is Killed in a Battle, you may immediately perform a Ritual of Annihilation. If this causes the marker to move to Instant Death, the game ends after this action.")
 
         // ── SOMETHING ABOUT CATS — HAGARG RYONIS (Independent Elder God) ──
-        case $("Hagarg Ryonis") => loyaltyCardIGOO("Hagarg Ryonis", "4", "Hagarg Ryonis rolls no dice. Instead, she adds 3 Pains to your Combat total.", false, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 4 Power, and place Hagarg Ryonis in the Area containing the Gate.", "Subversion", "First Player Phase", "Choose a player. If that player performs a Ritual of Annihilation in the Doom Phase, you steal 1 of the Elder Signs he earns (if any).", "", "", "", "")
+        case $("Hagarg Ryonis") => loyaltyCardIGOO("Hagarg Ryonis", "4", "Hagarg Ryonis rolls no dice. Instead, she adds 3 Pains to your Combat total.", false, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 4 Power, and place Hagarg Ryonis in the Area containing the Gate.", "Subversion", "First Player Phase", "Choose a player. If that player performs a Ritual of Annihilation in the Doom Phase, you steal 1 of the Elder Signs he earns (if any).", "Laziness", "You have 0 Power.", "Action: Cost 0", "Any faction with exactly 1 Power left loses that Power. Alternatively, pay 1 Power to force Windwalker to also lose 1 Power. You can only use this Action if Windwalker is Hibernating, or one or more enemy factions have exactly 1 Power.")
 
         case _ => ""
     }).but("")

@@ -200,6 +200,12 @@ case object GlaakiGreenDecay extends NeutralSpellbook("Green Decay")
 // SPELLBOOK — use .can(), CAN be blocked by Moonbeast
 case object NuclearChaos extends NeutralSpellbook("Nuclear Chaos")
 
+// Hagarg Ryonis: Laziness — Action: Cost 0: All factions with exactly 1 Power lose it;
+// alternatively, pay 1 Power to force Windwalker to also lose 1 Power.
+// Req: You have 0 Power (during Action Phase, not First like Gla'aki)
+// SPELLBOOK — use .can(), CAN be blocked by Moonbeast
+case object Laziness extends NeutralSpellbook("Laziness")
+
 // Dire Yog-Sothoth (Dunwich): It Walks Unseen — after you Move any other Unit(s),
 // you may also Move Dire Yog-Sothoth for free (a standalone move; it need NOT move
 // alongside the other units — modeled on the Hound of Tindalos Chronophage).
@@ -445,6 +451,23 @@ case class MotherHydraAgonyStingTargetAction(self : Faction, r : Region) extends
     override def question(implicit game : Game) = self.full + " — " + "The Agony Sting".styled("nt") + " — choose Ocean Area"
 }
 
+// Hagarg Ryonis: Laziness action (Action: Cost 0)
+case class LazynessMainAction(self : Faction) extends OptionFactionAction(implicit g => "Laziness".styled("nt") + " — " + HagargRyonis.styled(self)) with MainQuestion with Soft
+
+case class LazynessAllAction(self : Faction) extends BaseFactionAction(
+    implicit g => "Laziness".styled("nt"),
+    implicit g => "Every faction with exactly " + "1 Power".styled("power") + " loses it (" + g.factions.%(_.power == 1)./(_.name).mkString(", ") + ")"
+) {
+    override def question(implicit game : Game) = self.full + " — " + "Laziness".styled("nt") + " — Hagarg Ryonis"
+}
+
+case class LazynessWindwalkerAction(self : Faction) extends BaseFactionAction(
+    implicit g => "Laziness".styled("nt"),
+    implicit g => "Pay " + "1 Power".styled("power") + ": Windwalker loses " + "1 Power".styled("power")
+) {
+    override def question(implicit game : Game) = self.full + " — " + "Laziness".styled("nt") + " — Hagarg Ryonis"
+}
+
 object IGOOsExpansion extends Expansion {
     def checkAbhothSpellbook()(implicit game : Game) {
         factions.foreach { f =>
@@ -606,6 +629,16 @@ object IGOOsExpansion extends Expansion {
                 if (game.reachedZeroPowerFirst.has(f)) {
                     f.upgrades :+= GlaakiGreenDecay
                     f.log("gained", GlaakiGreenDecay.styled(f), "for", GlaakiIGOO.styled(f))
+                }
+            }
+        }
+
+        // Hagarg Ryonis: Laziness — faction reaches 0 power during action phase (not "first")
+        factions.foreach { f =>
+            if (f.has(HagargRyonis) && f.upgrades.has(Laziness).not) {
+                if (game.hagargReachedZeroPower.has(f)) {
+                    f.upgrades :+= Laziness
+                    f.log("gained", Laziness.styled(f), "for", HagargRyonis.styled(f))
                 }
             }
         }
@@ -1431,6 +1464,50 @@ object IGOOsExpansion extends Expansion {
             } else {
                 Force(then)
             }
+
+        // Hagarg Ryonis: Laziness (Action: Cost 0)
+        case LazynessMainAction(self) =>
+            // Owner must have at least 1 Power to take a normal action
+            if (self.power < 1) {
+                self.log("Laziness".styled("nt"), "not available — need at least", 1.power)
+                EndAction(self)
+            } else {
+                // Option 1 (only when an enemy has exactly 1 Power): every faction with exactly 1 Power,
+                // the owner included, loses it
+                val enemyOnePower = self.enemies.%(_.power == 1).any
+
+                // Option 2: Windwalker option (only if WW in game, Hibernating, not self, has 1+ Power, and self has 1+ Power)
+                val wwInGame = factions.has(WW)
+                val wwOption = wwInGame && WW.hibernating && self != WW && WW.power >= 1 && self.power >= 1
+
+                var ask = Ask(self)
+
+                // Add "all 1-power factions" option if any exist
+                if (enemyOnePower)
+                    ask = ask.add(LazynessAllAction(self))
+
+                // Add Windwalker option if conditions met
+                if (wwOption)
+                    ask = ask.add(LazynessWindwalkerAction(self))
+
+                ask.cancel
+            }
+
+        case LazynessAllAction(self) =>
+            // Every faction with exactly 1 Power (the owner included) loses it
+            val targets = factions.%(_.power == 1)
+            targets.foreach(t => t.power = 0)
+            self.log("used", "Laziness".styled("nt") + ":", targets./(t => t.full).mkString(", "), "lost their last", 1.power)
+            self.oncePerTurn :+= Laziness
+            EndAction(self)
+
+        case LazynessWindwalkerAction(self) =>
+            // Owner pays 1, Windwalker loses 1
+            self.payPower(1, "on Laziness")
+            WW.power -= 1
+            self.log("used", "Laziness".styled("nt") + ": paid", 1.power + ";", WW, "lost", 1.power)
+            self.oncePerTurn :+= Laziness
+            EndAction(self)
 
         // Ghatanothoa IGOO: Mummify
         case GhatanotoaMummifyAction(self) =>

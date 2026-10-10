@@ -2213,6 +2213,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var asteroidCatOnSpellbook : Map[UnitRef, (Faction, Requirement)] = Map()
     // Hagarg Ryonis: Subversion target for this Doom Phase (reset each First Player Phase)
     var hagargSubversionTarget : |[Faction] = None
+
+    // Hagarg Ryonis: Laziness — track factions that reached 0 Power during the Action Phase
+    // (reset each Action Phase like reachedZeroPowerFirst)
+    var hagargReachedZeroPower : $[Faction] = $
     // Gla'aki IGOO: first faction to reach 0 power during action phase (SBR tracking)
     var reachedZeroPowerFirst : |[Faction] = None
     // Azathoth IGOO: glyph position on doom track (= combat value)
@@ -3336,6 +3340,21 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (f.has(NuclearChaos) && !f.oncePerGame.has(NuclearChaos) && f.has(AzathothIGOO) && f.allInPlay.%(_.uclass == AzathothIGOO).any)
             + NuclearChaosMainAction(f)
 
+        // Hagarg Ryonis: Laziness spellbook (Action: Cost 0)
+        // Owner must have at least 1 Power to take any action. Offered when:
+        // - Has Laziness spellbook (can be blocked by Moonbeast)
+        // - Has Hagarg Ryonis in play
+        // - Not used this turn (once per turn)
+        // - AND (Windwalker in game + Hibernating + not owner + has 1+ Power) OR (some enemy has exactly 1 Power)
+        // Owner may also have 1 Power and be in the "all 1-power" target list
+        if (f.can(Laziness) && !f.oncePerGame.has(Laziness) && f.has(HagargRyonis) && f.power >= 1 && !f.oncePerTurn.has(Laziness)) {
+            val wwInGame = factions.has(WW)
+            val wwCondition = wwInGame && WW.hibernating && f != WW && WW.power >= 1
+            val enemyOnePower = f.enemies.%(_.power == 1).any
+            if (wwCondition || enemyOnePower)
+                + LazynessMainAction(f)
+        }
+
         // [2026-05-23] Azathoth top-level entry removed — now offered inside
         // AwakenIGOOMainAction sub-menu (alphabetical, with the others).
 
@@ -3802,6 +3821,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                 // Reset Gla'aki IGOO SBR tracking for the new turn
                 reachedZeroPowerFirst = None
+
+                // Reset Hagarg Ryonis Laziness SBR tracking for the new turn
+                hagargReachedZeroPower = $
 
                 // TB Behemoth: re-arm the 0-crossing latch for the new turn.
                 tbBehemothZeroLatched = false
@@ -5304,6 +5326,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Gla'aki IGOO SBR: track first faction to reach 0 power during action phase
                 if (reachedZeroPowerFirst.none)
                     reachedZeroPowerFirst = |(self)
+                // Hagarg Ryonis Laziness SBR: track all factions that reach 0 power during action phase
+                if (!hagargReachedZeroPower.has(self))
+                    hagargReachedZeroPower :+= self
             }
 
             if (self.power == -1)
