@@ -1489,6 +1489,8 @@ case object AfterPowerGatherAction extends ForcedAction
 case class BeforeFirstPlayerAction(l : $[Faction]) extends ForcedAction
 case object FirstPlayerDeterminationAction extends ForcedAction
 case object PlayOrderAction extends ForcedAction
+case object HagargSubversionPhaseAction extends ForcedAction
+case class HagargSubversionChooseAction(self : Faction, f : Faction) extends BaseFactionAction("Subversion".hl, "Target " + f.name)
 case class PowerGatherAction(then : Faction) extends ForcedAction
 case object DoomPhaseAction extends ForcedAction
 case object ActionPhaseAction extends ForcedAction
@@ -2203,6 +2205,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var moonbeastOnSpellbook : Map[UnitRef, (Faction, Spellbook)] = Map()
     // Moonbeasts placed THIS doom phase — excluded from auto-return at end of doom
     var moonbeastPlacedThisDoom : Set[UnitRef] = Set()
+    // Hagarg Ryonis: Subversion target for this Doom Phase (reset each First Player Phase)
+    var hagargSubversionTarget : |[Faction] = None
     // Gla'aki IGOO: first faction to reach 0 power during action phase (SBR tracking)
     var reachedZeroPowerFirst : |[Faction] = None
     // Azathoth IGOO: glyph position on doom track (= combat value)
@@ -4383,6 +4387,54 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             log("Play order", factions.mkString(", "))
 
+            // Reset Hagarg Subversion target at the start of each First Player Phase
+            hagargSubversionTarget = None
+
+            HagargSubversionPhaseAction // Then(...)
+
+        case HagargSubversionPhaseAction =>
+            // Hagarg Ryonis: Subversion — if any faction has Hagarg in play, they choose a target
+            val hagargOwners = factions.filter(f => f.loyaltyCards.has(HagargRyonisCard) && f.allInPlay.exists(_.uclass == HagargRyonis))
+            if (hagargOwners.any) {
+                // For now, assume only one faction can have Hagarg (standard IGOO rules)
+                val owner = hagargOwners.head
+                Ask(owner).each(owner.enemies)(f => HagargSubversionChooseAction(owner, f))
+            } else {
+                if (turn == 1)
+                    ActionPhaseAction // Then(...)
+                else {
+                    log(CthulhuWarsSolo.DottedLine)
+                    log("DOOM PHASE")
+
+                    // Clear moonbeast placed-this-doom tracker at start of doom phase
+                    moonbeastPlacedThisDoom = Set()
+
+                    // Ghatanothoa IGOO: un-mummify all cultists at Doom Phase
+                    if (mummifiedCultists.any) {
+                        mummifiedCultists = $
+                        log("Mummify".styled("nt") + ": all mummified cultists are freed at Doom Phase")
+                    }
+
+                    factions.foreach(f => f.satisfyIf(FirstDoomPhase, "The first Doom phase", turn == 2))
+                    factions.foreach(f => f.satisfyIf(FiveSpellbooks, "Have five spellbooks", f.unfulfilled.num == 1))
+
+                    // Moonbeast: return blocking moonbeasts from spellbooks to the map at the START
+                    // of the Doom phase, before anyone's turn. Only for live play — replaying an
+                    // existing game keeps its recorded end-of-doom return so old game logs stay valid.
+                    // moonbeastPlacedThisDoom was just cleared above, so every blocked spellbook qualifies;
+                    // moonbeasts placed during this same Doom phase are added afterward and so wait for next Doom.
+                    if (!nextReplayActionHint.any && moonbeastOnSpellbook.any) {
+                        val refs = moonbeastOnSpellbook.keys.toList
+                        return Force(MoonbeastReturnLoopAction(refs, CheckSpellbooksAction(DoomPhaseAction)))
+                    }
+
+                    CheckSpellbooksAction(DoomPhaseAction) // Then(...)
+                }
+            }
+
+        case HagargSubversionChooseAction(self, f) =>
+            hagargSubversionTarget = Some(f)
+            self.log("Subversion".styled("nt") + ":", HagargRyonis.styled(self), "targets", f)
             if (turn == 1)
                 ActionPhaseAction // Then(...)
             else {
@@ -4725,6 +4777,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 if (inerrantBonus > 0) {
                     f.takeES(inerrantBonus)
                     f.log(Inerrant.styled(TT), ": gained", inerrantBonus.es, "bonus (GOOs at enemy gates)")
+                }
+            }
+
+            // Hagarg Ryonis: Subversion — steal 1 ES from targeted faction's ritual
+            if (hagargSubversionTarget.has(f)) {
+                val hagargOwner = factions.find(owner => owner.loyaltyCards.has(HagargRyonisCard) && owner.allInPlay.exists(_.uclass == HagargRyonis))
+                if (hagargOwner.any && f.es.any) {
+                    // Steal 1 ES (randomly chosen if multiple, to be replay-safe)
+                    val stolenES = f.es.head
+                    f.es = f.es.tail
+                    hagargOwner.get.es :+= stolenES
+                    hagargOwner.get.log("Subversion".styled("nt") + ":", HagargRyonis.styled(hagargOwner.get), "stole", 1.es, "from", f)
                 }
             }
 
