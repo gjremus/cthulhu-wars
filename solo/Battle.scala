@@ -3239,6 +3239,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case BattleRollAction(f, rolls, next) =>
             f.rolls ++= rolls
 
+            // Hagarg Ryonis: adds 3 Pains automatically (rolls no dice)
+            val hr = f.forces(HagargRyonis).not(Zeroed)
+            if (hr.any) {
+                val pains = $(Pain, Pain, Pain)
+                f.rolls ++= pains
+                log(HagargRyonis.styled(f), "adds", pains.mkString(" "))
+            }
+
             val sv = f.forces(StarVampire)
 
             if (rolls.num > sv.num)

@@ -479,8 +479,8 @@ trait Faction { f =>
         units(Bokrug).not(Zeroed).num * 0 +
         // Gla'aki IGOO: combat 0
         units(GlaakiIGOO).not(Zeroed).num * 0 +
-        // Hagarg Ryonis: combat 3 Pains (no dice)
-        units(HagargRyonis).not(Zeroed).num * 3 +
+        // Hagarg Ryonis: rolls no dice (adds 3 Pains in Battle.scala BattleRollAction)
+        units(HagargRyonis).not(Zeroed).num * 0 +
         // Azathoth IGOO: = glyph position
         units(AzathothIGOO).not(Zeroed).num * game.azathothGlyphPosition +
         // Dunwich — Dire Yog-Sothoth: = number of enemy-controlled faction Great Old Ones in play
