@@ -328,21 +328,21 @@ case class MoonbeastChooseSpellbookAction(self : Faction, target : Faction, sb :
     override def question(implicit game : Game) = self.full + " — " + "Moonbeast".styled("nt") + " — choose Spellbook on " + target.full
 }
 
-// Asteroid Cat: Abandoned to Lusts (cost 0 action to place cat on enemy unearned spellbook slot)
+// Asteroid Cat: Abandoned to Lusts (cost 0 action to place cat on enemy unfulfilled requirement slot)
 case class AsteroidCatAbandonedMainAction(self : Faction) extends OptionFactionAction(implicit g => "Abandoned to Lusts".styled("nt") + " — " + AsteroidCat.styled(self)) with MainQuestion with Soft with PowerNeutral
-case class AsteroidCatChooseFactionAction(self : Faction, target : Faction) extends BaseFactionAction(implicit g => "Abandoned to Lusts".styled("nt") + " — choose enemy", target.full) {
-    override def question(implicit game : Game) = self.full + " — " + "Abandoned to Lusts".styled("nt") + " — choose enemy Faction"
+case class AsteroidCatChooseFactionAction(self : Faction, target : Faction) extends BaseFactionAction(implicit g => "Abandoned to Lusts".styled("nt") + " — " + target.full, target.full) {
+    override def question(implicit game : Game) = self.full + " — " + "Abandoned to Lusts".styled("nt") + " — Place cat on " + target.full + "'s spellbook slot"
 }
-case class AsteroidCatChooseSpellbookAction(self : Faction, target : Faction, sb : Spellbook) extends BaseFactionAction(implicit g => "Abandoned to Lusts".styled("nt") + " — block Spellbook slot", implicit g => sb.styled(target) + " (" + target.short + ")") {
-    override def question(implicit game : Game) = self.full + " — " + "Abandoned to Lusts".styled("nt") + " — choose Spellbook slot on " + target.full
+case class AsteroidCatChooseRequirementAction(self : Faction, target : Faction, req : Requirement, cat : UnitFigure) extends BaseFactionAction(implicit g => "Place cat on " + target.short + "'s spellbook slot", implicit g => req.text.styled(target)) {
+    override def question(implicit game : Game) = self.full + " — " + "Abandoned to Lusts".styled("nt") + " — " + target.full
 }
-// Asteroid Cat: return flow when enemy earns the blocked spellbook
-case class AsteroidCatReturnChooseRegionAction(self : Faction, catRef : UnitRef, target : Faction, sb : Spellbook, next : ForcedAction) extends BaseFactionAction(implicit g => "Return " + AsteroidCat.styled(self) + " to map", implicit g => "Choose gate region") {
+// Asteroid Cat: return flow when enemy fulfills the blocked requirement
+case class AsteroidCatReturnChooseRegionAction(self : Faction, catRef : UnitRef, target : Faction, req : Requirement, next : ForcedAction) extends BaseFactionAction(implicit g => "Return " + AsteroidCat.styled(self) + " to map", implicit g => "Choose region") {
     override def question(implicit game : Game) = self.full + " — Return " + AsteroidCat.styled(self) + " to controlled gate"
 }
-case class AsteroidCatReturnPlaceAction(self : Faction, catRef : UnitRef, r : Region, target : Faction, sb : Spellbook, next : ForcedAction) extends BaseFactionAction(implicit g => "Return " + AsteroidCat.styled(self), implicit g => "Place at " + r)
-// Asteroid Cat: owner picks which spellbook the target gets in the blocked slot
-case class AsteroidCatOwnerPicksSpellbookAction(self : Faction, target : Faction, sb : Spellbook, chosen : Spellbook, next : ForcedAction) extends BaseFactionAction(implicit g => "Abandoned to Lusts".styled("nt") + " — pick Spellbook for " + target.short, implicit g => chosen.styled(target))
+case class AsteroidCatReturnPlaceAction(self : Faction, catRef : UnitRef, r : Region, target : Faction, req : Requirement, next : ForcedAction) extends BaseFactionAction(implicit g => "Place " + AsteroidCat.styled(self), r)
+// Asteroid Cat: owner picks which spellbook the target gets for the fulfilled requirement
+case class AsteroidCatOwnerPicksSpellbookAction(self : Faction, target : Faction, req : Requirement, chosen : Spellbook, next : ForcedAction) extends BaseFactionAction(implicit g => "Abandoned to Lusts".styled("nt") + " — choose " + target.short + "'s Spellbook", implicit g => chosen.styled(target))
 
 object NeutralMonstersExpansion extends Expansion {
     // Shared post-payment placement for a hired Monster/Terror Loyalty Card — used by the normal
@@ -858,49 +858,54 @@ object NeutralMonstersExpansion extends Expansion {
         case AsteroidCatAbandonedMainAction(self) =>
             val catRegions = self.all(AsteroidCat)./(_.region).distinct
             val validTargets = self.enemies.filter { e =>
-                e.spellbooks.num <= 5 && catRegions.exists(r => e.at(r).any)
+                e.spellbooks.count(_.isInstanceOf[FactionSpellbook]) <= 5 && catRegions.exists(r => e.at(r).any)
             }
             Ask(self).each(validTargets)(f => AsteroidCatChooseFactionAction(self, f)).cancel
 
         case AsteroidCatChooseFactionAction(self, target) =>
-            val blockedSBs = game.asteroidCatOnSpellbook.values.%(t => t._1 == target)./(t => t._2).toSet
-            val unearned = target.library.%(sb => !target.spellbooks.has(sb) && !blockedSBs.contains(sb))
-            Ask(self).each(unearned)(sb => AsteroidCatChooseSpellbookAction(self, target, sb)).cancel
+            val blockedReqs = game.asteroidCatOnSpellbook.values.%(t => t._1 == target)./(t => t._2).toList
+            val unblocked = target.unfulfilled.diff(blockedReqs)
+            // Pick the first cat ON THE MAP (not in pool, not already on a slot)
+            val availableCats = self.all(AsteroidCat).%(cat => !game.asteroidCatOnSpellbook.contains(cat.ref))
+            if (availableCats.any && unblocked.any) {
+                val cat = availableCats.head
+                Ask(self).each(unblocked)(req => AsteroidCatChooseRequirementAction(self, target, req, cat)).cancel
+            } else {
+                self.log("no available", AsteroidCat.styled(self), "or unblocked slots")
+                EndAction(self)
+            }
 
-        case AsteroidCatChooseSpellbookAction(self, target, sb) =>
-            val cat = self.pool(AsteroidCat).head
-            game.asteroidCatOnSpellbook = game.asteroidCatOnSpellbook + (cat.ref -> (target, sb))
-            self.log("Abandoned to Lusts".styled("nt") + ":", AsteroidCat.styled(self), "placed on", sb.styled(target), "of", target.full)
-            EndAction(self)
+        case AsteroidCatChooseRequirementAction(self, target, req, cat) =>
+            cat.region = self.reserve
+            game.asteroidCatOnSpellbook = game.asteroidCatOnSpellbook + (cat.ref -> (target, req))
+            self.log("Abandoned to Lusts".styled("nt") + ":", AsteroidCat.styled(self), "placed on", target.full + "'s", req.text.styled(target), "slot")
+            Then(EndAction(self))
 
-        case AsteroidCatReturnChooseRegionAction(self, catRef, target, sb, next) =>
-            val controlledGates = game.factions./~(_.allGates).onMap.distinct
+        case AsteroidCatReturnChooseRegionAction(self, catRef, target, req, next) =>
+            val controlledGates = self.gates.onMap
             if (controlledGates.any)
-                Ask(self).each(controlledGates)(r => AsteroidCatReturnPlaceAction(self, catRef, r, target, sb, next))
+                Ask(self).each(controlledGates)(r => AsteroidCatReturnPlaceAction(self, catRef, r, target, req, next))
             else if (areas.nex.any)
-                Ask(self).each(areas.nex)(r => AsteroidCatReturnPlaceAction(self, catRef, r, target, sb, next))
+                Ask(self).each(areas.nex)(r => AsteroidCatReturnPlaceAction(self, catRef, r, target, req, next))
             else
                 Force(next)
 
-        case AsteroidCatReturnPlaceAction(self, catRef, r, target, sb, next) =>
+        case AsteroidCatReturnPlaceAction(self, catRef, r, target, req, next) =>
             val cat = game.unit(catRef)
             cat.region = r
             game.asteroidCatOnSpellbook -= catRef
             self.log(AsteroidCat.styled(self), "returned to", r)
-            // Now owner picks which spellbook target gets
-            val available = target.library.%(sb => !target.spellbooks.has(sb))
+            // Now cat owner picks which spellbook target gets from their available library
+            val available = target.library.%!(target.has)
             if (available.any)
-                Ask(self).each(available)(chosen => AsteroidCatOwnerPicksSpellbookAction(self, target, sb, chosen, next))
+                Ask(self).each(available)(chosen => AsteroidCatOwnerPicksSpellbookAction(self, target, req, chosen, next))
             else
                 Force(next)
 
-        case AsteroidCatOwnerPicksSpellbookAction(self, target, sb, chosen, next) =>
-            // The spellbook slot was already earned by the target, but now we override which one they get
-            // Remove the original sb and add the chosen one
-            target.spellbooks = target.spellbooks.but(sb) :+ chosen
-            self.log("Abandoned to Lusts".styled("nt") + ":", self, "chose", chosen.styled(target), "for", target)
-            // Continue the spellbook earning flow
-            Force(next)
+        case AsteroidCatOwnerPicksSpellbookAction(self, target, req, chosen, next) =>
+            // The requirement was satisfied, now the cat owner chooses which spellbook target receives
+            self.log("Abandoned to Lusts".styled("nt") + ":", self.full, "chose", chosen.styled(target), "for", target.full)
+            Then(SpellbookAction(target, chosen, next))
 
         // Moonbeast: summon action (costs 2 Power)
         case MoonbeastChooseSpellbookAction(self, target, sb) =>
