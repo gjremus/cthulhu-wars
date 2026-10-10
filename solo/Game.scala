@@ -2205,6 +2205,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var moonbeastOnSpellbook : Map[UnitRef, (Faction, Spellbook)] = Map()
     // Moonbeasts placed THIS doom phase — excluded from auto-return at end of doom
     var moonbeastPlacedThisDoom : Set[UnitRef] = Set()
+    // Asteroid Cat: spellbook slot blocking (cat sits on unearned spellbook, returns when earned)
+    var asteroidCatOnSpellbook : Map[UnitRef, (Faction, Spellbook)] = Map()
     // Hagarg Ryonis: Subversion target for this Doom Phase (reset each First Player Phase)
     var hagargSubversionTarget : |[Faction] = None
     // Gla'aki IGOO: first faction to reach 0 power during action phase (SBR tracking)
@@ -3057,6 +3059,22 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         }
 
         // Moonbeast: premature return moved to extraActions (available any time, not just own turn)
+
+        // Asteroid Cat: Abandoned to Lusts — cost 0 action, place cat on enemy unearned spellbook slot
+        if (!servitorBlocking && f.loyaltyCards.has(AsteroidCatCard) && f.pool(AsteroidCat).any) {
+            // Check if any enemy has ≤5 faction spellbooks and shares an area with an Asteroid Cat
+            val catRegions = f.all(AsteroidCat)./(_.region).distinct
+            val validTargets = f.enemies.filter { e =>
+                e.spellbooks.num <= 5 && catRegions.exists(r => e.at(r).any)
+            }
+            val hasUnblockedSlot = validTargets.exists { e =>
+                val blockedSBs = game.asteroidCatOnSpellbook.values.%(t => t._1 == e)./(t => t._2).toSet
+                val unearned = e.library.%(sb => !e.spellbooks.has(sb) && !blockedSBs.contains(sb))
+                unearned.any
+            }
+            if (hasUnblockedSlot)
+                + AsteroidCatAbandonedMainAction(f)
+        }
 
         // Bloated Woman Velvet Fan: skip monster summons when Servitor blocking
         if (!servitorBlocking) {
@@ -4537,6 +4555,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (moonbeastOnSpellbook.values.exists(t => t._1 == f && t._2 == sb)) {
                 f.oncePerGame :+= sb
                 f.log("received", sb, "but blocked by", "Moonbeast".styled("nt"))
+            } else if (asteroidCatOnSpellbook.values.exists(t => t._1 == f && t._2 == sb)) {
+                // Asteroid Cat: if a cat was blocking this slot, return it and let owner pick spellbook
+                val catRef = asteroidCatOnSpellbook.find(_._2 == (f, sb)).get._1
+                val catOwner = unit(catRef).faction
+                f.log("received spellbook slot, but", AsteroidCat.styled(catOwner), "was placed on it by", "Abandoned to Lusts".styled("nt"))
+                return Force(AsteroidCatReturnChooseRegionAction(catOwner, catRef, f, sb, CheckSpellbooksAction(next)))
             } else {
                 f.log("received", sb)
             }
@@ -4780,8 +4804,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 }
             }
 
-            // Hagarg Ryonis: Subversion — steal 1 ES from targeted faction's ritual
-            if (hagargSubversionTarget.has(f)) {
+            // Hagarg Ryonis: Subversion — steal 1 ES from targeted faction's ritual (Doom Phase only)
+            // Card text: "If that player performs a Ritual of Annihilation in the Doom Phase"
+            if (doomPhase && hagargSubversionTarget.has(f)) {
                 val hagargOwner = factions.find(owner => owner.loyaltyCards.has(HagargRyonisCard) && owner.allInPlay.exists(_.uclass == HagargRyonis))
                 if (hagargOwner.any && f.es.any) {
                     // Steal 1 ES (randomly chosen if multiple, to be replay-safe)
@@ -6078,15 +6103,20 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // CAT FROM VENUS — HONEYMOON
         case CatFromVenusCaptureMainAction(self) =>
             val venusRegions = self.all(CatFromVenus)./(_.region).distinct
-            val variants = venusRegions./~ { r =>
-                self.enemies.%(self.canCapture(r))./ { f =>
-                    CatFromVenusCaptureAction(self, r, f).as(f.at(r).cultists./(_.uclass).distinct.single./(_.name).|(Cultist.name).styled(f))("Capture", for1PowerWithTax(r, self), "in", r, self.iced(r))
+            val variants = venusRegions.filter(r => self.enemies.exists(self.canCapture(r))).flatMap { r =>
+                self.enemies.filter(self.canCapture(r)).flatMap { f =>
+                    val cultists = f.at(r).cultists.%(u => u.uclass.canBeCaptured(u))
+                    cultists./(_.uclass).distinct.map(uc =>
+                        CatFromVenusCaptureAction(self, r, f).as(uc.name.styled(f))(r.toString)
+                    )
                 }
             }
-            Ask(self)
-                .list(variants)
-                .group(" ")
-                .cancelIf(true)
+            if (variants.size == 1)
+                Force(variants.head)
+            else
+                Ask(self)
+                    .list(variants)
+                    .cancel
 
         case CatFromVenusCaptureAction(self, r, f) =>
             self.payPower(1, "on capture")
