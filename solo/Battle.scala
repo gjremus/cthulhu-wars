@@ -169,6 +169,17 @@ trait PostBattleQuestion extends FactionAction {
 }
 
 case class BattleDoneAction(self : Faction) extends ForcedAction
+
+// Cat from Neptune — The Final Ritual (Post-Battle): perform ritual if killed
+case class TheFinalRitualPostBattleAction(self : Faction, cost : Int) extends BaseFactionAction(
+    implicit g => "The Final Ritual".styled("nt") + " — perform Ritual of Annihilation",
+    implicit g => "Pay " + cost.power) {
+    override def question(implicit game : Game) = (game.battle./(_.attacker).has(self)).?("Attacker").|("Defender") + " post-battle"
+}
+case class TheFinalRitualSkipAction(self : Faction) extends BaseFactionAction(
+    "The Final Ritual".styled("nt") + " — perform Ritual of Annihilation", "Skip") {
+    override def question(implicit game : Game) = (game.battle./(_.attacker).has(self)).?("Attacker").|("Defender") + " post-battle"
+}
 // Dhole: Planetary Destruction — owner chooses whether opponent gains 2 Doom or 2 Power
 case class DholePlanetaryDestructionDoomAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => 2.doom) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
 case class DholePlanetaryDestructionPowerAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "2 Power".styled("power")) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
@@ -2633,6 +2644,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         XSS.satisfy(PetrichorBattlesAloneReq, "Petrichor battles alone")
                 }
 
+                // Cat from Neptune — The Final Ritual (Post-Battle): if Cat from Neptune was
+                // killed in battle, owner may immediately perform a Ritual of Annihilation
+                sides.foreach { s =>
+                    if (s.loyaltyCards.has(CatFromNeptuneCard) && eliminated.%(u => u.faction == s && u.uclass == CatFromNeptune && u.health == Killed).any) {
+                        val cost = game.ritualCost
+                        if (s.power >= cost) {
+                            return Ask(s).add(TheFinalRitualPostBattleAction(s, cost)).add(TheFinalRitualSkipAction(s))
+                        }
+                    }
+                }
+
                 // Xyrious Storm (XSS) — Distant Thunderclap ES check (§3.4.3, independent):
                 // If Petrichor participated AND no participants from either side remain in the
                 // battle area AND opponent had a non-Cultist unit, XSS gains 1 Elder Sign.
@@ -3589,6 +3611,33 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Skipping does NOT flip the spellbook facedown; flipping is the cost of using it.
         // The per-battle guard is the Side tag added at the offer site (DS.add(DirectedEnergy)).
         case DirectedEnergySkipAction(self) =>
+            proceed()
+
+        // CAT FROM NEPTUNE — THE FINAL RITUAL (Post-Battle)
+        case TheFinalRitualPostBattleAction(self, cost) =>
+            self.payPower(cost, "on post-battle ritual")
+
+            val gates = self.allGates
+            val doom = gates.num
+
+            val esGoo = if (self == TB) self.goos.factionGOOs.any.??(1) else self.goos.factionGOOs.num
+            val es = esGoo + (self.can(Consecration) && !game.options.has(ANAlternateSpellbooks)).??($(0, 1, 1, 1, 2)(game.cathedrals.num))
+
+            self.doom += doom
+            self.takeES(es)
+
+            log("The Final Ritual".styled("nt") + ":", self, "performed Ritual of Annihilation and gained", doom.doom, (es > 0).??("and " + es.es))
+
+            game.ritualMarker += 1
+
+            if (game.ritualTrack(game.ritualMarker) == 999) {
+                log("The Final Ritual".styled("nt") + ":", "Instant Death threshold reached — game ends")
+            }
+
+            proceed()
+
+        case TheFinalRitualSkipAction(self) =>
+            log("The Final Ritual".styled("nt") + ":", self, "declined the ritual")
             proceed()
 
         // FIENDISH SPAWN (DS alternate pre-battle)
