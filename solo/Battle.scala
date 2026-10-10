@@ -242,6 +242,11 @@ case class InvisibilityAction(self : Faction, ur : UnitRef, tr : UnitRef) extend
 case class SeekAndDestroyPreBattleAction(self : Faction) extends OptionFactionAction(SeekAndDestroy) with PreBattleQuestion with Soft
 case class SeekAndDestroyAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction("Bring with " + SeekAndDestroy, uc.styled(self) + " from " + r)
 
+// Cat from Mercury — Needs Affection (Pre-Battle): replace monsters with acolytes
+case class NeedsAffectionPreBattleAction(self : Faction) extends OptionFactionAction("Needs Affection".styled("nt") + " — " + CatFromMercury.styled(self)) with PreBattleQuestion with Soft
+case class NeedsAffectionReplaceAction(self : Faction, uRef : UnitRef) extends BaseFactionAction(
+    implicit g => "Needs Affection".styled("nt"), implicit g => "Replace " + g.unit(uRef).uclass.styled(self) + " with Acolyte")
+
 // Chronophage battle-join: when a pre-battle movement power moves a unit INTO the
 // arena, the owning faction's Hound of Tindalos may teleport into the same battle
 // (Gate→Gate), joining forces exactly like a Hunting Horror flown in by Seek &
@@ -761,6 +766,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             options :+= StaticAccumulatorPreBattleMainAction(XSS)
             options :+= StaticAccumulatorSkipAction(XSS)
         }
+
+        // Cat from Mercury — Needs Affection (Pre-Battle): if a Cat from Mercury is in battle,
+        // the owner can replace one or more of their Monsters with Acolytes from pool.
+        if (s.loyaltyCards.has(CatFromMercuryCard) && s.forces.%(_.uclass == CatFromMercury).any &&
+            s.forces.%(_.uclass.utype == Monster).any && s.pool(Acolyte).any)
+            options :+= NeedsAffectionPreBattleAction(s)
 
         Ask(s).list(options).add(PreBattleDoneAction(s, next))
     }
@@ -3498,6 +3509,22 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log(u, "flew from", r)
             // Chronophage: a pre-battle move happened → arm the Hound-join offer for self.
             houndPreBattleMoveArmed = (houndPreBattleMoveArmed :+ self).distinct
+            proceed()
+
+        // CAT FROM MERCURY — NEEDS AFFECTION (Pre-Battle)
+        case NeedsAffectionPreBattleAction(self) =>
+            val monsters = self.forces.%(_.uclass.utype == Monster)
+            Ask(self).each(monsters)(m => NeedsAffectionReplaceAction(self, m.ref)).cancel
+
+        case NeedsAffectionReplaceAction(self, uRef) =>
+            val monster = self.forces.%(_.ref == uRef).head
+            eliminate(monster)
+            log("Needs Affection".styled("nt") + ":", monster.uclass.styled(self), "in", arena, "eliminated")
+
+            val acolyte = self.pool.one(Acolyte)
+            acolyte.region = arena
+            self.forces :+= acolyte
+            log("Needs Affection".styled("nt") + ":", Acolyte.styled(self), "placed in", arena)
             proceed()
 
         // Chronophage: teleport the owner's Hound into this battle (Gate→Gate). Mirrors
