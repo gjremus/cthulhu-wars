@@ -1619,6 +1619,10 @@ case class MindParasiteCaptureTargetAction(self : Faction, r : Region, ur : Unit
 // Mind Parasite: original faction can block capture of their parasitized cultist
 case class MindParasiteBlockCaptureAction(self : Faction, captor : Faction, r : Region, ur : UnitRef) extends BaseFactionAction("Mind Parasite", "Block capture of parasitized Acolyte")
 case class MindParasiteAllowCaptureAction(self : Faction, captor : Faction, r : Region, ur : UnitRef) extends BaseFactionAction("Mind Parasite", "Allow capture")
+// Cat from Venus: Honeymoon — special capture that grants +1 Power and returns cultist to pool
+case class CatFromVenusCaptureMainAction(self : Faction) extends OptionFactionAction("Cat from Venus - Capture cultist") with MainQuestion with Soft
+case class CatFromVenusCaptureAction(self : Faction, r : Region, f : Faction) extends ForcedAction
+case class CatFromVenusCaptureTargetAction(self : Faction, r : Region, f : Faction, ur : UnitRef) extends ForcedAction
 
 case class RecruitMainAction(self : Faction, uc : UnitClass, l : $[Region]) extends OptionFactionAction("Recruit " + uc.styled(self)) with MainQuestion with Soft
 case class RecruitAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => {
@@ -2933,6 +2937,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val mpTargets = f.units.%(_.uclass == MindParasiteCultist).%(_.region.onMapOrMoon).%(u => !mindParasiteCaptureRejected.has(u.ref))
             if (mpTargets.any)
                 + MindParasiteCaptureMainAction(f)
+        }
+        // Cat from Venus: Honeymoon — special capture that grants +1 Power and returns cultist to pool
+        if (f.loyaltyCards.has(CatFromVenusCard) && f.power > 0) {
+            val venusRegions = f.all(CatFromVenus)./(_.region).distinct
+            val captureAreas = (areas.nex ++ tbMantleInPlay.??($(TB.mantle)) ++ game.factions.has(BB).??($(BB.moon)))
+            val venusAreas = venusRegions.intersect(captureAreas).%(r => tiAffordsUnit1(f, r)).%(r => factionlike.but(f).%(f.canCapture(r)).any)
+            if (venusAreas.any)
+                + CatFromVenusCaptureMainAction(f)
         }
     }
 
@@ -5998,6 +6010,57 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     fbCyclopeanGazeActionRegions :+= r
             }
             EndAction(captor)
+
+        // CAT FROM VENUS — HONEYMOON
+        case CatFromVenusCaptureMainAction(self) =>
+            val venusRegions = self.all(CatFromVenus)./(_.region).distinct
+            val variants = venusRegions./~ { r =>
+                self.enemies.%(self.canCapture(r))./ { f =>
+                    CatFromVenusCaptureAction(self, r, f).as(f.at(r).cultists./(_.uclass).distinct.single./(_.name).|(Cultist.name).styled(f))("Capture", for1PowerWithTax(r, self), "in", r, self.iced(r))
+                }
+            }
+            Ask(self)
+                .list(variants)
+                .group(" ")
+                .cancelIf(true)
+
+        case CatFromVenusCaptureAction(self, r, f) =>
+            self.payPower(1, "on capture")
+            self.payTax(r)
+            val l = f.at(r).cultists.%(u => u.uclass.canBeCaptured(u)).%(u => u.uclass != MindParasiteCultist || (self != f && !mindParasiteOriginalFaction.get(u.ref).has(self))).sortBy(u => u.uclass.cost * 10 + u.onGate.??(5))
+            if (l.none) {
+                EndAction(self)
+            } else {
+                val ll = f.clings.?(l.take(1)).|(l)
+                Ask(f).each(ll)(u => CatFromVenusCaptureTargetAction(f, r, self, u.ref).as(u.ref.full)(self, "captures in", r))
+            }
+
+        case CatFromVenusCaptureTargetAction(self, r, f, ur) =>
+            val unitFig = unit(ur)
+            val victimOwner = unitFig.faction
+            // Handle Mind Parasite special case
+            if (unitFig.uclass == MindParasiteCultist) {
+                val origFac = mindParasiteOriginalFaction.get(ur)
+                MindParasite.unparasitize(unitFig)
+                val restored = origFac./~(of => of.at(r, Acolyte).lastOption)
+                if (restored.any) {
+                    val victim = restored.get
+                    eliminate(victim)
+                    f.power += 1
+                    f.log("Honeymoon".styled("nt") + ":", CatFromVenus.styled(f), "captured", victim, "in", r + ",", f, "gained", 1.power + ",", victim, "returned to", victimOwner.name + "'s Pool")
+                } else {
+                    f.power += 1
+                    f.log("Honeymoon".styled("nt") + ":", CatFromVenus.styled(f), "captured an Acolyte in", r + ",", f, "gained", 1.power + ", Acolyte returned to", victimOwner.name + "'s Pool")
+                }
+            } else {
+                eliminate(unitFig)
+                f.power += 1
+                f.log("Honeymoon".styled("nt") + ":", CatFromVenus.styled(f), "captured", unitFig, "in", r + ",", f, "gained", 1.power + ",", unitFig, "returned to", victimOwner.name + "'s Pool")
+            }
+            f.satisfy(CaptureCultist, "Capture Cultist")
+            if (factions.has(FB))
+                fbCyclopeanGazeActionRegions :+= r
+            EndAction(f)
 
         // BUILD
         case BuildGateMainAction(self, locations) =>
