@@ -4906,18 +4906,25 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             tiCheckFuryFlip()   // The Invasion: flip Baphomet's Fury active on first 7
             showROAT()
 
-            // Requires Attention IS a Ritual of Annihilation, so — exactly like the standard
-            // RoA handler above — offer BB the choice to remove one of its own face-down
-            // Tombstalker Cursed Tomes from the game. TS never holds its own tomes, so the
-            // guard mirrors the standard path. Both remove/skip continue to the doom phase.
-            val faceDownTomes = if (self == TS) Nil else cursedTomesOwned.get(self).|(Nil).filter { case (_, fd) => fd }
-            if (faceDownTomes.any) {
-                implicit val asking = Asking(self)
-                faceDownTomes.foreach { case (n, _) => + TSRemoveTomeAction(self, n) }
-                + TSSkipRemoveTomeAction(self)
-                asking
-            } else
-                CheckSpellbooksAction(DoomAction(self))
+            // Cat from Neptune: The Final Ritual — if this ritual was invoked mid-battle,
+            // clear the flag and return to the battle flow instead of continuing doom phase
+            if (theFinalRitualInProgress) {
+                theFinalRitualInProgress = false
+                CheckSpellbooksAction(BattleDoneAction(self))
+            } else {
+                // Requires Attention IS a Ritual of Annihilation, so — exactly like the standard
+                // RoA handler above — offer BB the choice to remove one of its own face-down
+                // Tombstalker Cursed Tomes from the game. TS never holds its own tomes, so the
+                // guard mirrors the standard path. Both remove/skip continue to the doom phase.
+                val faceDownTomes = if (self == TS) Nil else cursedTomesOwned.get(self).|(Nil).filter { case (_, fd) => fd }
+                if (faceDownTomes.any) {
+                    implicit val asking = Asking(self)
+                    faceDownTomes.foreach { case (n, _) => + TSRemoveTomeAction(self, n) }
+                    + TSSkipRemoveTomeAction(self)
+                    asking
+                } else
+                    CheckSpellbooksAction(DoomAction(self))
+            }
 
         // MAIN
         case PreMainAction(f) if factions.exists(f => f.unfulfilled.num + f.spellbooks.num < f.library.num) =>

@@ -395,8 +395,15 @@ object TSExpansion extends Expansion {
             // if still needed); the CheckSpellbooksAction below then prompts the SB pick.
             self.satisfy(TSRitualOrEnemyGate, "Hecatomb Ritual of Annihilation")
 
-            // Continue doom phase — exactly as standard ritual does for TS (no tome penalty)
-            CheckSpellbooksAction(DoomAction(self))
+            // Cat from Neptune: The Final Ritual — if this ritual was invoked mid-battle,
+            // clear the flag and return to the battle flow instead of continuing doom phase
+            if (game.theFinalRitualInProgress) {
+                game.theFinalRitualInProgress = false
+                CheckSpellbooksAction(BattleDoneAction(self))
+            } else {
+                // Continue doom phase — exactly as standard ritual does for TS (no tome penalty)
+                CheckSpellbooksAction(DoomAction(self))
+            }
 
         // MAIN ACTIONS
         case MainAction(f) if f == TS && f.active.not =>

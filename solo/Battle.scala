@@ -180,6 +180,22 @@ case class TheFinalRitualSkipAction(self : Faction) extends BaseFactionAction(
     "The Final Ritual".styled("nt") + " — perform Ritual of Annihilation", "Skip") {
     override def question(implicit game : Game) = (game.battle./(_.attacker).has(self)).?("Attacker").|("Defender") + " post-battle"
 }
+// Cat from Neptune special ritual variants (mid-battle)
+case class TheFinalRitualDragonDescendingAction(self : Faction, cost : Int) extends BaseFactionAction(
+    implicit g => "The Final Ritual".styled("nt") + " — Ritual with " + DragonDescending,
+    implicit g => "Pay " + cost.power) {
+    override def question(implicit game : Game) = (game.battle./(_.attacker).has(self)).?("Attacker").|("Defender") + " post-battle"
+}
+case class TheFinalRitualHecatombAction(self : Faction, power : Int, dh : Int) extends BaseFactionAction(
+    implicit g => "The Final Ritual".styled("nt") + " — Ritual with " + Hecatomb,
+    implicit g => (power > 0).??("Pay " + power.power) + (power > 0 && dh > 0).??(" + ") + (dh > 0).??(dh.toString.styled("kill") + " Death's Head")) {
+    override def question(implicit game : Game) = (game.battle./(_.attacker).has(self)).?("Attacker").|("Defender") + " post-battle"
+}
+case class TheFinalRitualRequiresAttentionAction(self : Faction, r : Region, cost : Int) extends BaseFactionAction(
+    implicit g => "The Final Ritual".styled("nt") + " — Ritual with " + RequiresAttention.styled(BB) + " in " + r,
+    implicit g => "Pay " + cost.power) {
+    override def question(implicit game : Game) = (game.battle./(_.attacker).has(self)).?("Attacker").|("Defender") + " post-battle"
+}
 // Dhole: Planetary Destruction — owner chooses whether opponent gains 2 Doom or 2 Power
 case class DholePlanetaryDestructionDoomAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => 2.doom) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
 case class DholePlanetaryDestructionPowerAction(self : Faction, opponent : Faction) extends BaseFactionAction(implicit g => "Planetary Destruction".styled("nt"), implicit g => "2 Power".styled("power")) { override def question(implicit game : Game) = "Dhole: Planetary Destruction".styled("nt") + " - Choose enemy benefit" }
@@ -2655,8 +2671,38 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     s.power >= game.ritualCost)
                 if (catOwner.any) {
                     val s = catOwner.get
-                    val cost = game.ritualCost
-                    return Ask(s).add(TheFinalRitualPostBattleAction(s, cost)).add(TheFinalRitualSkipAction(s))
+                    val cost = s.can(Herald).?(5).|(game.ritualCost)
+
+                    implicit val asking = Asking(s)
+
+                    // Standard ritual
+                    + TheFinalRitualPostBattleAction(s, cost)
+
+                    // OW: Dragon Descending (2 Doom, once per game, costs same as standard ritual)
+                    if (s == OW && s.can(DragonDescending) && !s.oncePerGame.has(DragonDescending) && s.power >= cost)
+                        + TheFinalRitualDragonDescendingAction(s, cost)
+
+                    // TS: Hecatomb (can split cost between Power and Death's Head, requires all TH on map)
+                    if (s == TS && s.can(Hecatomb) && game.deathsHead > 0 && s.pool(TombHerd).none) {
+                        val minPower = max(0, cost - game.deathsHead)
+                        val maxPower = min(cost, s.power)
+                        (minPower to maxPower).foreach(p => + TheFinalRitualHecatombAction(s, p, cost - p))
+                    }
+
+                    // BB: Requires Attention (via Bastet + enemy Cultist, +4 doom + ES bonuses)
+                    if (s == BB && s.power >= cost) {
+                        val bastetUnits = s.allInPlay.%(_.uclass == Bastet).%(u => u.region.onMap || u.region == BB.moon)
+                        bastetUnits.foreach { bastet =>
+                            val r = bastet.region
+                            val hasEnemyCultist = factions.but(s).exists(e => e.at(r).%(u => u.uclass.utype == Cultist).any)
+                            if (hasEnemyCultist)
+                                + TheFinalRitualRequiresAttentionAction(s, r, cost)
+                        }
+                    }
+
+                    + TheFinalRitualSkipAction(s)
+
+                    return asking
                 }
 
                 // Xyrious Storm (XSS) — Distant Thunderclap ES check (§3.4.3, independent):
@@ -3637,6 +3683,52 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             theFinalRitualResolvedThisBattle = (theFinalRitualResolvedThisBattle :+ self).distinct
             log("The Final Ritual".styled("nt") + ":", self, "declined the ritual")
             proceed()
+
+        // CAT FROM NEPTUNE — THE FINAL RITUAL SPECIAL VARIANTS (Post-Battle)
+        case TheFinalRitualDragonDescendingAction(self, cost) =>
+            theFinalRitualResolvedThisBattle = (theFinalRitualResolvedThisBattle :+ self).distinct
+            game.theFinalRitualInProgress = true
+            OW.oncePerGame :+= DragonDescending
+            OW.log("used", DragonDescending)
+            log("The Final Ritual".styled("nt") + ":", self, "performs Ritual with", DragonDescending)
+            Force(RitualAction(self, cost, 2))
+
+        case TheFinalRitualHecatombAction(self, power, dh) =>
+            theFinalRitualResolvedThisBattle = (theFinalRitualResolvedThisBattle :+ self).distinct
+            game.theFinalRitualInProgress = true
+            game.deathsHead -= dh
+            if (dh > 0)
+                self.log("Hecatomb: using", dh.toString.styled("kill"), "Death's Head toward Ritual of Annihilation")
+            log("The Final Ritual".styled("nt") + ":", self, "performs Ritual with", Hecatomb)
+            if (power == 0) {
+                // Pure DH Hecatomb path: same logic as FactionTS.scala TSHecatombRitualCostAction
+                val brood = self.enemies.%(_.has(TheBrood))
+                val gates = self.allGates
+                val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
+                val doom = valid.num
+                val esGoo = if (self == TB) self.goos.factionGOOs.any.??(1) else self.goos.factionGOOs.num
+                val es = esGoo + self.can(Consecration).??($(0, 1, 1, 1, 2)(game.cathedrals.num))
+                val sycophants = game.factions.but(self).%(_.has(Sycophancy))
+                if (sycophants.any)
+                    Force(TTSycophancyChainAction(sycophants, self, doom, SycHecatombResume(es)))
+                else
+                    Force(TSHecatombResumeAction(self, doom, es))
+            } else
+                Force(RitualAction(self, power, 1))
+
+        case TheFinalRitualRequiresAttentionAction(self, r, cost) =>
+            theFinalRitualResolvedThisBattle = (theFinalRitualResolvedThisBattle :+ self).distinct
+            game.theFinalRitualInProgress = true
+            val enemyGate  = factions.but(self).exists(_.gates.has(r))
+            val enemyGOO   = factions.but(self).exists(e => e.at(r).%(_.uclass.isGOO).any || (AN.can(HolyGround) && e.at(r, Cathedral).any))
+            val esBonus    = enemyGate.??(1) + enemyGOO.??(2)
+            self.power -= cost
+            log("The Final Ritual".styled("nt") + ":", self, "performs Ritual with", RequiresAttention.styled(BB), "in", r)
+            val sycophants = game.factions.but(self).%(_.has(Sycophancy))
+            if (sycophants.any)
+                Force(TTSycophancyChainAction(sycophants, self, 4, SycRequiresAttentionResume(r, esBonus)))
+            else
+                Force(RequiresAttentionResumeAction(self, r, 4, esBonus))
 
         // FIENDISH SPAWN (DS alternate pre-battle)
         // V2: place exactly half of (8 minus the Azathoth marker), rounded up, Monsters or Acolytes
