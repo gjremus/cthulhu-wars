@@ -2205,8 +2205,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var moonbeastOnSpellbook : Map[UnitRef, (Faction, Spellbook)] = Map()
     // Moonbeasts placed THIS doom phase — excluded from auto-return at end of doom
     var moonbeastPlacedThisDoom : Set[UnitRef] = Set()
-    // Asteroid Cat: spellbook slot blocking (cat sits on unearned spellbook, returns when earned)
-    var asteroidCatOnSpellbook : Map[UnitRef, (Faction, Spellbook)] = Map()
+    // Asteroid Cat: requirement slot blocking (cat sits on unfulfilled requirement, returns when earned)
+    var asteroidCatOnSpellbook : Map[UnitRef, (Faction, Requirement)] = Map()
     // Hagarg Ryonis: Subversion target for this Doom Phase (reset each First Player Phase)
     var hagargSubversionTarget : |[Faction] = None
     // Gla'aki IGOO: first faction to reach 0 power during action phase (SBR tracking)
@@ -3060,17 +3060,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
         // Moonbeast: premature return moved to extraActions (available any time, not just own turn)
 
-        // Asteroid Cat: Abandoned to Lusts — cost 0 action, place cat on enemy unearned spellbook slot
-        if (!servitorBlocking && f.loyaltyCards.has(AsteroidCatCard) && f.pool(AsteroidCat).any) {
-            // Check if any enemy has ≤5 faction spellbooks and shares an area with an Asteroid Cat
+        // Asteroid Cat: Abandoned to Lusts — cost 0 action, place cat on enemy unfulfilled requirement slot
+        if (!servitorBlocking && f.loyaltyCards.has(AsteroidCatCard) && f.all(AsteroidCat).any) {
+            // Check if any enemy has ≤5 FACTION spellbooks and shares an area with an ON-MAP Asteroid Cat
             val catRegions = f.all(AsteroidCat)./(_.region).distinct
             val validTargets = f.enemies.filter { e =>
-                e.spellbooks.num <= 5 && catRegions.exists(r => e.at(r).any)
+                e.spellbooks.count(_.isInstanceOf[FactionSpellbook]) <= 5 && catRegions.exists(r => e.at(r).any)
             }
             val hasUnblockedSlot = validTargets.exists { e =>
-                val blockedSBs = game.asteroidCatOnSpellbook.values.%(t => t._1 == e)./(t => t._2).toSet
-                val unearned = e.library.%(sb => !e.spellbooks.has(sb) && !blockedSBs.contains(sb))
-                unearned.any
+                val blockedReqs = game.asteroidCatOnSpellbook.values.%(t => t._1 == e)./(t => t._2).toList
+                val unblocked = e.unfulfilled.diff(blockedReqs)
+                unblocked.any
             }
             if (hasUnblockedSlot)
                 + AsteroidCatAbandonedMainAction(f)
@@ -4492,6 +4492,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             if (fs.any) {
                 val f = fs(0)
+                // Asteroid Cat: check if a cat is blocking a requirement that was just fulfilled
+                // (i.e., a cat entry exists for f with a requirement NOT in f.unfulfilled)
+                val catEntry = asteroidCatOnSpellbook.find { case (catRef, (target, req)) =>
+                    target == f && !f.unfulfilled.contains(req)
+                }
+                if (catEntry.isDefined) {
+                    val (catRef, (target, req)) = catEntry.get
+                    val catOwner = unit(catRef).faction
+                    f.log("fulfilled", req.text.styled(f), "but slot blocked by", AsteroidCat.styled(catOwner), "via", "Abandoned to Lusts".styled("nt"))
+                    return Force(AsteroidCatReturnChooseRegionAction(catOwner, catRef, f, req, CheckSpellbooksAction(next)))
+                }
                 // Map library names for buff option spellbook swaps before filtering
                 val effectiveLibrary = f.library.map { sb => (f, sb) match {
                     case (DS, Traitors) if options.has(DSAlternateSpellbooks) => Omnipotence
@@ -4555,12 +4566,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (moonbeastOnSpellbook.values.exists(t => t._1 == f && t._2 == sb)) {
                 f.oncePerGame :+= sb
                 f.log("received", sb, "but blocked by", "Moonbeast".styled("nt"))
-            } else if (asteroidCatOnSpellbook.values.exists(t => t._1 == f && t._2 == sb)) {
-                // Asteroid Cat: if a cat was blocking this slot, return it and let owner pick spellbook
-                val catRef = asteroidCatOnSpellbook.find(_._2 == (f, sb)).get._1
-                val catOwner = unit(catRef).faction
-                f.log("received spellbook slot, but", AsteroidCat.styled(catOwner), "was placed on it by", "Abandoned to Lusts".styled("nt"))
-                return Force(AsteroidCatReturnChooseRegionAction(catOwner, catRef, f, sb, CheckSpellbooksAction(next)))
             } else {
                 f.log("received", sb)
             }
