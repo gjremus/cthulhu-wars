@@ -6794,9 +6794,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 // Round 8: replaced hardcoded cwo.im URL with the page's own origin so the
                 // "Online game" link goes to localhost when running locally. For production
                 // (data-server set to a real backend URL), the link still goes to that URL.
-                // Faction Editor: always the last item (after the data-menu cut); opens the designer site in a new tab
+                // Custom Editor (faction designer): always the last item (after the data-menu cut); opens the designer site in a new tab
                 val topItems = $("Quick Game".hl, "Local Game".hl, redirect.?("<a href='" + origin + "' target='_blank'><div>" + "Online game".hl + "</div></a>").|("Online Game".hl), "<a href='/' target='_blank'><div>Main</div></a>", "<a href='https://cwo.im/' target='_blank'><div>OG CWO.IM</div></a>", "Extra", "About", "Test").take(menu)
-                ask("Cthulhu Wars", topItems :+ "<a href='/designer/' target='_blank'><div>Faction Editor</div></a>", {
+                ask("Cthulhu Wars", topItems :+ "<a href='/designer/' target='_blank'><div>Custom Editor</div></a>", {
                     case n if n == topItems.num => topMenu()
                     case 998_0 =>
                         val setup = new Setup(randomSeating($(GC, BG, WW, OW)), Normal)
