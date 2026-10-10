@@ -1402,11 +1402,11 @@ object CthulhuWarsSolo {
                     case InsectsFromShaggai => DrawRect("n-insects-from-shaggai", |(neutralTint), x - 38, y - 97, 76, 107)
                     case ServitorUnit      => DrawRect("n-servitor-of-the-outer-gods", |(neutralTint), x - 35, y - 75, 70, 85)
                     // Something About Cats — Monsters
-                    case AsteroidCat       => DrawRect("n-asteroid-cat", |(neutralTint), x - 25, y - 60, 50, 70)
-                    case CatFromMercury    => DrawRect("n-cat-from-mercury", |(neutralTint), x - 25, y - 60, 50, 70)
-                    case CatFromVenus      => DrawRect("n-cat-from-venus", |(neutralTint), x - 25, y - 60, 50, 70)
+                    case AsteroidCat       => DrawRect("n-asteroid-cat", |(neutralTint), x - 35, y - 50, 71, 60)
+                    case CatFromMercury    => DrawRect("n-cat-from-mercury", |(neutralTint), x - 27, y - 54, 55, 64)
+                    case CatFromVenus      => DrawRect("n-cat-from-venus", |(neutralTint), x - 36, y - 46, 72, 56)
                     // Something About Cats — Terror
-                    case CatFromNeptune    => DrawRect("n-cat-from-neptune", |(neutralTint), x - 30, y - 70, 60, 80)
+                    case CatFromNeptune    => DrawRect("n-cat-from-neptune", |(neutralTint), x - 42, y - 52, 84, 62)
                     // IGOOs (sized relative to cultist from docx thumbnails)
                     case AzathothIGOO      => DrawRect("n-azathoth", |(neutralTint), x - 59, y - 128, 119, 138)
                     case Cthugha           => DrawRect("n-cthugha", |(neutralTint), x - 52, y - 112, 105, 122)
@@ -1419,7 +1419,7 @@ object CthulhuWarsSolo {
                     case Bokrug            => DrawRect("n-bokrug", |(neutralTint), x - 55, y - 115, 110, 125)
                     case GlaakiIGOO        => DrawRect("n-glaaki-igoo", |(neutralTint), x - 55, y - 115, 110, 125)
                     // Something About Cats — Hagarg Ryonis
-                    case HagargRyonis      => DrawRect("n-hagarg-ryonis", |(neutralTint), x - 55, y - 115, 110, 125)
+                    case HagargRyonis      => DrawRect("n-hagarg-ryonis", |(neutralTint), x - 41, y - 110, 83, 120)
 
                     // Dunwich Horror — Whateley Clan + Dire Yog-Sothoth
                     case LaviniaWhateley   => DrawRect("n-lavinia-whateley-dunwich", |(neutralTint), x - 13, y - 53, 26, 60)
@@ -4184,6 +4184,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             case AtlachNacha        => "n-atlach-nacha"
                             case Bokrug             => "n-bokrug"
                             case GlaakiIGOO         => "n-glaaki-igoo"
+                            case AsteroidCat        => "n-asteroid-cat"
+                            case CatFromMercury     => "n-cat-from-mercury"
+                            case CatFromVenus       => "n-cat-from-venus"
+                            case CatFromNeptune     => "n-cat-from-neptune"
+                            case HagargRyonis       => "n-hagarg-ryonis"
                             // Parasitized figure: show its OWN original sprite (Earth Cat, faction Acolyte, ...).
                             case MindParasiteCultist =>
                                 val of = displayGame.mindParasiteOriginalFaction.get(u.ref).|(f)

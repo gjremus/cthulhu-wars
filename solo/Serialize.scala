@@ -274,7 +274,9 @@ object Serialize {
         // MNU IGOOs
         AzathothIGOOCard, CthughaCard, MotherHydraCard, YigCard, FatherDagonCard, GhatanotoaIGOOCard, BloatedWomanCard, AtlachNachaCard, BokrugCard, GlaakiIGOOCard,
         // Dunwich Horror — Whateley Clan + Dire Yog-Sothoth
-        LaviniaWhateleyCard, WilburWhateleyCard, WizardWhateleyCard, JuniorWhateleyCard, DireYogSothothCard
+        LaviniaWhateleyCard, WilburWhateleyCard, WizardWhateleyCard, JuniorWhateleyCard, DireYogSothothCard,
+        // Something About Cats
+        AsteroidCatCard, CatFromMercuryCard, CatFromVenusCard, CatFromNeptuneCard, HagargRyonisCard
     )
 
     def parseFaction(s : String) : |[Faction] = factions.%(_.short == s).single
