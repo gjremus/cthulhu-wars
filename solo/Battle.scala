@@ -2924,7 +2924,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
                 val battleTerminus : ForcedAction =
                     // Cat from Neptune: The Final Ritual — if ritual reached Instant Death, end game
-                    if (game.ritualTrack(game.ritualMarker) == 999)
+                    if (theFinalRitualResolvedThisBattle.any && game.ritualTrack(game.ritualMarker) == 999)
                         GameOverPhaseAction
                     else if (game.csCorruptedRendingActor.any) {
                         // Corrupted Rending (§1.8): this battle was FORCED by CS between two other
@@ -3551,8 +3551,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             log("Needs Affection".styled("nt") + ":", monster.uclass.styled(self), "in", arena, "eliminated")
 
             // Place acolyte from pool into battle, mirroring Magician pattern
-            if (self.pool(Acolyte).none)
-                self.units :+= new UnitFigure(self, Acolyte, self.units.%(_.uclass == Acolyte).num + 1, self.reserve)
             val acolyte = self.pool(Acolyte).head
             acolyte.region = arena
             self.forces :+= acolyte

@@ -4831,7 +4831,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // clear the flag and return to the battle flow instead of continuing doom phase
             if (theFinalRitualInProgress) {
                 theFinalRitualInProgress = false
-                BattleDoneAction(f)
+                CheckSpellbooksAction(BattleDoneAction(f))
             } else {
                 val faceDownTomes = if (f == TS) Nil else cursedTomesOwned.get(f).|(Nil).filter { case (_, fd) => fd }
                 if (faceDownTomes.any) {
