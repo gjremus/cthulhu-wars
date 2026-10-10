@@ -4096,6 +4096,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // rest of the menu even when Fertility was used BEFORE the real action.
             // Fixed to compare the faction object itself.
             if (self == BG && self.oncePerRound.has(Fertility)) {
+                println(s"[BG-MENU-TRACE] post-Fertility-summon re-ask: acted=${self.acted}")
                 triggers()
                 Force(MainAction(self))
             }

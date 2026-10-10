@@ -140,6 +140,7 @@ object BGExpansion extends Expansion {
             UnknownContinue
 
         case MainAction(f : BG) if f.acted =>
+            println(s"[BG-MENU-TRACE] restricted-branch (acted=true): fertilityUsed=${f.oncePerRound.has(Fertility)}")
             implicit val asking = Asking(f)
 
             game.controls(f)
@@ -156,6 +157,7 @@ object BGExpansion extends Expansion {
             asking
 
         case MainAction(f : BG) =>
+            println(s"[BG-MENU-TRACE] full-branch (acted=false): fertilityUsed=${f.oncePerRound.has(Fertility)}")
             implicit val asking = Asking(f)
 
             game.moves(f)
