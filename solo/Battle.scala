@@ -2757,27 +2757,30 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
                 // Fleshmason (FM) — Tendon Flaying (Post-Battle): for each Muscle Stitcher that received
                 // a Pain, FM chooses one of three options: (1) Gain 1 Power, (2) Gain 1 Power, (3) Gain 1 Doom.
-                // Options 1 and 2 are identical per the design (designer question noted).
+                // Options 1 and 2 are identical per the design (designer question noted). Each stitcher
+                // must choose a different option; options reset after all three are used.
                 if (factions.has(FM) && FM.can(TendonFlaying) && sides.has(FM) && !FM.oncePerAction.has(TendonFlaying)) {
                     val fmSide = if (attacker == FM) attackers else defenders
                     val painedStitchers = (fmSide.forces ++ eliminated.%(_.faction == FM)).%(u =>
                         u.uclass == MuscleStitcher && (u.health == Pained || u.health == Killed))
                     if (painedStitchers.any) {
                         FM.oncePerAction :+= TendonFlaying
-                        return Force(TendonFlayingMainAction(FM, painedStitchers./(_.ref)))
+                        return Ask(FM).add(TendonFlayingMainAction(FM, painedStitchers./(_.ref)))
                     }
                 }
 
                 // Fleshmason (FM) — Spiteful Chisel (Post-Battle, part of Screaming Wall ability):
                 // If there are no Screaming Walls in FM's pool and an enemy Great Old One was assigned
-                // a result (Pain or Kill), return one captured Acolyte from the enemy's Faction Card.
-                if (factions.has(FM) && sides.has(FM) && FM.pool(ScreamingWall).none) {
+                // a result (Pain or Kill), return one of FM's captured Acolytes from the enemy's Faction Card.
+                if (factions.has(FM) && sides.has(FM) && FM.pool(ScreamingWall).none && !FM.oncePerAction.has(SpitefulChisel)) {
                     val enemy = if (attacker == FM) defender else attacker
                     val enemyGOOHit = (if (attacker == FM) defenders else attackers).forces.%(u =>
-                        u.uclass.utype == GOO && u.health != Alive).any
-                    val capturedEnemyAcolytes = FM.units.%(u => u.region == FM.prison && u.faction == enemy && u.uclass == Acolyte)
-                    if (enemyGOOHit && capturedEnemyAcolytes.any)
-                        return Force(SpitefulChiselMainAction(FM, enemy))
+                        u.uclass.isGOO && u.health != Alive).any
+                    val capturedFMAcolytes = FM.units.%(u => u.region == enemy.prison && u.uclass == Acolyte)
+                    if (enemyGOOHit && capturedFMAcolytes.any) {
+                        FM.oncePerAction :+= SpitefulChisel
+                        return Ask(FM).add(SpitefulChiselMainAction(FM, enemy))
+                    }
                 }
 
                 // Faceless Blight (FBE) — Necromantic Spores (Post-Battle, §3.14.4):
@@ -4210,6 +4213,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         case NecromanticSporesSkipAction(self) =>
+            proceed()
+
+        // FLESHMASON (FM): TENDON FLAYING & SPITEFUL CHISEL — post-battle chains. FMExpansion handles
+        // the option selection and Acolyte return logic; these cases resume battle flow via proceed().
+        case TendonFlayingMainAction(self, _) =>
+            proceed()
+
+        case TendonFlayingOption1Action(self, _, _, _) =>
+            proceed()
+
+        case TendonFlayingOption2Action(self, _, _, _) =>
+            proceed()
+
+        case TendonFlayingOption3Action(self, _, _, _) =>
+            proceed()
+
+        case SpitefulChiselMainAction(self, _) =>
+            proceed()
+
+        case SpitefulChiselReturnAction(self, _) =>
+            proceed()
+
+        case SpitefulChiselSkipAction(self) =>
             proceed()
 
         // COLOUR OUT OF SPACE (CS): SPECTRAL COLLAPSE — post-battle chain. CSExpansion handles the

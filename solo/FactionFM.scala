@@ -27,6 +27,11 @@ case object BlueprintsInBlood extends FactionSpellbook(FM, "Blueprints in Blood"
 case object MannedBattlements extends FactionSpellbook(FM, "Manned Battlements")
 case object FrenzyingAdze     extends FactionSpellbook(FM, "Frenzying Adze")
 
+// FM Unit Ability — Spiteful Chisel (Post-Battle, part of Screaming Wall).
+// Declared as a FactionSpellbook so it can be used as a once-per-action marker
+// (oncePerAction requires Spellbook type), even though it's not an actual SB.
+case object SpitefulChisel extends FactionSpellbook(FM, "Spiteful Chisel")
+
 
 // ── SPELLBOOK REQUIREMENTS ──────────────────────────────────────────────────
 case object CrumblingYawpReq     extends Requirement("Roll 9 or more dice in a single Combat")
@@ -107,15 +112,15 @@ case class TendonFlayingMainAction(self : Faction, stitchers : $[UnitRef])
     extends ForcedAction with PowerNeutral with Soft {
     override def question(implicit game : Game) = TendonFlaying.styled(FM)
 }
-case class TendonFlayingChoiceAction(self : Faction, stitcher : UnitRef, remaining : $[UnitRef])
+case class TendonFlayingChoiceAction(self : Faction, stitcher : UnitRef, remaining : $[UnitRef], availableOptions : $[Int])
     extends ForcedAction with PowerNeutral with Soft {
     override def question(implicit game : Game) = TendonFlaying.styled(FM)
 }
-case class TendonFlayingOption1Action(self : Faction, stitcher : UnitRef, remaining : $[UnitRef])
-    extends OptionFactionAction("Gain 1 Power") with PowerNeutral { def question(implicit game : Game) = TendonFlaying.styled(FM) }
-case class TendonFlayingOption2Action(self : Faction, stitcher : UnitRef, remaining : $[UnitRef])
-    extends OptionFactionAction("Gain 1 Power") with PowerNeutral { def question(implicit game : Game) = TendonFlaying.styled(FM) }
-case class TendonFlayingOption3Action(self : Faction, stitcher : UnitRef, remaining : $[UnitRef])
+case class TendonFlayingOption1Action(self : Faction, stitcher : UnitRef, remaining : $[UnitRef], availableOptions : $[Int])
+    extends OptionFactionAction("Gain 1 Power (option 1)") with PowerNeutral { def question(implicit game : Game) = TendonFlaying.styled(FM) }
+case class TendonFlayingOption2Action(self : Faction, stitcher : UnitRef, remaining : $[UnitRef], availableOptions : $[Int])
+    extends OptionFactionAction("Gain 1 Power (option 2)") with PowerNeutral { def question(implicit game : Game) = TendonFlaying.styled(FM) }
+case class TendonFlayingOption3Action(self : Faction, stitcher : UnitRef, remaining : $[UnitRef], availableOptions : $[Int])
     extends OptionFactionAction("Gain 1 Doom") with PowerNeutral { def question(implicit game : Game) = TendonFlaying.styled(FM) }
 
 case class MannedBattlementsMainAction(self : Faction)
@@ -403,35 +408,52 @@ object FMExpansion extends Expansion {
             if (stitchers.isEmpty)
                 UnknownContinue
             else
-                Then(TendonFlayingChoiceAction(self, stitchers.head, stitchers.drop(1)))
+                Then(TendonFlayingChoiceAction(self, stitchers.head, stitchers.drop(1), $(1, 2, 3)))
 
-        case TendonFlayingChoiceAction(self, stitcher, remaining) =>
-            Ask(self)
-                .add(TendonFlayingOption1Action(self, stitcher, remaining))
-                .add(TendonFlayingOption2Action(self, stitcher, remaining))
-                .add(TendonFlayingOption3Action(self, stitcher, remaining))
+        case TendonFlayingChoiceAction(self, stitcher, remaining, availableOptions) =>
+            val ask = Ask(self)
+            var result = ask
+            if (availableOptions.has(1))
+                result = result.add(TendonFlayingOption1Action(self, stitcher, remaining, availableOptions))
+            if (availableOptions.has(2))
+                result = result.add(TendonFlayingOption2Action(self, stitcher, remaining, availableOptions))
+            if (availableOptions.has(3))
+                result = result.add(TendonFlayingOption3Action(self, stitcher, remaining, availableOptions))
+            result
 
-        case TendonFlayingOption1Action(self, stitcher, remaining) =>
+        case TendonFlayingOption1Action(self, stitcher, remaining, availableOptions) =>
             self.power += 1
-            self.log(TendonFlaying.styled(FM) + ": gained", 1.power, "(Muscle Stitcher pained)")
-            if (remaining.any)
-                Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1)))
+            self.log(TendonFlaying.styled(FM) + ": gained", 1.power, "(Muscle Stitcher pained, option 1)")
+            val newAvailable = availableOptions.but(1)
+            if (remaining.any && newAvailable.any)
+                Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1), newAvailable))
+            else if (remaining.any)
+                // No more unique options available, reset for next stitcher
+                Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1), $(1, 2, 3)))
             else
                 UnknownContinue
 
-        case TendonFlayingOption2Action(self, stitcher, remaining) =>
+        case TendonFlayingOption2Action(self, stitcher, remaining, availableOptions) =>
             self.power += 1
-            self.log(TendonFlaying.styled(FM) + ": gained", 1.power, "(Muscle Stitcher pained)")
-            if (remaining.any)
-                Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1)))
+            self.log(TendonFlaying.styled(FM) + ": gained", 1.power, "(Muscle Stitcher pained, option 2)")
+            val newAvailable = availableOptions.but(2)
+            if (remaining.any && newAvailable.any)
+                Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1), newAvailable))
+            else if (remaining.any)
+                // No more unique options available, reset for next stitcher
+                Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1), $(1, 2, 3)))
             else
                 UnknownContinue
 
-        case TendonFlayingOption3Action(self, stitcher, remaining) =>
+        case TendonFlayingOption3Action(self, stitcher, remaining, availableOptions) =>
             self.doom += 1
             self.log(TendonFlaying.styled(FM) + ": gained", 1.doom, "(Muscle Stitcher pained)")
-            if (remaining.any)
-                Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1)))
+            val newAvailable = availableOptions.but(3)
+            if (remaining.any && newAvailable.any)
+                Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1), newAvailable))
+            else if (remaining.any)
+                // No more unique options available, reset for next stitcher
+                Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1), $(1, 2, 3)))
             else
                 UnknownContinue
 
@@ -439,15 +461,17 @@ object FMExpansion extends Expansion {
             Ask(self).add(SpitefulChiselReturnAction(self, enemyFaction)).add(SpitefulChiselSkipAction(self))
 
         case SpitefulChiselReturnAction(self, enemyFaction) =>
-            val acolyte = self.units.%(u => u.region == self.prison && u.faction == enemyFaction && u.uclass == Acolyte).head
+            // Find FM's Acolyte that is captured by the enemy (in the enemy's prison)
+            val acolyte = self.units.%(u => u.region == enemyFaction.prison && u.uclass == Acolyte).head
             implicit val battle = game.battle.get
             val region = battle.arena
             acolyte.region = region
             acolyte.onGate = false
-            self.log("Spiteful Chisel".styled(FM) + ": returned", Acolyte.styled(enemyFaction), "from capture to", region)
+            self.log("Spiteful Chisel".styled(FM) + ": returned", Acolyte.styled(FM), "from", enemyFaction.short, "Faction Card to", region)
             UnknownContinue
 
         case SpitefulChiselSkipAction(self) =>
+            self.log("Spiteful Chisel".styled(FM) + ": declined")
             UnknownContinue
 
         case _ =>

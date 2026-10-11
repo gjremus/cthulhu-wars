@@ -133,11 +133,11 @@ class GameEvaluationFM(implicit game : Game) extends GameEvaluation(FM)(game) {
                 case SpitefulChiselSkipAction(f) =>
                     true                         |=> 0    -> "skip spiteful chisel"
 
-                case TendonFlayingOption1Action(f, _, _) =>
-                    true                         |=> 100  -> "tendon flaying power"
-                case TendonFlayingOption2Action(f, _, _) =>
-                    true                         |=> 100  -> "tendon flaying power"
-                case TendonFlayingOption3Action(f, _, _) =>
+                case TendonFlayingOption1Action(f, _, _, _) =>
+                    true                         |=> 100  -> "tendon flaying power option 1"
+                case TendonFlayingOption2Action(f, _, _, _) =>
+                    true                         |=> 100  -> "tendon flaying power option 2"
+                case TendonFlayingOption3Action(f, _, _, _) =>
                     self.doom < 25               |=> 200  -> "tendon flaying doom"
                     true                         |=> 50   -> "tendon flaying doom"
 
