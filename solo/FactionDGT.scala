@@ -147,13 +147,13 @@ case class GodsPlagueMainAction(self : Faction)
     override def question(implicit game : Game) = GodsPlague.styled(DGT)
 }
 
-case class GodsPlagueEnemyPickAction(self : Faction, enemyFaction : Faction, r : Region)
+case class GodsPlagueEnemyPickAction(self : Faction, enemyFaction : Faction, r : Region, priorPicked : $[(UnitRef, Faction)])
     extends ForcedAction with PowerNeutral with Soft {
     override def question(implicit game : Game) =
         GodsPlague.styled(DGT) + ": " + enemyFaction.name + " — choose a Unit in " + r.elem + " to be Pained away"
 }
 
-case class GodsPlagueChooseUnitAction(self : Faction, enemyFaction : Faction, u : UnitRef, r : Region)
+case class GodsPlagueChooseUnitAction(self : Faction, enemyFaction : Faction, u : UnitRef, r : Region, priorPicked : $[(UnitRef, Faction)])
     extends BaseFactionAction(GodsPlague.styled(DGT) + ": Pain away", implicit g => g.unit(u).uclass.styled(enemyFaction) + " in " + g.unit(u).region)
 
 case class GodsPlagueChooseDestAction(self : Faction, u : UnitRef, painedUnits : $[(UnitRef, Faction)])
@@ -289,13 +289,70 @@ object DGTExpansion extends Expansion {
         case DistributeDoomCancelAction(f) =>
             Force(MainAction(f))
 
-        // ── GOD'S PLAGUE (simplified - needs full multi-enemy implementation) ─
+        // ── GOD'S PLAGUE ─────────────────────────────────────────────────────────
         case GodsPlagueMainAction(f) =>
-            // Simplified: just end the action for now
-            // TODO: Implement full multi-step enemy prompting + Pain destination choosing
             f.power -= 2
-            f.log(GodsPlague.styled(DGT) + ": used (simplified implementation)")
-            Force(EndAction(f))
+            val pestilenceArea = f.units.%(_.uclass == Pestilence)./(_.region).headOption
+            pestilenceArea match {
+                case Some(r) =>
+                    // Get enemies with units in Pestilence's area, in turn order
+                    val enemiesInArea = f.enemies.%(e => e.at(r).any)
+                    if (enemiesInArea.any) {
+                        // Start prompting enemies in turn order with empty picked list
+                        val firstEnemy = enemiesInArea.head
+                        Then(GodsPlagueEnemyPickAction(f, firstEnemy, r, $))
+                    } else {
+                        Force(EndAction(f))
+                    }
+                case None =>
+                    Force(EndAction(f))
+            }
+
+        case GodsPlagueEnemyPickAction(self, enemyFaction, r, priorPicked) =>
+            // Enemy picks one of their units in Pestilence's area to be Pained
+            implicit val asking = Asking(enemyFaction)
+            val units = enemyFaction.at(r)
+            Ask(enemyFaction).each(units)(u => GodsPlagueChooseUnitAction(self, enemyFaction, u.ref, r, priorPicked))
+
+        case GodsPlagueChooseUnitAction(self, enemyFaction, u, r, priorPicked) =>
+            val allPicked = priorPicked :+ (u, enemyFaction)
+            val pestilenceArea = r
+            val enemiesInArea = self.enemies.%(e => e.at(pestilenceArea).any)
+            val remainingEnemies = enemiesInArea.drop(allPicked.size)
+
+            if (remainingEnemies.any) {
+                // More enemies need to pick units
+                val nextEnemy = remainingEnemies.head
+                Then(GodsPlagueEnemyPickAction(self, nextEnemy, pestilenceArea, allPicked))
+            } else {
+                // All enemies have picked, now DGT chooses Pain destinations
+                // Start with the first picked unit
+                val firstPicked = allPicked.head
+                Then(GodsPlagueChooseDestAction(self, firstPicked._1, allPicked))
+            }
+
+        case GodsPlagueChooseDestAction(self, u, painedUnits) =>
+            // DGT chooses the destination for unit u to be Pained to
+            implicit val asking = Asking(self)
+            val regions = game.board.regions.%(_.onMap)
+            Ask(self).each(regions)(dest => GodsPlaguePainToAction(self, u, dest, painedUnits))
+
+        case GodsPlaguePainToAction(self, u, dest, painedUnits) =>
+            val unitFig = game.unit(u)
+            val oldRegion = unitFig.region
+            unitFig.region = dest
+            self.log(GodsPlague.styled(DGT) + ": Pained", unitFig.uclass.styled(unitFig.faction), "from", oldRegion, "to", dest)
+
+            // Remove this unit from the painedUnits list and check if there are more
+            val remainingUnits = painedUnits.tail
+            if (remainingUnits.any) {
+                // More units to Pain - prompt for next unit's destination
+                val nextUnit = remainingUnits.head._1
+                Then(GodsPlagueChooseDestAction(self, nextUnit, remainingUnits))
+            } else {
+                // All units have been Pained
+                Force(EndAction(self))
+            }
 
         // ── GATHER POWER PHASE (Martyr's Cry) ───────────────────────────────
         case AfterPowerGatherAction if game.setup.has(DGT) && DGT.can(MartyrsCry) =>

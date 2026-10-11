@@ -6078,6 +6078,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             f.satisfy(CaptureCultist, "Capture Cultist")
 
+            // DGT Rampage (Black Rider → God's Scale): During Gather Power Phase, if you
+            // Sacrifice (capture) one enemy Cultist, flip and gain 1 ES. Interpretation:
+            // this triggers when DGT captures an enemy cultist (eliminating it from the map).
+            if (game.setup.has(DGT) && f == DGT && DGT.has(BlackRider) && !DGT.has(GodsScale)) {
+                val capturedEnemyCultist = unitFig.faction != DGT && unitFig.uclass.utype == Cultist
+                if (capturedEnemyCultist) {
+                    DGTExpansion.flipSpellbook(DGT, BlackRider, GodsScale, "Rampage")
+                }
+            }
+
             if (factions.has(FB))
                 fbCyclopeanGazeActionRegions :+= r
 
