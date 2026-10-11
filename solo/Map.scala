@@ -756,7 +756,7 @@ object EarthRegionPalette {
         )
     }
     def get(boardId : String, r : Region) : Option[Int] =
-        byBoard.get(boardId).flatMap(_.get(r))
+        byBoard.get(boardId).flatMap(_.get(r)).orElse(YuggothRegionPalette.get(boardId, r))
 }
 
 
@@ -1244,4 +1244,557 @@ object LibraryCelaeno35 extends Board {
 
     def gateXYO(r : Region) : (Int, Int) = Library3LGates.gateXYO(r)
     override def gateXYOHorizontal(r : Region) : (Int, Int) = Library3LGates.gateXYOHorizontal(r)
+}
+// ══════════════════════════════════════════════════════════════════════════════
+// YUGGOTH MAP — Phase 1 implementation
+// Generated code for 4 board variants (3P, 4P 3-5, 4P 5-3, 5P)
+// ══════════════════════════════════════════════════════════════════════════════
+
+object Yuggoth3 extends Board {
+    val id = "yuggoth3"
+    val name = "Yuggoth Map (3 players)"
+    override val isYuggothMap = true
+
+    val SporeBadlands = Area("Spore Badlands", GlyphWW)
+    val ToxinDisposal = Area("Toxin Disposal", GlyphWW)
+    val WestSlimeSea = Area("West Slime Sea", Ocean)
+    val SlimeSeaOverlook = Area("Slime Sea Overlook", GlyphAA)
+    val EastSlimeSea = Area("East Slime Sea", Ocean)
+    val Laboratory = Area("Laboratory", GlyphAA)
+    val OxygenSea = Area("Oxygen Sea", Ocean)
+    val RadiationWastes = Area("Radiation Wastes", GlyphOO)
+    val PolarSea = Area("Polar Sea", Ocean)
+    val MethaneSea = Area("Methane Sea", Ocean)
+    val TheTwinDesolations = Area("The Twin Desolations", GlyphOO)
+    val AmmoniaSea = Area("Ammonia Sea", Ocean)
+    val GreenPyramidSlopes = Area("Green Pyramid Slopes", GlyphAA)
+    val TheWatchersPostern = Area("The Watcher's Postern", GlyphAA)
+    val NitrogenSea = Area("Nitrogen Sea", Ocean)
+
+    val regions = $(SporeBadlands, ToxinDisposal, WestSlimeSea, SlimeSeaOverlook, EastSlimeSea, Laboratory, OxygenSea, RadiationWastes, PolarSea, MethaneSea, TheTwinDesolations, AmmoniaSea, GreenPyramidSlopes, TheWatchersPostern, NitrogenSea)
+    val nonFactionRegions = $(ToxinDisposal, WestSlimeSea, SlimeSeaOverlook, EastSlimeSea, Laboratory, TheTwinDesolations, GreenPyramidSlopes, TheWatchersPostern)
+    val west = regions
+    val east = $[Region]()
+
+    def connected(region : Region) = region match {
+        case SporeBadlands => $(EastSlimeSea, GreenPyramidSlopes, Laboratory, ToxinDisposal, WestSlimeSea)
+        case ToxinDisposal => $(EastSlimeSea, GreenPyramidSlopes, NitrogenSea, PolarSea, RadiationWastes, SporeBadlands, TheTwinDesolations, WestSlimeSea)
+        case WestSlimeSea => $(EastSlimeSea, SlimeSeaOverlook, SporeBadlands, ToxinDisposal)
+        case SlimeSeaOverlook => $(EastSlimeSea, WestSlimeSea)
+        case EastSlimeSea => $(Laboratory, RadiationWastes, SlimeSeaOverlook, SporeBadlands, ToxinDisposal, WestSlimeSea)
+        case Laboratory => $(AmmoniaSea, EastSlimeSea, GreenPyramidSlopes, OxygenSea, RadiationWastes, SporeBadlands, TheTwinDesolations)
+        case OxygenSea => $(Laboratory, RadiationWastes, TheTwinDesolations)
+        case RadiationWastes => $(EastSlimeSea, Laboratory, MethaneSea, OxygenSea, PolarSea, TheTwinDesolations, ToxinDisposal)
+        case PolarSea => $(RadiationWastes, TheTwinDesolations, ToxinDisposal)
+        case MethaneSea => $(RadiationWastes, TheTwinDesolations)
+        case TheTwinDesolations => $(AmmoniaSea, GreenPyramidSlopes, Laboratory, MethaneSea, NitrogenSea, OxygenSea, PolarSea, RadiationWastes, ToxinDisposal)
+        case AmmoniaSea => $(GreenPyramidSlopes, Laboratory, TheTwinDesolations)
+        case GreenPyramidSlopes => $(AmmoniaSea, Laboratory, NitrogenSea, SporeBadlands, TheTwinDesolations, TheWatchersPostern, ToxinDisposal)
+        case TheWatchersPostern => $(GreenPyramidSlopes)
+        case NitrogenSea => $(GreenPyramidSlopes, TheTwinDesolations, ToxinDisposal)
+        case _ : MoonHold => $()
+        case _ : MantleHold => $()
+        case _ : FactionRegion => $()
+    }
+
+    def distance(a : Region, b : Region) =
+        if (a == b) 0
+        else if (connected(a).contains(b)) 1
+        else if (connected(a)./~(connected).contains(b)) 2
+        else if (connected(a)./~(connected)./~(connected).contains(b)) 3
+        else 4
+
+    def starting(faction : Faction) = faction match {
+        case BG => $(SporeBadlands)
+        case SL => $(OxygenSea)
+        case YS => $(RadiationWastes)
+        case WW => $(PolarSea, AmmoniaSea)
+        case CC => $(MethaneSea)
+        case GC => $(NitrogenSea)
+        case OW => $(SporeBadlands, ToxinDisposal, WestSlimeSea, EastSlimeSea, OxygenSea, RadiationWastes, PolarSea, MethaneSea, TheTwinDesolations, AmmoniaSea, NitrogenSea)
+        case AN => nonFactionRegions
+        case CS => regions
+        case TS => nonFactionRegions.%(_.glyph == Ocean)
+        case FB => regions
+        case DS => $()
+        case BB => $()
+        case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
+        case DC => $()
+        case FBE => regions
+        case XSS => $()
+        case TB => $()
+    }
+
+    def gateXYO(r : Region) : (Int, Int) = r match {
+        case SporeBadlands => (118, 114)
+        case ToxinDisposal => (106, 910)
+        case WestSlimeSea => (166, 578)
+        case SlimeSeaOverlook => (410, 430)
+        case EastSlimeSea => (510, 674)
+        case Laboratory => (814, 94)
+        case OxygenSea => (1042, 282)
+        case RadiationWastes => (882, 678)
+        case PolarSea => (846, 922)
+        case MethaneSea => (1274, 742)
+        case TheTwinDesolations => (1542, 906)
+        case AmmoniaSea => (1558, 190)
+        case GreenPyramidSlopes => (1566, 406)
+        case TheWatchersPostern => (1774, 418)
+        case NitrogenSea => (1894, 862)
+        case _ => throw new Error("Unknown region " + r)
+    }
+
+    // Special region sets for Yuggoth mechanics
+    val seaAreas = $(WestSlimeSea, EastSlimeSea, OxygenSea, PolarSea, MethaneSea, AmmoniaSea, NitrogenSea)
+    val greenPyramidRegions = $(GreenPyramidSlopes, TheWatchersPostern)
+    val openerRestrictedRegions = $(SlimeSeaOverlook, Laboratory, GreenPyramidSlopes, TheWatchersPostern)
+}
+
+object Yuggoth4a extends Board {
+    val id = "yuggoth35"
+    val name = "Yuggoth Map (4 players 3-5 variant)"
+    override val isYuggothMap = true
+
+    val SporeBadlands = Area("Spore Badlands", GlyphWW)
+    val ToxinDisposal = Area("Toxin Disposal", GlyphWW)
+    val WestSlimeSea = Area("West Slime Sea", Ocean)
+    val SlimeSeaOverlook = Area("Slime Sea Overlook", GlyphAA)
+    val EastSlimeSea = Area("East Slime Sea", Ocean)
+    val Laboratory = Area("Laboratory", GlyphAA)
+    val OxygenSea = Area("Oxygen Sea", Ocean)
+    val RadiationWastes = Area("Radiation Wastes", GlyphOO)
+    val PolarSea = Area("Polar Sea", Ocean)
+    val MethaneSea = Area("Methane Sea", Ocean)
+    val DesolationofXax = Area("Desolation of Xax", GlyphOO)
+    val DesolationofKnath = Area("Desolation of K'nath", GlyphOO)
+    val GhooricZone = Area("Ghooric Zone", GlyphOO)
+    val AmmoniaSea = Area("Ammonia Sea", Ocean)
+    val PyramidEmeraldSlope = Area("Pyramid Emerald Slope", GlyphAA)
+    val PyramidMalachiteSlope = Area("Pyramid Malachite Slope", GlyphAA)
+    val PyramidPainiteSlope = Area("Pyramid Painite Slope", GlyphAA)
+    val TheWatchersPostern = Area("The Watcher's Postern", GlyphAA)
+    val NitrogenSea = Area("Nitrogen Sea", Ocean)
+
+    val regions = $(SporeBadlands, ToxinDisposal, WestSlimeSea, SlimeSeaOverlook, EastSlimeSea, Laboratory, OxygenSea, RadiationWastes, PolarSea, MethaneSea, DesolationofXax, DesolationofKnath, GhooricZone, AmmoniaSea, PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern, NitrogenSea)
+    val nonFactionRegions = $(ToxinDisposal, WestSlimeSea, SlimeSeaOverlook, EastSlimeSea, Laboratory, DesolationofXax, DesolationofKnath, GhooricZone, PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
+    val west = regions
+    val east = $[Region]()
+
+    def connected(region : Region) = region match {
+        case SporeBadlands => $(EastSlimeSea, GhooricZone, Laboratory, PyramidMalachiteSlope, PyramidPainiteSlope, ToxinDisposal, WestSlimeSea)
+        case ToxinDisposal => $(DesolationofKnath, EastSlimeSea, NitrogenSea, PolarSea, PyramidPainiteSlope, RadiationWastes, SporeBadlands, WestSlimeSea)
+        case WestSlimeSea => $(EastSlimeSea, SlimeSeaOverlook, SporeBadlands, ToxinDisposal)
+        case SlimeSeaOverlook => $(EastSlimeSea, WestSlimeSea)
+        case EastSlimeSea => $(Laboratory, RadiationWastes, SlimeSeaOverlook, SporeBadlands, ToxinDisposal, WestSlimeSea)
+        case Laboratory => $(DesolationofXax, EastSlimeSea, GhooricZone, OxygenSea, RadiationWastes, SporeBadlands)
+        case OxygenSea => $(DesolationofXax, Laboratory, RadiationWastes)
+        case RadiationWastes => $(DesolationofKnath, DesolationofXax, EastSlimeSea, Laboratory, MethaneSea, OxygenSea, PolarSea, ToxinDisposal)
+        case PolarSea => $(DesolationofKnath, RadiationWastes, ToxinDisposal)
+        case MethaneSea => $(DesolationofKnath, DesolationofXax, RadiationWastes)
+        case DesolationofXax => $(AmmoniaSea, DesolationofKnath, GhooricZone, Laboratory, MethaneSea, OxygenSea, PyramidEmeraldSlope, RadiationWastes)
+        case DesolationofKnath => $(DesolationofXax, MethaneSea, NitrogenSea, PolarSea, PyramidEmeraldSlope, RadiationWastes, ToxinDisposal)
+        case GhooricZone => $(AmmoniaSea, DesolationofXax, Laboratory, PyramidMalachiteSlope, SporeBadlands)
+        case AmmoniaSea => $(DesolationofXax, GhooricZone, PyramidEmeraldSlope, PyramidMalachiteSlope)
+        case PyramidEmeraldSlope => $(AmmoniaSea, DesolationofKnath, DesolationofXax, NitrogenSea, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
+        case PyramidMalachiteSlope => $(AmmoniaSea, GhooricZone, PyramidEmeraldSlope, PyramidPainiteSlope, SporeBadlands, TheWatchersPostern)
+        case PyramidPainiteSlope => $(NitrogenSea, PyramidEmeraldSlope, PyramidMalachiteSlope, SporeBadlands, TheWatchersPostern, ToxinDisposal)
+        case TheWatchersPostern => $(PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope)
+        case NitrogenSea => $(DesolationofKnath, PyramidEmeraldSlope, PyramidPainiteSlope, ToxinDisposal)
+        case _ : MoonHold => $()
+        case _ : MantleHold => $()
+        case _ : FactionRegion => $()
+    }
+
+    def distance(a : Region, b : Region) =
+        if (a == b) 0
+        else if (connected(a).contains(b)) 1
+        else if (connected(a)./~(connected).contains(b)) 2
+        else if (connected(a)./~(connected)./~(connected).contains(b)) 3
+        else 4
+
+    def starting(faction : Faction) = faction match {
+        case BG => $(SporeBadlands)
+        case SL => $(OxygenSea)
+        case YS => $(RadiationWastes)
+        case WW => $(PolarSea, AmmoniaSea)
+        case CC => $(MethaneSea)
+        case GC => $(NitrogenSea)
+        case OW => $(SporeBadlands, ToxinDisposal, WestSlimeSea, EastSlimeSea, OxygenSea, RadiationWastes, PolarSea, MethaneSea, DesolationofXax, DesolationofKnath, GhooricZone, AmmoniaSea, NitrogenSea)
+        case AN => nonFactionRegions
+        case CS => regions
+        case TS => nonFactionRegions.%(_.glyph == Ocean)
+        case FB => regions
+        case DS => $()
+        case BB => $()
+        case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
+        case DC => $()
+        case FBE => regions
+        case XSS => $()
+        case TB => $()
+    }
+
+    def gateXYO(r : Region) : (Int, Int) = r match {
+        case SporeBadlands => (118, 114)
+        case ToxinDisposal => (106, 910)
+        case WestSlimeSea => (166, 578)
+        case SlimeSeaOverlook => (402, 434)
+        case EastSlimeSea => (510, 678)
+        case Laboratory => (814, 98)
+        case OxygenSea => (1038, 286)
+        case RadiationWastes => (882, 674)
+        case PolarSea => (850, 922)
+        case MethaneSea => (1274, 742)
+        case DesolationofXax => (1266, 470)
+        case DesolationofKnath => (1542, 906)
+        case GhooricZone => (1786, 50)
+        case AmmoniaSea => (1558, 190)
+        case PyramidEmeraldSlope => (1562, 406)
+        case PyramidMalachiteSlope => (1894, 234)
+        case PyramidPainiteSlope => (1866, 646)
+        case TheWatchersPostern => (1774, 418)
+        case NitrogenSea => (1890, 862)
+        case _ => throw new Error("Unknown region " + r)
+    }
+
+    // Special region sets for Yuggoth mechanics
+    val seaAreas = $(WestSlimeSea, EastSlimeSea, OxygenSea, PolarSea, MethaneSea, AmmoniaSea, NitrogenSea)
+    val greenPyramidRegions = $(PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
+    val openerRestrictedRegions = $(SlimeSeaOverlook, Laboratory, PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
+}
+
+object Yuggoth4b extends Board {
+    val id = "yuggoth53"
+    val name = "Yuggoth Map (4 players 5-3 variant)"
+    override val isYuggothMap = true
+
+    val SporeBadlands = Area("Spore Badlands", GlyphWW)
+    val ToxinDisposal = Area("Toxin Disposal", GlyphWW)
+    val WestSlimeSea = Area("West Slime Sea", Ocean)
+    val SlimeSeaOverlook = Area("Slime Sea Overlook", GlyphAA)
+    val NorthSlimeSea = Area("North Slime Sea", Ocean)
+    val SouthSlimeSea = Area("South Slime Sea", Ocean)
+    val Laboratory = Area("Laboratory", GlyphAA)
+    val OxygenSea = Area("Oxygen Sea", Ocean)
+    val RadiationWastes = Area("Radiation Wastes", GlyphOO)
+    val TheTindalosSteppes = Area("The Tindalos Steppes", GlyphWW)
+    val TheEmptiness = Area("The Emptiness", GlyphOO)
+    val PolarSea = Area("Polar Sea", Ocean)
+    val MethaneSea = Area("Methane Sea", Ocean)
+    val TheTwinDesolations = Area("The Twin Desolations", GlyphOO)
+    val AmmoniaSea = Area("Ammonia Sea", Ocean)
+    val GreenPyramidSlopes = Area("Green Pyramid Slopes", GlyphAA)
+    val TheWatchersPostern = Area("The Watcher's Postern", GlyphAA)
+    val NitrogenSea = Area("Nitrogen Sea", Ocean)
+
+    val regions = $(SporeBadlands, ToxinDisposal, WestSlimeSea, SlimeSeaOverlook, NorthSlimeSea, SouthSlimeSea, Laboratory, OxygenSea, RadiationWastes, TheTindalosSteppes, TheEmptiness, PolarSea, MethaneSea, TheTwinDesolations, AmmoniaSea, GreenPyramidSlopes, TheWatchersPostern, NitrogenSea)
+    val nonFactionRegions = $(ToxinDisposal, WestSlimeSea, SlimeSeaOverlook, NorthSlimeSea, SouthSlimeSea, Laboratory, TheTindalosSteppes, TheEmptiness, TheTwinDesolations, GreenPyramidSlopes, TheWatchersPostern)
+    val west = regions
+    val east = $[Region]()
+
+    def connected(region : Region) = region match {
+        case SporeBadlands => $(GreenPyramidSlopes, Laboratory, NorthSlimeSea, ToxinDisposal, WestSlimeSea)
+        case ToxinDisposal => $(GreenPyramidSlopes, NitrogenSea, PolarSea, SouthSlimeSea, SporeBadlands, TheTindalosSteppes, TheTwinDesolations, WestSlimeSea)
+        case WestSlimeSea => $(NorthSlimeSea, SlimeSeaOverlook, SouthSlimeSea, SporeBadlands, ToxinDisposal)
+        case SlimeSeaOverlook => $(NorthSlimeSea, SouthSlimeSea, WestSlimeSea)
+        case NorthSlimeSea => $(Laboratory, SlimeSeaOverlook, SouthSlimeSea, SporeBadlands, WestSlimeSea)
+        case SouthSlimeSea => $(Laboratory, NorthSlimeSea, RadiationWastes, SlimeSeaOverlook, TheTindalosSteppes, ToxinDisposal, WestSlimeSea)
+        case Laboratory => $(AmmoniaSea, GreenPyramidSlopes, NorthSlimeSea, OxygenSea, RadiationWastes, SouthSlimeSea, SporeBadlands, TheTwinDesolations)
+        case OxygenSea => $(Laboratory, RadiationWastes, TheEmptiness, TheTwinDesolations)
+        case RadiationWastes => $(Laboratory, OxygenSea, SouthSlimeSea, TheEmptiness, TheTindalosSteppes)
+        case TheTindalosSteppes => $(PolarSea, RadiationWastes, SouthSlimeSea, TheEmptiness, ToxinDisposal)
+        case TheEmptiness => $(MethaneSea, OxygenSea, PolarSea, RadiationWastes, TheTindalosSteppes, TheTwinDesolations)
+        case PolarSea => $(TheEmptiness, TheTindalosSteppes, TheTwinDesolations, ToxinDisposal)
+        case MethaneSea => $(TheEmptiness, TheTwinDesolations)
+        case TheTwinDesolations => $(AmmoniaSea, GreenPyramidSlopes, Laboratory, MethaneSea, NitrogenSea, OxygenSea, PolarSea, TheEmptiness, ToxinDisposal)
+        case AmmoniaSea => $(GreenPyramidSlopes, Laboratory, TheTwinDesolations)
+        case GreenPyramidSlopes => $(AmmoniaSea, Laboratory, NitrogenSea, SporeBadlands, TheTwinDesolations, TheWatchersPostern, ToxinDisposal)
+        case TheWatchersPostern => $(GreenPyramidSlopes)
+        case NitrogenSea => $(GreenPyramidSlopes, TheTwinDesolations, ToxinDisposal)
+        case _ : MoonHold => $()
+        case _ : MantleHold => $()
+        case _ : FactionRegion => $()
+    }
+
+    def distance(a : Region, b : Region) =
+        if (a == b) 0
+        else if (connected(a).contains(b)) 1
+        else if (connected(a)./~(connected).contains(b)) 2
+        else if (connected(a)./~(connected)./~(connected).contains(b)) 3
+        else 4
+
+    def starting(faction : Faction) = faction match {
+        case BG => $(SporeBadlands)
+        case SL => $(OxygenSea)
+        case YS => $(RadiationWastes)
+        case WW => $(PolarSea, AmmoniaSea)
+        case CC => $(MethaneSea)
+        case GC => $(NitrogenSea)
+        case OW => $(SporeBadlands, ToxinDisposal, WestSlimeSea, NorthSlimeSea, SouthSlimeSea, OxygenSea, RadiationWastes, TheTindalosSteppes, TheEmptiness, PolarSea, MethaneSea, TheTwinDesolations, AmmoniaSea, NitrogenSea)
+        case AN => nonFactionRegions
+        case CS => regions
+        case TS => nonFactionRegions.%(_.glyph == Ocean)
+        case FB => regions
+        case DS => $()
+        case BB => $()
+        case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
+        case DC => $()
+        case FBE => regions
+        case XSS => $()
+        case TB => $()
+    }
+
+    def gateXYO(r : Region) : (Int, Int) = r match {
+        case SporeBadlands => (118, 114)
+        case ToxinDisposal => (106, 906)
+        case WestSlimeSea => (166, 578)
+        case SlimeSeaOverlook => (410, 426)
+        case NorthSlimeSea => (406, 210)
+        case SouthSlimeSea => (510, 678)
+        case Laboratory => (814, 94)
+        case OxygenSea => (1042, 282)
+        case RadiationWastes => (818, 586)
+        case TheTindalosSteppes => (718, 758)
+        case TheEmptiness => (974, 738)
+        case PolarSea => (850, 922)
+        case MethaneSea => (1286, 742)
+        case TheTwinDesolations => (1542, 906)
+        case AmmoniaSea => (1558, 190)
+        case GreenPyramidSlopes => (1562, 406)
+        case TheWatchersPostern => (1774, 418)
+        case NitrogenSea => (1890, 862)
+        case _ => throw new Error("Unknown region " + r)
+    }
+
+    // Special region sets for Yuggoth mechanics
+    val seaAreas = $(WestSlimeSea, NorthSlimeSea, SouthSlimeSea, OxygenSea, PolarSea, MethaneSea, AmmoniaSea, NitrogenSea)
+    val greenPyramidRegions = $(GreenPyramidSlopes, TheWatchersPostern)
+    val openerRestrictedRegions = $(SlimeSeaOverlook, Laboratory, GreenPyramidSlopes, TheWatchersPostern)
+}
+
+object Yuggoth5 extends Board {
+    val id = "yuggoth5"
+    val name = "Yuggoth Map (5 players)"
+    override val isYuggothMap = true
+
+    val SporeBadlands = Area("Spore Badlands", GlyphWW)
+    val ToxinDisposal = Area("Toxin Disposal", GlyphWW)
+    val WestSlimeSea = Area("West Slime Sea", Ocean)
+    val SlimeSeaOverlook = Area("Slime Sea Overlook", GlyphAA)
+    val NorthSlimeSea = Area("North Slime Sea", Ocean)
+    val SouthSlimeSea = Area("South Slime Sea", Ocean)
+    val Laboratory = Area("Laboratory", GlyphAA)
+    val OxygenSea = Area("Oxygen Sea", Ocean)
+    val RadiationWastes = Area("Radiation Wastes", GlyphOO)
+    val TheTindalosSteppes = Area("The Tindalos Steppes", GlyphWW)
+    val TheEmptiness = Area("The Emptiness", GlyphOO)
+    val PolarSea = Area("Polar Sea", Ocean)
+    val MethaneSea = Area("Methane Sea", Ocean)
+    val DesolationofXax = Area("Desolation of Xax", GlyphOO)
+    val DesolationofKnath = Area("Desolation of K'nath", GlyphOO)
+    val GhooricZone = Area("Ghooric Zone", GlyphOO)
+    val AmmoniaSea = Area("Ammonia Sea", Ocean)
+    val PyramidEmeraldSlope = Area("Pyramid Emerald Slope", GlyphAA)
+    val PyramidMalachiteSlope = Area("Pyramid Malachite Slope", GlyphAA)
+    val PyramidPainiteSlope = Area("Pyramid Painite Slope", GlyphAA)
+    val TheWatchersPostern = Area("The Watcher's Postern", GlyphAA)
+    val NitrogenSea = Area("Nitrogen Sea", Ocean)
+
+    val regions = $(SporeBadlands, ToxinDisposal, WestSlimeSea, SlimeSeaOverlook, NorthSlimeSea, SouthSlimeSea, Laboratory, OxygenSea, RadiationWastes, TheTindalosSteppes, TheEmptiness, PolarSea, MethaneSea, DesolationofXax, DesolationofKnath, GhooricZone, AmmoniaSea, PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern, NitrogenSea)
+    val nonFactionRegions = $(ToxinDisposal, WestSlimeSea, SlimeSeaOverlook, NorthSlimeSea, SouthSlimeSea, Laboratory, TheTindalosSteppes, TheEmptiness, DesolationofXax, DesolationofKnath, GhooricZone, PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
+    val west = regions
+    val east = $[Region]()
+
+    def connected(region : Region) = region match {
+        case SporeBadlands => $(GhooricZone, Laboratory, NorthSlimeSea, PyramidMalachiteSlope, PyramidPainiteSlope, ToxinDisposal, WestSlimeSea)
+        case ToxinDisposal => $(DesolationofKnath, NitrogenSea, PolarSea, PyramidPainiteSlope, SouthSlimeSea, SporeBadlands, TheTindalosSteppes, WestSlimeSea)
+        case WestSlimeSea => $(NorthSlimeSea, SlimeSeaOverlook, SouthSlimeSea, SporeBadlands, ToxinDisposal)
+        case SlimeSeaOverlook => $(NorthSlimeSea, SouthSlimeSea, WestSlimeSea)
+        case NorthSlimeSea => $(Laboratory, SlimeSeaOverlook, SouthSlimeSea, SporeBadlands, WestSlimeSea)
+        case SouthSlimeSea => $(Laboratory, NorthSlimeSea, RadiationWastes, SlimeSeaOverlook, TheTindalosSteppes, ToxinDisposal, WestSlimeSea)
+        case Laboratory => $(DesolationofXax, GhooricZone, NorthSlimeSea, OxygenSea, RadiationWastes, SouthSlimeSea, SporeBadlands)
+        case OxygenSea => $(DesolationofXax, Laboratory, RadiationWastes, TheEmptiness)
+        case RadiationWastes => $(Laboratory, OxygenSea, SouthSlimeSea, TheEmptiness, TheTindalosSteppes)
+        case TheTindalosSteppes => $(PolarSea, RadiationWastes, SouthSlimeSea, TheEmptiness, ToxinDisposal)
+        case TheEmptiness => $(DesolationofKnath, DesolationofXax, MethaneSea, OxygenSea, PolarSea, RadiationWastes, TheTindalosSteppes)
+        case PolarSea => $(DesolationofKnath, TheEmptiness, TheTindalosSteppes, ToxinDisposal)
+        case MethaneSea => $(DesolationofKnath, DesolationofXax, TheEmptiness)
+        case DesolationofXax => $(AmmoniaSea, DesolationofKnath, GhooricZone, Laboratory, MethaneSea, OxygenSea, PyramidEmeraldSlope, TheEmptiness)
+        case DesolationofKnath => $(DesolationofXax, MethaneSea, NitrogenSea, PolarSea, PyramidEmeraldSlope, TheEmptiness, ToxinDisposal)
+        case GhooricZone => $(AmmoniaSea, DesolationofXax, Laboratory, PyramidMalachiteSlope, SporeBadlands)
+        case AmmoniaSea => $(DesolationofXax, GhooricZone, PyramidEmeraldSlope, PyramidMalachiteSlope)
+        case PyramidEmeraldSlope => $(AmmoniaSea, DesolationofKnath, DesolationofXax, NitrogenSea, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
+        case PyramidMalachiteSlope => $(AmmoniaSea, GhooricZone, PyramidEmeraldSlope, PyramidPainiteSlope, SporeBadlands, TheWatchersPostern)
+        case PyramidPainiteSlope => $(NitrogenSea, PyramidEmeraldSlope, PyramidMalachiteSlope, SporeBadlands, TheWatchersPostern, ToxinDisposal)
+        case TheWatchersPostern => $(PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope)
+        case NitrogenSea => $(DesolationofKnath, PyramidEmeraldSlope, PyramidPainiteSlope, ToxinDisposal)
+        case _ : MoonHold => $()
+        case _ : MantleHold => $()
+        case _ : FactionRegion => $()
+    }
+
+    def distance(a : Region, b : Region) =
+        if (a == b) 0
+        else if (connected(a).contains(b)) 1
+        else if (connected(a)./~(connected).contains(b)) 2
+        else if (connected(a)./~(connected)./~(connected).contains(b)) 3
+        else 4
+
+    def starting(faction : Faction) = faction match {
+        case BG => $(SporeBadlands)
+        case SL => $(OxygenSea)
+        case YS => $(RadiationWastes)
+        case WW => $(PolarSea, AmmoniaSea)
+        case CC => $(MethaneSea)
+        case GC => $(NitrogenSea)
+        case OW => $(SporeBadlands, ToxinDisposal, WestSlimeSea, NorthSlimeSea, SouthSlimeSea, OxygenSea, RadiationWastes, TheTindalosSteppes, TheEmptiness, PolarSea, MethaneSea, DesolationofXax, DesolationofKnath, GhooricZone, AmmoniaSea, NitrogenSea)
+        case AN => nonFactionRegions
+        case CS => regions
+        case TS => nonFactionRegions.%(_.glyph == Ocean)
+        case FB => regions
+        case DS => $()
+        case BB => $()
+        case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW)
+        case DC => $()
+        case FBE => regions
+        case XSS => $()
+        case TB => $()
+    }
+
+    def gateXYO(r : Region) : (Int, Int) = r match {
+        case SporeBadlands => (122, 114)
+        case ToxinDisposal => (106, 906)
+        case WestSlimeSea => (166, 578)
+        case SlimeSeaOverlook => (410, 426)
+        case NorthSlimeSea => (406, 210)
+        case SouthSlimeSea => (510, 678)
+        case Laboratory => (814, 98)
+        case OxygenSea => (1042, 282)
+        case RadiationWastes => (818, 582)
+        case TheTindalosSteppes => (722, 758)
+        case TheEmptiness => (974, 742)
+        case PolarSea => (850, 922)
+        case MethaneSea => (1286, 742)
+        case DesolationofXax => (1266, 470)
+        case DesolationofKnath => (1542, 902)
+        case GhooricZone => (1786, 50)
+        case AmmoniaSea => (1558, 190)
+        case PyramidEmeraldSlope => (1562, 406)
+        case PyramidMalachiteSlope => (1890, 238)
+        case PyramidPainiteSlope => (1866, 646)
+        case TheWatchersPostern => (1774, 418)
+        case NitrogenSea => (1890, 862)
+        case _ => throw new Error("Unknown region " + r)
+    }
+
+    // Special region sets for Yuggoth mechanics
+    val seaAreas = $(WestSlimeSea, NorthSlimeSea, SouthSlimeSea, OxygenSea, PolarSea, MethaneSea, AmmoniaSea, NitrogenSea)
+    val greenPyramidRegions = $(PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
+    val openerRestrictedRegions = $(SlimeSeaOverlook, Laboratory, PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
+}
+
+object YuggothRegionPalette {
+    private[cws] val byBoard : Map[String, Map[Region, Int]] = {
+        val yuggoth3 = {
+            import Yuggoth3._
+            Map[Region, Int](
+                SporeBadlands -> 0x733b25,
+                ToxinDisposal -> 0x956b2b,
+                WestSlimeSea -> 0xb886b2,
+                SlimeSeaOverlook -> 0x94512f,
+                EastSlimeSea -> 0xc2525e,
+                Laboratory -> 0x485241,
+                OxygenSea -> 0x71b9e3,
+                RadiationWastes -> 0xcb5b23,
+                PolarSea -> 0xdbcd8d,
+                MethaneSea -> 0xa7c067,
+                TheTwinDesolations -> 0x555627,
+                AmmoniaSea -> 0xc9cf55,
+                GreenPyramidSlopes -> 0x4c9532,
+                TheWatchersPostern -> 0x27421b,
+                NitrogenSea -> 0x80b4ae
+            )
+        }
+        val yuggoth35 = {
+            import Yuggoth4a._
+            Map[Region, Int](
+                SporeBadlands -> 0x733b25,
+                ToxinDisposal -> 0x956b2b,
+                WestSlimeSea -> 0xb886b2,
+                SlimeSeaOverlook -> 0x94512f,
+                EastSlimeSea -> 0xc2525e,
+                Laboratory -> 0x485241,
+                OxygenSea -> 0x71b9e3,
+                RadiationWastes -> 0xcb5b23,
+                PolarSea -> 0xdbcd8d,
+                MethaneSea -> 0xa7c067,
+                DesolationofXax -> 0x805719,
+                DesolationofKnath -> 0x555627,
+                GhooricZone -> 0x794820,
+                AmmoniaSea -> 0xc9cf55,
+                PyramidEmeraldSlope -> 0x4c9532,
+                PyramidMalachiteSlope -> 0x84b434,
+                PyramidPainiteSlope -> 0x1e5a24,
+                TheWatchersPostern -> 0x27421b,
+                NitrogenSea -> 0x80b4ae
+            )
+        }
+        val yuggoth53 = {
+            import Yuggoth4b._
+            Map[Region, Int](
+                SporeBadlands -> 0x733b25,
+                ToxinDisposal -> 0x956b2b,
+                WestSlimeSea -> 0xb886b2,
+                SlimeSeaOverlook -> 0x94512f,
+                NorthSlimeSea -> 0xc2525e,
+                SouthSlimeSea -> 0x65718e,
+                Laboratory -> 0x485241,
+                OxygenSea -> 0x71b9e3,
+                RadiationWastes -> 0x743c25,
+                TheTindalosSteppes -> 0x5e552f,
+                TheEmptiness -> 0xcb5b23,
+                PolarSea -> 0xdbcd8d,
+                MethaneSea -> 0xa7c067,
+                TheTwinDesolations -> 0x555627,
+                AmmoniaSea -> 0xc9cf55,
+                GreenPyramidSlopes -> 0x4c9532,
+                TheWatchersPostern -> 0x27421b,
+                NitrogenSea -> 0x80b4ae
+            )
+        }
+        val yuggoth5 = {
+            import Yuggoth5._
+            Map[Region, Int](
+                SporeBadlands -> 0x733b25,
+                ToxinDisposal -> 0x956b2b,
+                WestSlimeSea -> 0xb886b2,
+                SlimeSeaOverlook -> 0x94512f,
+                NorthSlimeSea -> 0xc2525e,
+                SouthSlimeSea -> 0x65718e,
+                Laboratory -> 0x485241,
+                OxygenSea -> 0x71b9e3,
+                RadiationWastes -> 0x743c25,
+                TheTindalosSteppes -> 0x5e552f,
+                TheEmptiness -> 0xcb5b23,
+                PolarSea -> 0xdbcd8d,
+                MethaneSea -> 0xa7c067,
+                DesolationofXax -> 0x805719,
+                DesolationofKnath -> 0x555627,
+                GhooricZone -> 0x794820,
+                AmmoniaSea -> 0xc9cf55,
+                PyramidEmeraldSlope -> 0x4c9532,
+                PyramidMalachiteSlope -> 0x84b434,
+                PyramidPainiteSlope -> 0x1e5a24,
+                TheWatchersPostern -> 0x27421b,
+                NitrogenSea -> 0x80b4ae
+            )
+        }
+        Map(
+            "yuggoth3" -> yuggoth3,
+            "yuggoth35" -> yuggoth35,
+            "yuggoth53" -> yuggoth53,
+            "yuggoth5" -> yuggoth5,
+        )
+    }
+    def get(boardId : String, r : Region) : Option[Int] =
+        byBoard.get(boardId).flatMap(_.get(r))
 }

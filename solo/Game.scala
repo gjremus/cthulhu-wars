@@ -146,6 +146,7 @@ trait Board {
     val west : $[Region]
     val east : $[Region]
     val isLibraryMap : Boolean = false
+    val isYuggothMap : Boolean = false
     def gateXYOHorizontal(r : Region) : (Int, Int) = gateXYO(r)
     def silenceTokenMax(f : Faction) : Int = 0
     val unitScale : Double = 1.0
@@ -1332,6 +1333,10 @@ case object MapLibrary33 extends MapOption
 case object MapLibrary35 extends MapOption
 case object MapLibrary53 extends MapOption
 case object MapLibrary55 extends MapOption
+case object MapYuggoth3 extends MapOption
+case object MapYuggoth35 extends MapOption
+case object MapYuggoth53 extends MapOption
+case object MapYuggoth5 extends MapOption
 
 abstract class LoyaltyCardGameOption(val lc : LoyaltyCard) extends GameOption
 
@@ -1438,6 +1443,10 @@ object GameOptions {
         MapLibrary35,
         MapLibrary53,
         MapLibrary55,
+        MapYuggoth3,
+        MapYuggoth35,
+        MapYuggoth53,
+        MapYuggoth5,
         UseGhast,
         UseGug,
         UseShantak,

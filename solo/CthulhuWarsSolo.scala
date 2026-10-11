@@ -642,6 +642,10 @@ object CthulhuWarsSolo {
                 case Some(MapLibrary33) => LibraryCelaeno33
                 case Some(MapLibrary35) => LibraryCelaeno35
                 case Some(MapLibrary53) => LibraryCelaeno53
+                case Some(MapYuggoth3) => Yuggoth3
+                case Some(MapYuggoth35) => Yuggoth4a
+                case Some(MapYuggoth53) => Yuggoth4b
+                case Some(MapYuggoth5) => Yuggoth5
             }
 
             val track = seating.num @@ {
@@ -5303,9 +5307,14 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         case MapLibrary35 => "library35"
                         case MapLibrary53 => "library53"
                         case MapLibrary55 => "library5"
+                        case MapYuggoth3 => "yuggoth3"
+                        case MapYuggoth35 => "yuggoth35"
+                        case MapYuggoth53 => "yuggoth53"
+                        case MapYuggoth5 => "yuggoth5"
                     }
                     val isHorizontal = dom.window.innerWidth > dom.window.innerHeight
                     val isLibrary = opt == MapLibrary33 || opt == MapLibrary35 || opt == MapLibrary53 || opt == MapLibrary55
+                    val isYuggoth = opt == MapYuggoth3 || opt == MapYuggoth35 || opt == MapYuggoth53 || opt == MapYuggoth5
                     val assetId = if (isLibrary && isHorizontal) imgId + "-h" else imgId
                     val img = getAsset(assetId)
                     mapDiv.innerHTML = ""
@@ -5622,7 +5631,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         }
                         n -= 1
                         if (n == 0) {
-                            val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55, MapLibrary33, MapLibrary35, MapLibrary53, MapLibrary55)
+                            val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55, MapLibrary33, MapLibrary35, MapLibrary53, MapLibrary55, MapYuggoth3, MapYuggoth35, MapYuggoth53, MapYuggoth5)
                             setup.options = setup.options.notOf[MapOption] :+ (all.dropWhile(setup.options.of[MapOption].lastOption.has(_).not).drop(1) ++ all).first
                             setupQuestions()
                         }
@@ -5685,9 +5694,14 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         case MapLibrary35 => "library35"
                         case MapLibrary53 => "library53"
                         case MapLibrary55 => "library5"
+                        case MapYuggoth3 => "yuggoth3"
+                        case MapYuggoth35 => "yuggoth35"
+                        case MapYuggoth53 => "yuggoth53"
+                        case MapYuggoth5 => "yuggoth5"
                     }
                     val isHorizontal = dom.window.innerWidth > dom.window.innerHeight
                     val isLibrary = opt == MapLibrary33 || opt == MapLibrary35 || opt == MapLibrary53 || opt == MapLibrary55
+                    val isYuggoth = opt == MapYuggoth3 || opt == MapYuggoth35 || opt == MapYuggoth53 || opt == MapYuggoth5
                     val assetId = if (isLibrary && isHorizontal) imgId + "-h" else imgId
                     val img = getAsset(assetId)
                     mapDiv.innerHTML = ""
@@ -6007,7 +6021,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         }
                         n -= 1
                         if (n == 0) {
-                            val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55, MapLibrary33, MapLibrary35, MapLibrary53, MapLibrary55)
+                            val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55, MapLibrary33, MapLibrary35, MapLibrary53, MapLibrary55, MapYuggoth3, MapYuggoth35, MapYuggoth53, MapYuggoth5)
                             setup.options = setup.options.notOf[MapOption] :+ (all.dropWhile(setup.options.of[MapOption].lastOption.has(_).not).drop(1) ++ all).first
                             setupQuestions()
                         }
