@@ -316,6 +316,51 @@ object PRMExpansion extends Expansion {
                 // Requirement auto-fulfilled by game logic
                 Then(EndAction(f))
 
+            // ── ATOMIC UNITY ────────────────────────────────────────────
+            case AtomicUnityMainAction(f) =>
+                val monsters = f.allInPlay.%(_.uclass.utype == Monster)
+                if (monsters.none) {
+                    f.log("No Monsters in play")
+                    EndAction(f)
+                } else if (f.power < 1) {
+                    f.log("Not enough Power for", AtomicUnity.styled(f))
+                    EndAction(f)
+                } else {
+                    implicit val asking = Asking(f)
+                    Ask(f, $(AtomicUnityPickMonsterAction(f, monsters./(_.ref))))
+                }
+
+            case AtomicUnityPickMonsterAction(f, monsters) =>
+                implicit val asking = Asking(f)
+                Ask(f).each(monsters)(m => AtomicUnityAction(f, m))
+
+            case AtomicUnityAction(f, monsterRef) =>
+                val monster = game.unit(monsterRef)
+                f.log(AtomicUnity.styled(f) + ":", "Eliminated", monster.uclass.styled(f), "in", monster.region)
+                f.power -= 1
+                game.eliminate(monster)
+
+                val cultistAreas = f.allInPlay.%(_.uclass == Acolyte)./(_.region).distinct
+                if (cultistAreas.any) {
+                    cultistAreas.foreach { r =>
+                        val egg = f.pool(AstralEgg).first
+                        egg.region = r
+                        f.log("Placed", AstralEgg.styled(f), "in", r)
+                    }
+                } else {
+                    f.log("No", Acolyte.styled(f), "on the map")
+                }
+
+                // Flip if no monsters remain in play
+                val remainingMonsters = f.allInPlay.%(_.uclass.utype == Monster)
+                if (remainingMonsters.none) {
+                    f.oncePerAction :+= AtomicUnity
+                    game.prmFlippedDownSpellbooks :+= AtomicUnity
+                    f.log(AtomicUnity.styled(f), "flipped Face Down until Doom Phase")
+                }
+
+                Then(EndAction(f))
+
             // ── ELDRITCH LOVE ───────────────────────────────────────────
             case EldritchLoveAction(f) =>
                 val flippedCount = game.prmFlippedDownSpellbooks.num
