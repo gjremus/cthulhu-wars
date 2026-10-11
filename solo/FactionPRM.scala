@@ -407,6 +407,43 @@ object PRMExpansion extends Expansion {
 
                 Then(EndAction(f))
 
+            // ── ZEALOUS SPARK ───────────────────────────────────────────
+            case ZealousSparkMainAction(f) =>
+                if (f.doom > 0) {
+                    // Find ALL monsters on the map (any faction)
+                    val allMonsters = game.factions./~(fx => fx.allInPlay.%(_.uclass.utype == Monster)./(_.ref))
+                    if (allMonsters.none) {
+                        f.log("No Monsters on the map")
+                        EndAction(f)
+                    } else {
+                        implicit val asking = Asking(f)
+                        Ask(f, $(ZealousSparkPickMonsterAction(f, allMonsters)))
+                    }
+                } else {
+                    f.log("No Doom for", ZealousSpark.styled(f))
+                    EndAction(f)
+                }
+
+            case ZealousSparkPickMonsterAction(f, monsters) =>
+                implicit val asking = Asking(f)
+                Ask(f).each(monsters)(m => {
+                    val monster = game.unit(m)
+                    val adjacentAreas = game.board.connected(monster.region)
+                    ZealousSparkPickDestAction(f, m, adjacentAreas)
+                })
+
+            case ZealousSparkPickDestAction(f, monsterRef, adjacentAreas) =>
+                implicit val asking = Asking(f)
+                Ask(f).each(adjacentAreas)(r => ZealousSparkAction(f, monsterRef, r))
+
+            case ZealousSparkAction(f, monsterRef, dest) =>
+                val monster = game.unit(monsterRef)
+                val origin = monster.region
+                f.doom -= 1
+                monster.region = dest
+                f.log(ZealousSpark.styled(f) + ":", "moved", monster.uclass.styled(monster.faction), "from", origin, "to", dest)
+                Then(EndAction(f))
+
             // ── ELDRITCH LOVE ───────────────────────────────────────────
             case EldritchLoveAction(f) =>
                 val flippedCount = game.prmFlippedDownSpellbooks.num
