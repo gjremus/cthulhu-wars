@@ -126,21 +126,7 @@ class GameEvaluationFM(implicit game : Game) extends GameEvaluation(FM)(game) {
             }
 
             a match {
-                case DevourSelfAction(f, u) => elim(u)
-                case DevourUnitAction(f, u) => elim(u)
-                case EliminateUnitAction(f, u) => elim(u)
-                case DevourAfterAction(f, u) => elim(u)
-                case LetEliminateUnitAction(f, u) => elim(u)
-                case BloodSacrificeBattleEliminateAction(f, u) => elim(u)
-
                 case RetreatUnitAction(f, u, r) => retreat(u)
-
-                case DivideAfterRetreatAction(f, u, r) =>
-                    u.cultist && !u.gateKeeper   |=> 500  -> "divide recruit acolyte"
-
-                case DamageUnitAction(f, u, _) =>
-                    u.is(MuscleStitcher)         |=> 600  -> "damage muscle stitcher (tendon flaying)"
-                    elim(u)
 
                 case SpitefulChiselReturnAction(f, _) =>
                     true                         |=> 500  -> "return captured acolyte"

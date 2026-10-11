@@ -1523,6 +1523,12 @@ object CthulhuWarsSolo {
                     case FungalThrall => DrawRect("fbe-fungal-thrall", |(tint), x - 35, y - 75, 70, 85, outline = true)
                     case Byagoona     => DrawRect("fbe-byagoona", |(tint), x - 70, y - 150, 140, 156, outline = true)
 
+                    // Fleshmason (FM): designer faction units
+                    case BoneSculptor   => DrawRect("fm-bone-sculptor", |(tint), x - 30, y - 60, 60, 70)
+                    case MuscleStitcher => DrawRect("fm-muscle-stitcher", |(tint), x - 35, y - 70, 70, 80)
+                    case BodyArchitect  => DrawRect("fm-body-architect", |(tint), x - 40, y - 80, 80, 90)
+                    case ScreamingWall  => DrawRect("fm-screaming-wall", |(tint), x - 35, y - 70, 70, 80)
+
                     // Xyrious Storm (XSS): placeholder sprites (no art yet).
                     // Amphibian Crawler = Gnorri, Twister = Shantak, Eye of the Storm = Star Vampire, Petrichor = Cthulhu-sized.
                     case AmphibianCrawler => DrawRect("n-gnorri", |(tint), x - 17, y - 53, 35, 59)
@@ -4167,6 +4173,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             // the Earth map.
                             case FungalThrall  => "n-dimensional-shambler"
                             case Byagoona      => "fbe-byagoona"
+                            case BoneSculptor   => "fm-bone-sculptor"
+                            case MuscleStitcher => "fm-muscle-stitcher"
+                            case BodyArchitect  => "fm-body-architect"
+                            case ScreamingWall  => "fm-screaming-wall"
                             case ProtoShoggoth => "tt-proto-shoggoth"
                             case UbboSathla    => "tt-ubbo-sathla"
                             case Ghast              => "n-ghast"

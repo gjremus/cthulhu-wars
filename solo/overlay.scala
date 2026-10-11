@@ -602,7 +602,7 @@ object Overlays {
     // single-method bytecode limit once the Dunwich cases were added, so the
     // Dunwich (Whateley Clan + Dire Yog-Sothoth) overlays live in their own
     // method and info() delegates to it first.
-    def info(s : $[Any]) : |[String] = { val d = infoDunwich(s); if (d.any) d else { val c = infoCats(s); if (c.any) c else infoMain(s) } }
+    def info(s : $[Any]) : |[String] = { val d = infoDunwich(s); if (d.any) d else { val c = infoCats(s); if (c.any) c else { val fm = infoFM(s); if (fm.any) fm else infoMain(s) } } }
 
     def infoDunwich(s : $[Any]) : |[String] = (s @@ {
         // ── DUNWICH HORROR — Whateley Clan + Dire Yog-Sothoth ──
@@ -614,6 +614,37 @@ object Overlays {
         // Shared common text — back of all four Whateley cards. Each Whateley card
         // links here via onExternalClick('How to Recruit Whateley Clan').
         case $("How to Recruit Whateley Clan") => whateleyClanCommonText
+
+        case _ => ""
+    }).but("")
+
+    def infoFM(s : $[Any]) : |[String] = (s @@ {
+        // ── FLESHMASON (FM) — HOMEBREW DESIGNER FACTION ──
+        case $("FM") => faction(FM, "", FrenzyingAdze, "Battle", "If you are the Attacker in an Area with the Screaming Wall, increase your Combat by the number of Screaming Walls in play.",
+            $(), $(
+            (Acolyte,        6, "1", "0", ""),
+            (BoneSculptor,   3, "1", "1", s"""<div class=p>Spellbook: ${reference(FM, TerrifyingShriek)}</div>"""),
+            (MuscleStitcher, 3, "2", "2", s"""<div class=p>Spellbook: ${reference(FM, TendonFlaying)}</div>"""),
+            (BodyArchitect,  3, "3", "3", s"""<div class=p>Spellbook: ${reference(FM, BlueprintsInBlood)}</div>"""),
+            (ScreamingWall,  6, "2", "—", s"""
+                <div class=p>You may use the Create Gate Action to Create Screaming Walls instead of Gates (3 Power). Whenever you Create a Gate, also place a Screaming Wall by paying 1 additional Power.</div>
+                <div class=p>Spellbooks: ${reference(FM, TerrifyingShriek)}, ${reference(FM, CrumblingYawp)}, ${reference(FM, MannedBattlements)}, ${reference(FM, HymnOfSuffering)}</div>
+                <div class=p>${ref("Spiteful Chisel")} ${cost("(Post-Battle):")} If there are no Screaming Walls in your Pool and an enemy Great Old One was assigned a Result, return one of your Captured Acolytes from their Faction Card to the Battle Area.</div>""")
+        ))
+
+        case $("FM", CrumblingYawpReq.text) => requirement("Roll 9 or more dice in a single Combat.")
+        case $("FM", HymnOfSufferingReq.text) => requirement("Your Units in play have 12 or more Combat.")
+        case $("FM", TerrifyingShriekReq.text) => requirement("The Screaming Wall is in Areas with 2 of the following Glyphs. (Implementation uses any 2 distinct glyphs.)")
+        case $("FM", TendonFlayingReq.text) => requirement("As an Action, Pay 6 Power, minus the number of Screaming Walls in play.")
+        case $("FM", BlueprintsInBloodReq.text) => requirement("Have 3 Screaming Walls in Play.")
+        case $("FM", MannedBattlementsReq.text) => requirement("Have 6 Screaming Walls in Play.")
+
+        case $("FM", CrumblingYawp.name) => spellbook(CrumblingYawp.name, "Doom Phase", "Whenever you perform the Ritual of Annihilation, choose one:<br/>1) Gain 1 Power for each Area with an enemy controlled gate and the Screaming Wall.<br/>2) Gain 1 Elder Sign for every 3 Screaming Walls in Play.")
+        case $("FM", HymnOfSuffering.name) => spellbook(HymnOfSuffering.name, "Gather Power Phase", "Choose an Area with your Acolyte and the Screaming Wall to remove that Screaming Wall and gain 1 Power for each adjacent Area containing the Screaming Wall.")
+        case $("FM", TerrifyingShriek.name) => spellbook(TerrifyingShriek.name, "Post-Battle", "The Screaming Wall adds 1 Pain to your combat results. If a Bone Sculptor is in the Battle, apply that pain Pre-Battle instead.")
+        case $("FM", TendonFlaying.name) => spellbook(TendonFlaying.name, "Post-Battle", "For Each Muscle Stitcher that Received a Pain, choose a different option:<br/>1) Gain 1 Power<br/>2) Gain 1 Power<br/>3) Gain 1 Doom")
+        case $("FM", BlueprintsInBlood.name) => spellbook(BlueprintsInBlood.name, "Ongoing", "Body Architects count as Screaming Walls for all purposes in Areas without Screaming Walls.")
+        case $("FM", MannedBattlements.name) => spellbook(MannedBattlements.name, "Action: Cost 1", "Choose an Area containing a Screaming Wall. Move any number of Units from that Area to any adjacent Areas containing the Screaming Wall.")
 
         case _ => ""
     }).but("")
