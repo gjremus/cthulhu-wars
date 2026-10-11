@@ -1728,6 +1728,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case DC => $(DCExpansion)
             // Faceless Blight (FBE): Homebrew faction
             case FBE => $(FBEExpansion)
+            // Fleshmason (FM): Homebrew designer faction
+            case FM => $(FMExpansion)
             // Xyrious Storm (XSS): Homebrew faction
             case XSS => $(XSSExpansion)
             // The Burrowers Beneath (TB): Homebrew faction
@@ -1974,6 +1976,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Xyrious Storm (XSS) state — Cloud Of Ashes holding zone (§1.10 SB3).
     // Monsters placed on the Faction Card during elimination; returned to map at Doom.
     var xssFactionCardMonsters : $[UnitRef] = $
+
+    // Fleshmason (FM) state — designer faction dcylxgn1wkqs.
+    // fmGateJustCreated: tracks the region where FM just created a Gate so the
+    // afterAction hook can auto-place a Screaming Wall there (+1 Power).
+    var fmGateJustCreated : Option[Region] = None
 
     // The Burrowers Beneath (TB) state — per FactionTB.scala §2.4 / undo HARD RULE.
     var tbMantleInPlay : Boolean = false

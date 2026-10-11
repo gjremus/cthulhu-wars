@@ -811,6 +811,8 @@ object CthulhuWarsSolo {
                                         case DC => BotDC   .ask(actions, 0.2)(game)
                                         // Faceless Blight (FBE): bot dispatch (Easy)
                                         case FBE => BotFBE  .ask(actions, 0.2)(game)
+                                        // Fleshmason (FM): bot dispatch (Easy)
+                                        case FM => BotFM   .ask(actions, 0.2)(game)
                                         // Xyrious Storm (XSS): bot dispatch (Easy)
                                         case XSS => BotXSS  .ask(actions, 0.2)(game)
                                         // The Burrowers Beneath (TB): bot dispatch (Easy)
@@ -843,6 +845,8 @@ object CthulhuWarsSolo {
                                         case DC => BotDC   .ask(actions, 0.03)(game)
                                         // Faceless Blight (FBE): bot dispatch (Normal)
                                         case FBE => BotFBE  .ask(actions, 0.03)(game)
+                                        // Fleshmason (FM): bot dispatch (Normal)
+                                        case FM => BotFM   .ask(actions, 0.03)(game)
                                         // Xyrious Storm (XSS): bot dispatch (Normal)
                                         case XSS => BotXSS  .ask(actions, 0.03)(game)
                                         // The Burrowers Beneath (TB): bot dispatch (Normal)
@@ -879,6 +883,8 @@ object CthulhuWarsSolo {
                                         case DC => BotDC   .ask(as, 0.03)(game)
                                         // Faceless Blight (FBE): bot dispatch (AllVsHuman)
                                         case FBE => BotFBE  .ask(as, 0.03)(game)
+                                        // Fleshmason (FM): bot dispatch (AllVsHuman)
+                                        case FM => BotFM   .ask(as, 0.03)(game)
                                         // Xyrious Storm (XSS): bot dispatch (AllVsHuman)
                                         case XSS => BotXSS  .ask(as, 0.03)(game)
                                         // The Burrowers Beneath (TB): bot dispatch (AllVsHuman)
@@ -1081,6 +1087,8 @@ object CthulhuWarsSolo {
                     // Faceless Blight (FBE): deep mossy green #3d5f1c — multiply-only
                     // (source sprites are white silhouettes; multiply alone = exact color)
                     case FBE => Processing(None, None, None, |("#3d5f1c"))
+                    // Fleshmason (FM): pale pink #f3c8c8
+                    case FM => Processing(|("#f3c8c8"), None, None)
                     // Xyrious Storm (XSS): stormy blue-grey #4a6b7a
                     case XSS => Processing(|("#4a6b7a"), None, None)
                     // Colour Out of Space (CS): placeholder with no tint
@@ -1144,6 +1152,8 @@ object CthulhuWarsSolo {
                         // Cultist colour comes from the #3d5f1c multiply — do NOT recolor the art),
                         // plus a thin crisp white keyline (outline=true) so it reads like every unit.
                         case FBE => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60, outline = true)
+                        // Fleshmason (FM): DC acolyte sprite tinted FM-pink
+                        case FM => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
@@ -1216,6 +1226,7 @@ object CthulhuWarsSolo {
                         // Defilers Court (DC): faction glyph sprite
                         case DC => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
                         case FBE => DrawRect("fbe-glyph", None, x - 50, y - 50, 100, 100)
+                        case FM => DrawRect("fm-glyph", None, x - 50, y - 50, 100, 100)
                         case XSS => DrawRect("xss-glyph", None, x - 50, y - 50, 100, 100)
                         case TB => DrawRect("tb-glyph", None, x - 50, y - 50, 100, 100)
                         // Colour Out of Space (CS): faction glyph sprite
