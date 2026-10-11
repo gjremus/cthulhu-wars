@@ -71,6 +71,7 @@ object Host {
                     case DC => BotDC.ask(actions, 0.03)(g)
                     case FBE => BotFBE.ask(actions, 0.03)(g)
                     case XSS => BotXSS.ask(actions, 0.03)(g)
+                    case DGT => BotDGT.ask(actions, 0.03)(g)
                     case TB => BotTB.ask(actions, 0.03)(g)
                     case CS => BotCS.ask(actions, 0.03)(g)
                     // [2026-05-24] Neutral / Library factions (NeutralAbhoth,
@@ -85,7 +86,7 @@ object Host {
 
     def main(args : Array[String]) {
         // Tombstalker (TS), Firstborn (FB), and Daemon Sultan (DS): included in the master faction list for headless simulation runs
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, DGT)
 
         val numberOfPlayers = 4
 

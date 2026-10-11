@@ -100,6 +100,8 @@ object EarthMap3 extends Board {
         case FBE => regions
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
+        // Tribulation (DGT): regular multi-area setup
+        case DGT => regions
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
         case TB => $()
     }
@@ -224,6 +226,8 @@ object EarthMap4v35 extends Board {
         case FBE => regions
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
+        // Tribulation (DGT): regular multi-area setup
+        case DGT => regions
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
         case TB => $()
     }
@@ -352,6 +356,8 @@ object EarthMap4v53 extends Board {
         case FBE => regions
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
+        // Tribulation (DGT): regular multi-area setup
+        case DGT => regions
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
         case TB => $()
     }
@@ -488,6 +494,8 @@ object EarthMap5 extends Board {
         case FBE => regions
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
+        // Tribulation (DGT): regular multi-area setup
+        case DGT => regions
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
         case TB => $()
     }
@@ -634,6 +642,8 @@ object EarthMap6 extends Board {
         case FBE => regions
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
+        // Tribulation (DGT): regular multi-area setup
+        case DGT => regions
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
         case TB => $()
     }
@@ -906,6 +916,8 @@ object LibraryCelaeno55 extends Board {
         case FBE => regions
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
+        // Tribulation (DGT): regular multi-area setup
+        case DGT => regions
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
         case TB => $()
     }
@@ -1019,7 +1031,7 @@ object LibraryCelaeno33 extends Board {
         case GC => $(Hyperquarium); case CC => $(BlueHall); case BG => $(Fountain); case YS => $(FloatingTower)
         case SL => $(ChamberOfSngac); case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case TB => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case DGT => regions; case TB => $()
         case CS => regions
         case _ => regions
     }
@@ -1101,7 +1113,7 @@ object LibraryCelaeno53 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case TB => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case DGT => regions; case TB => $()
         case CS => regions
         case _ => regions
     }
@@ -1204,7 +1216,7 @@ object LibraryCelaeno35 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case TB => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case DGT => regions; case TB => $()
         case CS => regions
         case _ => regions
     }
