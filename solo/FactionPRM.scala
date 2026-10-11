@@ -610,6 +610,56 @@ object PRMExpansion extends Expansion {
                 game.prmFlippedDownSpellbooks = $()
                 Force(DoomAction(f))
 
+            // ── MAKE AS ONE ─────────────────────────────────────────────
+            case MakeAsOneOfferAction(self, enemy, eligibleSBs) =>
+                // Offer enemy the choice to activate PRM spellbooks
+                implicit val asking = Asking(enemy)
+                val actions = eligibleSBs./(sb => MakeAsOneActivateAction(self, enemy, sb)) :+ MakeAsOneSkipAction(self, enemy)
+                Ask(enemy, actions)
+
+            case MakeAsOneActivateAction(self, enemy, sb) =>
+                // Enemy activates PRM spellbook
+                // Cost is the spellbook's power cost (varies by SB)
+                val powerCost = sb match {
+                    case AtomicUnity => 1
+                    case Protogenesis => 2
+                    case Osmosis => 2
+                    case ZealousSpark => 0  // Costs doom, not power
+                    case SpeakReality => 0  // Cost X, enemy chooses
+                    case _ => 0
+                }
+
+                if (enemy.power < powerCost) {
+                    enemy.log("Not enough Power for", sb.styled(self))
+                    Force(MakeAsOneSkipAction(self, enemy))
+                } else {
+                    enemy.power -= powerCost
+                    PRM.power += powerCost  // PRM receives the power
+                    game.prmMakeAsOneFlips += 1
+
+                    // Check if this causes flip
+                    val shouldFlip = sb match {
+                        case AtomicUnity => PRM.allInPlay.%(_.uclass.utype == Monster).none
+                        case Protogenesis => PRM.pool.%(_.uclass.utype == Monster).none
+                        case _ => false  // Others have different flip conditions or don't flip
+                    }
+
+                    if (shouldFlip) {
+                        PRM.oncePerAction :+= sb
+                        game.prmFlippedDownSpellbooks :+= sb
+                        PRM.doom += 1
+                        PRM.log("Gained", 1.doom, "from", sb.styled(PRM), "flipping")
+                    }
+
+                    enemy.log("Activated", sb.styled(PRM))
+                    // The actual execution of the spellbook action would be handled separately
+                    Then(EndAction(enemy))
+                }
+
+            case MakeAsOneSkipAction(self, enemy) =>
+                enemy.log("Declined", MakeAsOne.styled(self))
+                Then(EndAction(enemy))
+
             // ── END TURN ────────────────────────────────────────────────
             case EndTurnAction(f) if f == PRM || game.prmYcgnaTemporaryController.contains(f) =>
                 // Clear temporary Ycgn'àgnnisssz controller
