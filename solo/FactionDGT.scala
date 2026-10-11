@@ -433,14 +433,19 @@ object DGTExpansion extends Expansion {
             // Count Acolytes in pool
             val acolytesInPool = DGT.pool.%(_.uclass == Acolyte).num
             // Count Acolytes on enemy faction cards (captured by enemies)
-            // Acolytes captured by enemies would have u.faction == DGT but be in enemy territory
-            // For now, simplified: just count pool acolytes
-            // TODO: Properly count captured acolytes when we understand the capture mechanics
-            val total = acolytesInPool
+            // Captured units have faction == DGT but region == enemy's prison
+            val acolytesCaptured = game.factions.but(DGT)./~(enemy =>
+                enemy.at(enemy.prison).%(u => u.faction == DGT && u.uclass == Acolyte)
+            ).num
+            val total = acolytesInPool + acolytesCaptured
             if (total > 0) {
                 val powerGained = total * 2
                 DGT.power += powerGained
-                DGT.log(MartyrsCry.styled(DGT) + ": gained", powerGained.power, "for", total, "Acolytes in pool/captured")
+                val breakdown = (acolytesInPool > 0 && acolytesCaptured > 0).??(
+                    " (" + acolytesInPool + " in pool, " + acolytesCaptured + " captured)"
+                ).|(
+                    acolytesCaptured > 0).??(" (" + acolytesCaptured + " captured)").|("")
+                DGT.log(MartyrsCry.styled(DGT) + ": gained", powerGained.power, "for", total, "Acolyte".s(total) + breakdown)
             }
             UnknownContinue
 
