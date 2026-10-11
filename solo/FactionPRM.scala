@@ -660,6 +660,30 @@ object PRMExpansion extends Expansion {
                 enemy.log("Declined", MakeAsOne.styled(self))
                 Then(EndAction(enemy))
 
+            // ── MOTHER'S AID ────────────────────────────────────────────
+            case MothersAidOfferAction(self, enemy) =>
+                // Offer enemy the choice to control Ycgn'àgnnisssz
+                val ycgna = self.goo(Ycgnagnnisssz)
+                if (ycgna.region == null) {
+                    enemy.log(Ycgnagnnisssz.styled(self), "is not on the map")
+                    EndAction(enemy)
+                } else if (enemy.power < 1) {
+                    enemy.log("Not enough Power for Mother's Aid")
+                    EndAction(enemy)
+                } else {
+                    implicit val asking = Asking(enemy)
+                    Ask(enemy, $(MothersAidActivateAction(self, enemy)))
+                }
+
+            case MothersAidActivateAction(self, enemy) =>
+                // Enemy pays PRM 1 power to control Ycgn'àgnnisssz
+                enemy.power -= 1
+                PRM.power += 1
+                game.prmYcgnaTemporaryController = Some(enemy)
+                PRM.log(enemy.name, "paid", 1.power, "to control", Ycgnagnnisssz.styled(PRM), "this turn")
+                enemy.log("Controlling", Ycgnagnnisssz.styled(PRM), "this turn (moves cost 0, protected from combat/elimination)")
+                Then(EndAction(enemy))
+
             // ── END TURN ────────────────────────────────────────────────
             case EndTurnAction(f) if f == PRM || game.prmYcgnaTemporaryController.contains(f) =>
                 // Clear temporary Ycgn'àgnnisssz controller
