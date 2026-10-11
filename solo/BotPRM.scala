@@ -82,7 +82,7 @@ class GameEvaluationPRM(implicit game : Game) extends GameEvaluation(PRM)(game) 
 
                 // Eldritch Love - gain ES if 2+ face-down SBs
                 case EldritchLoveAction(f) =>
-                    self.flippedDown.num >= 2                    |=> 800  -> "gain ES from flipped SBs"
+                    game.prmFlippedDownSpellbooks.num >= 2       |=> 800  -> "gain ES from flipped SBs"
 
                 // Osmosis - redistribute units
                 case OsmosisMainAction(f) =>
@@ -150,21 +150,21 @@ class GameEvaluationPRM(implicit game : Game) extends GameEvaluation(PRM)(game) 
         else {
             // In battle
             a.unwrap match {
-                case AssignKillAction(_, _, target, _) =>
-                    target.goo                                   |=> 1000 -> "kill goo"
-                    target.monster                               |=> 500  -> "kill monster"
-                    target.cultist                               |=> 100  -> "kill cultist"
+                case AssignKillAction(_, _, _, u) =>
+                    u.goo                                        |=> 1000 -> "kill goo"
+                    u.monsterly                                  |=> 500  -> "kill monster"
+                    u.cultist                                    |=> 100  -> "kill cultist"
 
-                case AssignPainAction(_, _, target, _) =>
-                    target.monster                               |=> 300  -> "pain monster"
-                    target.cultist                               |=> 100  -> "pain cultist"
+                case AssignPainAction(_, _, _, u) =>
+                    u.monsterly                                  |=> 300  -> "pain monster"
+                    u.cultist                                    |=> 100  -> "pain cultist"
 
-                case DevourAction(_, _, _, target) =>
-                    target.goo                                   |=> 900  -> "devour goo"
-                    target.monster                               |=> 400  -> "devour monster"
+                case DevourAction(_, u) =>
+                    u.goo                                        |=> 900  -> "devour goo"
+                    u.monsterly                                  |=> 400  -> "devour monster"
 
-                case CaptureAction(_, _, _, target) =>
-                    target.cultist                               |=> 200  -> "capture cultist"
+                case CaptureAction(_, _, f, _) =>
+                    f.cultists.any                               |=> 200  -> "capture cultist"
 
                 case _ =>
             }

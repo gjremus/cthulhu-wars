@@ -85,7 +85,8 @@ case object PRM extends Faction { f =>
     // path; the custom YcgnaAwakenMainAction is offered from PRM's MainAction instead.
     override def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = None
 
-    override def cost(u : UnitClass)(implicit game : Game) : Int = u match {
+    // Override summonCost to handle Celestial Fledgling's variable cost
+    override def summonCost(u : UnitClass, r : Region)(implicit game : Game) : Int = u match {
         case CelestialFledgling =>
             // Variable cost: number of Fledglings in play plus one
             f.allInPlay.%(_.uclass == CelestialFledgling).num + 1
@@ -96,9 +97,11 @@ case object PRM extends Faction { f =>
         // Ycgn'àgnnisssz: combat = owner's earned spellbooks + all face-down spellbooks
         val ycgnaCount = units.%(_.uclass == Ycgnagnnisssz).not(Zeroed).num
         val ycgnaStr = if (ycgnaCount > 0) {
-            val earnedSBs = f.gained.num
-            val allFlippedDown = game.factions./(_.flippedDown.num).sum
-            earnedSBs + allFlippedDown
+            // Count of earned spellbooks (on faction card)
+            val earnedSBs = f.spellbooks.num
+            // Count of PRM's temporarily flipped-down spellbooks (from Pay 2 Doom requirement, etc.)
+            val prmFlippedDown = game.prmFlippedDownSpellbooks.num
+            earnedSBs + prmFlippedDown
         } else 0
 
         // Celestial Fledgling: combat = number of Fledglings in play plus one
@@ -269,25 +272,11 @@ object PRMExpansion extends Expansion {
     def name = "Permeation"
     def factions = $(PRM)
 
+    // Required perform method - no custom action handling for now
+    def perform(a : Action, soft : VoidGuard)(implicit game : Game) : Continue = null
+
     // No special elimination hooks needed for PRM
-    override def eliminate(g : Game, u : UnitFigure) {}
-
-    // Restore flipped-down spellbooks at Doom Phase
-    override def doom(g : Game, f : Faction) {
-        if (f == PRM) {
-            g.prmFlippedDownSpellbooks.foreach { sb =>
-                if (f.flippedDown.contains(sb)) {
-                    f.flippedDown :-= sb
-                }
-            }
-            g.prmFlippedDownSpellbooks = $()
-        }
-    }
-
-    // Clear temporary Ycgn'àgnnisssz controller at end of turn
-    override def afterTurn(g : Game, f : Faction) {
-        if (g.prmYcgnaTemporaryController.contains(f)) {
-            g.prmYcgnaTemporaryController = None
-        }
+    override def eliminate(u : UnitFigure)(implicit game : Game) {
+        // Could track eliminations here if needed for future abilities
     }
 }

@@ -2887,7 +2887,7 @@ object Overlays {
             $(AtomicUnity, EldritchLove, Osmosis, Protogenesis, SpeakReality, ZealousSpark), $(
             (Acolyte,           6, "1", "0", s"""<div class=p>Setup: 6 Acolytes + a Controlled Gate in an empty Sea Area.</div>"""),
             (AstralEgg,         4, "1", "1", s"""<div class=p>Replace with ${Ycgnagnnisssz.name} when Awakening.</div>"""),
-            (CelestialFledgling, 4, "1+", "1+", s"""<div class=p>${cost} Cost and ${combat} equal to the number of Fledglings in play plus one.</div><div class=p>Spellbook: ${prmRef(Protogenesis)}</div>"""),
+            (CelestialFledgling, 4, "1+", "1+", s"""<div class=p>${cost("Cost")} and ${combat} equal to the number of Fledglings in play plus one.</div><div class=p>Spellbook: ${prmRef(Protogenesis)}</div>"""),
             (Ycgnagnnisssz,     1, "?", "?", s"""
                 <div class=p>${cost(s"How to Awaken ${Ycgnagnnisssz.name}:")}</div>
                 <div class=p>${cost("1)")} Have an Astral Egg in play.</div>
