@@ -444,6 +444,78 @@ object PRMExpansion extends Expansion {
                 f.log(ZealousSpark.styled(f) + ":", "moved", monster.uclass.styled(monster.faction), "from", origin, "to", dest)
                 Then(EndAction(f))
 
+            // ── OSMOSIS ─────────────────────────────────────────────────
+            case OsmosisMainAction(f) =>
+                if (f.power < 2) {
+                    f.log("Not enough Power for", Osmosis.styled(f))
+                    EndAction(f)
+                } else {
+                    implicit val asking = Asking(f)
+                    Ask(f, $(OsmosisPickFirstAreaAction(f)))
+                }
+
+            case OsmosisPickFirstAreaAction(f) =>
+                implicit val asking = Asking(f)
+                Ask(f).each(game.board.regions)(r => OsmosisPickSecondAreaAction(f, r, game.board.connected(r)))
+
+            case OsmosisPickSecondAreaAction(f, first, adjacentToFirst) =>
+                implicit val asking = Asking(f)
+                Ask(f).each(adjacentToFirst)(r => {
+                    f.power -= 2
+                    // Find all factions with units in either area
+                    val factionsWithUnits = game.factions.%(fx => fx.allInPlay.%(u => u.region == first || u.region == r).any)
+                    // Start with PRM, then continue in turn order
+                    val orderedFactions = ($(f) ++ game.factions.but(f)).%(factionsWithUnits.contains)
+
+                    if (orderedFactions.any) {
+                        val firstFaction = orderedFactions.head
+                        val units = firstFaction.allInPlay.%(u => u.region == first || u.region == r)./(_.ref)
+                        OsmosisDistributeAction(f, firstFaction, first, r, units, $())
+                    } else {
+                        f.log(Osmosis.styled(f) + ":", "no Units to distribute")
+                        EndAction(f)
+                    }
+                })
+
+            case OsmosisDistributeAction(self, fx, area1, area2, units, placed) =>
+                if (units.none) {
+                    // Done with this faction, move to next
+                    val factionsWithUnits = game.factions.%(f => f.allInPlay.%(u => u.region == area1 || u.region == area2).any)
+                    val orderedFactions = ($(self) ++ game.factions.but(self)).%(factionsWithUnits.contains)
+                    val currentIndex = orderedFactions.indexOf(fx)
+
+                    if (currentIndex + 1 < orderedFactions.num) {
+                        val nextFaction = orderedFactions(currentIndex + 1)
+                        val nextUnits = nextFaction.allInPlay.%(u => u.region == area1 || u.region == area2)./(_.ref)
+                        // Collect placements
+                        val distributions = $()  // This would need to be accumulated properly
+                        Force(OsmosisDistributeAction(self, nextFaction, area1, area2, nextUnits, $()))
+                    } else {
+                        // All factions done
+                        self.log(Osmosis.styled(self) + ":", "distribution complete")
+                        Force(EndAction(self))
+                    }
+                } else {
+                    // Place next unit
+                    implicit val asking = Asking(fx)
+                    val unit = units.head
+                    val remaining = units.drop(1)
+                    Ask(fx).add(OsmosisPlaceUnitAction(self, fx, area1, area2, unit, remaining, placed, area1))
+                             .add(OsmosisPlaceUnitAction(self, fx, area1, area2, unit, remaining, placed, area2))
+                }
+
+            case OsmosisPlaceUnitAction(self, fx, area1, area2, u, remaining, placed, destArea) =>
+                val unit = game.unit(u)
+                unit.region = destArea
+                val newPlaced = placed :+ (u, destArea)
+                fx.log("Placed", unit.uclass.styled(fx), "in", destArea)
+                Force(OsmosisDistributeAction(self, fx, area1, area2, remaining, newPlaced))
+
+            case OsmosisCommitAction(self, area1, area2, distributions) =>
+                // This action would commit all the moves at once
+                // For now, moves are done immediately in OsmosisPlaceUnitAction
+                Then(EndAction(self))
+
             // ── ELDRITCH LOVE ───────────────────────────────────────────
             case EldritchLoveAction(f) =>
                 val flippedCount = game.prmFlippedDownSpellbooks.num
