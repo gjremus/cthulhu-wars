@@ -431,13 +431,14 @@ object DGTExpansion extends Expansion {
             AfterPowerGatherAction
 
         // ── GATHER POWER PHASE (Martyr's Cry) ───────────────────────────────
-        case AfterPowerGatherAction if game.setup.has(DGT) && DGT.can(MartyrsCry) =>
+        case AfterPowerGatherAction if game.setup.has(DGT) && DGT.can(MartyrsCry) && !game.dgtMartyrsCryDoneThisGather =>
+            game.dgtMartyrsCryDoneThisGather = true
             // Count Acolytes in pool
             val acolytesInPool = DGT.pool.%(_.uclass == Acolyte).num
             // Count Acolytes on enemy faction cards (captured by enemies)
             // Captured units have faction == DGT but region == enemy's prison
             val acolytesCaptured = game.factions.but(DGT)./~(enemy =>
-                enemy.at(enemy.prison).%(u => u.faction == DGT && u.uclass == Acolyte)
+                DGT.units.%(u => u.region == enemy.prison && u.uclass == Acolyte)
             ).num
             val total = acolytesInPool + acolytesCaptured
             if (total > 0) {

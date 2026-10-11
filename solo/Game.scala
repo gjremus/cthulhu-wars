@@ -2187,6 +2187,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var dgtGodsScaleFaceDown : Boolean = false
     // DGT (Tribulation) Rampage offer guard: prevents re-offering after decline/sacrifice
     var dgtRampageOfferedThisGather : Boolean = false
+    // DGT Martyr's Cry guard: AfterPowerGatherAction re-runs after Rampage, so pay out once per Gather Power
+    var dgtMartyrsCryDoneThisGather : Boolean = false
     // Round 9 bug fix: some action handlers (e.g. AN GiveWorstMonster /
     // GiveBestMonster SBRs) place units into other factions' pools/regions
     // as a game-level effect, not as a region-targeting action by the
@@ -3853,6 +3855,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                 // DGT (Tribulation): reset Rampage offer guard for this Gather Power.
                 dgtRampageOfferedThisGather = false
+                dgtMartyrsCryDoneThisGather = false
 
                 factions.foreach { f =>
                     f.oncePerTurn = $
