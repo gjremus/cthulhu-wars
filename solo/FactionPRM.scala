@@ -544,6 +544,50 @@ object PRMExpansion extends Expansion {
                 f.log("Paid", 2.doom, "to flip", sb.styled(f), "Face Down until Doom Phase")
                 Then(EndAction(f))
 
+            // ── SPEAK REALITY ───────────────────────────────────────────
+            case SpeakRealityMainAction(f) =>
+                val ycgna = f.goo(Ycgnagnnisssz)
+                if (ycgna.region == null) {
+                    f.log(Ycgnagnnisssz.styled(f), "is not on the map")
+                    EndAction(f)
+                } else {
+                    implicit val asking = Asking(f)
+                    Ask(f, $(SpeakRealityChoosePowerAction(f)))
+                }
+
+            case SpeakRealityChoosePowerAction(f) =>
+                implicit val asking = Asking(f)
+                // Offer power amounts from 0 to current power
+                Ask(f).each(0 to f.power)(p => SpeakRealityChooseFactionAction(f, p, $()))
+
+            case SpeakRealityChooseFactionAction(f, powerSpent, _) =>
+                val ycgna = f.goo(Ycgnagnnisssz)
+                val factionsInArea = game.factions.%(fx => fx != f && fx.allInPlay.%(_.region == ycgna.region).any)
+
+                if (factionsInArea.none) {
+                    f.log("No other Factions in", ycgna.region)
+                    EndAction(f)
+                } else {
+                    implicit val asking = Asking(f)
+                    Ask(f).each(factionsInArea)(target => SpeakRealityChooseActionAction(f, powerSpent, target))
+                }
+
+            case SpeakRealityChooseActionAction(f, powerSpent, targetFaction) =>
+                implicit val asking = Asking(f)
+                val commonActions = $("Move", "Summon", "Battle", "Build Gate", "Recruit")
+                Ask(f).each(commonActions)(action => SpeakRealityAction(f, powerSpent, targetFaction, action))
+
+            case SpeakRealityAction(f, powerSpent, targetFaction, namedAction) =>
+                f.power -= powerSpent
+                game.prmSpeakRealityTarget = Some(targetFaction)
+                game.prmSpeakRealityAction = namedAction
+                game.prmSpeakRealityPower = powerSpent
+
+                f.log(SpeakReality.styled(f) + ":", "spent", powerSpent.power, "commanding", targetFaction.name, "to perform", namedAction)
+                targetFaction.log("Must perform", namedAction, "spending at least", powerSpent.power, "next turn")
+
+                Then(EndAction(f))
+
             // ── ELDRITCH LOVE ───────────────────────────────────────────
             case EldritchLoveAction(f) =>
                 val flippedCount = game.prmFlippedDownSpellbooks.num
