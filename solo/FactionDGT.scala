@@ -352,9 +352,9 @@ object DGTExpansion extends Expansion {
 
         val deathInArea = DGT.at(u.region).exists(_.uclass == Death)
         if (deathInArea) {
-            // Cancel the elimination - unit survives
-            DGT.log(GodsHand.styled(DGT) + ":", u.uclass, "ignored elimination in Death's Area")
-            // TODO: Properly prevent elimination - for now just log it
+            // Cancel the elimination by removing the Eliminated tag
+            u.remove(Eliminated)
+            DGT.log(GodsHand.styled(DGT) + ":", u.uclass.styled(DGT), "ignored elimination in Death's Area")
         }
     }
 

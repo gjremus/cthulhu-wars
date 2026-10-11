@@ -544,6 +544,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Hound of Tindalos: Angles of Time — cannot be assigned a Kill
         if (unit.uclass == HoundOfTindalos) 0
         else if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
+        // Tribulation (DGT) God's Hand: DGT units in Death's Area ignore Kills
+        else if (game.setup.has(DGT) && unit.faction == DGT && DGT.has(GodsHand) &&
+                 DGT.at(unit.region).exists(_.uclass == Death)) 0
         else unit.health match {
             case DoubleHP(Killed, Killed) => 0
             case DoubleHP(Killed, _) => 1
@@ -1760,6 +1763,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             if (enemyHadKill) {
                 log(Bastet.styled(BB) + ": " + bbSide.opponent.full + " loses 1", "Kill".styled("kill"))
             }
+        }
+    }
+
+    // Tribulation (DGT) Pale Rider: +1 Kill if Death is present
+    sides.%(f => f == DGT).foreach { dgtSide =>
+        if (game.setup.has(DGT) && DGT.has(PaleRider) && dgtSide.forces.%(_.uclass == Death).not(Zeroed).any) {
+            dgtSide.rolls :+= Kill
+            log(PaleRider.styled(DGT) + ":", DGT.full, "gains 1", "Kill".styled("kill"))
         }
     }
 
