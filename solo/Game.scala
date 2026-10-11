@@ -5647,6 +5647,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 }
             }
 
+            // DGT Dominion: areas with DGT units are adjacent for Move actions
+            if (self == DGT && setup.has(DGT)) {
+                val dgtAreas = DGT.units.onMap./(_.region).distinct
+                if (dgtAreas.has(from))
+                    destinations = (destinations ++ dgtAreas.but(from)).distinct
+            }
+
             val arriving = self.units.%(_.region.glyph.onMap).tag(Moved)./(_.region).distinct
 
             val l1 = destinations.%(arriving.contains) ++ destinations.%!(arriving.contains)
