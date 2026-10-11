@@ -544,6 +544,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Hound of Tindalos: Angles of Time — cannot be assigned a Kill
         if (unit.uclass == HoundOfTindalos) 0
         else if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
+        // PRM Mother's Aid: Ycgn'àgnnisssz cannot be assigned combat results while controlled by an enemy
+        else if (unit.uclass == Ycgnagnnisssz && game.prmYcgnaTemporaryController.isDefined && game.prmYcgnaTemporaryController.get != unit.faction) 0
         else unit.health match {
             case DoubleHP(Killed, Killed) => 0
             case DoubleHP(Killed, _) => 1
@@ -614,6 +616,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
         // Cathedrals cannot be assigned a Pain
         else if (unit.uclass == Cathedral) 0
+        // PRM Mother's Aid: Ycgn'àgnnisssz cannot be assigned combat results while controlled by an enemy
+        else if (unit.uclass == Ycgnagnnisssz && game.prmYcgnaTemporaryController.isDefined && game.prmYcgnaTemporaryController.get != unit.faction) 0
         else unit.health match {
             case DoubleHP(Alive, Alive) => 2
             case DoubleHP(Alive, _) => 1

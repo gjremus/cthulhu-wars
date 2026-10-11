@@ -318,7 +318,7 @@ object PRMExpansion extends Expansion {
                 game.eliminate(eggFig)
                 val goo = f.goo(Ycgnagnnisssz)
                 goo.region = region
-                // Requirement auto-fulfilled by game logic
+                f.satisfy(AwakenYcgnaReq, "Awakened Ycgn'àgnnisssz")
                 Then(EndAction(f))
 
             // ── ATOMIC UNITY ────────────────────────────────────────────
@@ -547,6 +547,7 @@ object PRMExpansion extends Expansion {
                 f.oncePerAction :+= sb
                 game.prmFlippedDownSpellbooks :+= sb
                 f.log("Paid", 2.doom, "to flip", sb.styled(f), "Face Down until Doom Phase")
+                f.satisfy(Pay2DoomFlipSpellbookReq, "Paid 2 Doom and Flipped Spellbook")
                 Then(EndAction(f))
 
             // ── SPEAK REALITY ───────────────────────────────────────────
