@@ -178,7 +178,9 @@ case class RampageSacrificeAction(self : Faction, cultist : UnitRef)
     ) with PowerNeutral
 
 case class RampageSkipAction(self : Faction)
-    extends OptionFactionAction("Skip") with PowerNeutral
+    extends OptionFactionAction("Skip") with PowerNeutral {
+    override def question(implicit game : Game) = "Skip Rampage"
+}
 
 // ── GOD'S SCALE (Post-Action, Black Rider back side) ────────────────────────
 // Enemies can flip this face-down for +1 ES to DGT, then face-up at Doom Phase end.
