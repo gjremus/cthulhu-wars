@@ -1360,6 +1360,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 if (factions.has(CS))
                     csInsanityMeteorOrGlobulePresent = CS.at(arena).%(u => u.uclass == Meteorite || u.uclass == LuminousGlobule).any
 
+                // PRM: Ycgn'àgnnisssz is an Attacker in a Battle
+                if (factions.has(PRM) && attacker == PRM) {
+                    if (PRM.at(arena).%(u => u.uclass.isGOO && u.uclass == Ycgnagnnisssz).any)
+                        PRM.satisfy(YcgnaAttackerInBattleReq, "Ycgn'àgnnisssz is an Attacker in a Battle")
+                }
+
                 if (attacker.hasAllSB.not)
                     attacker.acted = true
 

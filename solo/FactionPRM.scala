@@ -280,6 +280,16 @@ object PRMExpansion extends Expansion {
     def name = "Permeation"
     def factions = $(PRM)
 
+    override def afterAction()(implicit game : Game) : Unit = {
+        if (!game.setup.has(PRM)) return
+
+        // Check for No Fledglings in Pool requirement after any action
+        val fledglingsInPool = PRM.pool.%(_.uclass == CelestialFledgling)
+        if (fledglingsInPool.none && PRM.allInPlay.%(_.uclass == CelestialFledgling).any) {
+            PRM.satisfy(NoFledglingsInPoolReq, "Have no Celestial Fledglings in Pool")
+        }
+    }
+
     def perform(a : Action, soft : VoidGuard)(implicit game : Game) : Continue = {
         if (!game.setup.has(PRM)) return null
 
@@ -408,6 +418,12 @@ object PRMExpansion extends Expansion {
                     f.oncePerAction :+= Protogenesis
                     game.prmFlippedDownSpellbooks :+= Protogenesis
                     f.log(Protogenesis.styled(f), "flipped Face Down until Doom Phase")
+                }
+
+                // Check for No Fledglings in Pool requirement
+                val fledglingsInPool = f.pool.%(_.uclass == CelestialFledgling)
+                if (fledglingsInPool.none) {
+                    f.satisfy(NoFledglingsInPoolReq, "Have no Celestial Fledglings in Pool")
                 }
 
                 Then(EndAction(f))

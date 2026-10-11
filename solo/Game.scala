@@ -2815,6 +2815,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         }
 
         triggers()
+
+        // PRM: Control 2 Gates in Land Areas
+        if (factions.has(PRM) && self == PRM) {
+            val landGates = PRM.gates.%(r => !r.glyph.is[Ocean.type])
+            if (landGates.num >= 2)
+                PRM.satisfy(Control2LandGatesReq, "Control 2 Gates in Land Areas")
+        }
     }
 
     def extraActions(f : Faction, outOfTurn : Boolean, highPriests : Boolean) : $[Action] = {
@@ -4604,6 +4611,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             if (f.hasAllSB)
                 factions.foreach(_.satisfy(AnotherFactionAllSpellbooks, "Another faction has all spellbooks"))
+
+            // PRM: Another Faction has 3 or more Spellbooks
+            if (factions.has(PRM) && f != PRM) {
+                if (f.spellbooks.num >= 3)
+                    PRM.satisfy(EnemyHas3SpellbooksReq, "Another Faction has 3 or more Spellbooks")
+            }
 
             f.ignorePerInstant = $
 
