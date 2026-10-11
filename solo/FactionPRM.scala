@@ -516,6 +516,34 @@ object PRMExpansion extends Expansion {
                 // For now, moves are done immediately in OsmosisPlaceUnitAction
                 Then(EndAction(self))
 
+            // ── PAY 2 DOOM AND FLIP SPELLBOOK ───────────────────────────
+            case Pay2DoomFlipSpellbookMainAction(f) =>
+                if (f.doom < 2) {
+                    f.log("Not enough Doom to flip a Spellbook")
+                    EndAction(f)
+                } else {
+                    // Find spellbooks that are earned but not already flipped
+                    val eligibleSBs = f.spellbooks.%(sb => !f.oncePerAction.has(sb) && !game.prmFlippedDownSpellbooks.has(sb))
+                    if (eligibleSBs.none) {
+                        f.log("No Spellbooks available to flip")
+                        EndAction(f)
+                    } else {
+                        implicit val asking = Asking(f)
+                        Ask(f, $(Pay2DoomFlipSpellbookPickAction(f, eligibleSBs)))
+                    }
+                }
+
+            case Pay2DoomFlipSpellbookPickAction(f, eligibleSBs) =>
+                implicit val asking = Asking(f)
+                Ask(f).each(eligibleSBs)(sb => Pay2DoomFlipSpellbookAction(f, sb))
+
+            case Pay2DoomFlipSpellbookAction(f, sb) =>
+                f.doom -= 2
+                f.oncePerAction :+= sb
+                game.prmFlippedDownSpellbooks :+= sb
+                f.log("Paid", 2.doom, "to flip", sb.styled(f), "Face Down until Doom Phase")
+                Then(EndAction(f))
+
             // ── ELDRITCH LOVE ───────────────────────────────────────────
             case EldritchLoveAction(f) =>
                 val flippedCount = game.prmFlippedDownSpellbooks.num
