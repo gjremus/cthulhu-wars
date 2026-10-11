@@ -5444,9 +5444,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                 // DGT God's Scale: after any action, while face-up, prompt each enemy in turn order
                 // to optionally flip it face-down for DGT to gain 1 ES. No prompt if DGT not in game
-                // or God's Scale not face-up.
+                // or God's Scale not face-up. Filter out neutral pseudo-factions (NeutralAbhoth,
+                // LibraryFaction) which have no real player to make choices.
                 if (setup.has(DGT) && DGT.has(GodsScale) && !dgtGodsScaleFaceDown) {
-                    val enemies = DGT.enemies
+                    val enemies = DGT.enemies.%(e => !e.isInstanceOf[NeutralFaction])
                     GodsScaleFlipCheckAction(DGT, enemies, afterCS)
                 } else {
                     afterCS
