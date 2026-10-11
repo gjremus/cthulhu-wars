@@ -166,20 +166,34 @@ case class GodsPlaguePainToAction(self : Faction, u : UnitRef, dest : Region, pa
     extends BaseFactionAction(GodsPlague.styled(DGT) + ": Pain to", dest)
 
 
+// ── RAMPAGE (Gather Power, Black Rider front side) ──────────────────────────
+// During Gather Power, DGT may sacrifice one captured enemy Cultist to flip and gain ES
+case class RampageCheckAction(self : Faction)
+    extends ForcedAction with PowerNeutral with Soft
+
+case class RampageSacrificeAction(self : Faction, cultist : UnitRef)
+    extends BaseFactionAction(
+        implicit g => "Sacrifice " + g.unit(cultist).faction.name + "'s " + g.unit(cultist).uclass.styled(g.unit(cultist).faction) + " (Rampage)",
+        implicit g => g.unit(cultist).full
+    ) with PowerNeutral
+
 // ── GOD'S SCALE (Post-Action, Black Rider back side) ────────────────────────
 // Enemies can flip this face-down for +1 ES to DGT, then face-up at Doom Phase end.
-case class GodsScaleFlipPromptAction(self : Faction, enemyFaction : Faction)
+case class GodsScaleFlipCheckAction(self : Faction, remainingEnemies : $[Faction], then : Action)
+    extends ForcedAction with PowerNeutral with Soft
+
+case class GodsScaleFlipPromptAction(self : Faction, enemyFaction : Faction, remainingEnemies : $[Faction], then : Action)
     extends ForcedAction with PowerNeutral with Soft {
     override def question(implicit game : Game) =
         GodsScale.styled(DGT) + ": " + enemyFaction.name + " — flip face-down for " + self.name + " to gain 1 Elder Sign?"
 }
 
-case class GodsScaleFlipYesAction(self : Faction, enemyFaction : Faction)
+case class GodsScaleFlipYesAction(self : Faction, enemyFaction : Faction, remainingEnemies : $[Faction], then : Action)
     extends OptionFactionAction(implicit g => "Flip " + GodsScale.styled(DGT) + " face-down") with PowerNeutral {
     override def question(implicit game : Game) = GodsScale.styled(DGT) + ": flip face-down?"
 }
 
-case class GodsScaleFlipNoAction(self : Faction, enemyFaction : Faction)
+case class GodsScaleFlipNoAction(self : Faction, enemyFaction : Faction, remainingEnemies : $[Faction], then : Action)
     extends OptionFactionAction("Skip") with PowerNeutral {
     override def question(implicit game : Game) = GodsScale.styled(DGT) + ": flip face-down?"
 }
@@ -355,28 +369,56 @@ object DGTExpansion extends Expansion {
             }
 
         // ── GOD'S SCALE (Post-Action flip prompts) ───────────────────────────
-        // TODO: These handlers need to be called after any action completes
-        // For now they're defined but not hooked into the afterAction flow
-        case GodsScaleFlipPromptAction(self, enemyFaction) =>
+        case GodsScaleFlipCheckAction(self, remainingEnemies, then) =>
+            if (remainingEnemies.any) {
+                val enemy = remainingEnemies.head
+                val rest = remainingEnemies.tail
+                Then(GodsScaleFlipPromptAction(self, enemy, rest, then))
+            } else {
+                Force(then)
+            }
+
+        case GodsScaleFlipPromptAction(self, enemyFaction, remainingEnemies, then) =>
             // Prompt enemy: flip God's Scale face-down for DGT to gain 1 ES?
             implicit val asking = Asking(enemyFaction)
             Ask(enemyFaction)
-                .add(GodsScaleFlipYesAction(self, enemyFaction))
-                .add(GodsScaleFlipNoAction(self, enemyFaction))
+                .add(GodsScaleFlipYesAction(self, enemyFaction, remainingEnemies, then))
+                .add(GodsScaleFlipNoAction(self, enemyFaction, remainingEnemies, then))
 
-        case GodsScaleFlipYesAction(self, enemyFaction) =>
+        case GodsScaleFlipYesAction(self, enemyFaction, remainingEnemies, then) =>
             // Flip God's Scale face-down and give DGT 1 ES
-            if (self.has(GodsScale)) {
-                self.spellbooks = self.spellbooks.but(GodsScale)
-                self.takeES(1)
-                enemyFaction.log("flipped", GodsScale.styled(DGT), "face-down,", self.name, "gained", 1.es)
-                // TODO: Track that it's face-down and flip back up at end of Doom Phase
-            }
-            Force(EndAction(enemyFaction))
+            self.takeES(1)
+            game.dgtGodsScaleFaceDown = true
+            enemyFaction.log("flipped", GodsScale.styled(DGT), "face-down,", self.name, "gained", 1.es)
+            // Stop prompting remaining enemies since it's now face-down
+            Force(then)
 
-        case GodsScaleFlipNoAction(self, enemyFaction) =>
-            // Skip flipping
-            Force(EndAction(enemyFaction))
+        case GodsScaleFlipNoAction(self, enemyFaction, remainingEnemies, then) =>
+            // Skip flipping, continue to next enemy
+            Force(GodsScaleFlipCheckAction(self, remainingEnemies, then))
+
+        // ── RAMPAGE (Gather Power Phase) ────────────────────────────────────
+        case RampageCheckAction(self) =>
+            // Offer to sacrifice one captured enemy Cultist
+            val capturedCultists = self.units.%(u => u.region == self.prison && u.faction != self && u.uclass.utype == Cultist)
+            if (capturedCultists.any) {
+                implicit val asking = Asking(self)
+                Ask(self)
+                    .each(capturedCultists)(u => RampageSacrificeAction(self, u.ref))
+                    .cancel
+            } else {
+                UnknownContinue
+            }
+
+        case RampageSacrificeAction(self, cultist) =>
+            val unitFig = game.unit(cultist)
+            val originalOwner = unitFig.faction
+            // Return cultist to owner's pool
+            unitFig.region = originalOwner.prison
+            self.log(BlackRider.styled(DGT) + " (Rampage): sacrificed", originalOwner.name + "'s", unitFig.uclass.styled(originalOwner))
+            // Flip Black Rider to God's Scale and gain 1 ES
+            DGTExpansion.flipSpellbook(DGT, BlackRider, GodsScale, "Rampage")
+            UnknownContinue
 
         // ── GATHER POWER PHASE (Martyr's Cry) ───────────────────────────────
         case AfterPowerGatherAction if game.setup.has(DGT) && DGT.can(MartyrsCry) =>

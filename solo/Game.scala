@@ -2182,6 +2182,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var fbInfernalPactFlippedTomes : $[LibraryTome] = $
     // §19b: per-turn cancel flag to prevent IP cancel→reenter loop
     var fbInfernalPactCancelledThisTurn : Boolean = false
+
+    // DGT (Tribulation) God's Scale face-down state
+    var dgtGodsScaleFaceDown : Boolean = false
     // Round 9 bug fix: some action handlers (e.g. AN GiveWorstMonster /
     // GiveBestMonster SBRs) place units into other factions' pools/regions
     // as a game-level effect, not as a region-targeting action by the
@@ -4175,6 +4178,17 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // MaoCeremony MUST be after raise-to-half — do not move it before.
         case AfterPowerGatherAction =>
             TSExpansion.shepherdDoneThisGather = false
+
+            // DGT Rampage: during Gather Power, DGT may sacrifice one captured enemy Cultist
+            // to flip Black Rider to God's Scale (once only). Only offer if DGT has Black Rider
+            // (not yet flipped) and has at least one captured enemy Cultist.
+            if (setup.has(DGT) && DGT.has(BlackRider) && !DGT.has(GodsScale)) {
+                val capturedCultists = DGT.units.%(u => u.region == DGT.prison && u.faction != DGT && u.uclass.utype == Cultist)
+                if (capturedCultists.any) {
+                    return Force(RampageCheckAction(DGT))
+                }
+            }
+
             factions.foreach { f =>
                 if (f.want(MaoCeremony)) {
                     f.cultists.onMapOrMoon.some.foreach { l =>
@@ -4327,6 +4341,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // doom phase, check FBMostDoomOrMoreGates so the requirement can be satisfied
             // immediately (not delayed until FB's next action-phase turn).
             FBExpansion.checkMostDoomOrGates()
+
+            // DGT God's Scale: flip face-up at end of Doom Phase
+            if (setup.has(DGT) && dgtGodsScaleFaceDown) {
+                dgtGodsScaleFaceDown = false
+                DGT.log(GodsScale.styled(DGT), "flipped face-up")
+            }
 
             CheckSpellbooksAction(DoomNextPlayerAction(game.first))
 
@@ -5410,10 +5430,20 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // CSExpansion.afterAction). Thread CS's free-Meteorite offer ahead of the normal
                 // end-of-action continuation; the flag stays set if a rarer nexed/CG branch above
                 // preempts this one, so the offer is never lost.
-                if (setup.has(CS) && csCosmicLandfallPending)
+                val afterCS = if (setup.has(CS) && csCosmicLandfallPending)
                     CSCosmicLandfallCheckAction(CS, afterBJ)
                 else
                     afterBJ
+
+                // DGT God's Scale: after any action, while face-up, prompt each enemy in turn order
+                // to optionally flip it face-down for DGT to gain 1 ES. No prompt if DGT not in game
+                // or God's Scale not face-up.
+                if (setup.has(DGT) && DGT.has(GodsScale) && !dgtGodsScaleFaceDown) {
+                    val enemies = DGT.enemies
+                    GodsScaleFlipCheckAction(DGT, enemies, afterCS)
+                } else {
+                    afterCS
+                }
             }
 
         case EndTurnAction(f) =>
@@ -6107,16 +6137,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
 
             f.satisfy(CaptureCultist, "Capture Cultist")
-
-            // DGT Rampage (Black Rider → God's Scale): During Gather Power Phase, if you
-            // Sacrifice (capture) one enemy Cultist, flip and gain 1 ES. Interpretation:
-            // this triggers when DGT captures an enemy cultist (eliminating it from the map).
-            if (game.setup.has(DGT) && f == DGT && DGT.has(BlackRider) && !DGT.has(GodsScale)) {
-                val capturedEnemyCultist = unitFig.faction != DGT && unitFig.uclass.utype == Cultist
-                if (capturedEnemyCultist) {
-                    DGTExpansion.flipSpellbook(DGT, BlackRider, GodsScale, "Rampage")
-                }
-            }
 
             if (factions.has(FB))
                 fbCyclopeanGazeActionRegions :+= r
