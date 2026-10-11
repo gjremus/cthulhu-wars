@@ -86,9 +86,13 @@ case class CrumblingYawpOption2Action(self : Faction)
     }) { def question(implicit game : Game) = CrumblingYawp.styled(FM) }
 
 case class HymnOfSufferingMainAction(self : Faction)
-    extends OptionFactionAction(HymnOfSuffering.styled(FM)) with Soft
+    extends OptionFactionAction(HymnOfSuffering.styled(FM)) with Soft {
+    def question(implicit game : Game) = HymnOfSuffering.styled(FM)
+}
 case class HymnOfSufferingSkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + HymnOfSuffering.name).styled(FM)) with Soft
+    extends OptionFactionAction(("Skip " + HymnOfSuffering.name).styled(FM)) with Soft {
+    def question(implicit game : Game) = HymnOfSuffering.styled(FM)
+}
 case class HymnOfSufferingAreaAction(self : Faction, r : Region)
     extends BaseFactionAction(HymnOfSuffering.styled(FM), implicit g => {
         val adj = g.board.connected(r).count(FMExpansion.hasScreamingWall)
@@ -159,7 +163,7 @@ object FMExpansion extends Expansion {
         hasActualWall || hasArchitectSubstitute
     }
 
-    override def strengthBonus(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
+    def strengthBonus(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
         if (!game.setup.has(FM)) return 0
         game.battle match {
             case None => 0
@@ -169,7 +173,7 @@ object FMExpansion extends Expansion {
         }
     }
 
-    override def onRoll(dice : Int)(implicit game : Game) {
+    def onRoll(dice : Int)(implicit game : Game) {
         if (!game.setup.has(FM)) return
         game.battle.foreach { b =>
             if ((b.attacker == FM || b.defender == FM) && dice >= 9 && FM.needs(CrumblingYawpReq))
@@ -294,7 +298,7 @@ object FMExpansion extends Expansion {
             game.independents(f)
 
             val wallAreas = game.board.regions.filter { r =>
-                f.at(r).cultists.any && !r.gate && f.pool.%(_.uclass == ScreamingWall).any
+                f.at(r).cultists.any && !game.gates.contains(r) && f.pool.%(_.uclass == ScreamingWall).any
             }
             if (f.power >= 3 && wallAreas.any)
                 + CreateScreamingWallMainAction(f)
@@ -321,7 +325,7 @@ object FMExpansion extends Expansion {
 
         case CreateScreamingWallMainAction(self) =>
             val wallAreas = game.board.regions.filter { r =>
-                self.at(r).cultists.any && !r.gate && self.pool.%(_.uclass == ScreamingWall).any
+                self.at(r).cultists.any && !game.gates.contains(r) && self.pool.%(_.uclass == ScreamingWall).any
             }
             Ask(self).each(wallAreas)(r => CreateScreamingWallAction(self, r)).cancel
 
@@ -364,7 +368,12 @@ object FMExpansion extends Expansion {
 
         case MannedBattlementsDestAction(self, source, units, dest) =>
             self.power -= 1
-            units.foreach { ur => game.move(ur, dest) }
+            units.foreach { ur =>
+                val u = game.unit(ur)
+                u.region = dest
+                u.onGate = false
+                u.add(Moved)
+            }
             self.log(MannedBattlements.styled(FM) + ": moved", units.num, "units from", source, "to", dest)
             Then(MainAction(self))
 
@@ -377,8 +386,8 @@ object FMExpansion extends Expansion {
         case BuildGateAction(f : FM.type, r) if game.setup.has(FM) =>
             f.power -= 3
             f.doom += 1
-            game.build(f, r)
-            f.log("created", "Gate".styled(f), "in", r)
+            game.gates :+= r
+            f.log("built a gate in", r)
 
             if (f.power >= 1 && f.pool.%(_.uclass == ScreamingWall).any) {
                 f.power -= 1
@@ -389,55 +398,18 @@ object FMExpansion extends Expansion {
 
             Then(MainAction(f))
 
-        case PreBattlePhase(b) if game.setup.has(FM) && FM.has(TerrifyingShriek) && (b.attacker == FM || b.defender == FM) =>
-            val fmUnits = if (b.attacker == FM) b.attackers else b.defenders
-            val hasBoneSculptor = fmUnits.exists(_.uclass == BoneSculptor)
-            val hasWall = hasScreamingWall(b.arena)
+        // TODO: Terrifying Shriek battle mechanics need implementation
+        // PreBattlePhase and PostBattlePhase are case objects, not case classes with Battle parameter
+        // These spellbook effects need to be integrated into Battle.scala or via expansion hooks
 
-            if (hasBoneSculptor && hasWall)
-                Force(TerrifyingShriekApplyAction(FM, preBattle = true))
-            else
-                UnknownContinue
+        // TODO: Tendon Flaying post-battle mechanics need implementation
+        // Damaged Muscle Stitchers should offer power/doom choices after battle
 
-        case TerrifyingShriekApplyAction(self, preBattle) =>
-            implicit val battle = game.battle.get
-            val enemyFaction = if (battle.attacker == self) battle.defender else battle.attacker
-            self.log(TerrifyingShriek.styled(FM) + ":", ScreamingWall.name, "adds 1 Pain", preBattle.??("(pre-battle)").|("(post-battle)"))
-            game.pains(enemyFaction, $, 1)
+        // TODO: Spiteful Chisel (Frenzying Adze) mechanics need implementation
+        // When FM hits enemy GOO with no Walls in pool, capture Acolyte if available
 
-        case PostBattlePhase(b) if game.setup.has(FM) && (b.attacker == FM || b.defender == FM) =>
-            val fmUnits = if (b.attacker == FM) b.attackers else b.defenders
-            val hasBoneSculptor = fmUnits.exists(_.uclass == BoneSculptor)
-            val hasWall = hasScreamingWall(b.arena)
-
-            if (FM.has(TerrifyingShriek) && hasWall && !hasBoneSculptor)
-                Force(TerrifyingShriekApplyAction(FM, preBattle = false))
-            else if (FM.has(TendonFlaying)) {
-                val damagedStitchers = fmUnits.filter(_.uclass == MuscleStitcher).filter(u =>
-                    game.damages.exists(_._1 == u.ref))
-                if (damagedStitchers.any)
-                    Force(TendonFlayingMainAction(FM, damagedStitchers./(_.ref)))
-                else if (FM.pooled(ScreamingWall).none) {
-                    val enemyFaction = if (b.attacker == FM) b.defender else b.attacker
-                    val enemyGOOs = (if (b.attacker == enemyFaction) b.attackers else b.defenders).filter(_.goo)
-                    val gooHit = enemyGOOs.exists(u => game.assignments.exists(_._1 == u.ref))
-                    if (gooHit && FM.factionCard(enemyFaction).exists(_.uclass == Acolyte))
-                        Force(SpitefulChiselMainAction(FM, enemyFaction))
-                    else
-                        UnknownContinue
-                } else
-                    UnknownContinue
-            } else if (FM.pooled(ScreamingWall).none) {
-                val enemyFaction = if (b.attacker == FM) b.defender else b.attacker
-                val enemyGOOs = (if (b.attacker == enemyFaction) b.attackers else b.defenders).filter(_.goo)
-                val gooHit = enemyGOOs.exists(u => game.assignments.exists(_._1 == u.ref))
-                if (gooHit && FM.factionCard(enemyFaction).exists(_.uclass == Acolyte))
-                    Force(SpitefulChiselMainAction(FM, enemyFaction))
-                else
-                    UnknownContinue
-            } else
-                UnknownContinue
-
+        // TODO: These handlers are temporarily disabled until battle phase hooks are implemented
+        /*
         case TendonFlayingMainAction(self, stitchers) =>
             if (stitchers.isEmpty)
                 UnknownContinue
@@ -481,12 +453,15 @@ object FMExpansion extends Expansion {
             val acolyte = self.factionCard(enemyFaction).%(_.uclass == Acolyte).head
             implicit val battle = game.battle.get
             val region = battle.arena
-            game.move(acolyte.ref, region)
+            val u = game.unit(acolyte.ref)
+            u.region = region
+            u.onGate = false
             self.log("Spiteful Chisel".styled(FM) + ": returned Acolyte from", enemyFaction.name, "to", region)
             UnknownContinue
 
         case SpitefulChiselSkipAction(self) =>
             UnknownContinue
+        */
 
         case _ =>
             UnknownContinue

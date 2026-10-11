@@ -629,7 +629,7 @@ object Overlays {
             (ScreamingWall,  6, "2", "—", s"""
                 <div class=p>You may use the Create Gate Action to Create Screaming Walls instead of Gates (3 Power). Whenever you Create a Gate, also place a Screaming Wall by paying 1 additional Power.</div>
                 <div class=p>Spellbooks: ${reference(FM, TerrifyingShriek)}, ${reference(FM, CrumblingYawp)}, ${reference(FM, MannedBattlements)}, ${reference(FM, HymnOfSuffering)}</div>
-                <div class=p>${ref("Spiteful Chisel")} ${cost("(Post-Battle):")} If there are no Screaming Walls in your Pool and an enemy Great Old One was assigned a Result, return one of your Captured Acolytes from their Faction Card to the Battle Area.</div>""")
+                <div class=p><strong>Spiteful Chisel</strong> ${cost("(Post-Battle):")} If there are no Screaming Walls in your Pool and an enemy Great Old One was assigned a Result, return one of your Captured Acolytes from their Faction Card to the Battle Area.</div>""")
         ))
 
         case $("FM", CrumblingYawpReq.text) => requirement("Roll 9 or more dice in a single Combat.")
