@@ -59,7 +59,8 @@ case object FM extends Faction { f =>
 
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
         units.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror).not(Zeroed)./(_.uclass.cost).sum +
-        neutralStrength(units, opponent)
+        neutralStrength(units, opponent) +
+        FMExpansion.strengthBonus(units, opponent)
     }
 }
 
@@ -398,23 +399,11 @@ object FMExpansion extends Expansion {
 
             Then(MainAction(f))
 
-        // TODO: Terrifying Shriek battle mechanics need implementation
-        // PreBattlePhase and PostBattlePhase are case objects, not case classes with Battle parameter
-        // These spellbook effects need to be integrated into Battle.scala or via expansion hooks
-
-        // TODO: Tendon Flaying post-battle mechanics need implementation
-        // Damaged Muscle Stitchers should offer power/doom choices after battle
-
-        // TODO: Spiteful Chisel (Frenzying Adze) mechanics need implementation
-        // When FM hits enemy GOO with no Walls in pool, capture Acolyte if available
-
-        // TODO: These handlers are temporarily disabled until battle phase hooks are implemented
-        /*
         case TendonFlayingMainAction(self, stitchers) =>
             if (stitchers.isEmpty)
                 UnknownContinue
             else
-                Force(TendonFlayingChoiceAction(self, stitchers.head, stitchers.drop(1)))
+                Then(TendonFlayingChoiceAction(self, stitchers.head, stitchers.drop(1)))
 
         case TendonFlayingChoiceAction(self, stitcher, remaining) =>
             Ask(self)
@@ -424,25 +413,25 @@ object FMExpansion extends Expansion {
 
         case TendonFlayingOption1Action(self, stitcher, remaining) =>
             self.power += 1
-            self.log(TendonFlaying.styled(FM) + ": gained", 1.power)
+            self.log(TendonFlaying.styled(FM) + ": gained", 1.power, "(Muscle Stitcher pained)")
             if (remaining.any)
-                Force(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1)))
+                Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1)))
             else
                 UnknownContinue
 
         case TendonFlayingOption2Action(self, stitcher, remaining) =>
             self.power += 1
-            self.log(TendonFlaying.styled(FM) + ": gained", 1.power)
+            self.log(TendonFlaying.styled(FM) + ": gained", 1.power, "(Muscle Stitcher pained)")
             if (remaining.any)
-                Force(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1)))
+                Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1)))
             else
                 UnknownContinue
 
         case TendonFlayingOption3Action(self, stitcher, remaining) =>
             self.doom += 1
-            self.log(TendonFlaying.styled(FM) + ": gained", 1.doom)
+            self.log(TendonFlaying.styled(FM) + ": gained", 1.doom, "(Muscle Stitcher pained)")
             if (remaining.any)
-                Force(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1)))
+                Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1)))
             else
                 UnknownContinue
 
@@ -450,18 +439,16 @@ object FMExpansion extends Expansion {
             Ask(self).add(SpitefulChiselReturnAction(self, enemyFaction)).add(SpitefulChiselSkipAction(self))
 
         case SpitefulChiselReturnAction(self, enemyFaction) =>
-            val acolyte = self.factionCard(enemyFaction).%(_.uclass == Acolyte).head
+            val acolyte = self.units.%(u => u.region == self.prison && u.faction == enemyFaction && u.uclass == Acolyte).head
             implicit val battle = game.battle.get
             val region = battle.arena
-            val u = game.unit(acolyte.ref)
-            u.region = region
-            u.onGate = false
-            self.log("Spiteful Chisel".styled(FM) + ": returned Acolyte from", enemyFaction.name, "to", region)
+            acolyte.region = region
+            acolyte.onGate = false
+            self.log("Spiteful Chisel".styled(FM) + ": returned", Acolyte.styled(enemyFaction), "from capture to", region)
             UnknownContinue
 
         case SpitefulChiselSkipAction(self) =>
             UnknownContinue
-        */
 
         case _ =>
             UnknownContinue

@@ -796,6 +796,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             options :+= StaticAccumulatorSkipAction(XSS)
         }
 
+        // Fleshmason (FM): Terrifying Shriek (Pre-Battle with Bone Sculptor).
+        // If FM has Terrifying Shriek, a Screaming Wall is in the battle, and a Bone Sculptor
+        // is present, add 1 Pain to the enemy pre-battle (automatic, not a menu).
+        if (s == FM && s.can(TerrifyingShriek) && !s.oncePerAction.has(TerrifyingShriek) &&
+            FMExpansion.hasScreamingWall(arena)(game) &&
+            s.forces.%(_.uclass == BoneSculptor).any) {
+            // Apply the Pain immediately as a forced effect
+            val side = if (s == attacker) defenders else attackers
+            val enemyUnits = side.forces.%(u => canAssignPains(u) > 0).sortBy(_.uclass.cost)
+            if (enemyUnits.any) {
+                val target = enemyUnits.head
+                target.health = Pained
+                log(s, TerrifyingShriek.styled(FM) + ":", target.short, "pained pre-battle (Bone Sculptor present)")
+                s.oncePerAction :+= TerrifyingShriek
+            }
+        }
+
         // Cat from Mercury — Needs Affection (Pre-Battle): if a Cat from Mercury is in battle,
         // the owner can replace one or more of their Monsters with Acolytes from pool.
         if (s.loyaltyCards.has(CatFromMercuryCard) && s.forces.%(_.uclass == CatFromMercury).any &&
@@ -1668,6 +1685,18 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     sides.foreach { side =>
                         log(side.full, "rolls now", side.rolls.mkString(" "))
                     }
+                }
+
+                // Fleshmason (FM): Terrifying Shriek (Post-Roll, no Bone Sculptor).
+                // If FM has Terrifying Shriek, a Screaming Wall is in the battle, and NO Bone Sculptor
+                // is present, add 1 Pain to FM's combat results.
+                if (sides.has(FM) && FM.can(TerrifyingShriek) && !FM.oncePerAction.has(TerrifyingShriek) &&
+                    FMExpansion.hasScreamingWall(arena)(game) &&
+                    FM.forces.%(_.uclass == BoneSculptor).none) {
+                    val fmSide = if (attacker == FM) attackers else defenders
+                    fmSide.rolls :+= Pain
+                    log(FM, TerrifyingShriek.styled(FM) + ": added", Pain, "to combat results (Screaming Wall present)")
+                    FM.oncePerAction :+= TerrifyingShriek
                 }
 
                 // Whirlwind is a passive retreat-destination expansion (§1.10 SB1),
@@ -2724,6 +2753,31 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             log("Distant Thunderclap".styled(XSS) + ": gained", 1.es, "(battle area vacated, opponent had non-Cultist)")
                         }
                     }
+                }
+
+                // Fleshmason (FM) — Tendon Flaying (Post-Battle): for each Muscle Stitcher that received
+                // a Pain, FM chooses one of three options: (1) Gain 1 Power, (2) Gain 1 Power, (3) Gain 1 Doom.
+                // Options 1 and 2 are identical per the design (designer question noted).
+                if (factions.has(FM) && FM.can(TendonFlaying) && sides.has(FM) && !FM.oncePerAction.has(TendonFlaying)) {
+                    val fmSide = if (attacker == FM) attackers else defenders
+                    val painedStitchers = (fmSide.forces ++ eliminated.%(_.faction == FM)).%(u =>
+                        u.uclass == MuscleStitcher && (u.health == Pained || u.health == Killed))
+                    if (painedStitchers.any) {
+                        FM.oncePerAction :+= TendonFlaying
+                        return Force(TendonFlayingMainAction(FM, painedStitchers./(_.ref)))
+                    }
+                }
+
+                // Fleshmason (FM) — Spiteful Chisel (Post-Battle, part of Screaming Wall ability):
+                // If there are no Screaming Walls in FM's pool and an enemy Great Old One was assigned
+                // a result (Pain or Kill), return one captured Acolyte from the enemy's Faction Card.
+                if (factions.has(FM) && sides.has(FM) && FM.pool(ScreamingWall).none) {
+                    val enemy = if (attacker == FM) defender else attacker
+                    val enemyGOOHit = (if (attacker == FM) defenders else attackers).forces.%(u =>
+                        u.uclass.utype == GOO && u.health != Alive).any
+                    val capturedEnemyAcolytes = FM.units.%(u => u.region == FM.prison && u.faction == enemy && u.uclass == Acolyte)
+                    if (enemyGOOHit && capturedEnemyAcolytes.any)
+                        return Force(SpitefulChiselMainAction(FM, enemy))
                 }
 
                 // Faceless Blight (FBE) — Necromantic Spores (Post-Battle, §3.14.4):
