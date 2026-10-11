@@ -177,6 +177,9 @@ case class RampageSacrificeAction(self : Faction, cultist : UnitRef)
         implicit g => g.unit(cultist).full
     ) with PowerNeutral
 
+case class RampageSkipAction(self : Faction)
+    extends OptionFactionAction("Skip") with PowerNeutral
+
 // ── GOD'S SCALE (Post-Action, Black Rider back side) ────────────────────────
 // Enemies can flip this face-down for +1 ES to DGT, then face-up at Doom Phase end.
 case class GodsScaleFlipCheckAction(self : Faction, remainingEnemies : $[Faction], then : Action)
@@ -405,20 +408,25 @@ object DGTExpansion extends Expansion {
                 implicit val asking = Asking(self)
                 Ask(self)
                     .each(capturedCultists)(u => RampageSacrificeAction(self, u.ref))
-                    .cancel
+                    .add(RampageSkipAction(self))
             } else {
-                UnknownContinue
+                AfterPowerGatherAction
             }
 
         case RampageSacrificeAction(self, cultist) =>
             val unitFig = game.unit(cultist)
             val originalOwner = unitFig.faction
-            // Return cultist to owner's pool
-            unitFig.region = originalOwner.prison
+            // Return cultist to owner's pool using eliminate() (the proper way to return captured cultists)
+            game.eliminate(unitFig)
             self.log(BlackRider.styled(DGT) + " (Rampage): sacrificed", originalOwner.name + "'s", unitFig.uclass.styled(originalOwner))
             // Flip Black Rider to God's Scale and gain 1 ES
             DGTExpansion.flipSpellbook(DGT, BlackRider, GodsScale, "Rampage")
-            UnknownContinue
+            // Continue with the rest of AfterPowerGatherAction (MaoCeremony, etc.)
+            AfterPowerGatherAction
+
+        case RampageSkipAction(self) =>
+            // Skip Rampage, continue with the rest of AfterPowerGatherAction
+            AfterPowerGatherAction
 
         // ── GATHER POWER PHASE (Martyr's Cry) ───────────────────────────────
         case AfterPowerGatherAction if game.setup.has(DGT) && DGT.can(MartyrsCry) =>

@@ -2185,6 +2185,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     // DGT (Tribulation) God's Scale face-down state
     var dgtGodsScaleFaceDown : Boolean = false
+    // DGT (Tribulation) Rampage offer guard: prevents re-offering after decline/sacrifice
+    var dgtRampageOfferedThisGather : Boolean = false
     // Round 9 bug fix: some action handlers (e.g. AN GiveWorstMonster /
     // GiveBestMonster SBRs) place units into other factions' pools/regions
     // as a game-level effect, not as a region-targeting action by the
@@ -3849,6 +3851,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Faceless Blight (FBE): re-arm Changeling Adherents for this Gather.
                 fbeChangelingDoneThisGather = false
 
+                // DGT (Tribulation): reset Rampage offer guard for this Gather Power.
+                dgtRampageOfferedThisGather = false
+
                 factions.foreach { f =>
                     f.oncePerTurn = $
                     f.ignorePerTurn = $
@@ -4181,10 +4186,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             // DGT Rampage: during Gather Power, DGT may sacrifice one captured enemy Cultist
             // to flip Black Rider to God's Scale (once only). Only offer if DGT has Black Rider
-            // (not yet flipped) and has at least one captured enemy Cultist.
-            if (setup.has(DGT) && DGT.has(BlackRider) && !DGT.has(GodsScale)) {
+            // (not yet flipped), has at least one captured enemy Cultist, and hasn't been offered yet.
+            // The offer returns AfterPowerGatherAction after completion to continue the normal flow.
+            if (setup.has(DGT) && DGT.has(BlackRider) && !DGT.has(GodsScale) && !dgtRampageOfferedThisGather) {
                 val capturedCultists = DGT.units.%(u => u.region == DGT.prison && u.faction != DGT && u.uclass.utype == Cultist)
                 if (capturedCultists.any) {
+                    dgtRampageOfferedThisGather = true
                     return Force(RampageCheckAction(DGT))
                 }
             }
