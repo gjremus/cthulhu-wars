@@ -190,6 +190,17 @@ case class GodsScaleFlipNoAction(self : Faction, enemyFaction : Faction)
 // ============================================================================
 object DGTExpansion extends Expansion {
 
+    // Helper: flip a dual-sided spellbook and gain 1 Elder Sign
+    def flipSpellbook(f : Faction, front : Spellbook, back : Spellbook, triggerName : String)(implicit game : Game) {
+        if (f.has(front) && !f.has(back) && !f.oncePerGame.has(back)) {
+            f.spellbooks = f.spellbooks.but(front)
+            f.spellbooks = f.spellbooks :+ back
+            f.oncePerGame :+= back  // Mark as flipped (once only)
+            f.takeES(1)
+            f.log(triggerName.styled(DGT) + ": flipped", front.styled(DGT), "to", back.styled(DGT), "and gained", 1.es)
+        }
+    }
+
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) = action @@ {
 
         // ── MAIN ACTION PHASE ────────────────────────────────────────────────

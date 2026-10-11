@@ -1901,6 +1901,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             DC.satisfyIf(PilgrimageReq, "A player performed a Ritual of Annihilation", true)
         if (setup.has(TT) && performer != TT)
             TT.satisfyIf(TTSycophancyTrigger, "Another faction ritualed or reached 15 Doom", true)
+        if (setup.has(DGT) && DGT.needs(PaleRiderReq) && !DGT.pool.exists(_.uclass == Death))
+            DGT.satisfyIf(PaleRiderReq, "A player performed a Ritual of Annihilation", true)
     }
     var battle : |[Battle] = None
     var nexed : $[Region] = $
