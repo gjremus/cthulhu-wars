@@ -99,9 +99,12 @@ case object PRM extends Faction { f =>
         val ycgnaStr = if (ycgnaCount > 0) {
             // Count of earned spellbooks (on faction card)
             val earnedSBs = f.spellbooks.num
-            // Count of PRM's temporarily flipped-down spellbooks (from Pay 2 Doom requirement, etc.)
+            // Count ALL face-down spellbooks across all factions:
+            // - PRM's temporarily flipped-down spellbooks
             val prmFlippedDown = game.prmFlippedDownSpellbooks.num
-            earnedSBs + prmFlippedDown
+            // - DC's Dark Bargain (if face-down this round)
+            val dcFlippedDown = game.dcDarkBargainFacedown.?(1).|(0)
+            earnedSBs + prmFlippedDown + dcFlippedDown
         } else 0
 
         // Celestial Fledgling: combat = number of Fledglings in play plus one
@@ -272,11 +275,87 @@ object PRMExpansion extends Expansion {
     def name = "Permeation"
     def factions = $(PRM)
 
-    // Required perform method - no custom action handling for now
-    def perform(a : Action, soft : VoidGuard)(implicit game : Game) : Continue = null
+    def perform(a : Action, soft : VoidGuard)(implicit game : Game) : Continue = {
+        if (!game.setup.has(PRM)) return null
 
-    // No special elimination hooks needed for PRM
-    override def eliminate(u : UnitFigure)(implicit game : Game) {
-        // Could track eliminations here if needed for future abilities
+        a match {
+            // ── SETUP ────────────────────────────────────────────────
+            case SetupFactionsAction if !game.starting.contains(PRM) =>
+                val otherStarts = game.factions.but(PRM)./~(fx => game.starting.get(fx).toList)
+                val seaAreas = game.board.regions.%(_.glyph == Ocean)
+                val emptySeaAreas = seaAreas.%(r => !otherStarts.contains(r) && game.board.connected(r).%(otherStarts.contains).none)
+
+                implicit val asking = Asking(PRM)
+                if (emptySeaAreas.any)
+                    Ask(PRM, emptySeaAreas./(r => StartingRegionAction(PRM, r)))
+                else
+                    Ask(PRM, seaAreas.%(r => !otherStarts.contains(r))./(r => StartingRegionAction(PRM, r)))
+
+            // ── YCGN'ÀGNNISSSZ AWAKEN ──────────────────────────────────
+            case YcgnaAwakenMainAction(f) =>
+                val eggs = f.allInPlay.%(_.uclass == AstralEgg)
+                if (eggs.none) {
+                    f.log("No", AstralEgg.styled(f), "in play")
+                    EndAction(f)
+                } else if (f.power < 7) {
+                    f.log("Not enough Power to awaken", Ycgnagnnisssz.styled(f))
+                    EndAction(f)
+                } else {
+                    implicit val asking = Asking(f)
+                    Ask(f).each(eggs)(u => YcgnaAwakenAction(f, u.ref))
+                }
+
+            case YcgnaAwakenAction(f, egg) =>
+                val eggFig = game.unit(egg)
+                val region = eggFig.region
+                f.log("Awakened", Ycgnagnnisssz.styled(f), "in", region, "replacing", eggFig.uclass.styled(f))
+                f.power -= 7
+                game.eliminate(eggFig)
+                val goo = f.goo(Ycgnagnnisssz)
+                goo.region = region
+                // Requirement auto-fulfilled by game logic
+                Then(EndAction(f))
+
+            // ── ELDRITCH LOVE ───────────────────────────────────────────
+            case EldritchLoveAction(f) =>
+                val flippedCount = game.prmFlippedDownSpellbooks.num
+                if (flippedCount >= 2) {
+                    f.log(EldritchLove.styled(f) + ":", "gained", 1.es)
+                    f.es ++= $(ElderSign(0))
+                }
+                f.oncePerAction :+= EldritchLove
+                game.prmFlippedDownSpellbooks :+= EldritchLove
+                f.log(EldritchLove.styled(f), "flipped Face Down until Doom Phase")
+                Then(EndAction(f))
+
+            // ── DOOM PHASE ──────────────────────────────────────────────
+            case DoomAction(f : PRM.type) =>
+                // Restore flipped-down spellbooks at start of Doom Phase
+                game.prmFlippedDownSpellbooks.foreach { sb =>
+                    f.oncePerAction = f.oncePerAction.but(sb)
+                    f.log(sb.styled(f), "restored (Face Up)")
+                }
+                game.prmFlippedDownSpellbooks = $()
+                Force(DoomAction(f))
+
+            // ── END TURN ────────────────────────────────────────────────
+            case EndTurnAction(f) if f == PRM || game.prmYcgnaTemporaryController.contains(f) =>
+                // Clear temporary Ycgn'àgnnisssz controller
+                game.prmYcgnaTemporaryController.foreach { controller =>
+                    if (f == controller) {
+                        game.prmYcgnaTemporaryController = None
+                        PRM.log(controller.name + "'s control of", Ycgnagnnisssz.styled(PRM), "ended")
+                    }
+                }
+                // Clear Speak Reality tracking
+                if (game.prmSpeakRealityTarget.contains(f)) {
+                    game.prmSpeakRealityTarget = None
+                    game.prmSpeakRealityAction = ""
+                    game.prmSpeakRealityPower = 0
+                }
+                Force(EndTurnAction(f))
+
+            case _ => null
+        }
     }
 }
