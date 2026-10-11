@@ -1,0 +1,245 @@
+// This is the corrected DGTExpansion object to replace lines 187-517 in FactionDGT.scala
+// It only uses methods that actually exist in the Expansion trait
+
+// ============================================================================
+// TRIBULATION (DGT) EXPANSION — game-loop integration
+// ============================================================================
+object DGTExpansion extends Expansion {
+
+    def perform(action : Action, soft : VoidGuard)(implicit game : Game) = action @@ {
+
+        // ── MAIN ACTION PHASE ────────────────────────────────────────────────
+        case MainAction(f : DGT.type) =>
+            implicit val asking = Asking(f)
+
+            val actions = $[Action]()
+
+            // God's Plague (White Rider back, 2 Power Action)
+            if (f.has(GodsPlague) && f.power >= 2) {
+                val pestilenceArea = f.units.%(_.uclass == Pestilence)./(_.region).headOption
+                pestilenceArea.foreach { r =>
+                    if (f.enemies.exists(e => e.at(r).any)) {
+                        actions :+= GodsPlagueMainAction(f)
+                    }
+                }
+            }
+
+            // Distribute Power (SBR 5 requirement action)
+            if (f.needs(MartyrsCryReq) && f.enemies.any) {
+                actions :+= DistributePowerMainAction(f)
+            }
+
+            // Distribute Doom (SBR 6 requirement action)
+            if (f.needs(CosmicChaosReq) && f.enemies.any) {
+                actions :+= DistributeDoomMainAction(f)
+            }
+
+            UnknownContinue.log(actions)
+
+        // ── DISTRIBUTE POWER ─────────────────────────────────────────────────
+        case DistributePowerMainAction(f) =>
+            implicit val asking = Asking(f)
+            val total = game.factions.num
+            Force(DistributePowerFactionAction(f, total, $))
+
+        case DistributePowerFactionAction(f, remaining, distributed) =>
+            implicit val asking = Asking(f)
+            if (remaining <= 0) {
+                f.satisfy(MartyrsCryReq, MartyrsCryReq.text)
+                Force(EndAction(f))
+            } else {
+                val enemies = f.enemies
+                Ask(f).each(enemies)(e => DistributePowerAmountAction(f, e, remaining, distributed))
+                    .cancel
+
+        case DistributePowerAmountAction(f, target, remaining, distributed) =>
+            implicit val asking = Asking(f)
+            val amounts = (1 to remaining).toList
+            Ask(f).each(amounts)(amt => DistributePowerGiveAction(f, target, amt, remaining, distributed))
+
+        case DistributePowerGiveAction(f, target, amount, remaining, distributed) =>
+            target.power += amount
+            f.log("gave", amount.power, "to", target)
+            Force(DistributePowerFactionAction(f, remaining - amount, distributed :+ (target, amount)))
+
+        case DistributePowerCancelAction(f) =>
+            Force(MainAction(f))
+
+        // ── DISTRIBUTE DOOM ──────────────────────────────────────────────────
+        case DistributeDoomMainAction(f) =>
+            implicit val asking = Asking(f)
+            val total = game.factions.num
+            Force(DistributeDoomFactionAction(f, total, $))
+
+        case DistributeDoomFactionAction(f, remaining, distributed) =>
+            implicit val asking = Asking(f)
+            if (remaining <= 0) {
+                f.satisfy(CosmicChaosReq, CosmicChaosReq.text)
+                Force(EndAction(f))
+            } else {
+                val enemies = f.enemies
+                Ask(f).each(enemies)(e => DistributeDoomAmountAction(f, e, remaining, distributed))
+                    .cancel
+
+        case DistributeDoomAmountAction(f, target, remaining, distributed) =>
+            implicit val asking = Asking(f)
+            val amounts = (1 to remaining).toList
+            Ask(f).each(amounts)(amt => DistributeDoomGiveAction(f, target, amt, remaining, distributed))
+
+        case DistributeDoomGiveAction(f, target, amount, remaining, distributed) =>
+            target.doom += amount
+            f.log("gave", amount.doom, "to", target)
+            Force(DistributeDoomFactionAction(f, remaining - amount, distributed :+ (target, amount)))
+
+        case DistributeDoomCancelAction(f) =>
+            Force(MainAction(f))
+
+        // ── GOD'S PLAGUE (simplified - needs full multi-enemy implementation) ─
+        case GodsPlagueMainAction(f) =>
+            // Simplified: just end the action for now
+            // TODO: Implement full multi-step enemy prompting + Pain destination choosing
+            f.power -= 2
+            f.log(GodsPlague.styled(DGT) + ": used (simplified implementation)")
+            Force(EndAction(f))
+
+        // ── GATHER POWER PHASE (Martyr's Cry) ───────────────────────────────
+        case AfterPowerGatherAction if game.setup.has(DGT) && DGT.can(MartyrsCry) =>
+            val acolytesInPool = DGT.pool.%(_.uclass == Acolyte).num
+            val acolytesOnEnemyCards = DGT.enemies.map(e => e.captured.%(_.uclass == Acolyte).num).sum
+            val total = acolytesInPool + acolytesOnEnemyCards
+            if (total > 0) {
+                val powerGained = total * 2
+                DGT.power += powerGained
+                DGT.log(MartyrsCry.styled(DGT) + ": gained", powerGained.power, "for", total, "Acolytes in pool/captured")
+            }
+            UnknownContinue
+
+        // ── RITUAL OF ANNIHILATION (Pale Rider SBR trigger) ──────────────────
+        case RitualOfAnnihilationMainAction(f) if game.setup.has(DGT) && DGT.needs(PaleRiderReq) =>
+            DGT.satisfy(PaleRiderReq, PaleRiderReq.text)
+            UnknownContinue
+
+        // ── DOMINION: Intercept Move action destination calculation ──────────
+        case MoveSelectAction(f : DGT.type, u) =>
+            // Calculate available destinations: normal adjacency + Dominion bonus
+            val from = game.unit(u).region
+            val normalDests = from.near
+            val dominionDests = if (f.has(Dominion)) {
+                // All regions where DGT has units are available
+                DGT.units.%(_.region.onMap)./(_.region).distinct.diff($(from))
+            } else $()
+            val allDests = (normalDests ++ dominionDests).distinct
+
+            implicit val asking = Asking(f)
+            Ask(f).each(allDests)(r => MoveAction(f, u, from, r, 1))
+                .needPower.cancel
+
+        // ── PALE RIDER: Add 1 Kill in battles with Death present ─────────────
+        // Intercept at the start of kill assignment phase
+        case BattleProceedAction(AssignDefenderKills) if game.setup.has(DGT) && DGT.has(PaleRider) =>
+            game.battle.foreach { b =>
+                val dgtInBattle = b.attacker == DGT || b.defender == DGT
+                val deathPresent = DGT.at(b.arena).exists(_.uclass == Death)
+                if (dgtInBattle && deathPresent) {
+                    // Add 1 Kill to DGT's side
+                    val dgtSide = if (b.attacker == DGT) b.attackers else b.defenders
+                    dgtSide.extraKills += 1
+                    DGT.log(PaleRider.styled(DGT) + ": Death present, add 1 Kill")
+                }
+            }
+            UnknownContinue
+
+        // ── DUAL-SIDED SPELLBOOK FLIP TRIGGERS ───────────────────────────────
+        // These check at the end of battle phases
+
+        // Mayhem: White Rider → God's Plague (Pestilence present + 2+ Pains to enemies)
+        case BattleProceedAction(AllPainsAssignedPhase) if game.setup.has(DGT) && DGT.has(WhiteRider) && !DGT.has(GodsPlague) =>
+            game.battle.foreach { b =>
+                val dgtInBattle = b.attacker == DGT || b.defender == DGT
+                val pestilencePresent = DGT.at(b.arena).exists(_.uclass == Pestilence)
+                if (dgtInBattle && pestilencePresent) {
+                    val enemyFaction = if (b.attacker == DGT) b.defender else b.attacker
+                    val enemySide = if (b.attacker == DGT) b.defenders else b.attackers
+                    val painsAssigned = enemySide.forces.count(_.health == Pained)
+                    if (painsAssigned >= 2) {
+                        DGT.es += 1
+                        DGT.log("Mayhem".styled(DGT) + ": flipped", WhiteRider, "to", GodsPlague, "— gained", 1.es)
+                        DGT.unsatisfy(WhiteRider)
+                        DGT.satisfy(GodsPlague, "Mayhem flip trigger")
+                    }
+                }
+            }
+            UnknownContinue
+
+        // Ruin: Red Rider → God's Sword (War present + 10+ combat dice rolled)
+        case BattleRollAction(f : DGT.type, rolls, next) if game.setup.has(DGT) && DGT.has(RedRider) && !DGT.has(GodsSword) =>
+            game.battle.foreach { b =>
+                val warPresent = DGT.at(b.arena).exists(_.uclass == War)
+                val dgtSide = if (b.attacker == DGT) b.attackers else b.defenders
+                if (warPresent && dgtSide.rolls.num >= 10) {
+                    DGT.es += 1
+                    DGT.log("Ruin".styled(DGT) + ": flipped", RedRider, "to", GodsSword, "— gained", 1.es)
+                    DGT.unsatisfy(RedRider)
+                    DGT.satisfy(GodsSword, "Ruin flip trigger")
+                }
+            }
+            UnknownContinue
+
+        // Despair: Pale Rider → God's Hand (Death present + 3+ cost enemy unit killed)
+        case AssignKillAction(f, count, faction, ur) if game.setup.has(DGT) && DGT.has(PaleRider) && !DGT.has(GodsHand) =>
+            game.battle.foreach { b =>
+                val dgtInBattle = b.attacker == DGT || b.defender == DGT
+                val deathPresent = DGT.at(b.arena).exists(_.uclass == Death)
+                val enemyFaction = if (b.attacker == DGT) b.defender else b.attacker
+                val unit = game.unit(ur)
+                if (dgtInBattle && deathPresent && unit.faction == enemyFaction && unit.uclass.cost >= 3) {
+                    DGT.es += 1
+                    DGT.log("Despair".styled(DGT) + ": flipped", PaleRider, "to", GodsHand, "— gained", 1.es)
+                    DGT.unsatisfy(PaleRider)
+                    DGT.satisfy(GodsHand, "Despair flip trigger")
+                }
+            }
+            UnknownContinue
+
+        case _ => UnknownContinue
+    }
+
+    // ── SPELLBOOK REQUIREMENTS (continuous evaluation) ──────────────────────
+    override def triggers()(implicit game : Game) {
+        if (!game.setup.has(DGT)) return
+        val f = DGT
+
+        // SBR 1 — White Rider: Control a Gate in Dragon Glyph (GlyphOO) area
+        f.satisfyIf(WhiteRiderReq, WhiteRiderReq.text,
+            game.board.regions.exists(r => r.glyph == GlyphOO && f.gates.contains(r)) && !f.pool.exists(_.uclass == Pestilence))
+
+        // SBR 2 — Red Rider: Control a Gate in Thorn Glyph (GlyphWW) area
+        f.satisfyIf(RedRiderReq, RedRiderReq.text,
+            game.board.regions.exists(r => r.glyph == GlyphWW && f.gates.contains(r)) && !f.pool.exists(_.uclass == War))
+
+        // SBR 3 — Black Rider: Control a Gate in Chevron Glyph (GlyphAA) area
+        f.satisfyIf(BlackRiderReq, BlackRiderReq.text,
+            game.board.regions.exists(r => r.glyph == GlyphAA && f.gates.contains(r)) && !f.pool.exists(_.uclass == Famine))
+    }
+
+    // ── GOD'S HAND: DGT units in Death's area can't be eliminated ──────────
+    override def eliminate(u : UnitFigure)(implicit game : Game) {
+        if (!game.setup.has(DGT)) return
+        if (u.faction != DGT) return
+        if (!DGT.has(GodsHand)) return
+
+        val deathInArea = DGT.at(u.region).exists(_.uclass == Death)
+        if (deathInArea) {
+            // Cancel the elimination - unit survives
+            DGT.log(GodsHand.styled(DGT) + ":", u.uclass, "ignored elimination in Death's Area")
+            // Clear the Killed/Pained tag to prevent pool return
+            u.health = Healthy
+        }
+    }
+
+    // ── AFTER ACTION: nothing special needed for now ────────────────────────
+    override def afterAction()(implicit game : Game) {
+        // Future: God's Scale flip prompts could go here
+    }
+
+}
