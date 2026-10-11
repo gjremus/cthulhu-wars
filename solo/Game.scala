@@ -1976,6 +1976,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var prmFlippedDownSpellbooks : $[Spellbook] = $
     var prmYcgnaTemporaryController : |[Faction] = None
     var prmMakeAsOneFlips : Int = 0
+    // Speak Reality tracking
+    var prmSpeakRealityTarget : |[Faction] = None
+    var prmSpeakRealityAction : String = ""
+    var prmSpeakRealityPower : Int = 0
 
     // Xyrious Storm (XSS) state — Cloud Of Ashes holding zone (§1.10 SB3).
     // Monsters placed on the Faction Card during elimination; returned to map at Doom.
