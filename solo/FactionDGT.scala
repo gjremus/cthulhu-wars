@@ -441,10 +441,12 @@ object DGTExpansion extends Expansion {
             if (total > 0) {
                 val powerGained = total * 2
                 DGT.power += powerGained
-                val breakdown = (acolytesInPool > 0 && acolytesCaptured > 0).??(
+                val breakdown = if (acolytesInPool > 0 && acolytesCaptured > 0)
                     " (" + acolytesInPool + " in pool, " + acolytesCaptured + " captured)"
-                ).|(
-                    acolytesCaptured > 0).??(" (" + acolytesCaptured + " captured)").|("")
+                else if (acolytesCaptured > 0)
+                    " (" + acolytesCaptured + " captured)"
+                else
+                    ""
                 DGT.log(MartyrsCry.styled(DGT) + ": gained", powerGained.power, "for", total, "Acolyte".s(total) + breakdown)
             }
             UnknownContinue
