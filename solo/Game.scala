@@ -1743,6 +1743,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case FBE => $(FBEExpansion)
             // Fleshmason (FM): Homebrew designer faction
             case FM => $(FMExpansion)
+            case PRM => $(PRMExpansion)
             // Xyrious Storm (XSS): Homebrew faction
             case XSS => $(XSSExpansion)
             // The Burrowers Beneath (TB): Homebrew faction
@@ -1987,6 +1988,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var fbeCardDice : $[Int] = $
     var fbeSelfConsumingDeaths : $[(Region, |[Faction])] = $
     var fbeShapestolen : $[UnitRef] = $
+
+    // Permeation (PRM) state — spellbook manipulation and Ycgn'àgnnisssz control
+    var prmFlippedDownSpellbooks : $[Spellbook] = $
+    var prmYcgnaTemporaryController : |[Faction] = None
+    var prmMakeAsOneFlips : Int = 0
+    // Speak Reality tracking
+    var prmSpeakRealityTarget : |[Faction] = None
+    var prmSpeakRealityAction : String = ""
+    var prmSpeakRealityPower : Int = 0
 
     // Xyrious Storm (XSS) state — Cloud Of Ashes holding zone (§1.10 SB3).
     // Monsters placed on the Faction Card during elimination; returned to map at Doom.
@@ -2834,6 +2844,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         }
 
         triggers()
+
+        // PRM: Control 2 Gates in Land Areas
+        if (factions.has(PRM) && self == PRM) {
+            val landGates = PRM.gates.%(r => !r.glyph.is[Ocean.type])
+            if (landGates.num >= 2)
+                PRM.satisfy(Control2LandGatesReq, "Control 2 Gates in Land Areas")
+        }
     }
 
     def extraActions(f : Faction, outOfTurn : Boolean, highPriests : Boolean) : $[Action] = {
@@ -3518,6 +3535,23 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 if (factions.but(CS).exists(_.gates.has(r)) && f.at(r).%(_.uclass.utype == Cultist).not(Zeroed).any)
                     + CSEffulgentSacrificeAction(f, r)
             }
+
+        // Permeation (PRM): Make as One — enemies may activate PRM's face-up spellbooks by paying
+        // their Power cost. Only offer this during the enemy's action phase (not doom phase).
+        // Must check oncePerAction to see which books are face-up.
+        if (factions.has(PRM) && f != PRM && !doomPhase) {
+            val eligibleSBs = PRM.library.%(sb => !PRM.used(sb) && !prmFlippedDownSpellbooks.has(sb))
+            if (eligibleSBs.any)
+                + MakeAsOneOfferAction(PRM, f, eligibleSBs)
+        }
+
+        // Permeation (PRM): Mother's Aid — enemies may pay PRM 1 Power to control Ycgn'àgnnisssz
+        // this turn. Only offer if Ycgn'àgnnisssz is on the map and not already controlled by someone.
+        if (factions.has(PRM) && f != PRM && prmYcgnaTemporaryController.none && !doomPhase) {
+            val ycgna = PRM.goo(Ycgnagnnisssz)
+            if (ycgna.region != null && f.power >= 1)
+                + MothersAidOfferAction(PRM, f)
+        }
     }
 
     def libraryActions(f : Faction)(implicit w : AskWrapper) {
@@ -4630,6 +4664,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (f.hasAllSB)
                 factions.foreach(_.satisfy(AnotherFactionAllSpellbooks, "Another faction has all spellbooks"))
 
+            // PRM: Another Faction has 3 or more Spellbooks
+            if (factions.has(PRM) && f != PRM) {
+                if (f.spellbooks.num >= 3)
+                    PRM.satisfy(EnemyHas3SpellbooksReq, "Another Faction has 3 or more Spellbooks")
+            }
+
             f.ignorePerInstant = $
 
             // TT Hierophants: when TT earns a Faction Spellbook, place HP at gate or grow counter
@@ -5483,6 +5523,20 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             factions.foreach(_.oncePerRound = $)
             fbeShapestealingUsedThisActionPhase = false
 
+            // PRM Speak Reality cleanup: clear state at end of target's turn
+            if (prmSpeakRealityTarget.contains(prev)) {
+                prmSpeakRealityTarget = None
+                prmSpeakRealityAction = ""
+                prmSpeakRealityPower = 0
+            }
+
+            // PRM Mother's Aid cleanup: clear controller at end of their turn
+            if (prmYcgnaTemporaryController.contains(prev)) {
+                prmYcgnaTemporaryController = None
+                if (factions.has(PRM))
+                    PRM.log(prev.name + "'s control of", Ycgnagnnisssz.name.styled(PRM), "ended")
+            }
+
             round += 1
 
             factions.foreach { f =>
@@ -5652,12 +5706,20 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             else {
                 // Any faction may move a unit OFF the Moon (only BB may move TO it).
                 val moonUnits = factions.has(BB).??(self.at(BB.moon).not(Moved).%(_.canMove))
-                val ownUnits = (self.units.nex.onMap.not(Moved).%(_.canMove) ++ moonUnits).sortA
+                // PRM Mother's Aid: PRM cannot move Ycgn'àgnnisssz when she's controlled by an enemy
+                val ownUnits = (self.units.nex.onMap.not(Moved).%(u =>
+                    u.canMove && !(u.uclass == Ycgnagnnisssz && prmYcgnaTemporaryController.isDefined && prmYcgnaTemporaryController.get != self)
+                ) ++ moonUnits).sortA
                 // Mind Parasite: include parasitized enemy acolytes that this faction controls
                 val parasitized : $[UnitFigure] = if (self.loyaltyCards.has(InsectsFromShaggaiCard))
                     factions.but(self)./~(e => e.units.nex.onMap.not(Moved).%(u => MindParasite.controller(u)(game).has(self)))
                 else $
-                val units = ownUnits ++ parasitized
+                // PRM Mother's Aid: include Ycgn'àgnnisssz when controlled by this faction
+                val ycgnaControlled : $[UnitFigure] = if (factions.has(PRM) && prmYcgnaTemporaryController.contains(self) && self != PRM) {
+                    val ycgna = PRM.goo(Ycgnagnnisssz)
+                    if (ycgna.region.inPlay && !ycgna.tag(Moved)) $(ycgna) else $
+                } else $
+                val units = ownUnits ++ parasitized ++ ycgnaControlled
 
                 if (units.none)
                     Then(MoveDoneAction(self))
@@ -5680,6 +5742,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             }
 
         case MoveSelectAction(self, u, from, cost) =>
+            // PRM Mother's Aid: when an enemy controls Ycgn'àgnnisssz, moving her costs 0 Power
+            val adjustedCost = if (u.uclass == Ycgnagnnisssz && prmYcgnaTemporaryController.contains(self) && self != PRM) 0 else cost
+
             var destinations = board.connected(from)
 
             if (self.has(Flight))
@@ -5747,10 +5812,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // destinations despite having Sin. Tax (if any) is still paid by the
             // handler's payTax; the move loop is bounded by Sin in MoveContinue.
             val tenebrosumMoveSin = dcTenebrosumGuard && dcTenebrosumMovePerUnit
-            val l3 = if (tenebrosumMoveSin) l2 else l2.%(self.affords(cost))
+            val l3 = if (tenebrosumMoveSin) l2 else l2.%(self.affords(adjustedCost))
 
             Ask(self)
-                .each(l3)(to => MoveAction(self, u, from, to, cost).as
+                .each(l3)(to => MoveAction(self, u, from, to, adjustedCost).as
                     (ConnectionGlyph(from, to) + to.toString, self.iced(to),
                      (isOffMapMove || to == BB.moon || to.is[MantleHold]).?("").|( s"""<img class=direction src="${Overlays.imageSource("move-deg-" + direction(from, to))}" />""" ))
                     ("Move", u, (cost == 0).??("for free"), "from", from, "to")

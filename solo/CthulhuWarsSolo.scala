@@ -813,6 +813,8 @@ object CthulhuWarsSolo {
                                         case FBE => BotFBE  .ask(actions, 0.2)(game)
                                         // Fleshmason (FM): bot dispatch (Easy)
                                         case FM => BotFM   .ask(actions, 0.2)(game)
+                                        // Permeation (PRM): bot dispatch (Easy)
+                                        case PRM => BotPRM  .ask(actions, 0.2)(game)
                                         // Xyrious Storm (XSS): bot dispatch (Easy)
                                         case XSS => BotXSS  .ask(actions, 0.2)(game)
                                         // Tribulation (DGT): bot dispatch (Easy)
@@ -849,6 +851,8 @@ object CthulhuWarsSolo {
                                         case FBE => BotFBE  .ask(actions, 0.03)(game)
                                         // Fleshmason (FM): bot dispatch (Normal)
                                         case FM => BotFM   .ask(actions, 0.03)(game)
+                                        // Permeation (PRM): bot dispatch (Normal)
+                                        case PRM => BotPRM  .ask(actions, 0.03)(game)
                                         // Xyrious Storm (XSS): bot dispatch (Normal)
                                         case XSS => BotXSS  .ask(actions, 0.03)(game)
                                         // Tribulation (DGT): bot dispatch (Normal)
@@ -889,6 +893,8 @@ object CthulhuWarsSolo {
                                         case FBE => BotFBE  .ask(as, 0.03)(game)
                                         // Fleshmason (FM): bot dispatch (AllVsHuman)
                                         case FM => BotFM   .ask(as, 0.03)(game)
+                                        // Permeation (PRM): bot dispatch (AllVsHuman)
+                                        case PRM => BotPRM  .ask(as, 0.03)(game)
                                         // Xyrious Storm (XSS): bot dispatch (AllVsHuman)
                                         case XSS => BotXSS  .ask(as, 0.03)(game)
                                         // Tribulation (DGT): bot dispatch (AllVsHuman)
@@ -1095,6 +1101,8 @@ object CthulhuWarsSolo {
                     case FBE => Processing(None, None, None, |("#3d5f1c"))
                     // Fleshmason (FM): pale pink #f3c8c8
                     case FM => Processing(|("#f3c8c8"), None, None)
+                    // Permeation (PRM): deep red #9d1b0c — multiply-only
+                    case PRM => Processing(None, None, None, |("#9d1b0c"))
                     // Xyrious Storm (XSS): stormy blue-grey #4a6b7a
                     case XSS => Processing(|("#4a6b7a"), None, None)
                     // Colour Out of Space (CS): placeholder with no tint
@@ -1124,6 +1132,7 @@ object CthulhuWarsSolo {
                     case BB => Processing(|("#c8a84b"), |("#333333"), None)
                     case DC => Processing(|("#F0EDA8"), |("#333333"), None)
                     case FBE => Processing(None, None, None, |("#3d5f1c"))
+                    case PRM => Processing(None, None, None, |("#9d1b0c"))
                     case XSS => Processing(|("#4a6b7a"), None, None)
                     case DGT => Processing(|("#808080"), |("#333333"), None)
                     case TB => Processing(|("#8b6914"), |("#333333"), None)
@@ -1161,6 +1170,8 @@ object CthulhuWarsSolo {
                         case FBE => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60, outline = true)
                         // Fleshmason (FM): DC acolyte sprite tinted FM-pink
                         case FM => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        // Permeation (PRM): use PRM unit silhouette
+                        case PRM => DrawRect("prm-acolyte", |(tint), x - 17, y - 54, 39, 60, outline = true)
                         // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Tribulation (DGT): acolyte sprite
@@ -1236,6 +1247,7 @@ object CthulhuWarsSolo {
                         case DC => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
                         case FBE => DrawRect("fbe-glyph", None, x - 50, y - 50, 100, 100)
                         case FM => DrawRect("fm-glyph", None, x - 50, y - 50, 100, 100)
+                        case PRM => DrawRect("prm-card", None, x - 50, y - 50, 100, 100)
                         case XSS => DrawRect("xss-glyph", None, x - 50, y - 50, 100, 100)
                         case DGT => DrawRect("dgt-glyph", None, x - 50, y - 50, 100, 100)
                         case TB => DrawRect("tb-glyph", None, x - 50, y - 50, 100, 100)
@@ -1520,6 +1532,7 @@ object CthulhuWarsSolo {
                     // AwakenedAction(YgolonacDC) handler.
                     case StartingGlyph if faction == DC => DrawRect("dc-glyph", None, x - 33, y - 33, 66, 66)
                     case StartingGlyph if faction == FBE => DrawRect("fbe-glyph", None, x - 33, y - 33, 66, 66)
+                    case StartingGlyph if faction == PRM => DrawRect("prm-card", None, x - 33, y - 33, 66, 66)
                     case StartingGlyph if faction == TI => DrawRect("ti-glyph", None, x - 33, y - 33, 66, 66)
 
                     // Library map units — larger than monsters, smaller than GOOs
@@ -1538,6 +1551,10 @@ object CthulhuWarsSolo {
                     case MuscleStitcher => DrawRect("fm-muscle-stitcher", |(tint), x - 35, y - 70, 70, 80)
                     case BodyArchitect  => DrawRect("fm-body-architect", |(tint), x - 40, y - 80, 80, 90)
                     case ScreamingWall  => DrawRect("fm-screaming-wall", |(tint), x - 35, y - 70, 70, 80)
+                    // Permeation (PRM): unit sprites from designer with PRM-red multiply tint
+                    case AstralEgg          => DrawRect("prm-astral-egg", |(tint), x - 30, y - 60, 60, 60, outline = true)
+                    case CelestialFledgling => DrawRect("prm-celestial-fledgling", |(tint), x - 35, y - 75, 70, 85, outline = true)
+                    case Ycgnagnnisssz      => DrawRect("prm-ycgnagnnisssz", |(tint), x - 70, y - 150, 140, 156, outline = true)
 
                     // Xyrious Storm (XSS): placeholder sprites (no art yet).
                     // Amphibian Crawler = Gnorri, Twister = Shantak, Eye of the Storm = Star Vampire, Petrichor = Cthulhu-sized.

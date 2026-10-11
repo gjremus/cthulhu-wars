@@ -547,6 +547,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Tribulation (DGT) God's Hand: DGT units in Death's Area ignore Kills
         else if (game.setup.has(DGT) && unit.faction == DGT && DGT.has(GodsHand) &&
                  DGT.at(unit.region).exists(_.uclass == Death)) 0
+        // PRM Mother's Aid: Ycgn'àgnnisssz cannot be assigned combat results while controlled by an enemy
+        else if (unit.uclass == Ycgnagnnisssz && game.prmYcgnaTemporaryController.isDefined && game.prmYcgnaTemporaryController.get != unit.faction) 0
         else unit.health match {
             case DoubleHP(Killed, Killed) => 0
             case DoubleHP(Killed, _) => 1
@@ -617,6 +619,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
         // Cathedrals cannot be assigned a Pain
         else if (unit.uclass == Cathedral) 0
+        // PRM Mother's Aid: Ycgn'àgnnisssz cannot be assigned combat results while controlled by an enemy
+        else if (unit.uclass == Ycgnagnnisssz && game.prmYcgnaTemporaryController.isDefined && game.prmYcgnaTemporaryController.get != unit.faction) 0
         else unit.health match {
             case DoubleHP(Alive, Alive) => 2
             case DoubleHP(Alive, _) => 1
@@ -1375,6 +1379,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // csInsanityMeteorOrGlobulePresent for why this can't be re-checked at BattleEnd.
                 if (factions.has(CS))
                     csInsanityMeteorOrGlobulePresent = CS.at(arena).%(u => u.uclass == Meteorite || u.uclass == LuminousGlobule).any
+
+                // PRM: Ycgn'àgnnisssz is an Attacker in a Battle
+                if (factions.has(PRM) && attacker == PRM) {
+                    if (PRM.at(arena).%(u => u.uclass.isGOO && u.uclass == Ycgnagnnisssz).any)
+                        PRM.satisfy(YcgnaAttackerInBattleReq, "Ycgn'àgnnisssz is an Attacker in a Battle")
+                }
 
                 if (attacker.hasAllSB.not)
                     attacker.acted = true
