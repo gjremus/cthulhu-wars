@@ -354,6 +354,30 @@ object DGTExpansion extends Expansion {
                 Force(EndAction(self))
             }
 
+        // ── GOD'S SCALE (Post-Action flip prompts) ───────────────────────────
+        // TODO: These handlers need to be called after any action completes
+        // For now they're defined but not hooked into the afterAction flow
+        case GodsScaleFlipPromptAction(self, enemyFaction) =>
+            // Prompt enemy: flip God's Scale face-down for DGT to gain 1 ES?
+            implicit val asking = Asking(enemyFaction)
+            Ask(enemyFaction)
+                .add(GodsScaleFlipYesAction(self, enemyFaction))
+                .add(GodsScaleFlipNoAction(self, enemyFaction))
+
+        case GodsScaleFlipYesAction(self, enemyFaction) =>
+            // Flip God's Scale face-down and give DGT 1 ES
+            if (self.has(GodsScale)) {
+                self.spellbooks = self.spellbooks.but(GodsScale)
+                self.takeES(1)
+                enemyFaction.log("flipped", GodsScale.styled(DGT), "face-down,", self.name, "gained", 1.es)
+                // TODO: Track that it's face-down and flip back up at end of Doom Phase
+            }
+            Force(EndAction(enemyFaction))
+
+        case GodsScaleFlipNoAction(self, enemyFaction) =>
+            // Skip flipping
+            Force(EndAction(enemyFaction))
+
         // ── GATHER POWER PHASE (Martyr's Cry) ───────────────────────────────
         case AfterPowerGatherAction if game.setup.has(DGT) && DGT.can(MartyrsCry) =>
             // Count Acolytes in pool

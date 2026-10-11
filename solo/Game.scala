@@ -1168,6 +1168,19 @@ class Player(private val f : Faction)(implicit game : Game) {
         if (f == AN && AN.can(HolyGround) && f.at(r, Cathedral).any)
             true
         else
+        // DGT Black Rider: In Famine's Area, ignore enemy Monsters/Terrors when capturing
+        if (game.setup.has(DGT) && f == DGT && DGT.has(BlackRider)) {
+            val famineArea = DGT.units.%(_.uclass == Famine)./(_.region).headOption
+            if (famineArea.has(r))
+                true // Can capture despite enemy Monsters/Terrors
+            else if (e.at(r, Terror).any)
+                false
+            else if (e.at(r, Monster).any)
+                e.at(r, Monster).none
+            else
+                f.at(r, Terror).any || f.at(r, Monster).%(u => u.uclass.canCapture(u)).any
+        }
+        else
         if (e.at(r, Terror).any)
             false
         else
@@ -5605,7 +5618,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     Ask(self)
                         .group("Moved", self.units.tag(Moved).mkString(", "))
                         .add(MoveDoneAction(self).as("Done"))
-                        .each(units)(u => MoveSelectAction(u.faction, u, u.region, 1).as(u.ref.full, "from", u.region)("Move", "another".hl, "unit"))
+                        .each(units)(u => {
+                            // DGT Cosmic Chaos: Conquests move for free during Move action with 1+ Power spent
+                            val isCosmicChaos = setup.has(DGT) && self == DGT && DGT.can(CosmicChaos) && u.uclass == Conquest
+                            val moveCost = isCosmicChaos.?(0).|(1)
+                            MoveSelectAction(u.faction, u, u.region, moveCost).as(u.ref.full, "from", u.region)("Move", "another".hl, "unit", isCosmicChaos.??("(free via " + CosmicChaos.styled(DGT) + ")"))
+                        })
                 else
                     Ask(self)
                         .group("Move unit")
@@ -5654,6 +5672,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val dgtAreas = DGT.units.onMap./(_.region).distinct
                 if (dgtAreas.has(from))
                     destinations = (destinations ++ dgtAreas.but(from)).distinct
+            }
+
+            // DGT White Rider: Pestilence's Area has no adjacent Areas for enemy units
+            if (setup.has(DGT) && self != DGT && DGT.has(WhiteRider)) {
+                val pestilenceArea = DGT.units.%(_.uclass == Pestilence)./(_.region).headOption
+                pestilenceArea.foreach { pestiArea =>
+                    val unitFig = unit(u)
+                    // If the unit is IN Pestilence's area, it cannot move out
+                    if (from == pestiArea) {
+                        destinations = $  // No destinations available
+                    }
+                }
             }
 
             val arriving = self.units.%(_.region.glyph.onMap).tag(Moved)./(_.region).distinct
