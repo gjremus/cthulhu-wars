@@ -361,6 +361,52 @@ object PRMExpansion extends Expansion {
 
                 Then(EndAction(f))
 
+            // ── PROTOGENESIS ────────────────────────────────────────────
+            case ProtogenesisMainAction(f) =>
+                val poolMonsters = f.pool.%(_.uclass.utype == Monster)
+                if (poolMonsters.none) {
+                    f.log("No Monsters in pool")
+                    EndAction(f)
+                } else if (f.power < 2) {
+                    f.log("Not enough Power for", Protogenesis.styled(f))
+                    EndAction(f)
+                } else {
+                    // Find lowest-cost monster
+                    // Use ocean as reference region for cost calculation since region doesn't matter for finding minimum
+                    val oceanRef = game.board.regions.%(_.glyph == Ocean).head
+                    val lowestCostMonster = poolMonsters.minBy(u => f.summonCost(u.uclass, oceanRef))
+
+                    val areasWithUnits = f.allInPlay./(_.region).distinct
+                    if (areasWithUnits.none) {
+                        f.log("No Areas with", PRM.name, "Units")
+                        EndAction(f)
+                    } else {
+                        implicit val asking = Asking(f)
+                        Ask(f, $(ProtogenesisPickAreaAction(f, lowestCostMonster.ref)))
+                    }
+                }
+
+            case ProtogenesisPickAreaAction(f, monsterRef) =>
+                val areasWithUnits = f.allInPlay./(_.region).distinct
+                implicit val asking = Asking(f)
+                Ask(f).each(areasWithUnits)(r => ProtogenesisAction(f, monsterRef, r))
+
+            case ProtogenesisAction(f, monsterRef, dest) =>
+                val monster = game.unit(monsterRef)
+                f.power -= 2
+                monster.region = dest
+                f.log(Protogenesis.styled(f) + ":", "placed", monster.uclass.styled(f), "in", dest)
+
+                // Flip if no monsters remain in pool
+                val remainingPoolMonsters = f.pool.%(_.uclass.utype == Monster)
+                if (remainingPoolMonsters.none) {
+                    f.oncePerAction :+= Protogenesis
+                    game.prmFlippedDownSpellbooks :+= Protogenesis
+                    f.log(Protogenesis.styled(f), "flipped Face Down until Doom Phase")
+                }
+
+                Then(EndAction(f))
+
             // ── ELDRITCH LOVE ───────────────────────────────────────────
             case EldritchLoveAction(f) =>
                 val flippedCount = game.prmFlippedDownSpellbooks.num
