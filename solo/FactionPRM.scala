@@ -271,6 +271,11 @@ case class MothersAidActivateAction(self : Faction, enemy : Faction)
 // ============================================================================
 // PERMEATION (PRM) EXPANSION
 // ============================================================================
+// Battle mechanics:
+// - Celestial Fledgling combat: each gets (# in play + 1) strength
+// - Ycgn'àgnnisssz combat: owner's earned SBs + ALL face-down SBs (PRM + DC if present)
+// - Mother's Aid protection: when controlled by enemy, Ycgn'àgnnisssz cannot be assigned
+//   combat results or eliminated (requires combat phase integration)
 object PRMExpansion extends Expansion {
     def name = "Permeation"
     def factions = $(PRM)
