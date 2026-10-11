@@ -707,21 +707,7 @@ object PRMExpansion extends Expansion {
                 Then(EndAction(enemy))
 
             // ── END TURN ────────────────────────────────────────────────
-            case EndTurnAction(f) if f == PRM || game.prmYcgnaTemporaryController.contains(f) =>
-                // Clear temporary Ycgn'àgnnisssz controller
-                game.prmYcgnaTemporaryController.foreach { controller =>
-                    if (f == controller) {
-                        game.prmYcgnaTemporaryController = None
-                        PRM.log(controller.name + "'s control of", Ycgnagnnisssz.styled(PRM), "ended")
-                    }
-                }
-                // Clear Speak Reality tracking
-                if (game.prmSpeakRealityTarget.contains(f)) {
-                    game.prmSpeakRealityTarget = None
-                    game.prmSpeakRealityAction = ""
-                    game.prmSpeakRealityPower = 0
-                }
-                Force(EndTurnAction(f))
+            // Note: Mother's Aid and Speak Reality cleanup now handled in Game.scala NextPlayerAction
 
             case _ => null
         }
