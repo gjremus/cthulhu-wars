@@ -602,7 +602,7 @@ object Overlays {
     // single-method bytecode limit once the Dunwich cases were added, so the
     // Dunwich (Whateley Clan + Dire Yog-Sothoth) overlays live in their own
     // method and info() delegates to it first.
-    def info(s : $[Any]) : |[String] = { val d = infoDunwich(s); if (d.any) d else { val c = infoCats(s); if (c.any) c else { val fm = infoFM(s); if (fm.any) fm else infoMain(s) } } }
+    def info(s : $[Any]) : |[String] = { val d = infoDunwich(s); if (d.any) d else { val c = infoCats(s); if (c.any) c else { val fm = infoFM(s); if (fm.any) fm else { val g = infoDGT(s); if (g.any) g else infoMain(s) } } } }
 
     def infoDunwich(s : $[Any]) : |[String] = (s @@ {
         // ── DUNWICH HORROR — Whateley Clan + Dire Yog-Sothoth ──
@@ -660,6 +660,51 @@ object Overlays {
 
         // ── SOMETHING ABOUT CATS — HAGARG RYONIS (Independent Elder God) ──
         case $("Hagarg Ryonis") => loyaltyCardIGOO("Hagarg Ryonis", "4", "Hagarg Ryonis rolls no dice. Instead, she adds 3 Pains to your Combat total.", false, "1. Your Controlled Gate is in an Area with your Great Old One.<br>2. Pay 4 Power, and place Hagarg Ryonis in the Area containing the Gate.", "Subversion", "First Player Phase", "Choose a player. If that player performs a Ritual of Annihilation in the Doom Phase, you steal 1 of the Elder Signs he earns (if any).", "Laziness", "You have 0 Power.", "Action: Cost 0", "Any faction with exactly 1 Power left loses that Power. Alternatively, pay 1 Power to force Windwalker to also lose 1 Power. You can only use this Action if Windwalker is Hibernating, or one or more enemy factions have exactly 1 Power.")
+
+        case _ => ""
+    }).but("")
+
+    def infoDGT(s : $[Any]) : |[String] = (s @@ {
+        // ── TRIBULATION (DGT) — HOMEBREW FACTION ──
+        case $("DGT") => faction(DGT, "info:dgt-background", Dominion, "Ongoing", "When performing the Move Action, Areas with Units you control are adjacent to each other.",
+            $(), $(
+            (Acolyte,    6, "1", "0", s"""<div class=p>Spellbook: ${reference(DGT, MartyrsCry)}</div>"""),
+            (Conquest,   4, "1", "1", s"""<div class=p>Spellbook: ${reference(DGT, CosmicChaos)}</div>"""),
+            (Pestilence, 1, "3", "3", s"""<div class=p>Spellbooks: ${reference(DGT, WhiteRider)}, ${reference(DGT, GodsPlague)}</div>"""),
+            (War,        1, "3/6/12", "3/6/12", s"""
+                <div class=p>${cost("Cost:")} 3 Power</div>
+                <div class=p>${combat} 3 base, 6 with ${reference(DGT, RedRider)}, 12 with ${reference(DGT, GodsSword)}</div>
+                <div class=p>Spellbooks: ${reference(DGT, RedRider)}, ${reference(DGT, GodsSword)}</div>"""
+            ),
+            (Famine,     1, "3", "3", s"""<div class=p>Spellbooks: ${reference(DGT, BlackRider)}, ${reference(DGT, GodsScale)}</div>"""),
+            (Death,      1, "3", "3", s"""<div class=p>Spellbooks: ${reference(DGT, PaleRider)}, ${reference(DGT, GodsHand)}</div>"""),
+        ))
+
+        case $("DGT", WhiteRiderReq.text) => requirement("Control a Gate in an Area marked with Dragon Glyph. Add Pestilence to your Pool.")
+        case $("DGT", RedRiderReq.text) => requirement("Control a Gate in an Area marked with Thorn Glyph. Add War to your Pool.")
+        case $("DGT", BlackRiderReq.text) => requirement("Control a Gate in an Area marked with Chevron Glyph. Add Famine to your Pool.")
+        case $("DGT", PaleRiderReq.text) => requirement("A player performs a Ritual of Annihilation. Add Death to your Pool.")
+        case $("DGT", MartyrsCryReq.text) => requirement("As an Action, distribute Power equal to number of players to enemy Factions.")
+        case $("DGT", CosmicChaosReq.text) => requirement("As an Action, distribute Doom equal to number of players to enemy Factions.")
+
+        case $("DGT", WhiteRider.name) => spellbook(WhiteRider.name, "Ongoing", "Pestilence's Area has no adjacent Areas for enemy Units in it.")
+        case $("DGT", "Mayhem") => spellbook("Mayhem", "Once Only", "During Post-Battle, if Pestilence is present and 2 or more Pains are assigned to enemy Units, Gain 1 Elder Sign and flip this Spellbook.")
+        case $("DGT", GodsPlague.name) => spellbook(GodsPlague.name, "Action: Cost 2", "All enemy Factions with one or more Units in Pestilence's Area choose one of their Units to be Pained away. You choose the Area into which each Unit is Pained.")
+
+        case $("DGT", RedRider.name) => spellbook(RedRider.name, "Ongoing", "War now has 6 Combat.")
+        case $("DGT", "Ruin") => spellbook("Ruin", "Once Only", "During Battle, if War is present and you roll 10 or more Combat dice, Gain 1 Elder Sign and flip this Spellbook.")
+        case $("DGT", GodsSword.name) => spellbook(GodsSword.name, "Ongoing", "War now has 12 Combat.")
+
+        case $("DGT", BlackRider.name) => spellbook(BlackRider.name, "Ongoing", "In Famine's Area, ignore the presence of enemy Monsters and Terrors when you Capture an enemy Cultist.")
+        case $("DGT", "Rampage") => spellbook("Rampage", "Once Only", "During Gather Power Phase, if you Sacrifice one enemy Cultist, Gain 1 Elder Sign and flip this Spellbook.")
+        case $("DGT", GodsScale.name) => spellbook(GodsScale.name, "Ongoing", "Enemy Spellbooks are ignored in Famine's Area. After any Action, an enemy Faction may choose to have you Gain 1 Elder Sign to flip this Spellbook face-down. At the end of the Doom Phase, flip it face-up.")
+
+        case $("DGT", PaleRider.name) => spellbook(PaleRider.name, "Post-Battle", "If Death is present, add 1 Kill to your results.")
+        case $("DGT", "Despair") => spellbook("Despair", "Once Only", "During Post-Battle, if Death is present and a Kill is assigned to a 3-cost or higher enemy Unit, Gain 1 Elder Sign and flip this Spellbook.")
+        case $("DGT", GodsHand.name) => spellbook(GodsHand.name, "Ongoing", "Your Units ignore Kills and Eliminations in Death's Area.")
+
+        case $("DGT", MartyrsCry.name) => spellbook(MartyrsCry.name, "Gather Power Phase", "Gain 2 Power for each Tribulation Acolyte in your pool and on enemy Faction Cards.")
+        case $("DGT", CosmicChaos.name) => spellbook(CosmicChaos.name, "Ongoing", "Move any number of Conquests for free when you perform a Move Action during which you spend 1 or more Power.")
 
         case _ => ""
     }).but("")

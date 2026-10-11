@@ -815,6 +815,8 @@ object CthulhuWarsSolo {
                                         case FM => BotFM   .ask(actions, 0.2)(game)
                                         // Xyrious Storm (XSS): bot dispatch (Easy)
                                         case XSS => BotXSS  .ask(actions, 0.2)(game)
+                                        // Tribulation (DGT): bot dispatch (Easy)
+                                        case DGT => BotDGT  .ask(actions, 0.2)(game)
                                         // The Burrowers Beneath (TB): bot dispatch (Easy)
                                         case TB => BotTB    .ask(actions, 0.2)(game)
                                         // Colour Out of Space (CS): bot dispatch (Easy)
@@ -849,6 +851,8 @@ object CthulhuWarsSolo {
                                         case FM => BotFM   .ask(actions, 0.03)(game)
                                         // Xyrious Storm (XSS): bot dispatch (Normal)
                                         case XSS => BotXSS  .ask(actions, 0.03)(game)
+                                        // Tribulation (DGT): bot dispatch (Normal)
+                                        case DGT => BotDGT  .ask(actions, 0.03)(game)
                                         // The Burrowers Beneath (TB): bot dispatch (Normal)
                                         case TB => BotTB    .ask(actions, 0.03)(game)
                                         // Colour Out of Space (CS): bot dispatch (Normal)
@@ -887,6 +891,8 @@ object CthulhuWarsSolo {
                                         case FM => BotFM   .ask(as, 0.03)(game)
                                         // Xyrious Storm (XSS): bot dispatch (AllVsHuman)
                                         case XSS => BotXSS  .ask(as, 0.03)(game)
+                                        // Tribulation (DGT): bot dispatch (AllVsHuman)
+                                        case DGT => BotDGT  .ask(as, 0.03)(game)
                                         // The Burrowers Beneath (TB): bot dispatch (AllVsHuman)
                                         case TB => BotTB    .ask(as, 0.03)(game)
                                         // Colour Out of Space (CS): bot dispatch (AllVsHuman)
@@ -1119,6 +1125,7 @@ object CthulhuWarsSolo {
                     case DC => Processing(|("#F0EDA8"), |("#333333"), None)
                     case FBE => Processing(None, None, None, |("#3d5f1c"))
                     case XSS => Processing(|("#4a6b7a"), None, None)
+                    case DGT => Processing(|("#808080"), |("#333333"), None)
                     case TB => Processing(|("#8b6914"), |("#333333"), None)
                     case CS => Processing(None, None, None)
                     case TI => Processing(|("#94382b"), |("#333333"), None)
@@ -1156,6 +1163,8 @@ object CthulhuWarsSolo {
                         case FM => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Xyrious Storm (XSS): placeholder acolyte sprite (reuse dc-acolyte tinted)
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        // Tribulation (DGT): acolyte sprite
+                        case DGT => DrawRect("dgt-acolyte", None, x - 17, y - 54, 39, 60)
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
                         // Colour Out of Space (CS): acolyte unit sprite
                         case CS => DrawRect("cs-acolyte", None, x - 17, y - 54, 34, 60)
@@ -1228,6 +1237,7 @@ object CthulhuWarsSolo {
                         case FBE => DrawRect("fbe-glyph", None, x - 50, y - 50, 100, 100)
                         case FM => DrawRect("fm-glyph", None, x - 50, y - 50, 100, 100)
                         case XSS => DrawRect("xss-glyph", None, x - 50, y - 50, 100, 100)
+                        case DGT => DrawRect("dgt-glyph", None, x - 50, y - 50, 100, 100)
                         case TB => DrawRect("tb-glyph", None, x - 50, y - 50, 100, 100)
                         // Colour Out of Space (CS): faction glyph sprite
                         case CS => DrawRect("cs-glyph", None, x - 50, y - 50, 100, 100)
@@ -1551,6 +1561,13 @@ object CthulhuWarsSolo {
                     case Gryllus     => DrawRect("ti-gryllus",  None, x - 22, y - 53, 44, 59)
                     case Fiend       => DrawRect("ti-fiend",    None, x - 34, y - 78, 69, 90)
                     case Baphomet    => DrawRect("ti-baphomet", None, x - 75, y - 90, 150, 107)
+
+                    // Tribulation (DGT): Four Horsemen units
+                    case Conquest    => DrawRect("dgt-conquest", None, x - 17, y - 54, 39, 60)
+                    case Pestilence  => DrawRect("dgt-pestilence", None, x - 35, y - 75, 70, 85)
+                    case War         => DrawRect("dgt-war", None, x - 35, y - 75, 70, 85)
+                    case Famine      => DrawRect("dgt-famine", None, x - 35, y - 75, 70, 85)
+                    case Death       => DrawRect("dgt-death", None, x - 35, y - 75, 70, 85)
 
                     case _ => null
                 }
@@ -5021,6 +5038,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         // MatchError for FBE games.
                                         case FBE => BotFBE
                                         case XSS => BotXSS
+                                        case DGT => BotDGT
                                         case TB => BotTB
                                         case CS => BotCS
                                         // The Invasion (TI): debug action-sort dispatch, mirrors CS/TB.
@@ -5916,7 +5934,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Order: GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB
         // Faceless Blight (FBE): Homebrew faction appended (§3.13.1)
         // Xyrious Storm (XSS): Homebrew faction appended
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, CS, TI)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, CS, TI, DGT)
 
         // Alt picker display order (may differ from allFactions).
         // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB, DC.
@@ -5940,7 +5958,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // from DC.short.toLowerCase, matching every other faction.
         // Faceless Blight (FBE): Homebrew faction appended to the alt picker (§3.13.1)
         // The Invasion (TI): appended to the alt picker per Implementation Guide §2.9/§3
-        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS, TI)
+        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS, TI, DGT)
         // [2026-07-23] §3.13.5: OW / SL / DS each get a SECOND ("alt") entry
         // immediately after their standard entry, matching the AN and BB alt
         // entries added earlier. Picking an alt entry auto-flips that

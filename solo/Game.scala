@@ -1168,6 +1168,19 @@ class Player(private val f : Faction)(implicit game : Game) {
         if (f == AN && AN.can(HolyGround) && f.at(r, Cathedral).any)
             true
         else
+        // DGT Black Rider: In Famine's Area, ignore enemy Monsters/Terrors when capturing
+        if (game.setup.has(DGT) && f == DGT && DGT.has(BlackRider)) {
+            val famineArea = DGT.units.%(_.uclass == Famine)./(_.region).headOption
+            if (famineArea.has(r))
+                true // Can capture despite enemy Monsters/Terrors
+            else if (e.at(r, Terror).any)
+                false
+            else if (e.at(r, Monster).any)
+                e.at(r, Monster).none
+            else
+                f.at(r, Terror).any || f.at(r, Monster).%(u => u.uclass.canCapture(u)).any
+        }
+        else
         if (e.at(r, Terror).any)
             false
         else
@@ -1903,6 +1916,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             DC.satisfyIf(PilgrimageReq, "A player performed a Ritual of Annihilation", true)
         if (setup.has(TT) && performer != TT)
             TT.satisfyIf(TTSycophancyTrigger, "Another faction ritualed or reached 15 Doom", true)
+        if (setup.has(DGT) && DGT.needs(PaleRiderReq) && !DGT.pool.exists(_.uclass == Death))
+            DGT.satisfyIf(PaleRiderReq, "A player performed a Ritual of Annihilation", true)
     }
     var battle : |[Battle] = None
     var nexed : $[Region] = $
@@ -2174,6 +2189,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var fbInfernalPactFlippedTomes : $[LibraryTome] = $
     // §19b: per-turn cancel flag to prevent IP cancel→reenter loop
     var fbInfernalPactCancelledThisTurn : Boolean = false
+
+    // DGT (Tribulation) God's Scale face-down state
+    var dgtGodsScaleFaceDown : Boolean = false
+    // DGT (Tribulation) Rampage offer guard: prevents re-offering after decline/sacrifice
+    var dgtRampageOfferedThisGather : Boolean = false
+    // DGT Martyr's Cry guard: AfterPowerGatherAction re-runs after Rampage, so pay out once per Gather Power
+    var dgtMartyrsCryDoneThisGather : Boolean = false
     // Round 9 bug fix: some action handlers (e.g. AN GiveWorstMonster /
     // GiveBestMonster SBRs) place units into other factions' pools/regions
     // as a game-level effect, not as a region-targeting action by the
@@ -3838,6 +3860,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Faceless Blight (FBE): re-arm Changeling Adherents for this Gather.
                 fbeChangelingDoneThisGather = false
 
+                // DGT (Tribulation): reset Rampage offer guard for this Gather Power.
+                dgtRampageOfferedThisGather = false
+                dgtMartyrsCryDoneThisGather = false
+
                 factions.foreach { f =>
                     f.oncePerTurn = $
                     f.ignorePerTurn = $
@@ -4167,6 +4193,19 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // MaoCeremony MUST be after raise-to-half — do not move it before.
         case AfterPowerGatherAction =>
             TSExpansion.shepherdDoneThisGather = false
+
+            // DGT Rampage: during Gather Power, DGT may sacrifice one captured enemy Cultist
+            // to flip Black Rider to God's Scale (once only). Only offer if DGT has Black Rider
+            // (not yet flipped), has at least one captured enemy Cultist, and hasn't been offered yet.
+            // The offer returns AfterPowerGatherAction after completion to continue the normal flow.
+            if (setup.has(DGT) && DGT.has(BlackRider) && !DGT.has(GodsScale) && !dgtRampageOfferedThisGather) {
+                val capturedCultists = DGT.units.%(u => u.region == DGT.prison && u.faction != DGT && u.uclass.utype == Cultist)
+                if (capturedCultists.any) {
+                    dgtRampageOfferedThisGather = true
+                    return Force(RampageCheckAction(DGT))
+                }
+            }
+
             factions.foreach { f =>
                 if (f.want(MaoCeremony)) {
                     f.cultists.onMapOrMoon.some.foreach { l =>
@@ -4319,6 +4358,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // doom phase, check FBMostDoomOrMoreGates so the requirement can be satisfied
             // immediately (not delayed until FB's next action-phase turn).
             FBExpansion.checkMostDoomOrGates()
+
+            // DGT God's Scale: flip face-up at end of Doom Phase
+            if (setup.has(DGT) && dgtGodsScaleFaceDown) {
+                dgtGodsScaleFaceDown = false
+                DGT.log(GodsScale.styled(DGT), "flipped face-up")
+            }
 
             CheckSpellbooksAction(DoomNextPlayerAction(game.first))
 
@@ -5402,10 +5447,21 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // CSExpansion.afterAction). Thread CS's free-Meteorite offer ahead of the normal
                 // end-of-action continuation; the flag stays set if a rarer nexed/CG branch above
                 // preempts this one, so the offer is never lost.
-                if (setup.has(CS) && csCosmicLandfallPending)
+                val afterCS = if (setup.has(CS) && csCosmicLandfallPending)
                     CSCosmicLandfallCheckAction(CS, afterBJ)
                 else
                     afterBJ
+
+                // DGT God's Scale: after any action, while face-up, prompt each enemy in turn order
+                // to optionally flip it face-down for DGT to gain 1 ES. No prompt if DGT not in game
+                // or God's Scale not face-up. Filter out neutral pseudo-factions (NeutralAbhoth,
+                // LibraryFaction) which have no real player to make choices.
+                if (setup.has(DGT) && DGT.has(GodsScale) && !dgtGodsScaleFaceDown) {
+                    val enemies = DGT.enemies.%(e => !e.isInstanceOf[NeutralFaction])
+                    GodsScaleFlipCheckAction(DGT, enemies, afterCS)
+                } else {
+                    afterCS
+                }
             }
 
         case EndTurnAction(f) =>
@@ -5610,7 +5666,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     Ask(self)
                         .group("Moved", self.units.tag(Moved).mkString(", "))
                         .add(MoveDoneAction(self).as("Done"))
-                        .each(units)(u => MoveSelectAction(u.faction, u, u.region, 1).as(u.ref.full, "from", u.region)("Move", "another".hl, "unit"))
+                        .each(units)(u => {
+                            // DGT Cosmic Chaos: Conquests move for free during Move action with 1+ Power spent
+                            val isCosmicChaos = setup.has(DGT) && self == DGT && DGT.can(CosmicChaos) && u.uclass == Conquest
+                            val moveCost = isCosmicChaos.?(0).|(1)
+                            MoveSelectAction(u.faction, u, u.region, moveCost).as(u.ref.full, "from", u.region)("Move", "another".hl, "unit", isCosmicChaos.??("(free via " + CosmicChaos.styled(DGT) + ")"))
+                        })
                 else
                     Ask(self)
                         .group("Move unit")
@@ -5651,6 +5712,25 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     // HB Fix (2026-07-07): Flight can reach Mantle if any 2-hop
                     // destination is a Mantle-adjacent area.
                     destinations = (destinations ++ $(TB.mantle)).distinct
+                }
+            }
+
+            // DGT Dominion: areas with DGT units are adjacent for Move actions
+            if (self == DGT && setup.has(DGT)) {
+                val dgtAreas = DGT.units.onMap./(_.region).distinct
+                if (dgtAreas.has(from))
+                    destinations = (destinations ++ dgtAreas.but(from)).distinct
+            }
+
+            // DGT White Rider: Pestilence's Area has no adjacent Areas for enemy units
+            if (setup.has(DGT) && self != DGT && DGT.has(WhiteRider)) {
+                val pestilenceArea = DGT.units.%(_.uclass == Pestilence)./(_.region).headOption
+                pestilenceArea.foreach { pestiArea =>
+                    val unitFig = unit(u)
+                    // If the unit is IN Pestilence's area, it cannot move out
+                    if (from == pestiArea) {
+                        destinations = $  // No destinations available
+                    }
                 }
             }
 

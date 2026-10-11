@@ -544,6 +544,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Hound of Tindalos: Angles of Time — cannot be assigned a Kill
         if (unit.uclass == HoundOfTindalos) 0
         else if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
+        // Tribulation (DGT) God's Hand: DGT units in Death's Area ignore Kills
+        else if (game.setup.has(DGT) && unit.faction == DGT && DGT.has(GodsHand) &&
+                 DGT.at(unit.region).exists(_.uclass == Death)) 0
         else unit.health match {
             case DoubleHP(Killed, Killed) => 0
             case DoubleHP(Killed, _) => 1
@@ -1792,6 +1795,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
     }
 
+    // Tribulation (DGT) Pale Rider: +1 Kill if Death is present
+    sides.%(f => f == DGT).foreach { dgtSide =>
+        if (game.setup.has(DGT) && DGT.has(PaleRider) && dgtSide.forces.%(_.uclass == Death).not(Zeroed).any) {
+            dgtSide.rolls :+= Kill
+            log(PaleRider.styled(DGT) + ":", DGT.full, "gains 1", "Kill".styled("kill"))
+        }
+    }
+
     jump(AssignDefenderKills)
 
             case AssignDefenderKills =>
@@ -2904,6 +2915,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             .add(CSSpectralCollapseSkipAction(queue.head, arena, queue.tail))
                 }
 
+                // DGT Mayhem (White Rider → God's Plague): During Post-Battle, if Pestilence
+                // is present and 2+ Pains are assigned to enemy Units in total, flip and gain 1 ES.
+                if (game.setup.has(DGT) && sides.has(DGT) && DGT.has(WhiteRider) && !DGT.has(GodsPlague)) {
+                    val pestilencePresent = DGT.forces.exists(_.uclass == Pestilence)
+                    if (pestilencePresent) {
+                        // Count pains assigned to enemy units (health == Pained)
+                        val enemyPains = sides.but(DGT)./~(_.forces).count(_.health == Pained)
+                        if (enemyPains >= 2) {
+                            DGTExpansion.flipSpellbook(DGT, WhiteRider, GodsPlague, "Mayhem")
+                        }
+                    }
+                }
+
                 jump(BattleEnd)
 
             case BattleEnd =>
@@ -3415,11 +3439,33 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             if (rolls.num >= 6)
                 f.satisfy(Roll6DiceInBattle, "Roll " + rolls.num + " dice in Battle")
 
+            // DGT Ruin (Red Rider → God's Sword): During Battle, if War is present and
+            // DGT rolls 10 or more combat dice total, flip the spellbook and gain 1 ES.
+            if (game.setup.has(DGT) && f == DGT && DGT.has(RedRider) && !DGT.has(GodsSword)) {
+                val warPresent = f.forces.exists(_.uclass == War)
+                if (warPresent && f.rolls.num >= 10) {
+                    DGTExpansion.flipSpellbook(DGT, RedRider, GodsSword, "Ruin")
+                }
+            }
+
             jump(next)
 
         // ASSIGN
         case AssignKillAction(_, _, _, u) =>
             assignKill(u)
+
+            // DGT Despair (Pale Rider → God's Hand): During Post-Battle, if Death is present
+            // and a Kill is assigned to a 3-cost or higher enemy Unit, flip and gain 1 ES.
+            if (game.setup.has(DGT) && sides.has(DGT) && DGT.has(PaleRider) && !DGT.has(GodsHand)) {
+                val deathPresent = DGT.forces.exists(_.uclass == Death)
+                val enemyUnit = game.unit(u)
+                val isEnemy = enemyUnit.faction != DGT
+                val is3PlusCost = enemyUnit.uclass.cost >= 3
+                if (deathPresent && isEnemy && is3PlusCost && enemyUnit.health == Killed) {
+                    DGTExpansion.flipSpellbook(DGT, PaleRider, GodsHand, "Despair")
+                }
+            }
+
             // TT Martyrdom: if TT's High Priest is killed, convert all kills on TT's other units to pains
             if (u.faction == TT && u.uclass == HighPriest && (u : UnitFigure).health == Killed && TT.can(Martyrdom)) {
                 val ttSide = if (attacker == TT) attackers else defenders
