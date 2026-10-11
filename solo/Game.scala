@@ -1728,6 +1728,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case DC => $(DCExpansion)
             // Faceless Blight (FBE): Homebrew faction
             case FBE => $(FBEExpansion)
+            case PRM => $(PRMExpansion)
             // Xyrious Storm (XSS): Homebrew faction
             case XSS => $(XSSExpansion)
             // The Burrowers Beneath (TB): Homebrew faction
@@ -1970,6 +1971,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var fbeCardDice : $[Int] = $
     var fbeSelfConsumingDeaths : $[(Region, |[Faction])] = $
     var fbeShapestolen : $[UnitRef] = $
+
+    // Permeation (PRM) state — spellbook manipulation and Ycgn'àgnnisssz control
+    var prmFlippedDownSpellbooks : $[Spellbook] = $
+    var prmYcgnaTemporaryController : |[Faction] = None
+    var prmMakeAsOneFlips : Int = 0
 
     // Xyrious Storm (XSS) state — Cloud Of Ashes holding zone (§1.10 SB3).
     // Monsters placed on the Faction Card during elimination; returned to map at Doom.

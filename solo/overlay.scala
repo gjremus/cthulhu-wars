@@ -1286,6 +1286,9 @@ object Overlays {
         // 64KB method-size limit (the inline cases overflowed it).
         case s2 if s2.headOption.exists(_ == "FBE") => fbeOverlay(s2)
 
+        // ── PERMEATION (PRM) — Homebrew faction overlays ─────────────────────
+        case s2 if s2.headOption.exists(_ == "PRM") => prmOverlay(s2)
+
         // Bubastis (BB): alternate spellbooks info overlay.
         // Help text shows the FULL rulebook text of both replacement spellbooks
         // (Syzygy and Carnivore), mirroring the DS Alternate Spellbooks help
@@ -2848,6 +2851,52 @@ object Overlays {
                 <div class=p>${ref(AnimatedRush)} ${cost("(Move):")} When Byagoona Moves, discard dice from your Faction Card to move twice that many Units for free.</div>
                 <div class=p>Distributed Death ${cost("(Post-Battle):")} Prevent any number of Kills assigned to your Units by discarding that many Dice from your Faction Card.</div>
                 <div class=p>Spellbooks: ${fbeRef(OverlordOfDeath)}</div>""")
+        ), setup = true)
+    }
+
+    // Permeation (PRM) — overlay dispatch helper
+    def prmOverlay(s : $[Any]) : String = s match {
+        case $("PRM") => prmFactionOverlay()
+
+        case $("PRM", "Setup") => requirement("After Windwalker and Before Anubi, 8 Power, 6 Acolytes and a Controlled Gate in an empty Sea Area.")
+
+        case $("PRM", Control2LandGatesReq.text)     => requirement("Control 2 Gates in Land Areas.")
+        case $("PRM", Pay2DoomFlipSpellbookReq.text) => requirement("As an Action, Pay 2 Doom and Flip one of your Face Up Spellbooks Face Down until the Doom Phase.")
+        case $("PRM", NoFledglingsInPoolReq.text)    => requirement("Have no Celestial Fledglings in your Pool.")
+        case $("PRM", EnemyHas3SpellbooksReq.text)   => requirement("Another Faction has 3 or more Spellbooks on its Faction Card.")
+        case $("PRM", YcgnaAttackerInBattleReq.text) => requirement("Ycgn'àgnnisssz is an Attacker in a Battle.")
+        case $("PRM", AwakenYcgnaReq.text)           => requirement("Awaken Ycgn'àgnnisssz.")
+
+        case $("PRM", MakeAsOne.name)     => spellbook(MakeAsOne.name,     "Ongoing (Faction Ability)", "Other Factions may activate your Spellbook Abilities by Paying your their Power Costs. You gain a Doom whenever this causes your Spellbook to become Flipped.")
+        case $("PRM", AtomicUnity.name)   => spellbook(AtomicUnity.name,   "Action: Cost 1", "Eliminate a Monster you control to gain Power equal to its Cost minus one. Flip this Spellbook Face Down until the Doom Phase if you gained 2 or more Power this way.")
+        case $("PRM", EldritchLove.name)  => spellbook(EldritchLove.name,  "Action: Cost 1", "Gain an Elder Sign if you have 2 or more Face Down Spellbooks. Flip this Spellbook Face Down until the Doom Phase.")
+        case $("PRM", Osmosis.name)       => spellbook(Osmosis.name,       "Action: Cost 2", "Choose two adjacent Areas. Each faction with units in at least one of those Areas, beginning with you and proceeding in turn order, evenly distributes their Units present between those Areas.")
+        case $("PRM", Protogenesis.name)  => spellbook(Protogenesis.name,  "Action: Cost 2", "Place the lowest cost Monster from your Pool into any Area already containing your Units. Flip this Spellbook Face Down until the Doom Phase if you have no Monsters remain in your Pool.")
+        case $("PRM", SpeakReality.name)  => spellbook(SpeakReality.name,  "Action: Cost X", "Choose a Faction with Units in Ycgn'àgnnisssz's Area and name a Common Action. They must spend at least as much power as you did performing that Action on their next turn if able. If you spend less than the required Cost, nothing happens.")
+        case $("PRM", ZealousSpark.name)  => spellbook(ZealousSpark.name,  "Unlimited Action: Cost 1 Doom", "Move ANY Monster from its Area to an Adjacent Area.")
+
+        case _ => ""
+    }
+
+    def prmFactionOverlay() = {
+        def prmRef(sb : Spellbook) = s"""<span class="ability-color pointer" onclick="onExternalClick('PRM', '${sb.name}')">${sb.name}</span>"""
+        def combat = """<span class="combat-color">Combat</span>"""
+        def cost(s : String) = s"""<span class="cost-color">$s</span>"""
+        def ref(sb : Spellbook) = s"""<span class="ability-color">${sb.name}</span>"""
+        faction(PRM, "info:prm-background", MakeAsOne, "Ongoing", "Other Factions may activate your Spellbook Abilities by Paying you their Power Costs. You gain a Doom whenever this causes your Spellbook to become Flipped.",
+            $(AtomicUnity, EldritchLove, Osmosis, Protogenesis, SpeakReality, ZealousSpark), $(
+            (Acolyte,           6, "1", "0", s"""<div class=p>Setup: 6 Acolytes + a Controlled Gate in an empty Sea Area.</div>"""),
+            (AstralEgg,         4, "1", "1", s"""<div class=p>Replace with ${Ycgnagnnisssz.name} when Awakening.</div>"""),
+            (CelestialFledgling, 4, "1+", "1+", s"""<div class=p>${cost} Cost and ${combat} equal to the number of Fledglings in play plus one.</div><div class=p>Spellbook: ${prmRef(Protogenesis)}</div>"""),
+            (Ycgnagnnisssz,     1, "?", "?", s"""
+                <div class=p>${cost(s"How to Awaken ${Ycgnagnnisssz.name}:")}</div>
+                <div class=p>${cost("1)")} Have an Astral Egg in play.</div>
+                <div class=p>${cost("2)")} Pay 7 Power.</div>
+                <div class=p>${cost("3)")} Replace the Egg with ${Ycgnagnnisssz.name}.</div>
+                <div class=p>${combat} Equal to your number of Earned Spellbooks plus the total number of Face Down Spellbooks on all Faction Cards.</div>
+                <div class=p>Mother's Aid ${cost("(Ongoing):")} On their turn, any opponent may pay you 1 Power to control ${Ycgnagnnisssz.name} this turn. Moving her costs 0 Power for them.</div>
+                <div class=p>Fathomless Progenitor ${cost("(Ongoing):")} While controlled by another player, ${Ycgnagnnisssz.name} cannot be assigned Combat results or Eliminated. She can only be moved by the Move Action and does not participate in battle against you. This ability is not optional.</div>
+                <div class=p>Spellbook: ${prmRef(SpeakReality)}</div>""")
         ), setup = true)
     }
 
