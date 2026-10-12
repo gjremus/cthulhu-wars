@@ -6055,6 +6055,15 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // Start with the built-in map; will be merged with designer API on fetch.
             val stabilityMap = scala.collection.mutable.Map[String, String]() ++ builtInStability
 
+            // [2026-10-12] Designer-built factions: populated from fetched endpoint.
+            // Separate from stabilityMap so getCategory can distinguish designer factions
+            // from built-in official ones.
+            val designerAcronyms = scala.collection.mutable.Set[String]()
+            val fallbackDesignerAcronyms = Set("FM", "PRM", "DGT", "XSS")
+
+            // [2026-10-12] Rerender callback: set once render() exists, called after XHR loads.
+            var rerender : () => Unit = () => ()
+
             // [2026-10-12] Fetch designer stability endpoint and merge into stabilityMap.
             // Timeout after 3s; on failure or timeout use only the built-in map.
             // Must not block or break the UI — fetch runs async, render proceeds immediately.
@@ -6066,7 +6075,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     try {
                         // Parse JSON response: {"<ACRONYM>": "alpha"|"beta"|"stable", ...}
                         val json = scala.scalajs.js.JSON.parse(xhr.responseText).asInstanceOf[scala.scalajs.js.Dictionary[String]]
-                        json.foreach { case (k, v) => stabilityMap(k) = v }
+                        json.foreach { case (k, v) =>
+                            stabilityMap(k) = v
+                            designerAcronyms += k
+                        }
+                        rerender()  // Redraw picker if still on screen
                     } catch {
                         case _ : Throwable => // Ignore parse errors, use built-in map
                     }
@@ -6317,14 +6330,16 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
             // [2026-10-12] Categorize a picker entry as "official", "variants", or "homebrews".
             // Base factions (GC/CC/BG/YS) are "official" unless it's an alt entry.
-            // Designer-built factions (from stabilityMap, not GC/CC/BG/YS) + TS/FB/DC/CS/FBE/XSS are "homebrews".
+            // Designer-built factions (from designerAcronyms + fallback, not GC/CC/BG/YS)
+            // plus TS/FB/DC/CS/FBE/XSS are "homebrews".
             // Alt entries where the base faction is NOT a homebrew are "variants".
             // Alt entries where the base faction IS a homebrew are "homebrews".
+            // Official factions (per owner) are all of the rest (includes TI, TB).
             def getCategory(e : PickerEntry) : String = {
                 val baseFactions = Set("GC", "CC", "BG", "YS")
-                val homebrewFactions = Set("TS", "FB", "DC", "CS", "FBE", "XSS")
-                val designerBuilt = stabilityMap.keys.toSet -- baseFactions
-                val allHomebrews = homebrewFactions ++ designerBuilt
+                val homebrewOnlyFactions = Set("TS", "FB", "DC", "CS", "FBE", "XSS")
+                val designerBuilt = (designerAcronyms.toSet ++ fallbackDesignerAcronyms) -- baseFactions
+                val allHomebrews = homebrewOnlyFactions ++ designerBuilt
                 val isHomebrew = allHomebrews.contains(e.faction.short)
                 if (e.alt) {
                     if (isHomebrew) "homebrews" else "variants"
@@ -6339,6 +6354,25 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     enabledStability.contains(getStability(e)) &&
                     enabledCategory.contains(getCategory(e))
                 )
+
+            // [2026-10-12] Shared helper for filter toggle: remove hidden entries,
+            // add newly visible ones (respecting locks).
+            def updateEnabledEntries(newChecked : Boolean) {
+                val visible = visibleEntries().toSet
+                val locked = computeLocks()
+                for (i <- 0 until pn) {
+                    // Remove entries that are now hidden.
+                    enabledEntries(i) --= enabledEntries(i).filterNot(visible.contains)
+                    // Add newly visible entries (respecting locks).
+                    if (newChecked) {
+                        visible.foreach { e =>
+                            if (!locked.contains(e.faction) || locked(e.faction) == i) {
+                                enabledEntries(i) += e
+                            }
+                        }
+                    }
+                }
+            }
 
             def render() {
                 clear(root)
@@ -6366,23 +6400,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     lbl.onclick = (e : dom.MouseEvent) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        val newChecked = !cb.checked
+                        // [2026-10-12] Compute from state, not DOM (clicking the box itself
+                        // toggles cb.checked before the bubbled label onclick runs).
+                        val newChecked = !enabledStability.contains(level)
                         cb.checked = newChecked
                         if (newChecked) enabledStability += level else enabledStability -= level
-                        val visible = visibleEntries().toSet
-                        val locked = computeLocks()
-                        for (i <- 0 until pn) {
-                            // Remove entries that are now hidden.
-                            enabledEntries(i) --= enabledEntries(i).filterNot(visible.contains)
-                            // Add newly visible entries (respecting locks).
-                            if (newChecked) {
-                                visible.foreach { e =>
-                                    if (!locked.contains(e.faction) || locked(e.faction) == i) {
-                                        enabledEntries(i) += e
-                                    }
-                                }
-                            }
-                        }
+                        updateEnabledEntries(newChecked)
                         render()
                     }
                     val text = dom.document.createElement("span").asInstanceOf[html.Span]
@@ -6415,23 +6438,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     lbl.onclick = (e : dom.MouseEvent) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        val newChecked = !cb.checked
+                        // [2026-10-12] Compute from state, not DOM (clicking the box itself
+                        // toggles cb.checked before the bubbled label onclick runs).
+                        val newChecked = !enabledCategory.contains(category)
                         cb.checked = newChecked
                         if (newChecked) enabledCategory += category else enabledCategory -= category
-                        val visible = visibleEntries().toSet
-                        val locked = computeLocks()
-                        for (i <- 0 until pn) {
-                            // Remove entries that are now hidden.
-                            enabledEntries(i) --= enabledEntries(i).filterNot(visible.contains)
-                            // Add newly visible entries (respecting locks).
-                            if (newChecked) {
-                                visible.foreach { e =>
-                                    if (!locked.contains(e.faction) || locked(e.faction) == i) {
-                                        enabledEntries(i) += e
-                                    }
-                                }
-                            }
-                        }
+                        updateEnabledEntries(newChecked)
                         render()
                     }
                     val text = dom.document.createElement("span").asInstanceOf[html.Span]
@@ -6712,6 +6724,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 btnRow.appendChild(genBtn)
                 btnRow.appendChild(backBtn)
                 root.appendChild(btnRow)
+
+                // [2026-10-12] Set rerender callback so XHR onload can redraw if picker is still on screen.
+                // If picker is cleared (root removed), this becomes a no-op.
+                rerender = () => { if (root.parentNode != null) render() }
             }
 
             def attemptGenerate() {
