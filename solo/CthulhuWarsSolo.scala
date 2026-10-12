@@ -6338,12 +6338,25 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     cb.`type` = "checkbox"
                     cb.checked = enabledStability.contains(level)
                     cb.style.cssText = "margin:0;cursor:pointer;"
-                    cb.onchange = (_) => {
-                        if (cb.checked) enabledStability += level else enabledStability -= level
-                        // Uncheck any enabled entries that are now hidden by the filter.
+                    lbl.onclick = (e : dom.MouseEvent) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        val newChecked = !cb.checked
+                        cb.checked = newChecked
+                        if (newChecked) enabledStability += level else enabledStability -= level
                         val visible = visibleEntries().toSet
+                        val locked = computeLocks()
                         for (i <- 0 until pn) {
+                            // Remove entries that are now hidden.
                             enabledEntries(i) --= enabledEntries(i).filterNot(visible.contains)
+                            // Add newly visible entries (respecting locks).
+                            if (newChecked) {
+                                visible.foreach { e =>
+                                    if (!locked.contains(e.faction) || locked(e.faction) == i) {
+                                        enabledEntries(i) += e
+                                    }
+                                }
+                            }
                         }
                         render()
                     }
