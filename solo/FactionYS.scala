@@ -112,6 +112,11 @@ object YSExpansion extends Expansion {
             f.power += 1
 
             f.log("got", 1.power, "from", Passion)
+
+            // Fix: If a faction gains power during Action Phase and was marked inactive,
+            // reactivate it so it gets turns. (Bug: YS Passion on DC Satiate while YS at 0)
+            if (f.active.not && f.power > 0)
+                f.active = true
         }
     }
 
