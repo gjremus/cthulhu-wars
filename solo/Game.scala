@@ -1998,6 +1998,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var prmSpeakRealityAction : String = ""
     var prmSpeakRealityPower : Int = 0
     var prmSpeakRealityMoveSpent : Int = 0  // Power spent during enforced Move action
+    var prmSpeakRealityLogged : Boolean = false  // Log restriction message only once
 
     // Xyrious Storm (XSS) state — Cloud Of Ashes holding zone (§1.10 SB3).
     // Monsters placed on the Faction Card during elimination; returned to map at Doom.
@@ -2911,6 +2912,92 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         result
     }
 
+    // PRM Speak Reality: check if the commanded action is legal (can spend >= N power on it)
+    def speakRealityLegal(f : Faction) : Boolean = {
+        val requiredPower = prmSpeakRealityPower
+        val commandedAction = prmSpeakRealityAction
+
+        commandedAction match {
+            case "Move" =>
+                // Move is multi-step: can spend N+ power across multiple units
+                f.power >= requiredPower && (f.units.nex.onMap.not(Moved).%(_.canMove).any ||
+                    (factions.has(BB) && f.at(BB.moon).not(Moved).%(_.canMove).any))
+
+            case "Battle" =>
+                // Battle normally costs 1 (or 0 with Crusade), so only legal if requiredPower <= 1
+                if (requiredPower > 1) false
+                else {
+                    val battleAreas = areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ tbMantleInPlay.??($(TB.mantle))
+                    battleAreas.exists(r => factionlike.but(f).exists(e => f.canAttack(r)(e) && affordsAttack(f, r, e)))
+                }
+
+            case "Capture" =>
+                // Capture costs 1, so only legal if requiredPower <= 1
+                if (requiredPower > 1) false
+                else {
+                    val captureAreas = areas.nex ++ tbMantleInPlay.??($(TB.mantle)) ++ game.factions.has(BB).??($(BB.moon))
+                    captureAreas.exists(r => tiAffordsUnit1(f, r) && factionlike.but(f).exists(f.canCapture(r)))
+                }
+
+            case "Build Gate" =>
+                val gateCost = 3 - f.has(UmrAtTawil).??(1)
+                // Build Gate costs gateCost, so only legal if requiredPower <= gateCost
+                requiredPower <= gateCost && f.power >= gateCost &&
+                    areas.nex.%!(gates.has).exists(r => f.at(r).%(_.canControlGate).any)
+
+            case "Recruit" =>
+                val availableCultists = if (f == FB) f.pool.cultists.%(_.uclass != HighPriest) else f.pool.cultists
+                val recruitAreas = areas ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))
+                // Check if any recruitable unit costs >= requiredPower
+                availableCultists.exists { u =>
+                    recruitAreas.exists { r =>
+                        val cost = f.recruitCost(u.uclass, r)
+                        cost >= requiredPower && f.affords(cost)(r)
+                    }
+                }
+
+            case "Summon" =>
+                val summonAreas = (areas ++ ((f == BB || (f == OW && f.can(TheyBreakThrough))).??($(BB.moon))) ++
+                    ((f == TB && tbMantleInPlay).??($(TB.mantle)))).diff(factions.has(CS).??(csPrismaticWellRegions.%(r => f.gates.has(r))))
+                // Check if any summonable monster costs >= requiredPower
+                f.pool.monsters.exists { u =>
+                    val cost = u.uclass.cost
+                    cost >= requiredPower && summonAreas.exists(r => f.gates.has(r) && f.affords(cost)(r))
+                }
+
+            case _ => false
+        }
+    }
+
+    // PRM Speak Reality: filter an Ask to only keep actions that cost >= N power
+    def speakRealityFilterAsk(asking : Ask) : Ask = {
+        val requiredPower = prmSpeakRealityPower
+        val commandedAction = prmSpeakRealityAction
+        val f = asking.faction
+
+        // Filter actions based on their cost
+        val filteredActions = asking.actions.filter {
+            case a : RecruitAction =>
+                val cost = f.recruitCost(a.uc, a.r)
+                cost >= requiredPower
+
+            case a : SummonAction =>
+                val cost = f.summonCost(a.uc, a.r)
+                cost >= requiredPower
+
+            case a : BuildGateAction =>
+                val cost = 3 - f.has(UmrAtTawil).??(1)
+                cost >= requiredPower
+
+            case a if a.isInstanceOf[Cancel] => true  // Keep cancel actions
+            case a if a.isInstanceOf[Info] => true    // Keep info/group entries
+            case _ : GroupAction => true    // Keep group entries
+            case _ => true  // Keep other actions (Move, Battle, Capture don't need filtering)
+        }
+
+        Ask(f, filteredActions)
+    }
+
     def internalPerform(action : Action, soft : VoidGuard) : Continue = {
         if (action == OutOfTurnReturn)
             return continue match {
@@ -2922,6 +3009,44 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (battle.none) action match {
             case _ : RetreatUnitAction | _ : RetreatAllAction | _ : RetreatSeparatelyAction | _ : BattleProceedAction | _ : RetreatOrderAction => return StartContinue
             case _ =>
+        }
+
+        // PRM Speak Reality enforcement: intercept MainAction when a faction is commanded
+        if (prmSpeakRealityTarget.any) action match {
+            case MainAction(f) if prmSpeakRealityTarget.contains(f) && f.active && f.acted.not && speakRealityLegal(f) =>
+                val requiredPower = prmSpeakRealityPower
+                val commandedAction = prmSpeakRealityAction
+
+                // Log restriction only once
+                if (!prmSpeakRealityLogged) {
+                    f.log("must", commandedAction, "(Speak Reality, at least " + requiredPower.power + ")")
+                    prmSpeakRealityLogged = true
+                }
+
+                // Reset move spent counter at start of move action
+                if (commandedAction == "Move" && prmSpeakRealityMoveSpent == 0)
+                    prmSpeakRealityMoveSpent = 0
+
+                // Build the restricted menu
+                implicit val asking = Asking(f)
+                commandedAction match {
+                    case "Move"       => game.moves(f)
+                    case "Battle"     => game.battles(f)
+                    case "Capture"    => game.captures(f)
+                    case "Build Gate" => game.builds(f)
+                    case "Recruit"    => game.recruits(f)
+                    case "Summon"     => game.summons(f)
+                }
+
+                // Filter the built Ask to only keep options that cost >= requiredPower
+                val filtered = commandedAction match {
+                    case "Recruit" | "Summon" | "Build Gate" => speakRealityFilterAsk(asking.ask)
+                    case _ => asking.ask
+                }
+
+                return Ask(f, filtered.actions)
+
+            case _ => // Not MainAction or not the target: fall through to normal handling
         }
 
         expansions.foreach { e =>
@@ -5342,101 +5467,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             CheckSpellbooksAction(MainAction(f))
 
-        // PRM Speak Reality enforcement: when a faction is commanded to perform a
-        // specific Common Action, restrict their menu to only that action if they
-        // can afford to spend at least the required power on it.
-        case MainAction(f) if prmSpeakRealityTarget.contains(f) && f.active && f.acted.not =>
-            val requiredPower = prmSpeakRealityPower
-            val commandedAction = prmSpeakRealityAction
-
-            // Helper: check if faction can perform the action spending >= requiredPower
-            def canPerformMove = {
-                // Move is multi-step: can spend N+ power across multiple units
-                f.power >= requiredPower && (f.units.nex.onMap.not(Moved).%(_.canMove).any ||
-                    (factions.has(BB) && f.at(BB.moon).not(Moved).%(_.canMove).any))
-            }
-
-            def canPerformBattle = {
-                // Battle normally costs 1 (or 0 with Crusade), so only legal if requiredPower <= 1
-                if (requiredPower > 1) false
-                else {
-                    val battleAreas = areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ tbMantleInPlay.??($(TB.mantle))
-                    battleAreas.exists(r => factionlike.but(f).exists(e => f.canAttack(r)(e) && affordsAttack(f, r, e)))
-                }
-            }
-
-            def canPerformCapture = {
-                // Capture costs 1, so only legal if requiredPower <= 1
-                if (requiredPower > 1) false
-                else {
-                    val captureAreas = areas.nex ++ tbMantleInPlay.??($(TB.mantle)) ++ game.factions.has(BB).??($(BB.moon))
-                    captureAreas.exists(r => tiAffordsUnit1(f, r) && factionlike.but(f).exists(f.canCapture(r)))
-                }
-            }
-
-            def canPerformBuildGate = {
-                val gateCost = 3 - f.has(UmrAtTawil).??(1)
-                // Build Gate costs gateCost, so only legal if requiredPower <= gateCost
-                requiredPower <= gateCost && f.affords(gateCost)(areas.headOption.getOrElse(null)) &&
-                    areas.nex.%!(gates.has).exists(r => f.at(r).%(_.canControlGate).any)
-            }
-
-            def canPerformRecruit = {
-                val availableCultists = if (f == FB) f.pool.cultists.%(_.uclass != HighPriest) else f.pool.cultists
-                val recruitAreas = areas ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))
-                // Check if any recruitable unit costs >= requiredPower
-                availableCultists.exists { u =>
-                    recruitAreas.exists { r =>
-                        val cost = f.recruitCost(u.uclass, r)
-                        cost >= requiredPower && f.affords(cost)(r)
-                    }
-                }
-            }
-
-            def canPerformSummon = {
-                val summonAreas = (areas ++ ((f == BB || (f == OW && f.can(TheyBreakThrough))).??($(BB.moon))) ++
-                    ((f == TB && tbMantleInPlay).??($(TB.mantle)))).diff(factions.has(CS).??(csPrismaticWellRegions.%(r => f.gates.has(r))))
-                // Check if any summonable monster costs >= requiredPower
-                f.pool.monsters.exists { u =>
-                    val cost = u.uclass.cost
-                    cost >= requiredPower && summonAreas.exists(r => f.gates.has(r) && f.affords(cost)(r))
-                }
-            }
-
-            val isLegal = commandedAction match {
-                case "Move"       => canPerformMove
-                case "Battle"     => canPerformBattle
-                case "Capture"    => canPerformCapture
-                case "Build Gate" => canPerformBuildGate
-                case "Recruit"    => canPerformRecruit
-                case "Summon"     => canPerformSummon
-                case _            => false
-            }
-
-            if (isLegal) {
-                // Restriction applies: only offer the commanded action
-                implicit val asking = Asking(f)
-                f.log("must", commandedAction, "(Speak Reality, at least " + requiredPower.power + ")")
-
-                // Reset move spent counter at start of move action
-                if (commandedAction == "Move")
-                    prmSpeakRealityMoveSpent = 0
-
-                commandedAction match {
-                    case "Move"       => game.moves(f)
-                    case "Battle"     => game.battles(f)
-                    case "Capture"    => game.captures(f)
-                    case "Build Gate" => game.builds(f)
-                    case "Recruit"    => game.recruits(f)
-                    case "Summon"     => game.summons(f)
-                }
-
-                asking
-            } else {
-                // Action is not legal at required power: play normally
-                UnknownContinue
-            }
-
         case MainAction(f) if f.active.not =>
             implicit val asking = Asking(f)
 
@@ -5625,6 +5655,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 prmSpeakRealityAction = ""
                 prmSpeakRealityPower = 0
                 prmSpeakRealityMoveSpent = 0
+                prmSpeakRealityLogged = false
             }
 
             // PRM Mother's Aid cleanup: clear controller at end of their turn
