@@ -416,7 +416,13 @@ trait Faction { f =>
     def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = None
     def gooValue(u : UnitClass)(implicit game : Game) : Int = u.cost
     def awakenDesc(u : UnitClass) : |[String] = None
-    def canAwakenIGOO(r : Region)(implicit game : Game) : Boolean = f.gates.has(r) && f.at(r, GOO, ElderGod).any
+    def canAwakenIGOO(r : Region)(implicit game : Game) : Boolean = {
+        val hasGate = f.gates.has(r)
+        val hasGOO = f.at(r, GOO, ElderGod).any
+        // DGT: Death counts as a GOO for iGOO awakening
+        val hasDeath = game.setup.has(DGT) && f == DGT && f.at(r, Death).any
+        hasGate && (hasGOO || hasDeath)
+    }
     // Regions eligible for iGOO awakening. `areas` = board.regions, which EXCLUDES
     // the Moon (MoonGlyph.onMap=false). The Moon is a BB-Controlled Gate "for all
     // purposes" (Moon Tile rule), so BB must be able to awaken an iGOO there when a
@@ -3429,7 +3435,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Cost = 10 - that unit's cost (may be negative → gain Power).
     def direYogGenericOptions(f : Faction) : $[(Region, UnitClass, Int)] = (f != OW).??({
         val victims = f.allInPlay.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror)
-        (f.allInPlay.goos.any && victims.any).??({
+        // DGT: Death counts as a GOO for iGOO awakening
+        val hasGOO = f.allInPlay.goos.any || (setup.has(DGT) && f == DGT && f.allInPlay.%(_.uclass == Death).any)
+        (hasGOO && victims.any).??({
             val maxCost = victims./(_.uclass.cost).max
             val cost = 10 - maxCost
             f.canSpend(cost).??(victims.%(_.uclass.cost == maxCost)./(u => (u.region, u.uclass, cost)).distinct)

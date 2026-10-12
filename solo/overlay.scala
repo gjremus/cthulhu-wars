@@ -677,7 +677,7 @@ object Overlays {
                 <div class=p>Spellbooks: ${reference(DGT, RedRider)}, ${reference(DGT, GodsSword)}</div>"""
             ),
             (Famine,     1, "3", "3", s"""<div class=p>Spellbooks: ${reference(DGT, BlackRider)}, ${reference(DGT, GodsScale)}</div>"""),
-            (Death,      1, "3", "3", s"""<div class=p>Spellbooks: ${reference(DGT, PaleRider)}, ${reference(DGT, GodsHand)}</div>"""),
+            (Death,      1, "3", "3", s"""<div class=p>Death counts as a Great Old One to Awaken Independent Great Old Ones.</div><div class=p>Spellbooks: ${reference(DGT, PaleRider)}, ${reference(DGT, GodsHand)}</div>"""),
         ))
 
         case $("DGT", WhiteRiderReq.text) => requirement("Control a Gate in an Area marked with Dragon Glyph. Add Pestilence to your Pool.")

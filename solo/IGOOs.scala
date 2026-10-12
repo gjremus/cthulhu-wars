@@ -961,6 +961,9 @@ object IGOOsExpansion extends Expansion {
                 game.eliminate(victim)
                 self.units :+= new UnitFigure(self, DireYogSothoth, 1, r)
                 self.log("awakened", DireYogSothoth.name.styled("nt"), "in", r, (if (cost >= 0) "for" else "gaining"), (if (cost >= 0) cost else -cost).power, "(replacing", victimClass.styled(self) + ")")
+                // DGT: if Death enabled this iGOO awaken (no actual GOO in play), log it
+                if (game.setup.has(DGT) && self == DGT && self.allInPlay.goos.none && self.allInPlay.%(_.uclass == Death).any)
+                    self.log("(Death counts as a Great Old One)")
                 if (self.has(Immortal)) {
                     self.log("gained", 1.es, "as", Immortal)
                     self.takeES(1)
@@ -1039,8 +1042,9 @@ object IGOOsExpansion extends Expansion {
                 }).any
             }
 
+            // DGT: Death counts as a GOO for iGOO awakening
             val azathothAvailable = game.loyaltyCards.has(AzathothIGOOCard) && (game.dcTenebrosumGuard || self.canSpend(8)) &&
-                self.allGates.onMapOrMoon.%(r => self.at(r).goos.any).any
+                self.allGates.onMapOrMoon.%(r => self.at(r).goos.any || (game.setup.has(DGT) && self == DGT && self.at(r, Death).any)).any
 
             // Build name-keyed entries (Entry case class) and sort by name.
             // The action is what gets dispatched when the user picks an item.
@@ -1120,6 +1124,10 @@ object IGOOsExpansion extends Expansion {
                 self.log("awakened", lc.unit.name.styled("nt"), "in", r)
             else
                 self.log("awakened", lc.unit.name.styled("nt"), "in", r, "for", cost.power)
+
+            // DGT: if Death enabled this iGOO awaken (no other GOO in the region), log it
+            if (game.setup.has(DGT) && self == DGT && self.at(r, Death).any && self.at(r).goos.none)
+                self.log("(Death counts as a Great Old One)")
 
             // Bokrug re-awakening: move existing pool unit instead of creating new
             if (lc == BokrugCard && self.pool(Bokrug).any) {
@@ -1686,7 +1694,8 @@ object IGOOsExpansion extends Expansion {
         // ── AZATHOTH IGOO: Custom Awakening ──
         case AzathothAwakenMainAction(self) =>
             // Choose which gate to place Azathoth at (must have own GOO at controlled gate)
-            val gooAtGate = self.allGates.onMapOrMoon.%(r => self.at(r).goos.any)
+            // DGT: Death counts as a GOO for iGOO awakening
+            val gooAtGate = self.allGates.onMapOrMoon.%(r => self.at(r).goos.any || (game.setup.has(DGT) && self == DGT && self.at(r, Death).any))
             Ask(self).each(gooAtGate)(r => AzathothAwakenCommitAction(self, 0, r).as("Awaken Azathoth at", r)).cancel
 
         case AzathothAwakenCommitAction(self, _, gateRegion) =>
@@ -1702,6 +1711,9 @@ object IGOOsExpansion extends Expansion {
         case AzathothAwakenCostAction(self, roll, powerCost, gateRegion) =>
             self.payPower(powerCost, "on iGOO awaken")
             self.log("rolled a", roll, "with the Azathoth die.", self.full, "awakened Azathoth for", powerCost.power, "(" + roll, "dice roll + 2)")
+            // DGT: if Death enabled this iGOO awaken (no other GOO at the gate), log it
+            if (game.setup.has(DGT) && self == DGT && self.at(gateRegion, Death).any && self.at(gateRegion).goos.none)
+                self.log("(Death counts as a Great Old One)")
             // Start enemy choice loop
             val enemies = factions.but(self)
             AzathothEnemyChoiceAction(self, 0, enemies, $())
