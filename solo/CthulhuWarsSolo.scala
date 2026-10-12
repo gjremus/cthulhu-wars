@@ -6007,7 +6007,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // Homebrew factions with explicit stability levels
             "TI" -> "alpha",   // The Invasion
             "CS" -> "beta",    // Colour Out of Space
-            "TB" -> "beta",    // (Tcho-Tcho Brigade)
+            "TB" -> "beta",    // The Burrowers Beneath
             "FBE" -> "beta",   // Faceless Blight
             // Designer factions (alpha)
             "FM" -> "alpha",   // Fleshmason
@@ -6015,7 +6015,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             "DGT" -> "alpha",  // Tribulation
             "XSS" -> "alpha",  // Xothic Starspawn
             // Homebrew-only factions (beta pending owner confirmation)
-            "DC" -> "beta"     // Dread Curse
+            "DC" -> "stable"   // Defilers Court
         )
 
         // [2026-05-23] MNU alt faction picker. Replaces the combinations dropdown
@@ -6331,13 +6331,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // [2026-10-12] Categorize a picker entry as "official", "variants", or "homebrews".
             // Base factions (GC/CC/BG/YS) are "official" unless it's an alt entry.
             // Designer-built factions (from designerAcronyms + fallback, not GC/CC/BG/YS)
-            // plus TS/FB/DC/CS/FBE/XSS are "homebrews".
+            // plus TS/FB/DC/CS/FBE/TB are "homebrews" (user 2026-10-12: TB is homebrew-only).
             // Alt entries where the base faction is NOT a homebrew are "variants".
             // Alt entries where the base faction IS a homebrew are "homebrews".
-            // Official factions (per owner) are all of the rest (includes TI, TB).
+            // Official factions (per owner) are all of the rest (includes TI).
             def getCategory(e : PickerEntry) : String = {
                 val baseFactions = Set("GC", "CC", "BG", "YS")
-                val homebrewOnlyFactions = Set("TS", "FB", "DC", "CS", "FBE")
+                val homebrewOnlyFactions = Set("TS", "FB", "DC", "CS", "FBE", "TB")
                 val designerBuilt = (designerAcronyms.toSet ++ fallbackDesignerAcronyms) -- baseFactions
                 val allHomebrews = homebrewOnlyFactions ++ designerBuilt
                 val isHomebrew = allHomebrews.contains(e.faction.short)
