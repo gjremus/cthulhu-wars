@@ -2948,7 +2948,7 @@ object Overlays {
         case $("PRM", EldritchLove.name)  => spellbook(EldritchLove.name,  "Action: Cost 1", "Gain an Elder Sign if you have 2 or more Face Down Spellbooks. Flip this Spellbook Face Down until the Doom Phase.")
         case $("PRM", Osmosis.name)       => spellbook(Osmosis.name,       "Action: Cost 2", "Choose two adjacent Areas. Each faction with units in at least one of those Areas, beginning with you and proceeding in turn order, evenly distributes their Units present between those Areas.")
         case $("PRM", Protogenesis.name)  => spellbook(Protogenesis.name,  "Action: Cost 2", "Place the lowest cost Monster from your Pool into any Area already containing your Units. Flip this Spellbook Face Down until the Doom Phase if you have no Monsters remain in your Pool.")
-        case $("PRM", SpeakReality.name)  => spellbook(SpeakReality.name,  "Action: Cost X", "Choose a Faction with Units in Ycgn'àgnnisssz's Area and name a Common Action. They must spend at least as much power as you did performing that Action on their next turn if able. If you spend less than the required Cost, nothing happens.")
+        case $("PRM", SpeakReality.name)  => spellbook(SpeakReality.name,  "Action: Cost X", "Choose a Faction with Units in Ycgn'àgnnisssz's Area and name a Common Action (Move, Summon, Battle, Capture, Build Gate, or Recruit). They can take no other Action on their next turn if they are able to perform the named Action spending at least as much Power as you spent. If you spend less than the required Cost, nothing happens.")
         case $("PRM", ZealousSpark.name)  => spellbook(ZealousSpark.name,  "Unlimited Action: Cost 1 Doom", "Move ANY Monster from its Area to an Adjacent Area.")
 
         case _ => ""

@@ -1997,6 +1997,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var prmSpeakRealityTarget : |[Faction] = None
     var prmSpeakRealityAction : String = ""
     var prmSpeakRealityPower : Int = 0
+    var prmSpeakRealityMoveSpent : Int = 0  // Power spent during enforced Move action
 
     // Xyrious Storm (XSS) state — Cloud Of Ashes holding zone (§1.10 SB3).
     // Monsters placed on the Faction Card during elimination; returned to map at Doom.
@@ -5341,6 +5342,101 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             CheckSpellbooksAction(MainAction(f))
 
+        // PRM Speak Reality enforcement: when a faction is commanded to perform a
+        // specific Common Action, restrict their menu to only that action if they
+        // can afford to spend at least the required power on it.
+        case MainAction(f) if prmSpeakRealityTarget.contains(f) && f.active && f.acted.not =>
+            val requiredPower = prmSpeakRealityPower
+            val commandedAction = prmSpeakRealityAction
+
+            // Helper: check if faction can perform the action spending >= requiredPower
+            def canPerformMove = {
+                // Move is multi-step: can spend N+ power across multiple units
+                f.power >= requiredPower && (f.units.nex.onMap.not(Moved).%(_.canMove).any ||
+                    (factions.has(BB) && f.at(BB.moon).not(Moved).%(_.canMove).any))
+            }
+
+            def canPerformBattle = {
+                // Battle normally costs 1 (or 0 with Crusade), so only legal if requiredPower <= 1
+                if (requiredPower > 1) false
+                else {
+                    val battleAreas = areas.nex ++ game.factions.has(BB).??($(BB.moon)) ++ tbMantleInPlay.??($(TB.mantle))
+                    battleAreas.exists(r => factionlike.but(f).exists(e => f.canAttack(r)(e) && affordsAttack(f, r, e)))
+                }
+            }
+
+            def canPerformCapture = {
+                // Capture costs 1, so only legal if requiredPower <= 1
+                if (requiredPower > 1) false
+                else {
+                    val captureAreas = areas.nex ++ tbMantleInPlay.??($(TB.mantle)) ++ game.factions.has(BB).??($(BB.moon))
+                    captureAreas.exists(r => tiAffordsUnit1(f, r) && factionlike.but(f).exists(f.canCapture(r)))
+                }
+            }
+
+            def canPerformBuildGate = {
+                val gateCost = 3 - f.has(UmrAtTawil).??(1)
+                // Build Gate costs gateCost, so only legal if requiredPower <= gateCost
+                requiredPower <= gateCost && f.affords(gateCost)(areas.headOption.getOrElse(null)) &&
+                    areas.nex.%!(gates.has).exists(r => f.at(r).%(_.canControlGate).any)
+            }
+
+            def canPerformRecruit = {
+                val availableCultists = if (f == FB) f.pool.cultists.%(_.uclass != HighPriest) else f.pool.cultists
+                val recruitAreas = areas ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))
+                // Check if any recruitable unit costs >= requiredPower
+                availableCultists.exists { u =>
+                    recruitAreas.exists { r =>
+                        val cost = f.recruitCost(u.uclass, r)
+                        cost >= requiredPower && f.affords(cost)(r)
+                    }
+                }
+            }
+
+            def canPerformSummon = {
+                val summonAreas = (areas ++ ((f == BB || (f == OW && f.can(TheyBreakThrough))).??($(BB.moon))) ++
+                    ((f == TB && tbMantleInPlay).??($(TB.mantle)))).diff(factions.has(CS).??(csPrismaticWellRegions.%(r => f.gates.has(r))))
+                // Check if any summonable monster costs >= requiredPower
+                f.pool.monsters.exists { u =>
+                    val cost = u.uclass.cost
+                    cost >= requiredPower && summonAreas.exists(r => f.gates.has(r) && f.affords(cost)(r))
+                }
+            }
+
+            val isLegal = commandedAction match {
+                case "Move"       => canPerformMove
+                case "Battle"     => canPerformBattle
+                case "Capture"    => canPerformCapture
+                case "Build Gate" => canPerformBuildGate
+                case "Recruit"    => canPerformRecruit
+                case "Summon"     => canPerformSummon
+                case _            => false
+            }
+
+            if (isLegal) {
+                // Restriction applies: only offer the commanded action
+                implicit val asking = Asking(f)
+                f.log("must", commandedAction, "(Speak Reality, at least " + requiredPower.power + ")")
+
+                // Reset move spent counter at start of move action
+                if (commandedAction == "Move")
+                    prmSpeakRealityMoveSpent = 0
+
+                commandedAction match {
+                    case "Move"       => game.moves(f)
+                    case "Battle"     => game.battles(f)
+                    case "Capture"    => game.captures(f)
+                    case "Build Gate" => game.builds(f)
+                    case "Recruit"    => game.recruits(f)
+                    case "Summon"     => game.summons(f)
+                }
+
+                asking
+            } else {
+                // Action is not legal at required power: play normally
+                UnknownContinue
+            }
+
         case MainAction(f) if f.active.not =>
             implicit val asking = Asking(f)
 
@@ -5528,6 +5624,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 prmSpeakRealityTarget = None
                 prmSpeakRealityAction = ""
                 prmSpeakRealityPower = 0
+                prmSpeakRealityMoveSpent = 0
             }
 
             // PRM Mother's Aid cleanup: clear controller at end of their turn
@@ -5724,17 +5821,26 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 if (units.none)
                     Then(MoveDoneAction(self))
                 else
-                if (moved)
-                    Ask(self)
+                if (moved) {
+                    // PRM Speak Reality: during an enforced Move action, only allow "Done" if power >= required
+                    val speakRealityActive = prmSpeakRealityTarget.contains(self) && prmSpeakRealityAction == "Move"
+                    val canFinish = !speakRealityActive || prmSpeakRealityMoveSpent >= prmSpeakRealityPower
+
+                    val ask = Ask(self)
                         .group("Moved", self.units.tag(Moved).mkString(", "))
-                        .add(MoveDoneAction(self).as("Done"))
-                        .each(units)(u => {
+
+                    if (canFinish)
+                        ask.add(MoveDoneAction(self).as("Done"))
+                    else
+                        ask.add(GroupAction("Must spend at least " + (prmSpeakRealityPower - prmSpeakRealityMoveSpent).power + " more (Speak Reality)"))
+
+                    ask.each(units)(u => {
                             // DGT Cosmic Chaos: Conquests move for free during Move action with 1+ Power spent
                             val isCosmicChaos = setup.has(DGT) && self == DGT && DGT.can(CosmicChaos) && u.uclass == Conquest
                             val moveCost = isCosmicChaos.?(0).|(1)
                             MoveSelectAction(u.faction, u, u.region, moveCost).as(u.ref.full, "from", u.region)("Move", "another".hl, "unit", isCosmicChaos.??("(free via " + CosmicChaos.styled(DGT) + ")"))
                         })
-                else
+                } else
                     Ask(self)
                         .group("Move unit")
                         .each(units)(u => MoveSelectAction(u.faction, u, u.region, 1).as(u.ref.full, "from", u.region))
@@ -5901,8 +6007,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             // HB Fix 101 (2026-06-08): on a Tenebrosum repeat (sin-paid), skip
             // the power debit — Sin was already debited in DCTenebrosumRepeatAction.
-            if (cost > 0 && !dcTenebrosumGuard)
+            if (cost > 0 && !dcTenebrosumGuard) {
                 self.payPower(cost, "on move")
+                // Track power spent for Speak Reality Move enforcement
+                if (prmSpeakRealityTarget.contains(self) && prmSpeakRealityAction == "Move")
+                    prmSpeakRealityMoveSpent += cost
+            }
 
             // HB Fix 108 (2026-06-10): Tenebrosum Move repeat charges 1 Sin PER
             // UNIT moved (not a flat 1 Sin for all units). Debit here, once per
