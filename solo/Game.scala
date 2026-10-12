@@ -5885,8 +5885,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 } else
                     Ask(self)
                         .group("Move unit")
+                        .add(MoveDoneAction(self).as("Done"))
                         .each(units)(u => MoveSelectAction(u.faction, u, u.region, 1).as(u.ref.full, "from", u.region))
-                        .cancel
             }
 
         case MoveSelectAction(self, u, from, cost) =>
