@@ -6047,6 +6047,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // By default only "stable" is checked.
             var enabledStability = scala.collection.mutable.Set[String]("stable")
 
+            // [2026-10-12] Category filter state: Official, Variants, Homebrews.
+            // By default all three are enabled.
+            var enabledCategory = scala.collection.mutable.Set[String]("official", "variants", "homebrews")
+
             // [2026-10-12] Merged stability map: built-in + designer endpoint.
             // Start with the built-in map; will be merged with designer API on fetch.
             val stabilityMap = scala.collection.mutable.Map[String, String]() ++ builtInStability
@@ -6311,9 +6315,30 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             def getStability(e : PickerEntry) : String =
                 stabilityMap.getOrElse(e.faction.short, "stable")
 
-            // [2026-10-12] Filter picker entries by enabled stability levels.
+            // [2026-10-12] Categorize a picker entry as "official", "variants", or "homebrews".
+            // Base factions (GC/CC/BG/YS) are "official" unless it's an alt entry.
+            // Designer-built factions (from stabilityMap, not GC/CC/BG/YS) + TS/FB/DC/CS/FBE/XSS are "homebrews".
+            // Alt entries where the base faction is NOT a homebrew are "variants".
+            // Alt entries where the base faction IS a homebrew are "homebrews".
+            def getCategory(e : PickerEntry) : String = {
+                val baseFactions = Set("GC", "CC", "BG", "YS")
+                val homebrewFactions = Set("TS", "FB", "DC", "CS", "FBE", "XSS")
+                val designerBuilt = stabilityMap.keys.toSet -- baseFactions
+                val allHomebrews = homebrewFactions ++ designerBuilt
+                val isHomebrew = allHomebrews.contains(e.faction.short)
+                if (e.alt) {
+                    if (isHomebrew) "homebrews" else "variants"
+                } else {
+                    if (isHomebrew) "homebrews" else "official"
+                }
+            }
+
+            // [2026-10-12] Filter picker entries by enabled stability levels and categories.
             def visibleEntries() : $[PickerEntry] =
-                altPickerEntries.filter(e => enabledStability.contains(getStability(e)))
+                altPickerEntries.filter(e =>
+                    enabledStability.contains(getStability(e)) &&
+                    enabledCategory.contains(getCategory(e))
+                )
 
             def render() {
                 clear(root)
@@ -6370,6 +6395,55 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 makeStabilityCb("beta", "Tested / Beta")
                 makeStabilityCb("alpha", "Untested / Alpha")
                 root.appendChild(stabilityRow)
+
+                // [2026-10-12] Category filter checkboxes: Official, Variants, Homebrews.
+                // By default all three are checked. Unchecking a category hides those factions.
+                val categoryRow = dom.document.createElement("div").asInstanceOf[html.Div]
+                categoryRow.style.cssText = "display:flex;gap:16px;align-items:center;margin-bottom:12px;padding:6px 8px;background:#161b22;border:1px solid #30363d;border-radius:6px;"
+                val categoryLabel = dom.document.createElement("span").asInstanceOf[html.Span]
+                categoryLabel.style.cssText = "font-size:10.5pt;color:#8c95a0;font-weight:600;"
+                categoryLabel.innerHTML = "Category:"
+                categoryRow.appendChild(categoryLabel)
+
+                def makeCategoryCb(category : String, label : String) {
+                    val lbl = dom.document.createElement("label").asInstanceOf[html.Label]
+                    lbl.style.cssText = "display:inline-flex;align-items:center;gap:4px;font-size:10pt;color:#e6edf3;cursor:pointer;"
+                    val cb = dom.document.createElement("input").asInstanceOf[html.Input]
+                    cb.`type` = "checkbox"
+                    cb.checked = enabledCategory.contains(category)
+                    cb.style.cssText = "margin:0;cursor:pointer;"
+                    lbl.onclick = (e : dom.MouseEvent) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        val newChecked = !cb.checked
+                        cb.checked = newChecked
+                        if (newChecked) enabledCategory += category else enabledCategory -= category
+                        val visible = visibleEntries().toSet
+                        val locked = computeLocks()
+                        for (i <- 0 until pn) {
+                            // Remove entries that are now hidden.
+                            enabledEntries(i) --= enabledEntries(i).filterNot(visible.contains)
+                            // Add newly visible entries (respecting locks).
+                            if (newChecked) {
+                                visible.foreach { e =>
+                                    if (!locked.contains(e.faction) || locked(e.faction) == i) {
+                                        enabledEntries(i) += e
+                                    }
+                                }
+                            }
+                        }
+                        render()
+                    }
+                    val text = dom.document.createElement("span").asInstanceOf[html.Span]
+                    text.innerHTML = label
+                    lbl.appendChild(cb)
+                    lbl.appendChild(text)
+                    categoryRow.appendChild(lbl)
+                }
+                makeCategoryCb("official", "Official")
+                makeCategoryCb("variants", "Variants")
+                makeCategoryCb("homebrews", "Homebrews")
+                root.appendChild(categoryRow)
 
                 val help = dom.document.createElement("div").asInstanceOf[html.Div]
                 help.style.cssText = "font-size:9.5pt;color:#8c95a0;margin-bottom:16px;"
