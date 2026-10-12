@@ -1211,13 +1211,20 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Full destination set includes Whirlwind areas if any Twister is retreating
         val destinations = (standardDest ++ (hasTwisterRefugees.??(whirlwindDest)) ++ moonDest ++ moonRetreatDests).distinct
 
+        // DGT White Rider: enemy units in Pestilence's Area cannot retreat out
+        val dgtRetreatBlocked = if (game.setup.has(DGT) && s != DGT && DGT.has(WhiteRider)) {
+            val pestilenceArea = DGT.units.%(_.uclass == Pestilence)./(_.region).headOption
+            pestilenceArea.exists(_ == arena)  // Block retreat only if battle is IN Pestilence's area
+        } else false
+        val finalDestinations : $[Region] = if (dgtRetreatBlocked) $ else destinations
+
         val chooser : Faction = retreater(s)
 
-        if (destinations.none)
+        if (finalDestinations.none)
             Ask(s).each(refugees.sortA)(u => EliminateNoWayAction(s, u).as(u)("Nowhere to retreat, a pained unit is eliminated"))
         else
-        if (destinations.num == 1 && (allAreTwisters || whirlwindDest.none)) {
-            val r = destinations.only
+        if (finalDestinations.num == 1 && (allAreTwisters || whirlwindDest.none)) {
+            val r = finalDestinations.only
 
             refugees.foreach(u => retreat(u, r))
 
@@ -1243,7 +1250,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Moon-is-adjacent-to-all pain-retreat set (moonRetreatDests) is safe for
             // EVERY unit type, so it must be included here too. Omitting it eliminated
             // a lone pained unit in a Moon battle with a false "Nowhere to retreat".
-            val validDest = if (u.uclass == Twister) destinations else (standardDest ++ moonDest ++ moonRetreatDests).distinct
+            val validDest : $[Region] = if (u.uclass == Twister) finalDestinations else if (dgtRetreatBlocked) $ else (standardDest ++ moonDest ++ moonRetreatDests).distinct
             if (validDest.none)
                 Ask(s).each($(u))(u2 => EliminateNoWayAction(s, u2).as(u2)("Nowhere to retreat, a pained unit is eliminated"))
             else
@@ -1252,13 +1259,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         else
         if (allAreTwisters || whirlwindDest.none)
             // All same type or no Whirlwind expansion — "retreat all" is safe
-            Ask(chooser).each(destinations)(d => RetreatAllAction(chooser, s, d)).add(RetreatSeparatelyAction(chooser, s, destinations))
+            Ask(chooser).each(finalDestinations)(d => RetreatAllAction(chooser, s, d)).add(RetreatSeparatelyAction(chooser, s, finalDestinations))
         else {
             // Mixed Twisters + others with Whirlwind active — "Retreat all" only
             // offered to standard destinations (safe for all units). "Retreat separately"
             // gets the full destination list so Twisters can individually pick Sea Areas.
-            val safeForAll = (standardDest ++ moonDest ++ moonRetreatDests).distinct
-            Ask(chooser).each(safeForAll)(d => RetreatAllAction(chooser, s, d)).add(RetreatSeparatelyAction(chooser, s, destinations))
+            val safeForAll : $[Region] = if (dgtRetreatBlocked) $ else (standardDest ++ moonDest ++ moonRetreatDests).distinct
+            Ask(chooser).each(safeForAll)(d => RetreatAllAction(chooser, s, d)).add(RetreatSeparatelyAction(chooser, s, finalDestinations))
         }
     }
 

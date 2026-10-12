@@ -687,7 +687,7 @@ object Overlays {
         case $("DGT", MartyrsCryReq.text) => requirement("As an Action, distribute Power equal to number of players to enemy Factions.")
         case $("DGT", CosmicChaosReq.text) => requirement("As an Action, distribute Doom equal to number of players to enemy Factions.")
 
-        case $("DGT", WhiteRider.name) => spellbook(WhiteRider.name, "Ongoing", "Pestilence's Area has no adjacent Areas for enemy Units in it.")
+        case $("DGT", WhiteRider.name) => spellbook(WhiteRider.name, "Ongoing", "Enemy Units in Pestilence's Area cannot move out and cannot retreat from that Area.")
         case $("DGT", "Mayhem") => spellbook("Mayhem", "Once Only", "During Post-Battle, if Pestilence is present and 2 or more Pains are assigned to enemy Units, Gain 1 Elder Sign and flip this Spellbook.")
         case $("DGT", GodsPlague.name) => spellbook(GodsPlague.name, "Action: Cost 2", "All enemy Factions with one or more Units in Pestilence's Area choose one of their Units to be Pained away. You choose the Area into which each Unit is Pained.")
 
@@ -696,8 +696,8 @@ object Overlays {
         case $("DGT", GodsSword.name) => spellbook(GodsSword.name, "Ongoing", "War now has 12 Combat.")
 
         case $("DGT", BlackRider.name) => spellbook(BlackRider.name, "Ongoing", "In Famine's Area, ignore the presence of enemy Monsters and Terrors when you Capture an enemy Cultist.")
-        case $("DGT", "Rampage") => spellbook("Rampage", "Once Only", "During Gather Power Phase, if you Sacrifice one enemy Cultist, Gain 1 Elder Sign and flip this Spellbook.")
-        case $("DGT", GodsScale.name) => spellbook(GodsScale.name, "Ongoing", "Enemy Spellbooks are ignored in Famine's Area. After any Action, an enemy Faction may choose to have you Gain 1 Elder Sign to flip this Spellbook face-down. At the end of the Doom Phase, flip it face-up.")
+        case $("DGT", "Rampage") => spellbook("Rampage", "Once Only", "During Gather Power Phase, if you Sacrifice one enemy Cultist (gaining the usual Power for it), Gain 1 Elder Sign and flip this Spellbook.")
+        case $("DGT", GodsScale.name) => spellbook(GodsScale.name, "Ongoing", "Enemy Spellbooks are ignored in Famine's Area. After any Faction Action, each enemy Faction may choose (in response) to have you Gain 1 Elder Sign to flip this Spellbook face-down. At the end of the Doom Phase, flip it face-up.")
 
         case $("DGT", PaleRider.name) => spellbook(PaleRider.name, "Post-Battle", "If Death is present, add 1 Kill to your results.")
         case $("DGT", "Despair") => spellbook("Despair", "Once Only", "During Post-Battle, if Death is present and a Kill is assigned to a 3-cost or higher enemy Unit, Gain 1 Elder Sign and flip this Spellbook.")

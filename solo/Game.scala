@@ -5406,6 +5406,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         + TBRemoveGatePlaceChthonianPromptAction(f, PreMainAction(e)).as(RemoveGatePlaceChthonianReq.text.styled(TB))("(free)", reasons./("<br/>(" + _ + ")").mkString(""))
                 }
 
+                // DGT God's Scale: after any action, each enemy faction may choose to flip it face-down
+                // (same pattern as Devolve — offered as an out-of-turn reaction to each enemy in turn)
+                if (setup.has(DGT) && f != DGT && DGT.has(GodsScale) && !game.dgtGodsScaleFaceDown && !f.oncePerAction.has(GodsScale)) {
+                    val famineArea = DGT.units.%(_.uclass == Famine)./(_.region).headOption
+                    // Offer if the enemy has units in Famine's area OR if their spellbooks are affected
+                    val affectedByScale = famineArea.exists(r => f.at(r).any || f.spellbooks.any)
+                    if (affectedByScale)
+                        + GodsScalePromptAction(f, PreMainAction(e)).as("Flip " + GodsScale.styled(DGT) + " face-down")(GodsScale, "for " + DGT.name + " to gain " + 1.es)
+                }
+
                 |(asking.ask).%(_.actions.%!(_.isInfo).any)./(_.add(NeedOk).add(OutOfTurnRefresh(PreMainAction(e))).add(SacrificeHighPriestAllowedAction).group(" ").skip(PreActionPromptsAction(e, l.but(f))))
             }
 
@@ -5618,16 +5628,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 else
                     afterBJ
 
-                // DGT God's Scale: after any action, while face-up, prompt each enemy in turn order
-                // to optionally flip it face-down for DGT to gain 1 ES. No prompt if DGT not in game
-                // or God's Scale not face-up. Filter out neutral pseudo-factions (NeutralAbhoth,
-                // LibraryFaction) which have no real player to make choices.
-                if (setup.has(DGT) && DGT.has(GodsScale) && !dgtGodsScaleFaceDown) {
-                    val enemies = DGT.enemies.%(e => !e.isInstanceOf[NeutralFaction])
-                    GodsScaleFlipCheckAction(DGT, enemies, afterCS)
-                } else {
-                    afterCS
-                }
+                // DGT God's Scale: now handled as an out-of-turn reaction in PreActionPromptsAction (like Devolve)
+                afterCS
             }
 
         case EndTurnAction(f) =>

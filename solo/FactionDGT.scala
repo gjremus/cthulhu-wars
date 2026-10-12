@@ -182,26 +182,20 @@ case class RampageSkipAction(self : Faction)
     override def question(implicit game : Game) = "Skip Rampage"
 }
 
-// ── GOD'S SCALE (Post-Action, Black Rider back side) ────────────────────────
-// Enemies can flip this face-down for +1 ES to DGT, then face-up at Doom Phase end.
-case class GodsScaleFlipCheckAction(self : Faction, remainingEnemies : $[Faction], then : Action)
-    extends ForcedAction with PowerNeutral with Soft
+// ── GOD'S SCALE (Out-of-Turn Reaction, Black Rider back side) ───────────────
+// Like Devolve, enemies can react after any action to flip God's Scale face-down for +1 ES to DGT.
+// It flips back face-up at Doom Phase end.
+case class GodsScalePromptAction(self : Faction, then : ForcedAction)
+    extends ForcedAction with Soft with OutOfTurn
 
-case class GodsScaleFlipPromptAction(self : Faction, enemyFaction : Faction, remainingEnemies : $[Faction], then : Action)
-    extends ForcedAction with PowerNeutral with Soft {
+case class GodsScaleMainAction(self : Faction, then : ForcedAction)
+    extends OptionFactionAction(implicit g => "Flip " + GodsScale.styled(DGT) + " face-down") with MainQuestion with Soft with OutOfTurn {
     override def question(implicit game : Game) =
-        GodsScale.styled(DGT) + ": " + enemyFaction.name + " — flip face-down for " + self.name + " to gain 1 Elder Sign?"
+        GodsScale.styled(DGT) + ": flip face-down for " + DGT.name + " to gain 1 Elder Sign?"
 }
 
-case class GodsScaleFlipYesAction(self : Faction, enemyFaction : Faction, remainingEnemies : $[Faction], then : Action)
-    extends OptionFactionAction(implicit g => "Flip " + GodsScale.styled(DGT) + " face-down") with PowerNeutral {
-    override def question(implicit game : Game) = GodsScale.styled(DGT) + ": flip face-down?"
-}
-
-case class GodsScaleFlipNoAction(self : Faction, enemyFaction : Faction, remainingEnemies : $[Faction], then : Action)
-    extends OptionFactionAction("Skip") with PowerNeutral {
-    override def question(implicit game : Game) = GodsScale.styled(DGT) + ": flip face-down?"
-}
+case class GodsScaleFlipAction(self : Faction, then : ForcedAction)
+    extends BaseFactionAction(implicit g => "Flip " + GodsScale.styled(DGT) + " face-down", implicit g => DGT.name + " gains " + 1.es)
 
 
 // ============================================================================
@@ -373,34 +367,24 @@ object DGTExpansion extends Expansion {
                 Force(EndAction(self))
             }
 
-        // ── GOD'S SCALE (Post-Action flip prompts) ───────────────────────────
-        case GodsScaleFlipCheckAction(self, remainingEnemies, then) =>
-            if (remainingEnemies.any) {
-                val enemy = remainingEnemies.head
-                val rest = remainingEnemies.tail
-                Then(GodsScaleFlipPromptAction(self, enemy, rest, then))
-            } else {
-                Force(then)
-            }
+        // ── GOD'S SCALE (Out-of-Turn Reaction) ──────────────────────────────
+        case GodsScalePromptAction(self, then) =>
+            Force(GodsScaleMainAction(self, then))
 
-        case GodsScaleFlipPromptAction(self, enemyFaction, remainingEnemies, then) =>
-            // Prompt enemy: flip God's Scale face-down for DGT to gain 1 ES?
-            implicit val asking = Asking(enemyFaction)
-            Ask(enemyFaction)
-                .add(GodsScaleFlipYesAction(self, enemyFaction, remainingEnemies, then))
-                .add(GodsScaleFlipNoAction(self, enemyFaction, remainingEnemies, then))
+        case GodsScaleMainAction(self, then) =>
+            implicit val asking = Asking(self)
+            Ask(self)
+                .add(GodsScaleFlipAction(self, then))
+                .cancel
 
-        case GodsScaleFlipYesAction(self, enemyFaction, remainingEnemies, then) =>
+        case GodsScaleFlipAction(self, then) =>
             // Flip God's Scale face-down and give DGT 1 ES
-            self.takeES(1)
+            DGT.takeES(1)
             game.dgtGodsScaleFaceDown = true
-            enemyFaction.log("flipped", GodsScale.styled(DGT), "face-down,", self.name, "gained", 1.es)
-            // Stop prompting remaining enemies since it's now face-down
-            Force(then)
-
-        case GodsScaleFlipNoAction(self, enemyFaction, remainingEnemies, then) =>
-            // Skip flipping, continue to next enemy
-            Force(GodsScaleFlipCheckAction(self, remainingEnemies, then))
+            self.log("flipped", GodsScale.styled(DGT), "face-down,", DGT.name, "gained", 1.es)
+            // Mark that this enemy has reacted (same as Devolve pattern)
+            self.oncePerAction :+= GodsScale
+            Then(then)
 
         // ── RAMPAGE (Gather Power Phase) ────────────────────────────────────
         case RampageCheckAction(self) =>
@@ -418,9 +402,11 @@ object DGTExpansion extends Expansion {
         case RampageSacrificeAction(self, cultist) =>
             val unitFig = game.unit(cultist)
             val originalOwner = unitFig.faction
+            // Gain 1 Power for sacrificing the cultist (as if it had remained captured during Gather Power)
+            self.power += 1
             // Return cultist to owner's pool using eliminate() (the proper way to return captured cultists)
             game.eliminate(unitFig)
-            self.log(BlackRider.styled(DGT) + " (Rampage): sacrificed", originalOwner.name + "'s", unitFig.uclass.styled(originalOwner))
+            self.log(BlackRider.styled(DGT) + " (Rampage): sacrificed", originalOwner.name + "'s", unitFig.uclass.styled(originalOwner), "and gained", 1.power)
             // Flip Black Rider to God's Scale and gain 1 ES
             DGTExpansion.flipSpellbook(DGT, BlackRider, GodsScale, "Rampage")
             // Continue with the rest of AfterPowerGatherAction (MaoCeremony, etc.)
