@@ -634,7 +634,7 @@ object Overlays {
 
         case $("FM", CrumblingYawpReq.text) => requirement("Roll 9 or more dice in a single Combat.")
         case $("FM", HymnOfSufferingReq.text) => requirement("Your Units in play have 12 or more Combat.")
-        case $("FM", TerrifyingShriekReq.text) => requirement("The Screaming Wall is in Areas with 2 of the following Glyphs. (Implementation uses any 2 distinct glyphs.)")
+        case $("FM", TerrifyingShriekReq.text) => requirement("The Screaming Wall is in Areas with 2 of the 3 Glyph types (the Yellow Sign Glyphs).")
         case $("FM", TendonFlayingReq.text) => requirement("As an Action, Pay 6 Power, minus the number of Screaming Walls in play.")
         case $("FM", BlueprintsInBloodReq.text) => requirement("Have 3 Screaming Walls in Play.")
         case $("FM", MannedBattlementsReq.text) => requirement("Have 6 Screaming Walls in Play.")
