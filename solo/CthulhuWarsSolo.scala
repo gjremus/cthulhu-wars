@@ -5996,6 +5996,28 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 case e                    => $(e)
             }
 
+        // [2026-10-12] Built-in stability map for faction filtering in the alt picker.
+        // Factions in the main build = stable; designer factions = alpha; homebrew-only = beta.
+        // This map is merged with the live designer endpoint on page load.
+        val builtInStability : Map[String, String] = Map(
+            // Main build factions (stable)
+            "GC" -> "stable", "CC" -> "stable", "BG" -> "stable", "YS" -> "stable",
+            "OW" -> "stable", "SL" -> "stable", "WW" -> "stable", "TT" -> "stable",
+            "AN" -> "stable", "DS" -> "stable", "BB" -> "stable", "TS" -> "stable", "FB" -> "stable",
+            // Homebrew factions with explicit stability levels
+            "TI" -> "alpha",   // The Invasion
+            "CS" -> "beta",    // Colour Out of Space
+            "TB" -> "beta",    // (Tcho-Tcho Brigade)
+            "FBE" -> "beta",   // Faceless Blight
+            // Designer factions (alpha)
+            "FM" -> "alpha",   // Fleshmason
+            "PRM" -> "alpha",  // Permeation
+            "DGT" -> "alpha",  // Tribulation
+            "XSS" -> "alpha",  // Xothic Starspawn
+            // Homebrew-only factions (beta pending owner confirmation)
+            "DC" -> "beta"     // Dread Curse
+        )
+
         // [2026-05-23] MNU alt faction picker. Replaces the combinations dropdown
         // for users who want to: (a) lock specific factions onto specific player
         // slots and/or limit which factions are eligible per slot before
@@ -6020,6 +6042,35 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             }
             val playerNames = scala.collection.mutable.ArrayBuffer.fill(pn)("")
             for (i <- 0 until pn) playerNames(i) = "Player " + (i + 1)
+
+            // [2026-10-12] Stability filter state: which levels are currently enabled.
+            // By default only "stable" is checked.
+            var enabledStability = scala.collection.mutable.Set[String]("stable")
+
+            // [2026-10-12] Merged stability map: built-in + designer endpoint.
+            // Start with the built-in map; will be merged with designer API on fetch.
+            val stabilityMap = scala.collection.mutable.Map[String, String]() ++ builtInStability
+
+            // [2026-10-12] Fetch designer stability endpoint and merge into stabilityMap.
+            // Timeout after 3s; on failure or timeout use only the built-in map.
+            // Must not block or break the UI — fetch runs async, render proceeds immediately.
+            val xhr = new org.scalajs.dom.XMLHttpRequest()
+            xhr.open("GET", "/designer/api/public/stability", true)
+            xhr.timeout = 3000  // 3-second timeout
+            xhr.onload = (_) => {
+                if (xhr.status == 200) {
+                    try {
+                        // Parse JSON response: {"<ACRONYM>": "alpha"|"beta"|"stable", ...}
+                        val json = scala.scalajs.js.JSON.parse(xhr.responseText).asInstanceOf[scala.scalajs.js.Dictionary[String]]
+                        json.foreach { case (k, v) => stabilityMap(k) = v }
+                    } catch {
+                        case _ : Throwable => // Ignore parse errors, use built-in map
+                    }
+                }
+            }
+            xhr.onerror = (_) => { /* Ignore fetch errors, use built-in map */ }
+            xhr.ontimeout = (_) => { /* Ignore timeout, use built-in map */ }
+            xhr.send()
             // [2026-06-02] §3.13.3: per-player checkbox state is now keyed on
             // PickerEntry, not Faction. Two entries (BB and BB-alt) collapse
             // to the same Faction (BB) for the matching constraint, so picking
@@ -6256,12 +6307,56 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     "webp/images/" + e.faction.short.toLowerCase + "-glyph-hb.webp"
                 else glyphSrc(e.faction)
 
+            // [2026-10-12] Get stability level for a picker entry (defaults to "stable" if unknown).
+            def getStability(e : PickerEntry) : String =
+                stabilityMap.getOrElse(e.faction.short, "stable")
+
+            // [2026-10-12] Filter picker entries by enabled stability levels.
+            def visibleEntries() : $[PickerEntry] =
+                altPickerEntries.filter(e => enabledStability.contains(getStability(e)))
+
             def render() {
                 clear(root)
                 val title = dom.document.createElement("div").asInstanceOf[html.Div]
                 title.style.cssText = "font-size:14pt;font-weight:600;margin-bottom:8px;color:#fff;"
                 title.innerHTML = "Choose factions included for random selection"
                 root.appendChild(title)
+
+                // [2026-10-12] Stability filter checkboxes: Stable, Beta, Alpha.
+                // By default only Stable is checked. Unchecking a level hides those factions.
+                val stabilityRow = dom.document.createElement("div").asInstanceOf[html.Div]
+                stabilityRow.style.cssText = "display:flex;gap:16px;align-items:center;margin-bottom:12px;padding:6px 8px;background:#161b22;border:1px solid #30363d;border-radius:6px;"
+                val stabilityLabel = dom.document.createElement("span").asInstanceOf[html.Span]
+                stabilityLabel.style.cssText = "font-size:10.5pt;color:#8c95a0;font-weight:600;"
+                stabilityLabel.innerHTML = "Stability:"
+                stabilityRow.appendChild(stabilityLabel)
+
+                def makeStabilityCb(level : String, label : String) {
+                    val lbl = dom.document.createElement("label").asInstanceOf[html.Label]
+                    lbl.style.cssText = "display:inline-flex;align-items:center;gap:4px;font-size:10pt;color:#e6edf3;cursor:pointer;"
+                    val cb = dom.document.createElement("input").asInstanceOf[html.Input]
+                    cb.`type` = "checkbox"
+                    cb.checked = enabledStability.contains(level)
+                    cb.style.cssText = "margin:0;cursor:pointer;"
+                    cb.onchange = (_) => {
+                        if (cb.checked) enabledStability += level else enabledStability -= level
+                        // Uncheck any enabled entries that are now hidden by the filter.
+                        val visible = visibleEntries().toSet
+                        for (i <- 0 until pn) {
+                            enabledEntries(i) --= enabledEntries(i).filterNot(visible.contains)
+                        }
+                        render()
+                    }
+                    val text = dom.document.createElement("span").asInstanceOf[html.Span]
+                    text.innerHTML = label
+                    lbl.appendChild(cb)
+                    lbl.appendChild(text)
+                    stabilityRow.appendChild(lbl)
+                }
+                makeStabilityCb("stable", "Stable")
+                makeStabilityCb("beta", "Tested / Beta")
+                makeStabilityCb("alpha", "Untested / Alpha")
+                root.appendChild(stabilityRow)
 
                 val help = dom.document.createElement("div").asInstanceOf[html.Div]
                 help.style.cssText = "font-size:9.5pt;color:#8c95a0;margin-bottom:16px;"
@@ -6270,6 +6365,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                 val locked = computeLocks()
                 val lockedFactions = locked.keySet
+                val visible = visibleEntries()
 
                 for (i <- 0 until pn) {
                     val row = dom.document.createElement("div").asInstanceOf[html.Div]
@@ -6301,10 +6397,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     allLbl.style.cssText = "display:inline-flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5pt;color:#8c95a0;"
                     val allCb = dom.document.createElement("input").asInstanceOf[html.Input]
                     allCb.`type` = "checkbox"
+                    // [2026-10-12] "All" button checks only VISIBLE factions (those passing the stability filter).
                     // "Locked elsewhere" is a Faction-level concept (BB and BB-alt
                     // share Faction = BB; if BB is locked to another player, BOTH
                     // BB entries are blocked here).
-                    val unlockableForThisPlayer = altPickerEntries.filter(e => !lockedFactions.contains(e.faction) || locked(e.faction) == i)
+                    val unlockableForThisPlayer = visible.filter(e => !lockedFactions.contains(e.faction) || locked(e.faction) == i)
                     allCb.checked = unlockableForThisPlayer.forall(enabledEntries(i).contains)
                     allCb.style.cssText = "margin:0;cursor:pointer;"
                     allLbl.appendChild(newDiv("", "All"))
@@ -6312,7 +6409,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     cbWrap.appendChild(allLbl)
 
                     val entryCbs = scala.collection.mutable.ArrayBuffer[(PickerEntry, html.Input)]()
-                    altPickerEntries.foreach { e =>
+                    visible.foreach { e =>
                         val lockedElsewhere = lockedFactions.contains(e.faction) && locked(e.faction) != i
                         val lbl = dom.document.createElement("label").asInstanceOf[html.Label]
                         lbl.style.cssText =
@@ -6342,13 +6439,14 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     }
                     allCb.onchange = (_) => {
                         // [2026-05-23] All-toggle has clean semantics now:
-                        //   ON  → enabledEntries(i) = altPickerEntries minus those
-                        //         whose Faction is locked to OTHER players.
+                        //   ON  → enabledEntries(i) = visible entries (passing stability filter)
+                        //         minus those whose Faction is locked to OTHER players.
                         //   OFF → enabledEntries(i) = empty.
+                        // [2026-10-12] Updated to check only visible entries.
                         // Never touches any other player's set.
                         enabledEntries(i).clear()
                         if (allCb.checked) {
-                            altPickerEntries.foreach { e =>
+                            visible.foreach { e =>
                                 if (!lockedFactions.contains(e.faction) || locked(e.faction) == i)
                                     enabledEntries(i) += e
                             }
