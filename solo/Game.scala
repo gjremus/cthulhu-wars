@@ -6112,10 +6112,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 FB.units.exists(uf => uf.region == r && (uf.uclass == RevenantOfKnaa || uf.uclass == Ghatanothoa)))
                 fbCyclopeanGazeActionRegions :+= r
 
-            MovedAction(self, u, o, r)
+            Then(MovedAction(self, u, o, r))
 
         case MovedAction(self, u, o, r) =>
-            MoveContinueAction(self, true)
+            Then(MoveContinueAction(self, true))
 
         // Base-game fallback for the Chronophage entry point. NeutralMonstersExpansion
         // handles this when neutral monsters/terrors are in play; when they are not,
