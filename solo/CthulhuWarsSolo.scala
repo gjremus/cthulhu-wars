@@ -1247,7 +1247,7 @@ object CthulhuWarsSolo {
                         case DC => DrawRect("dc-glyph", |(tint), x - 50, y - 50, 100, 100)
                         case FBE => DrawRect("fbe-glyph", None, x - 50, y - 50, 100, 100)
                         case FM => DrawRect("fm-glyph", None, x - 50, y - 50, 100, 100)
-                        case PRM => DrawRect("prm-card", None, x - 50, y - 50, 100, 100)
+                        case PRM => DrawRect("prm-glyph", None, x - 50, y - 50, 100, 100)
                         case XSS => DrawRect("xss-glyph", None, x - 50, y - 50, 100, 100)
                         case DGT => DrawRect("dgt-glyph", None, x - 50, y - 50, 100, 100)
                         case TB => DrawRect("tb-glyph", None, x - 50, y - 50, 100, 100)
@@ -5951,7 +5951,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Order: GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB
         // Faceless Blight (FBE): Homebrew faction appended (§3.13.1)
         // Xyrious Storm (XSS): Homebrew faction appended
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, CS, TI, DGT)
+        // Fleshmason (FM), Permeation (PRM), Tribulation (DGT): Designer factions appended
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT)
 
         // Alt picker display order (may differ from allFactions).
         // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB, DC.
@@ -5975,7 +5976,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // from DC.short.toLowerCase, matching every other faction.
         // Faceless Blight (FBE): Homebrew faction appended to the alt picker (§3.13.1)
         // The Invasion (TI): appended to the alt picker per Implementation Guide §2.9/§3
-        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS, TI, DGT)
+        // Fleshmason (FM), Permeation (PRM), Tribulation (DGT): Designer factions appended
+        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT)
         // [2026-07-23] §3.13.5: OW / SL / DS each get a SECOND ("alt") entry
         // immediately after their standard entry, matching the AN and BB alt
         // entries added earlier. Picking an alt entry auto-flips that
