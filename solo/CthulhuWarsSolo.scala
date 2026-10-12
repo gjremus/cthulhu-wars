@@ -5943,20 +5943,23 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         ask("Players", ("3 Players".hl :: "4 Players".hl :: "5 Players".hl) :+ "Back", n => {
                             if (n < 3) {
                                 val pn = n + 3
-                                val combinations = allFactions.combinations(pn).toList
-                                // [2026-05-23] Alt faction picker entry at top of the
-                                // faction-selection list. Picking it opens the per-player
-                                // glyph-checkbox UI; the rest of the list is the existing
-                                // combinatorial dropdown for users who want the literal
-                                // faction set.
-                                val opts = (("Alt faction picker".hl) +: combinations./(_.mkString(", "))./(smaller).toList) :+ "Back"
-                                ask("Choose factions", opts, n2 => {
-                                    if (n2 == 0)
-                                        altFactionPicker(pn)
-                                    else if (n2 - 1 < combinations.num)
-                                        startSetup(combinations(n2 - 1))
-                                    else
-                                        topMenu()
+                                // [2026-10-11] New intermediate menu for faction selection style
+                                ask("Faction selection style", $("Original faction selection".hl, "Alternate faction selection".hl, "Back"), styleChoice => {
+                                    styleChoice match {
+                                        case 0 =>
+                                            val combinations = allFactions.combinations(pn).toList
+                                            val opts = combinations./(_.mkString(", "))./(smaller).toList :+ "Back"
+                                            ask("Choose factions", opts, n2 => {
+                                                if (n2 < combinations.num)
+                                                    startSetup(combinations(n2))
+                                                else
+                                                    topMenu()
+                                            })
+                                        case 1 =>
+                                            altFactionPicker(pn)
+                                        case 2 =>
+                                            topMenu()
+                                    }
                                 })
                             }
                             else
@@ -5966,16 +5969,23 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         ask("Players", ("3 Players".hl :: "4 Players".hl :: "5 Players".hl) :+ "Back", n => {
                             if (n < 3) {
                                 val pn = n + 3
-                                val combinations = allFactions.combinations(pn).toList
-                                // [2026-05-23] Alt faction picker at top of online flow too.
-                                val opts = (("Alt faction picker".hl) +: combinations./(_.mkString(", "))./(smaller).toList) :+ "Back"
-                                ask("Choose factions", opts, n2 => {
-                                    if (n2 == 0)
-                                        altFactionPicker(pn, (fs, bbAlt) => startOnlineSetup(fs, bbAlt))
-                                    else if (n2 - 1 < combinations.num)
-                                        startOnlineSetup(combinations(n2 - 1))
-                                    else
-                                        topMenu()
+                                // [2026-10-11] New intermediate menu for faction selection style
+                                ask("Faction selection style", $("Original faction selection".hl, "Alternate faction selection".hl, "Back"), styleChoice => {
+                                    styleChoice match {
+                                        case 0 =>
+                                            val combinations = allFactions.combinations(pn).toList
+                                            val opts = combinations./(_.mkString(", "))./(smaller).toList :+ "Back"
+                                            ask("Choose factions", opts, n2 => {
+                                                if (n2 < combinations.num)
+                                                    startOnlineSetup(combinations(n2))
+                                                else
+                                                    topMenu()
+                                            })
+                                        case 1 =>
+                                            altFactionPicker(pn, (fs, bbAlt) => startOnlineSetup(fs, bbAlt))
+                                        case 2 =>
+                                            topMenu()
+                                    }
                                 })
                             }
                             else
