@@ -3098,6 +3098,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 mbTarget.oncePerGame = mbTarget.oncePerGame.but(mbSb)
                 game.moonbeastOnSpellbook -= uRef
             }
+            // Non-standard capture: trigger YS Passion if applicable (skip if already eliminated)
+            if (u.uclass.utype == Cultist && !eliminated.exists(_.ref == u.ref))
+                YSExpansion.passionOnCapture(u)(game)
             // Card: "place it on this card; that Unit is considered to be out of play"
             // Penguin: if transferred, return to original owner first
             val origOwner = penguinOriginalOwner.get(u.ref)

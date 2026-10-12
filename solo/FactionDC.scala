@@ -1074,6 +1074,7 @@ object DCExpansion extends Expansion {
                 if (cultists.num == 1) {
                     val c = cultists.first
                     println(s"[SATIATE-AUTO-CAPTURE] Capturing ${c.ref} from ${c.region} → ${self}.prison")
+                    YSExpansion.passionOnCapture(c)
                     c.region = self.prison
                     c.onGate = false
                     ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(only one in", area, ")")
@@ -1100,6 +1101,7 @@ object DCExpansion extends Expansion {
                     if (allSameType && allEquivGate) {
                         val c = cultists.first
                         println(s"[SATIATE-TRACE] auto-capture: ${c.ref} from ${c.region} → prison. cultists in area: ${cultists./(_.ref).mkString(", ")}")
+                        YSExpansion.passionOnCapture(c)
                         c.region = self.prison
                         c.onGate = false
                         ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(all equivalent in", area, ")")
@@ -1118,6 +1120,7 @@ object DCExpansion extends Expansion {
 
         case DCSatiatePickCultistAction(self, area, cultistRef, remaining, capturedSoFar) =>
             val c = game.unit(cultistRef)
+            YSExpansion.passionOnCapture(c)
             c.region = DC.prison
             c.onGate = false
             self.log(Satiate.styled(DC) + ":", self.short.styled(self), "loses", c.uclass.styled(self), "to", DC.full)
