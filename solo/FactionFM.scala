@@ -259,8 +259,10 @@ object FMExpansion extends Expansion {
                 FM.at(r).exists(_.uclass == Acolyte) && hasScreamingWall(r))
             if (eligibleAreas.any)
                 Force(HymnOfSufferingMainAction(FM))
-            else
+            else {
+                FM.oncePerAction :+= HymnOfSuffering
                 Force(AfterPowerGatherAction)
+            }
 
         case HymnOfSufferingMainAction(self) =>
             val eligibleAreas = game.board.regions.filter(r =>

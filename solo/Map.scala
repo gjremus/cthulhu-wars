@@ -77,6 +77,7 @@ object EarthMap3 extends Board {
         // Already-taken setup areas removed by .diff(starting.values.$) in Game.scala.
         case CS => regions
         // Tombstalker (TS): starting areas are ocean-only non-faction regions (Gla'aki requires ocean gate)
+        case PRM => regions.%(_.glyph == Ocean)
         case TS => nonFactionRegions.%(_.glyph == Ocean)
         // Firstborn (FB): starting areas are ANY area on the map. The faction card only
         // requires "an empty area" — meaning any area not already chosen by another faction.
@@ -203,6 +204,7 @@ object EarthMap4v35 extends Board {
         // Already-taken setup areas removed by .diff(starting.values.$) in Game.scala.
         case CS => regions
         // Tombstalker (TS): starting areas are ocean-only non-faction regions (Gla'aki requires ocean gate)
+        case PRM => regions.%(_.glyph == Ocean)
         case TS => nonFactionRegions.%(_.glyph == Ocean)
         // Firstborn (FB): starting areas are ANY area on the map. The faction card only
         // requires "an empty area" — meaning any area not already chosen by another faction.
@@ -333,6 +335,7 @@ object EarthMap4v53 extends Board {
         // Already-taken setup areas removed by .diff(starting.values.$) in Game.scala.
         case CS => regions
         // Tombstalker (TS): starting areas are ocean-only non-faction regions (Gla'aki requires ocean gate)
+        case PRM => regions.%(_.glyph == Ocean)
         case TS => nonFactionRegions.%(_.glyph == Ocean)
         // Firstborn (FB): starting areas are ANY area on the map. The faction card only
         // requires "an empty area" — meaning any area not already chosen by another faction.
@@ -471,6 +474,7 @@ object EarthMap5 extends Board {
         // Already-taken setup areas removed by .diff(starting.values.$) in Game.scala.
         case CS => regions
         // Tombstalker (TS): starting areas are ocean-only non-faction regions (Gla'aki requires ocean gate)
+        case PRM => regions.%(_.glyph == Ocean)
         case TS => nonFactionRegions.%(_.glyph == Ocean)
         // Firstborn (FB): starting areas are ANY area on the map. The faction card only
         // requires "an empty area" — meaning any area not already chosen by another faction.
@@ -619,6 +623,7 @@ object EarthMap6 extends Board {
         // Already-taken setup areas removed by .diff(starting.values.$) in Game.scala.
         case CS => regions
         // Tombstalker (TS): starting areas are ocean-only non-faction regions (Gla'aki requires ocean gate)
+        case PRM => regions.%(_.glyph == Ocean)
         case TS => nonFactionRegions.%(_.glyph == Ocean)
         // Firstborn (FB): starting areas are ANY area on the map. The faction card only
         // requires "an empty area" — meaning any area not already chosen by another faction.
@@ -900,6 +905,7 @@ object LibraryCelaeno55 extends Board {
         // nonFactionRegions (like AN/TS) to honour the card's "no faction glyph" rule —
         // plain `regions` wrongly allowed CS to start on a printed faction-glyph area.
         case CS => nonFactionRegions
+        case PRM => regions.%(_.glyph == Ocean)
         case TS => nonFactionRegions.%(_.glyph == Ocean)
         case FB => regions.diff(tomeRegions)
         case DS => $()
@@ -1031,6 +1037,7 @@ object LibraryCelaeno33 extends Board {
         case GC => $(Hyperquarium); case CC => $(BlueHall); case BG => $(Fountain); case YS => $(FloatingTower)
         case SL => $(ChamberOfSngac); case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
+        case PRM => regions.%(_.glyph == Ocean)
         case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case DGT => regions; case XSS => $(); case TB => $()
         case CS => regions
         case _ => regions
@@ -1113,6 +1120,7 @@ object LibraryCelaeno53 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
+        case PRM => regions.%(_.glyph == Ocean)
         case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case DGT => regions; case XSS => $(); case TB => $()
         case CS => regions
         case _ => regions
@@ -1216,6 +1224,7 @@ object LibraryCelaeno35 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
+        case PRM => regions.%(_.glyph == Ocean)
         case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case DGT => regions; case XSS => $(); case TB => $()
         case CS => regions
         case _ => regions
