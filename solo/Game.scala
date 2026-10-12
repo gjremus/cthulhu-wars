@@ -6113,10 +6113,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 FB.units.exists(uf => uf.region == r && (uf.uclass == RevenantOfKnaa || uf.uclass == Ghatanothoa)))
                 fbCyclopeanGazeActionRegions :+= r
 
-            Then(MovedAction(self, u, o, r))
+            // Must stay a bare (inline) Force, NOT Then(...): MovedAction and
+            // MoveContinueAction are deterministic, so recording them only adds
+            // a write that every client races to post, stalling the chain before
+            // the "Move another unit / Done" prompt (game "Dread as Space"). Old
+            // journals also never contain them, so Then broke their replays.
+            MovedAction(self, u, o, r)
 
         case MovedAction(self, u, o, r) =>
-            Then(MoveContinueAction(self, true))
+            MoveContinueAction(self, true)
 
         // Base-game fallback for the Chronophage entry point. NeutralMonstersExpansion
         // handles this when neutral monsters/terrors are in play; when they are not,
