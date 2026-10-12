@@ -5876,7 +5876,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     else
                         askWithGroup.add(GroupAction("Must spend at least " + (prmSpeakRealityPower - prmSpeakRealityMoveSpent).power + " more (Speak Reality)"))
 
-                    askWithButton.each(units)(u => {
+                    askWithButton
+                        .add(MoveDoneAction(self).as("Done"))
+                        .each(units)(u => {
                             // DGT Cosmic Chaos: Conquests move for free during Move action with 1+ Power spent
                             val isCosmicChaos = setup.has(DGT) && self == DGT && DGT.can(CosmicChaos) && u.uclass == Conquest
                             val moveCost = isCosmicChaos.?(0).|(1)
