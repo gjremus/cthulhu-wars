@@ -2971,7 +2971,7 @@ object Overlays {
                 <div class=p>${cost("3)")} Replace the Egg with ${Ycgnagnnisssz.name}.</div>
                 <div class=p>${combat} Equal to your number of Earned Spellbooks plus the total number of Face Down Spellbooks on all Faction Cards.</div>
                 <div class=p>Mother's Aid ${cost("(Ongoing):")} On their turn, any opponent may pay you 1 Power to control ${Ycgnagnnisssz.name} this turn. Moving her costs 0 Power for them.</div>
-                <div class=p>Fathomless Progenitor ${cost("(Ongoing):")} While controlled by another player, ${Ycgnagnnisssz.name} cannot be assigned Combat results or Eliminated. She can only be moved by the Move Action and does not participate in battle against you. This ability is not optional.</div>
+                <div class=p>Fathomless Progenitor ${cost("(Ongoing):")} While controlled by another player attacking Permeation, ${Ycgnagnnisssz.name} does not participate in battle. She contributes no combat and cannot be assigned results. This ability is not optional.</div>
                 <div class=p>Spellbook: ${prmRef(SpeakReality)}</div>""")
         ), setup = true)
     }

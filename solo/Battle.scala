@@ -1579,6 +1579,28 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // Permeation (PRM) Mother's Aid: when an opponent controls Ycgn'àgnnisssz and
+                // attacks Permeation in her area, she "does not participate in battle against
+                // Permeation" (designer ruling). She contributes no combat and cannot be assigned
+                // results. Exempt her from the battle — she remains in the region but is neither
+                // a combatant nor a casualty, exactly like mummified cultists and protected Lavinia.
+                if (game.setup.has(PRM) && attacker != PRM && defender == PRM && game.prmYcgnaTemporaryController.contains(attacker)) {
+                    sides.foreach { s =>
+                        s.forces.%(_.uclass == Ycgnagnnisssz).foreach { u =>
+                            log(Ycgnagnnisssz.styled(PRM), "in", arena, "does not participate in battle against", PRM.name, "(Mother's Aid)")
+                            exempt(u)
+                        }
+                    }
+                    if (attacker.forces.none && !battleStartReplayExpectsContinue) {
+                        log("No attackers left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                    if (defender.forces.none && !battleStartReplayExpectsContinue) {
+                        log("No defenders left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                }
+
                 sides.foreach(s => s.forces.foreach(u => u.health = Alive))
 
                 sides.foreach(s => s.str = s.strength(s.forces, s.opponent))
