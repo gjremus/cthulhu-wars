@@ -696,7 +696,7 @@ object Overlays {
         case $("DGT", GodsSword.name) => spellbook(GodsSword.name, "Ongoing", "War now has 12 Combat.")
 
         case $("DGT", BlackRider.name) => spellbook(BlackRider.name, "Ongoing", "In Famine's Area, ignore the presence of enemy Monsters and Terrors when you Capture an enemy Cultist.")
-        case $("DGT", "Rampage") => spellbook("Rampage", "Once Only", "During Gather Power Phase, if you Sacrifice one enemy Cultist (gaining the usual Power for it), Gain 1 Elder Sign and flip this Spellbook.")
+        case $("DGT", "Rampage") => spellbook("Rampage", "Once Only", "During Gather Power Phase, if you Sacrifice one enemy Cultist, Gain 1 Elder Sign and flip this Spellbook.")
         case $("DGT", GodsScale.name) => spellbook(GodsScale.name, "Ongoing", "Enemy Spellbooks are ignored in Famine's Area. After any Faction Action, each enemy Faction may choose (in response) to have you Gain 1 Elder Sign to flip this Spellbook face-down. At the end of the Doom Phase, flip it face-up.")
 
         case $("DGT", PaleRider.name) => spellbook(PaleRider.name, "Post-Battle", "If Death is present, add 1 Kill to your results.")

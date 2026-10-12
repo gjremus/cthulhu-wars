@@ -167,17 +167,18 @@ case class GodsPlaguePainToAction(self : Faction, u : UnitRef, dest : Region, pa
 
 
 // ── RAMPAGE (Gather Power, Black Rider front side) ──────────────────────────
-// During Gather Power, DGT may sacrifice one captured enemy Cultist to flip and gain ES
-case class RampageCheckAction(self : Faction)
+// During Gather Power, DGT may sacrifice one captured enemy Cultist to flip and gain ES.
+// The `last` parameter is the faction that acted last (for PowerGatherAction continuation).
+case class RampageCheckAction(self : Faction, last : Faction)
     extends ForcedAction with PowerNeutral with Soft
 
-case class RampageSacrificeAction(self : Faction, cultist : UnitRef)
+case class RampageSacrificeAction(self : Faction, cultist : UnitRef, last : Faction)
     extends BaseFactionAction(
         implicit g => "Sacrifice " + g.unit(cultist).faction.name + "'s " + g.unit(cultist).uclass.styled(g.unit(cultist).faction) + " (Rampage)",
         implicit g => g.unit(cultist).full
     ) with PowerNeutral
 
-case class RampageSkipAction(self : Faction)
+case class RampageSkipAction(self : Faction, last : Faction)
     extends OptionFactionAction("Skip") with PowerNeutral {
     override def question(implicit game : Game) = "Skip Rampage"
 }
@@ -387,34 +388,35 @@ object DGTExpansion extends Expansion {
             Then(then)
 
         // ── RAMPAGE (Gather Power Phase) ────────────────────────────────────
-        case RampageCheckAction(self) =>
-            // Offer to sacrifice one captured enemy Cultist
-            val capturedCultists = self.units.%(u => u.region == self.prison && u.faction != self && u.uclass.utype == Cultist)
+        case RampageCheckAction(self, last) =>
+            // Offer to sacrifice one captured enemy Cultist.
+            // Captured cultists are other factions' cultists sitting in DGT's prison.
+            val capturedCultists = game.factions./~(_.at(self.prison)).%(_.cultist)
             if (capturedCultists.any) {
                 implicit val asking = Asking(self)
                 Ask(self)
-                    .each(capturedCultists)(u => RampageSacrificeAction(self, u.ref))
-                    .add(RampageSkipAction(self))
+                    .each(capturedCultists)(u => RampageSacrificeAction(self, u.ref, last))
+                    .add(RampageSkipAction(self, last))
             } else {
-                AfterPowerGatherAction
+                PowerGatherAction(last)
             }
 
-        case RampageSacrificeAction(self, cultist) =>
+        case RampageSacrificeAction(self, cultist, last) =>
             val unitFig = game.unit(cultist)
             val originalOwner = unitFig.faction
-            // Gain 1 Power for sacrificing the cultist (as if it had remained captured during Gather Power)
-            self.power += 1
+            // The sacrificed cultist already contributed to DGT's power during the Gather Power
+            // calculations (at line ~4059), so no extra power is gained here.
             // Return cultist to owner's pool using eliminate() (the proper way to return captured cultists)
             game.eliminate(unitFig)
-            self.log(BlackRider.styled(DGT) + " (Rampage): sacrificed", originalOwner.name + "'s", unitFig.uclass.styled(originalOwner), "and gained", 1.power)
+            self.log(BlackRider.styled(DGT) + " (Rampage): sacrificed", originalOwner.name + "'s", unitFig.uclass.styled(originalOwner))
             // Flip Black Rider to God's Scale and gain 1 ES
             DGTExpansion.flipSpellbook(DGT, BlackRider, GodsScale, "Rampage")
-            // Continue with the rest of AfterPowerGatherAction (MaoCeremony, etc.)
-            AfterPowerGatherAction
+            // Continue with PowerGatherAction so the release loop handles the rest of the captives
+            PowerGatherAction(last)
 
-        case RampageSkipAction(self) =>
-            // Skip Rampage, continue with the rest of AfterPowerGatherAction
-            AfterPowerGatherAction
+        case RampageSkipAction(self, last) =>
+            // Skip Rampage, continue with PowerGatherAction
+            PowerGatherAction(last)
 
         // ── GATHER POWER PHASE (Martyr's Cry) ───────────────────────────────
         case AfterPowerGatherAction if game.setup.has(DGT) && DGT.can(MartyrsCry) && !game.dgtMartyrsCryDoneThisGather =>

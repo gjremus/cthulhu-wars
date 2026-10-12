@@ -4020,8 +4020,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Faceless Blight (FBE): re-arm Changeling Adherents for this Gather.
                 fbeChangelingDoneThisGather = false
 
-                // DGT (Tribulation): reset Rampage offer guard for this Gather Power.
-                dgtRampageOfferedThisGather = false
+                // DGT (Tribulation): reset Martyr's Cry guard for this Gather Power.
+                // Rampage guard is NOT reset here to prevent re-entry during the same Gather Power.
                 dgtMartyrsCryDoneThisGather = false
 
                 factions.foreach { f =>
@@ -4261,6 +4261,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 }
             }
 
+            // DGT Rampage: BEFORE releasing captured cultists, DGT may sacrifice one enemy Cultist
+            // to flip Black Rider to God's Scale (once only). Offered only if DGT has Black Rider
+            // (not yet flipped) and at least one captured enemy Cultist. The sacrificed cultist is
+            // eliminated here (returned to owner's pool) so the normal release loop skips it.
+            if (setup.has(DGT) && DGT.has(BlackRider) && !DGT.has(GodsScale) && !dgtRampageOfferedThisGather) {
+                val capturedCultists = factions./~(_.at(DGT.prison)).%(_.cultist)
+                if (capturedCultists.any) {
+                    dgtRampageOfferedThisGather = true
+                    return Force(RampageCheckAction(DGT, last))
+                }
+            }
+
             factions.foreach { f =>
                 val captured = factions./~(_.at(f.prison))
 
@@ -4353,18 +4365,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // MaoCeremony MUST be after raise-to-half — do not move it before.
         case AfterPowerGatherAction =>
             TSExpansion.shepherdDoneThisGather = false
-
-            // DGT Rampage: during Gather Power, DGT may sacrifice one captured enemy Cultist
-            // to flip Black Rider to God's Scale (once only). Only offer if DGT has Black Rider
-            // (not yet flipped), has at least one captured enemy Cultist, and hasn't been offered yet.
-            // The offer returns AfterPowerGatherAction after completion to continue the normal flow.
-            if (setup.has(DGT) && DGT.has(BlackRider) && !DGT.has(GodsScale) && !dgtRampageOfferedThisGather) {
-                val capturedCultists = DGT.units.%(u => u.region == DGT.prison && u.faction != DGT && u.uclass.utype == Cultist)
-                if (capturedCultists.any) {
-                    dgtRampageOfferedThisGather = true
-                    return Force(RampageCheckAction(DGT))
-                }
-            }
+            dgtRampageOfferedThisGather = false  // Reset for next Gather Power
 
             factions.foreach { f =>
                 if (f.want(MaoCeremony)) {
