@@ -1299,9 +1299,9 @@ object DCExpansion extends Expansion {
                     EndAction(self)
             } else {
                 implicit val asking = Asking(self)
-                remaining.foreach { u =>
-                    + DCPilgrimageUnitMoveAction(self, prophet, dest, u, remaining.but(u))
-                }
+                val u = remaining.first
+                + DCPilgrimageUnitMoveAction(self, prophet, dest, u, remaining.dropStarting)
+                + DCPilgrimageUnitStayAction(self, prophet, dest, u, remaining.dropStarting)
                 + DCPilgrimageDoneAction(self, prophet, dest)
                 asking
             }
