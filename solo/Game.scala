@@ -1758,6 +1758,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case CS => $(CSExpansion)
             // The Invasion (TI): Homebrew faction
             case TI => $(TIExpansion)
+            // Desert Guardian (DGT): register DGT expansion handler for Martyr's Cry reset
+            case DGT => $(DGTExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any || options.of[WhateleyClanOption].any).$(NeutralMonstersExpansion) ++
@@ -4050,6 +4052,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 }
             }
 
+            // DGT per-gather-phase reset
+            if (setup.has(DGT))
+                dgtMartyrsCryDoneThisGather = false
+
+            log(CthulhuWarsSolo.DoubleLine)
+            log("POWER GATHER")
             factions.foreach { f =>
                 val hibernate = f.power
                 // Only a faction that actually Hibernated kept its Power on purpose.
