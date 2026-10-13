@@ -667,7 +667,7 @@ object Overlays {
     def infoDGT(s : $[Any]) : |[String] = (s @@ {
         // ── TRIBULATION (DGT) — HOMEBREW FACTION ──
         case $("DGT") => faction(DGT, "info:dgt-background", Dominion, "Ongoing", "When performing the Move Action, Areas with Units you control are adjacent to each other.",
-            $(), $(
+            $(WhiteRider, RedRider, BlackRider, PaleRider, MartyrsCry, CosmicChaos), $(
             (Acolyte,    6, "1", "0", s"""<div class=p>Spellbook: ${reference(DGT, MartyrsCry)}</div>"""),
             (Conquest,   4, "1", "1", s"""<div class=p>Spellbook: ${reference(DGT, CosmicChaos)}</div>"""),
             (Pestilence, 1, "3", "3", s"""<div class=p>Spellbooks: ${reference(DGT, WhiteRider)}, ${reference(DGT, GodsPlague)}</div>"""),
