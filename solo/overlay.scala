@@ -1367,6 +1367,9 @@ object Overlays {
         // ── PERMEATION (PRM) — Homebrew faction overlays ─────────────────────
         case s2 if s2.headOption.exists(_ == "PRM") => prmOverlay(s2)
 
+        // ── TRIBULATION (DGT) — Homebrew faction overlays ──────────────────────
+        case s2 if s2.headOption.exists(_ == "DGT") => dgtOverlay(s2)
+
         // Bubastis (BB): alternate spellbooks info overlay.
         // Help text shows the FULL rulebook text of both replacement spellbooks
         // (Syzygy and Carnivore), mirroring the DS Alternate Spellbooks help
@@ -3002,6 +3005,29 @@ object Overlays {
                 <div class=p>Fathomless Progenitor ${cost("(Ongoing):")} While controlled by another player, ${Ycgnagnnisssz.name} cannot be assigned Combat results or Eliminated. She can only be moved by the Move Action. If that player battles you in her Area, she does not take part: she adds no Combat and cannot receive results. This ability is not optional.</div>
                 <div class=p>Spellbook: ${prmRef(SpeakReality)}</div>""")
         ), setup = true)
+    }
+
+    def dgtOverlay(s : $[Any]) : String = s match {
+        case $("DGT") => dgtFactionOverlay()
+
+        case $("DGT", "Setup") => requirement("6 Acolytes, 4 Conquest, and 1 each of Pestilence, War, Famine, and Death.")
+
+        case $("DGT", WhiteRiderReq.text)  => requirement("Control a Gate in an Area marked with Dragon Glyph; Add Pestilence to your Pool")
+        case $("DGT", RedRiderReq.text)    => requirement("Control a Gate in an Area marked with Thorn Glyph; Add War to your Pool")
+        case $("DGT", BlackRiderReq.text)  => requirement("Control a Gate in an Area marked with Chevron Glyph; Add Famine to your Pool")
+        case $("DGT", PaleRiderReq.text)   => requirement("A player performs a Ritual of Annihilation; Add Death to your Pool")
+        case $("DGT", MartyrsCryReq.text)  => requirement("As an Action, distribute Power equal to number of players to enemy Factions")
+        case $("DGT", CosmicChaosReq.text) => requirement("As an Action, distribute Doom equal to number of players to enemy Factions")
+
+        case $("DGT", Dominion.name)   => spellbook(Dominion.name,   "Ongoing", "When performing the Move Action, Areas with Units you control are adjacent to each other.")
+        case $("DGT", WhiteRider.name) => spellbook(WhiteRider.name, "Action: Cost 1", "Gain 1 Elder Sign. If Pestilence is in the Battle, it cannot be Assigned a Pains result.")
+        case $("DGT", RedRider.name)   => spellbook(RedRider.name,   "Action: Cost 1", "Gain 1 Elder Sign. War's Combat becomes 6 for this Battle; if it kills an enemy unit, gain 1 Power.")
+        case $("DGT", BlackRider.name) => spellbook(BlackRider.name, "Action: Cost 1", "Gain 1 Elder Sign. Famine captures units instead of eliminating them; captured units go into your Pool, not the enemy's.")
+        case $("DGT", PaleRider.name)  => spellbook(PaleRider.name,  "Action: Cost 1", "Gain 1 Elder Sign. Death is treated as a Great Old One for purposes of Awakening. It counts as one when Awakening cost is divided.")
+        case $("DGT", MartyrsCry.name) => spellbook(MartyrsCry.name, "Action: Cost X", "Distribute X Power equal to the number of players to enemy Factions; you gain 1 Doom per player (maximum = number of players).")
+        case $("DGT", CosmicChaos.name) => spellbook(CosmicChaos.name, "Action: Cost X", "Distribute X Doom equal to the number of players to enemy Factions; you gain 1 Power per player (maximum = number of players).")
+
+        case _ => ""
     }
 
     def owFactionOverlay(cheapMutants : Boolean, yogCurseDie : Boolean) = {
