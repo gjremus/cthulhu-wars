@@ -672,8 +672,8 @@ object Overlays {
             (Conquest,   4, "1", "1", s"""<div class=p>Spellbook: ${reference(DGT, CosmicChaos)}</div>"""),
             (Pestilence, 1, "3", "3", s"""<div class=p>Spellbooks: ${reference(DGT, WhiteRider)}, ${reference(DGT, GodsPlague)}</div>"""),
             (War,        1, "3/6/12", "3/6/12", s"""
-                <div class=p>${cost("Cost:")} 3 Power</div>
-                <div class=p>${combat} 3 base, 6 with ${reference(DGT, RedRider)}, 12 with ${reference(DGT, GodsSword)}</div>
+                <div class=p><span class=cost-color>Cost:</span> 3 Power</div>
+                <div class=p><span class=combat-color>Combat</span> 3 base, 6 with ${reference(DGT, RedRider)}, 12 with ${reference(DGT, GodsSword)}</div>
                 <div class=p>Spellbooks: ${reference(DGT, RedRider)}, ${reference(DGT, GodsSword)}</div>"""
             ),
             (Famine,     1, "3", "3", s"""<div class=p>Spellbooks: ${reference(DGT, BlackRider)}, ${reference(DGT, GodsScale)}</div>"""),
