@@ -89,6 +89,76 @@ class GameEvaluationDGT(implicit game : Game) extends GameEvaluation(DGT)(game) 
                 case EndTurnAction(f) =>
                     f == self                                    |=> 0    -> "end turn"
 
+                case ControlGateAction(_, r, u, _) =>
+                    val currentlyOnGate = self.at(r).%(_.onGate)
+                    val isSwitch = currentlyOnGate.any && !currentlyOnGate.exists(_.ref == u)
+                    !isSwitch                                    |=> 1000 -> "control empty gate"
+                    isSwitch                                    |=> -1000000 -> "no-op swap"
+
+                case AbandonGateAction(_, r, _) =>
+                    true                                         |=> -1000000 -> "never abandon gate"
+
+                case _ =>
+                    true                                         |=> -1000 -> "unknown"
+            }
+        }
+        else {
+            implicit val battle = game.battle.get
+            val allies  = self.forces
+            val enemies = self.opponent.forces
+
+            def elim(u : UnitFigure) {
+                u.is(Acolyte)          |=> 800  -> "elim acolyte"
+                u.is(Conquest)         |=> 600  -> "elim conquest"
+                u.is(Pestilence)       |=> 400  -> "elim pestilence"
+                u.is(War)              |=> 400  -> "elim war"
+                u.is(Famine)           |=> 400  -> "elim famine"
+                u.is(Death)            |=> 400  -> "elim death"
+            }
+
+            def retreat(u : UnitFigure) {
+                u.gateKeeper           |=> -1000 -> "dont retreat gate keeper"
+                u.is(Acolyte)          |=> 800   -> "retreat acolyte"
+                u.is(Conquest)         |=> 500   -> "retreat conquest"
+                u.is(Pestilence)       |=> -500  -> "dont retreat pestilence"
+                u.is(War)              |=> -500  -> "dont retreat war"
+                u.is(Famine)           |=> -500  -> "dont retreat famine"
+                u.is(Death)            |=> -500  -> "dont retreat death"
+            }
+
+            a match {
+                case RetreatUnitAction(f, u, r) => retreat(u)
+
+                case GodsPlagueEnemyPickAction(f, ef, r, priorPicked) =>
+                    true                         |=> 0    -> "god's plague pick"
+
+                case GodsPlagueChooseDestAction(f, u, painedUnits) =>
+                    true                         |=> 0    -> "god's plague dest"
+
+                case RampageSacrificeAction(f, cultist, last) =>
+                    true                         |=> 100  -> "rampage sacrifice"
+                case RampageSkipAction(f, last) =>
+                    true                         |=> 0    -> "skip rampage"
+
+                case DistributePowerFactionAction(f, remaining, distributed) =>
+                    true                         |=> 0    -> "distribute power pick faction"
+
+                case DistributePowerAmountAction(f, target, remaining, distributed) =>
+                    remaining > 0                |=> 100  -> "distribute power amount"
+                    true                         |=> 0    -> "zero power remaining"
+
+                case DistributeDoomFactionAction(f, remaining, distributed) =>
+                    true                         |=> 0    -> "distribute doom pick faction"
+
+                case DistributeDoomAmountAction(f, target, remaining, distributed) =>
+                    remaining > 0                |=> 100  -> "distribute doom amount"
+                    true                         |=> 0    -> "zero doom remaining"
+
+                case GodsScaleMainAction(f, then) =>
+                    true                         |=> 300  -> "use god's scale"
+                case GodsScaleSkipAction(f, then) =>
+                    true                         |=> 0    -> "skip god's scale"
+
                 case _ =>
             }
         }
