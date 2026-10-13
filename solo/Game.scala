@@ -965,6 +965,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case WW => $(WWExpansion)
             case OW => $(OWExpansion)
             case AN => $(ANExpansion)
+            case DGT => $(DGTExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         options.of[NeutralMonsterOption].any.$(NeutralMonstersExpansion) ++
@@ -1453,6 +1454,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 f.oncePerTurn = $
                 f.ignorePerTurn = $
             }
+
+            // DGT per-gather-phase reset
+            if (setup.has(DGT))
+                dgtMartyrsCryDoneThisGather = false
 
             log(CthulhuWarsSolo.DoubleLine)
             log("POWER GATHER")
