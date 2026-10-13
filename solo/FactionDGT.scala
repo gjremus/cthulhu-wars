@@ -59,8 +59,7 @@ case object DGT extends Faction { f =>
 
     // Dominion is the always-on unique ability.
     override def abilities = $(Dominion)
-    override def library   = $(WhiteRider, RedRider, BlackRider, PaleRider, MartyrsCry, CosmicChaos,
-                               GodsPlague, GodsSword, GodsScale, GodsHand)
+    override def library   = $(WhiteRider, RedRider, BlackRider, PaleRider, MartyrsCry, CosmicChaos)
     override def requirements(options : $[GameOption]) =
         $(WhiteRiderReq, RedRiderReq, BlackRiderReq, PaleRiderReq, MartyrsCryReq, CosmicChaosReq)
 
