@@ -51,7 +51,7 @@ case object Precipitation extends FactionSpellbook(XSS, "Precipitation")
 
 
 // -- SPELLBOOK REQUIREMENTS (§1.9) --------------------------------------------
-case object PetrichorBattlesAloneReq extends Requirement("Petrichor Battles Alone")
+case object PetrichorBattlesAloneReq extends Requirement("Petrichor is alone (no other of your Units) in a Battle")
 case object FourGlyphFootprintReq    extends Requirement("Have Units in 4 Areas with Faction Glyphs")
 case object SeaGatesReq              extends Requirement("Control 3 Gates in Sea Areas OR Control 3 Gates in Areas with Faction Glyphs")
 case object LandGatesReq             extends Requirement("Control 3 Gates in Land Areas OR Control 3 Gates in Areas with Faction Glyphs")
