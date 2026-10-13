@@ -233,8 +233,25 @@ object DGTExpansion extends Expansion {
             UnknownContinue
 
         // ── MAIN ACTION PHASE ────────────────────────────────────────────────
+        case MainAction(f : DGT.type) if f.active.not =>
+            UnknownContinue
+
+        case MainAction(f : DGT.type) if f.acted =>
+            UnknownContinue
+
         case MainAction(f : DGT.type) =>
             implicit val asking = Asking(f)
+
+            // Standard game actions
+            game.moves(f)
+            game.captures(f)
+            game.recruits(f)
+            game.battles(f)
+            game.controls(f)
+            game.builds(f)
+            game.summons(f)
+            game.awakens(f)
+            game.independents(f)
 
             // God's Plague (White Rider back, 2 Power Action)
             if (f.has(GodsPlague) && f.power >= 2) {
@@ -256,7 +273,9 @@ object DGTExpansion extends Expansion {
                 + DistributeDoomMainAction(f)
             }
 
-            UnknownContinue
+            game.neutralSpellbooks(f)
+
+            asking
 
         // ── DISTRIBUTE POWER ─────────────────────────────────────────────────
         case DistributePowerMainAction(f) =>
