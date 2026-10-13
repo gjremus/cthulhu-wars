@@ -707,6 +707,7 @@ object Overlays {
 
         case $("DGT", MartyrsCry.name) => spellbook(MartyrsCry.name, "Gather Power Phase", "Gain 2 Power for each Tribulation Acolyte in your pool and on enemy Faction Cards.")
         case $("DGT", CosmicChaos.name) => spellbook(CosmicChaos.name, "Ongoing", "Move any number of Conquests for free when you perform a Move Action during which you spend 1 or more Power.")
+        case $("DGT", Dominion.name) => spellbook(Dominion.name, "Ongoing", "When performing the Move Action, Areas with Units you control are adjacent to each other.")
 
         case _ => ""
     }).but("")
