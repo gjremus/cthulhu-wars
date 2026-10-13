@@ -216,6 +216,12 @@ object DGTExpansion extends Expansion {
 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) = action @@ {
 
+        // ── SETUP: Starting Region placement (no special units) ──────────────
+        case StartingRegionAction(f : DGT.type, r) =>
+            // DGT places no special starting units; just log setup completion
+            f.log("started in", r)
+            UnknownContinue
+
         // ── MAIN ACTION PHASE ────────────────────────────────────────────────
         case MainAction(f : DGT.type) =>
             implicit val asking = Asking(f)
@@ -416,6 +422,18 @@ object DGTExpansion extends Expansion {
         case RampageSkipAction(self, last) =>
             // Skip Rampage, continue with PowerGatherAction
             PowerGatherAction(last)
+
+        // ── DOOM PHASE ──────────────────────────────────────────────────────
+        case DoomAction(f : DGT.type) =>
+            implicit val asking = Asking(f)
+            game.rituals(f)
+            game.reveals(f)
+            game.highPriests(f)
+            game.hires(f)
+            game.recruitsWhateley(f)
+            game.motherOfMonsters(f)
+            game.doomDone(f)
+            asking
 
         // ── GATHER POWER PHASE (Martyr's Cry) ───────────────────────────────
         case AfterPowerGatherAction if game.setup.has(DGT) && DGT.can(MartyrsCry) && !game.dgtMartyrsCryDoneThisGather =>
