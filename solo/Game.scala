@@ -4397,10 +4397,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 FB.units.exists(uf => uf.region == r && (uf.uclass == RevenantOfKnaa || uf.uclass == Ghatanothoa)))
                 fbCyclopeanGazeActionRegions :+= r
 
-            Then(MovedAction(self, u, o, r))
+            MovedAction(self, u, o, r)
 
         case MovedAction(self, u, o, r) =>
-            Then(MoveContinueAction(self, true))
+            MoveContinueAction(self, true)
 
         // Base-game fallback for the shared Chronophage offer: when the Hound (a neutral
         // monster) is not in the game, this just continues to the caller's continuation.
