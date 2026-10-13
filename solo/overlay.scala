@@ -1349,11 +1349,6 @@ object Overlays {
         case $("DC", Pilgrimage.name)  => spellbook(Pilgrimage.name,  "Action: Cost 1", "Choose a Fallen Prophet, then move any or all of your other Units from that Area to an adjacent Area for free.")
         case $("DC", DarkBargain.name) => spellbook(DarkBargain.name, "Action: Cost 0", "If Y'Golonac is in play, all enemies have 30 seconds to choose a number using a D6. You gain Sin equal to one of those numbers of your choice, then distribute an equal amount of Power as evenly as possible among all enemies. Flip this spellbook facedown until the Gather Power Phase.")
 
-        // ── TRIBULATION (DGT) — Homebrew faction overlays ─────────────────────
-        // Delegated to dgtOverlay(...) to keep the giant `info` match under the JVM
-        // 64KB method-size limit.
-        case s2 if s2.headOption.exists(_ == "DGT") => dgtOverlay(s2)
-
         // ── COLOUR OUT OF SPACE (CS) — Homebrew faction overlays ──────────────
         // Delegated to csOverlay(...) to keep the giant `info` match under the JVM
         // 64KB method-size limit.
@@ -2965,40 +2960,6 @@ object Overlays {
     // match so that method stays under the JVM 64KB method-size limit). Handles the
     // faction info card, the 6 spellbook-requirement panels, and the 8 spellbook /
     // ability info cards (verbatim from card art, §1.9 / §1.10).
-    def dgtOverlay(s : $[Any]) : String = s match {
-        case $("DGT") => dgtFactionOverlay()
-
-        case $("DGT", "Setup") => requirement("After Anubi, 8 Power, 6 Acolytes and a Controlled Gate in an empty Area not adjacent to another faction's Start Area.")
-
-        case $("DGT", WhiteRiderReq.text) => requirement("Control a Gate in an Area marked with Dragon Glyph. Add Pestilence to your Pool.")
-        case $("DGT", RedRiderReq.text) => requirement("Control a Gate in an Area marked with Thorn Glyph. Add War to your Pool.")
-        case $("DGT", BlackRiderReq.text) => requirement("Control a Gate in an Area marked with Chevron Glyph. Add Famine to your Pool.")
-        case $("DGT", PaleRiderReq.text) => requirement("A player performs a Ritual of Annihilation. Add Death to your Pool.")
-        case $("DGT", MartyrsCryReq.text) => requirement("As an Action, distribute Power equal to number of players to enemy Factions.")
-        case $("DGT", CosmicChaosReq.text) => requirement("As an Action, distribute Doom equal to number of players to enemy Factions.")
-
-        case $("DGT", WhiteRider.name) => spellbook(WhiteRider.name, "Ongoing", "Enemy Units in Pestilence's Area cannot move out and cannot retreat from that Area.")
-        case $("DGT", "Mayhem") => spellbook("Mayhem", "Once Only", "During Post-Battle, if Pestilence is present and 2 or more Pains are assigned to enemy Units, Gain 1 Elder Sign and flip this Spellbook.")
-        case $("DGT", GodsPlague.name) => spellbook(GodsPlague.name, "Action: Cost 2", "All enemy Factions with one or more Units in Pestilence's Area choose one of their Units to be Pained away. You choose the Area into which each Unit is Pained.")
-
-        case $("DGT", RedRider.name) => spellbook(RedRider.name, "Ongoing", "War now has 6 Combat.")
-        case $("DGT", "Ruin") => spellbook("Ruin", "Once Only", "During Battle, if War is present and you roll 10 or more Combat dice, Gain 1 Elder Sign and flip this Spellbook.")
-        case $("DGT", GodsSword.name) => spellbook(GodsSword.name, "Ongoing", "War now has 12 Combat.")
-
-        case $("DGT", BlackRider.name) => spellbook(BlackRider.name, "Ongoing", "In Famine's Area, ignore the presence of enemy Monsters and Terrors when you Capture an enemy Cultist.")
-        case $("DGT", "Rampage") => spellbook("Rampage", "Once Only", "During Gather Power Phase, if you Sacrifice one enemy Cultist, Gain 1 Elder Sign and flip this Spellbook.")
-        case $("DGT", GodsScale.name) => spellbook(GodsScale.name, "Ongoing", "Enemy Spellbooks are ignored in Famine's Area. After any Faction Action, each enemy Faction may choose (in response) to have you Gain 1 Elder Sign to flip this Spellbook face-down. At the end of the Doom Phase, flip it face-up.")
-
-        case $("DGT", PaleRider.name) => spellbook(PaleRider.name, "Post-Battle", "If Death is present, add 1 Kill to your results.")
-        case $("DGT", "Despair") => spellbook("Despair", "Once Only", "During Post-Battle, if Death is present and a Kill is assigned to a 3-cost or higher enemy Unit, Gain 1 Elder Sign and flip this Spellbook.")
-        case $("DGT", GodsHand.name) => spellbook(GodsHand.name, "Ongoing", "Your Units ignore Kills and Eliminations in Death's Area.")
-
-        case $("DGT", MartyrsCry.name) => spellbook(MartyrsCry.name, "Gather Power Phase", "Gain 2 Power for each Tribulation Acolyte in your pool and on enemy Faction Cards.")
-        case $("DGT", CosmicChaos.name) => spellbook(CosmicChaos.name, "Ongoing", "Move any number of Conquests for free when you perform a Move Action during which you spend 1 or more Power.")
-
-        case _ => ""
-    }
-
     // Tribulation (DGT) — faction info card. All text VERBATIM from the Tribulation
     // implementation guide / §1.5–§1.10. Do not paraphrase.
     def dgtFactionOverlay() = {
