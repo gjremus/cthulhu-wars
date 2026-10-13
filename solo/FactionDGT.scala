@@ -10,6 +10,50 @@ import html._
 // Four Horsemen theme: Pestilence, War, Famine, Death as Terrors.
 // ============================================================================
 
+// ============================================================================
+// TRIBULATION (DGT) FACTION OBJECT — DEFINED FIRST (before units/spellbooks)
+// ============================================================================
+case object DGT extends Faction { f =>
+    def name  = "Tribulation"
+    def short = "DGT"
+    def style = "dgt"
+
+    // Dominion is the always-on unique ability.
+    override def abilities = $(Dominion)
+    override def library   = $(
+        WhiteRider, RedRider, BlackRider, PaleRider, MartyrsCry, CosmicChaos,
+        Mayhem, Ruin, Rampage, Despair,
+        GodsPlague, GodsSword, GodsScale, GodsHand
+    )
+    override def requirements(options : $[GameOption]) =
+        $(WhiteRiderReq, RedRiderReq, BlackRiderReq, PaleRiderReq, MartyrsCryReq, CosmicChaosReq)
+
+    // 6 Acolytes + 4 Conquest + 1 each of the four Terrors (starts out of pool).
+    val allUnits =
+        6.times(Acolyte)    ++
+        4.times(Conquest)   ++
+        1.times(Pestilence) ++
+        1.times(War)        ++
+        1.times(Famine)     ++
+        1.times(Death)
+
+    // Standard strength calculation: cost-based combat for Monsters/Terrors, 0 for Acolytes.
+    def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
+        // Conquest and the four Terrors use their cost as combat.
+        // War has 6 Combat with Red Rider, 12 with God's Sword.
+        val warBonus = if (units.exists(_.uclass == War)) {
+            if (f.has(GodsSword)) 12 - 3  // +9 from base 3
+            else if (f.has(RedRider)) 6 - 3  // +3 from base 3
+            else 0
+        } else 0
+
+        units.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror)
+            .not(Zeroed)
+            ./(_.uclass.cost)
+            .sum + warBonus + neutralStrength(units, opponent)
+    }
+}
+
 
 // ── UNITS ───────────────────────────────────────────────────────────────────
 // DGT uses the standard Acolyte UnitClass for its 6 Acolytes.
@@ -53,51 +97,6 @@ case object BlackRiderReq  extends Requirement("Control a Gate in an Area marked
 case object PaleRiderReq   extends Requirement("A player performs a Ritual of Annihilation; Add Death to your Pool")
 case object MartyrsCryReq  extends Requirement("As an Action, distribute Power equal to number of players to enemy Factions")
 case object CosmicChaosReq extends Requirement("As an Action, distribute Doom equal to number of players to enemy Factions")
-
-
-// ============================================================================
-// TRIBULATION (DGT) FACTION OBJECT
-// ============================================================================
-case object DGT extends Faction { f =>
-    def name  = "Tribulation"
-    def short = "DGT"
-    def style = "dgt"
-
-    // Dominion is the always-on unique ability.
-    override def abilities = $(Dominion)
-    override def library   = $(
-        WhiteRider, RedRider, BlackRider, PaleRider, MartyrsCry, CosmicChaos,
-        Mayhem, Ruin, Rampage, Despair,
-        GodsPlague, GodsSword, GodsScale, GodsHand
-    )
-    override def requirements(options : $[GameOption]) =
-        $(WhiteRiderReq, RedRiderReq, BlackRiderReq, PaleRiderReq, MartyrsCryReq, CosmicChaosReq)
-
-    // 6 Acolytes + 4 Conquest + 1 each of the four Terrors (starts out of pool).
-    val allUnits =
-        6.times(Acolyte)    ++
-        4.times(Conquest)   ++
-        1.times(Pestilence) ++
-        1.times(War)        ++
-        1.times(Famine)     ++
-        1.times(Death)
-
-    // Standard strength calculation: cost-based combat for Monsters/Terrors, 0 for Acolytes.
-    def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
-        // Conquest and the four Terrors use their cost as combat.
-        // War has 6 Combat with Red Rider, 12 with God's Sword.
-        val warBonus = if (units.exists(_.uclass == War)) {
-            if (f.has(GodsSword)) 12 - 3  // +9 from base 3
-            else if (f.has(RedRider)) 6 - 3  // +3 from base 3
-            else 0
-        } else 0
-
-        units.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror)
-            .not(Zeroed)
-            ./(_.uclass.cost)
-            .sum + warBonus + neutralStrength(units, opponent)
-    }
-}
 
 
 // ============================================================================
