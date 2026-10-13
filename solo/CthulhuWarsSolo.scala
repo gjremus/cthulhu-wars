@@ -1059,6 +1059,8 @@ object CthulhuWarsSolo {
                         case DS => DrawRect("ds-acolyte", None, x - 17, y - 54, 38, 60)
                         // Bubastis (BB): acolyte unit sprite (placeholder until Task 3.9.1)
                         case BB => DrawRect("bb-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        // Tribulation (DGT): acolyte unit sprite
+                        case DGT => DrawRect("dgt-acolyte", None, x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -1120,6 +1122,8 @@ object CthulhuWarsSolo {
                         // NOT FOR THE GAME ITSELF. In-game rendering always uses the standard
                         // bb-glyph regardless of the BBAlternateSpellbooks option.
                         case BB => DrawRect("bb-glyph", |(tint), x - 50, y - 50, 100, 100)
+                        // Tribulation (DGT): faction glyph sprite
+                        case DGT => DrawRect("dgt-glyph", None, x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
                         case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
@@ -1197,6 +1201,13 @@ object CthulhuWarsSolo {
                     case CatFromSaturn => DrawRect("bb-cat-from-saturn",|(tint), x - 53, y - 140, 105, 140)
                     case CatFromUranus => DrawRect("bb-cat-from-uranus",|(tint), x - 71, y - 175, 142, 175)
                     case Bastet        => DrawRect("bb-bastet",         |(tint), x - 64, y - 210, 128, 210)
+
+                    // Tribulation (DGT): Four Horsemen units
+                    case Conquest      => DrawRect("dgt-conquest",      None, x - 17, y - 54, 39, 60)
+                    case Pestilence    => DrawRect("dgt-pestilence",    None, x - 35, y - 75, 70, 85)
+                    case War           => DrawRect("dgt-war",           None, x - 35, y - 75, 70, 85)
+                    case Famine        => DrawRect("dgt-famine",        None, x - 35, y - 75, 70, 85)
+                    case Death         => DrawRect("dgt-death",         None, x - 35, y - 75, 70, 85)
 
                     case DesecrationToken => DrawRect("ys-desecration", None, x - 20, y - 20, 41, 40)
                     case WebToken         => DrawRect("web-token", |(neutralTint), x - 31, y - 30, 62, 60)
@@ -3498,6 +3509,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             case Ghatanothoa   => "fb-ghatanothoa"
                             case ProtoShoggoth => "tt-proto-shoggoth"
                             case UbboSathla    => "tt-ubbo-sathla"
+                            // Tribulation (DGT): unit sprites (can end up on Moon via various mechanics)
+                            case Conquest      => "dgt-conquest"
+                            case Pestilence    => "dgt-pestilence"
+                            case War           => "dgt-war"
+                            case Famine        => "dgt-famine"
+                            case Death         => "dgt-death"
                             // Neutral monsters/terrors/IGOOs (can end up on Moon via Catnapping)
                             case Ghast              => "n-ghast"
                             case Gug                => "n-gug"
