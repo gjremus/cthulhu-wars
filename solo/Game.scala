@@ -5883,7 +5883,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                             val moveCost = isCosmicChaos.?(0).|(1)
                             MoveSelectAction(u.faction, u, u.region, moveCost).as(u.ref.full, "from", u.region)("Move", "another".hl, "unit", isCosmicChaos.??("(free via " + CosmicChaos.styled(DGT) + ")"))
                         })
-                        .cancel
+                        // No .cancel here (matches original HRF): after a unit has moved, Cancel
+                        // was a dead button that just re-showed this same Done / Move-another menu.
                 } else
                     Ask(self)
                         .group("Move unit")
