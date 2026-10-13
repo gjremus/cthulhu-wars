@@ -552,4 +552,59 @@ object DGTExpansion extends Expansion {
         // Future: God's Scale flip prompts could go here
     }
 
+    // ── OVERLAY INFO FUNCTION — Faction card text HTML ──────────────────────
+    // Provides formatted HTML for the faction card display showing faction name,
+    // unique ability (Dominion), core spellbooks, units, and key mechanics.
+    def overlayInfo : String = {
+        s"""
+        <div class="faction-card dgt-faction">
+            <div class="faction-header">
+                <h2 class="faction-name">${DGT.name}</h2>
+                <p class="faction-short">(${DGT.short})</p>
+            </div>
+            <div class="faction-color-indicator" style="background-color: #808080;"></div>
+            <div class="unique-ability">
+                <strong>Dominion</strong> (Ongoing):
+                When performing the Move Action, Areas with Units you control are adjacent to each other.
+            </div>
+            <div class="spellbooks-section">
+                <h3>Core Spellbooks</h3>
+                <ul>
+                    <li>${WhiteRider.name} — Pestilence theme</li>
+                    <li>${RedRider.name} — War theme</li>
+                    <li>${BlackRider.name} — Famine theme</li>
+                    <li>${PaleRider.name} — Death theme</li>
+                    <li>${MartyrsCry.name} — Power distribution</li>
+                    <li>${CosmicChaos.name} — Doom distribution</li>
+                </ul>
+            </div>
+            <div class="units-section">
+                <h3>Units</h3>
+                <ul>
+                    <li>6 Acolytes (standard cultist)</li>
+                    <li>4 Conquest (Monster, cost 1)</li>
+                    <li>Pestilence (Terror, cost 3, unlocked via ${WhiteRider.name})</li>
+                    <li>War (Terror, cost 3, unlocked via ${RedRider.name})</li>
+                    <li>Famine (Terror, cost 3, unlocked via ${BlackRider.name})</li>
+                    <li>Death (Terror, cost 3, unlocked via ${PaleRider.name})</li>
+                </ul>
+            </div>
+            <div class="mechanics-section">
+                <h3>Special Mechanics</h3>
+                <p>
+                    <strong>Four Horsemen Theme:</strong> The faction unlocks special Terror units
+                    (Pestilence, War, Famine, Death) by controlling gates in specific Glyph areas.
+                    Each rider spellbook has a dual-sided back (Mayhem, Ruin, Rampage, Despair)
+                    that flips under specific conditions.
+                </p>
+                <p>
+                    <strong>Dual-Sided Spellbooks:</strong> Front sides (Riders) remain active;
+                    back sides (God's Plagues/Swords/Scales/Hands) unlock advanced effects through
+                    battle/gate/ritual triggers.
+                </p>
+            </div>
+        </div>
+        """
+    }
+
 }
