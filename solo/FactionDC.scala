@@ -385,6 +385,7 @@ case class DCPilgrimageProphetAction(self : Faction, prophet : UnitRef)
     with PowerNeutral
 case class DCPilgrimageDestAction(self : Faction, prophet : UnitRef, dest : Region)
     extends BaseFactionAction(Pilgrimage.styled(DC) + ": move other units to", implicit g => dest.toString)
+    with PowerNeutral
 // Per-unit opt-in chain (Fix HB-77): after the destination is chosen, prompt
 // the DC player for each OTHER DC unit in the Prophet's source area. Each unit
 // gets a Move/Stay choice; Done finishes the entire Pilgrimage early.
