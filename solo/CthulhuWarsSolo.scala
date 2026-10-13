@@ -6337,7 +6337,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // Official factions (per owner) are all of the rest (includes TI).
             def getCategory(e : PickerEntry) : String = {
                 val baseFactions = Set("GC", "CC", "BG", "YS")
-                val homebrewOnlyFactions = Set("TS", "FB", "DC", "CS", "FBE", "TB")
+                val homebrewOnlyFactions = Set("TS", "FB", "DC", "CS", "FBE", "TB", "FM", "PRM", "DGT")
                 val designerBuilt = (designerAcronyms.toSet ++ fallbackDesignerAcronyms) -- baseFactions
                 val allHomebrews = homebrewOnlyFactions ++ designerBuilt
                 val isHomebrew = allHomebrews.contains(e.faction.short)
