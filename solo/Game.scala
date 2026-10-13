@@ -1000,6 +1000,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Solution for keeping track of use cases for dematerialization, for the AN bot.
     var demCaseMap : Map[Region, Int] = areas.map(r => r -> 0).toMap
 
+    // DGT-specific game state
+    var dgtGodsScaleFaceDown : Boolean = false
+    var dgtMartyrsCryDoneThisGather : Boolean = false
+
     def forNPowerWithTax(r : Region, f : Faction, n : Int) : String = { val p = n + f.taxIn(r) ; " for " + p.power }
     def for1PowerWithTax(r : Region, f : Faction) : String = { val p = 1 + f.taxIn(r) ; if (p != 1) " for " + p.power else "" }
 

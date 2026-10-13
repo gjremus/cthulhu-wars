@@ -2344,7 +2344,7 @@ object CthulhuWarsSolo {
             askTop()
         }
 
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, AN, DGT)
 
         val replay = getElem("replay").?./(_.innerHTML).|("")
 
