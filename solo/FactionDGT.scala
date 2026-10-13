@@ -36,6 +36,12 @@ case object GodsSword    extends FactionSpellbook(DGT, "God's Sword")
 case object GodsScale    extends FactionSpellbook(DGT, "God's Scale")
 case object GodsHand     extends FactionSpellbook(DGT, "God's Hand")
 
+// Dual-sided spellbook front sides (matched to their back sides)
+case object Mayhem       extends FactionSpellbook(DGT, "Mayhem")
+case object Ruin         extends FactionSpellbook(DGT, "Ruin")
+case object Rampage      extends FactionSpellbook(DGT, "Rampage")
+case object Despair      extends FactionSpellbook(DGT, "Despair")
+
 // DGT Unique Ability — Dominion (Ongoing).
 case object Dominion extends FactionSpellbook(DGT, "Dominion")
 
