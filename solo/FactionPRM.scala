@@ -709,7 +709,7 @@ object PRMExpansion extends Expansion {
             // ── END TURN ────────────────────────────────────────────────
             // Note: Mother's Aid and Speak Reality cleanup now handled in Game.scala NextPlayerAction
 
-            case _ => null
+            case _ => UnknownContinue
         }
     }
 }
