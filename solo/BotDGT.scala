@@ -156,8 +156,8 @@ class GameEvaluationDGT(implicit game : Game) extends GameEvaluation(DGT)(game) 
 
                 case GodsScaleMainAction(f, then) =>
                     true                         |=> 300  -> "use god's scale"
-                case GodsScaleSkipAction(f, then) =>
-                    true                         |=> 0    -> "skip god's scale"
+                case GodsScaleFlipAction(f, then) =>
+                    true                         |=> 300  -> "flip god's scale"
 
                 case _ =>
             }
