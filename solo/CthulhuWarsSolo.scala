@@ -1216,6 +1216,8 @@ object CthulhuWarsSolo {
                         case TB => DrawRect("tb-high-priest", None, x - 35, y - 60, 70, 67)
                         // Colour Out of Space (CS): high priest unit sprite
                         case CS => DrawRect("cs-high-priest", None, x - 34, y - 60, 69, 66)
+                        // Tribulation (DGT): high priest unit sprite
+                        case DGT => DrawRect("dgt-high-priest", None, x - 35, y - 60, 70, 66)
                         case _ => DrawRect("gc-high-priest", |(tint), x - 35, y - 60, 70, 66)
                     }
 
