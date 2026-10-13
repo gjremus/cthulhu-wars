@@ -5883,6 +5883,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                             val moveCost = isCosmicChaos.?(0).|(1)
                             MoveSelectAction(u.faction, u, u.region, moveCost).as(u.ref.full, "from", u.region)("Move", "another".hl, "unit", isCosmicChaos.??("(free via " + CosmicChaos.styled(DGT) + ")"))
                         })
+                        .cancel
                 } else
                     Ask(self)
                         .group("Move unit")
