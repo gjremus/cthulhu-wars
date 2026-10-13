@@ -1824,6 +1824,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var fbCyclopeanGazePendingSources : $[FBCyclopeanGazeSource] = $
     var fbCyclopeanGazePendingActor : |[Faction] = None
 
+    // Tribulation (DGT): track state for God's Scale flip and Martyr's Cry gather-power bonus
+    var dgtGodsScaleFaceDown : Boolean = false
+    var dgtMartyrsCryDoneThisGather : Boolean = false
+
     // Fix 30: Elder Thing passive-block movement logging.
     // Fire-once guard: (mover ref, suppressed-GOO ref, ability label) triples already logged this tick.
     var elderThingBlockGuard : $[(UnitRef, UnitRef, String)] = $
@@ -3164,6 +3168,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // inline dispatch could be skipped on re-entry; now we're past
             // raise-to-half and can safely clear it.
             TSExpansion.shepherdDoneThisGather = false
+            dgtMartyrsCryDoneThisGather = false
             factions.foreach { f =>
                 if (f.want(MaoCeremony)) {
                     f.cultists.%(u => u.region.onMap || u.region == BB.moon).some.foreach { l =>
@@ -3290,6 +3295,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             doomPhase = false
             endActionPhasePrompts = false
             fbGhatoLastMoveOrigin = None
+            dgtGodsScaleFaceDown = false
             if (doomOrder.any)
                 factions = doomOrder
 
