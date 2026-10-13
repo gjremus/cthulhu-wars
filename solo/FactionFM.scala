@@ -76,6 +76,11 @@ case class CreateScreamingWallMainAction(self : Faction)
 case class CreateScreamingWallAction(self : Faction, r : Region)
     extends BaseFactionAction(("Create " + ScreamingWall.name).styled(FM) + " in", r)
 
+case class CreateGateWithWallMainAction(self : Faction, l : $[Region])
+    extends OptionFactionAction(("Create Gate with " + ScreamingWall.name).styled(FM)) with MainQuestion with Soft
+case class CreateGateWithWallAction(self : Faction, r : Region)
+    extends BaseFactionAction(("Create Gate with " + ScreamingWall.name).styled(FM) + " in", r)
+
 case class CrumblingYawpMainAction(self : Faction)
     extends OptionFactionAction(CrumblingYawp.styled(FM)) with DoomQuestion with Soft
 case class CrumblingYawpSkipAction(self : Faction)
@@ -311,6 +316,12 @@ object FMExpansion extends Expansion {
             if (f.power >= 3 && wallAreas.any)
                 + CreateScreamingWallMainAction(f)
 
+            val gateWallAreas = game.board.regions.nex.filter { r =>
+                !game.gates.contains(r) && !hasScreamingWall(r) && f.at(r).%(_.canControlGate).any
+            }.%(r => f.affords(4)(r))
+            if (f.power >= 4 && f.pool.%(_.uclass == ScreamingWall).any && gateWallAreas.any)
+                + CreateGateWithWallMainAction(f, gateWallAreas)
+
             if (f.can(MannedBattlements) && f.power >= 1) {
                 val sourceAreas = game.board.regions.filter(r => hasScreamingWall(r) && f.at(r).any)
                 if (sourceAreas.any)
@@ -342,6 +353,18 @@ object FMExpansion extends Expansion {
             val wall = self.pool.%(_.uclass == ScreamingWall).head
             self.place(ScreamingWall, r)
             self.log("created", ScreamingWall.styled(FM), "in", r)
+            Then(MainAction(self))
+
+        case CreateGateWithWallMainAction(self, locations) =>
+            Ask(self).each(locations)(r => CreateGateWithWallAction(self, r)).cancel
+
+        case CreateGateWithWallAction(self, r) =>
+            self.power -= 4
+            self.doom += 1
+            game.gates :+= r
+            val wall = self.pool.%(_.uclass == ScreamingWall).head
+            self.place(ScreamingWall, r)
+            self.log("created a gate with", ScreamingWall.styled(FM), "in", r)
             Then(MainAction(self))
 
         case MannedBattlementsMainAction(self) =>
@@ -396,14 +419,6 @@ object FMExpansion extends Expansion {
             f.doom += 1
             game.gates :+= r
             f.log("built a gate in", r)
-
-            if (f.power >= 1 && f.pool.%(_.uclass == ScreamingWall).any) {
-                f.power -= 1
-                val wall = f.pool.%(_.uclass == ScreamingWall).head
-                f.place(ScreamingWall, r)
-                f.log("also placed", ScreamingWall.styled(FM), "in", r)
-            }
-
             Then(MainAction(f))
 
         case TendonFlayingMainAction(self, stitchers) =>

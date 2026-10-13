@@ -627,7 +627,7 @@ object Overlays {
             (MuscleStitcher, 3, "2", "2", s"""<div class=p>Spellbook: ${reference(FM, TendonFlaying)}</div>"""),
             (BodyArchitect,  3, "3", "3", s"""<div class=p>Spellbook: ${reference(FM, BlueprintsInBlood)}</div>"""),
             (ScreamingWall,  6, "2", "—", s"""
-                <div class=p>You may use the Create Gate Action to Create Screaming Walls instead of Gates (3 Power). Whenever you Create a Gate, also place a Screaming Wall by paying 1 additional Power.</div>
+                <div class=p>You may use the Create Gate Action to Create Screaming Walls instead of Gates (3 Power). You may also perform a joint Create Gate with Screaming Wall Action (4 Power) in an Area that lacks both a Gate and a Screaming Wall.</div>
                 <div class=p>Spellbooks: ${reference(FM, TerrifyingShriek)}, ${reference(FM, CrumblingYawp)}, ${reference(FM, MannedBattlements)}, ${reference(FM, HymnOfSuffering)}</div>
                 <div class=p><strong>Spiteful Chisel</strong> ${cost("(Post-Battle):")} If there are no Screaming Walls in your Pool and an enemy Great Old One was assigned a Result, return one of your Captured Acolytes from their Faction Card to the Battle Area.</div>""")
         ))
