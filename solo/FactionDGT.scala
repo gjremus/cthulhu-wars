@@ -274,6 +274,10 @@ object DGTExpansion extends Expansion {
             }
 
             game.neutralSpellbooks(f)
+            game.highPriests(f)
+            game.reveals(f)
+
+            game.endTurn(f)(f.battled.any)
 
             asking
 
