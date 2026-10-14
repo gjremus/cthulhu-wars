@@ -280,14 +280,15 @@ object FMExpansion extends Expansion {
 
         case HymnOfSufferingAreaAction(self, r) =>
             val wall = self.at(r).%(_.uclass == ScreamingWall).head
-            game.eliminate(wall)
             val adjacent = game.board.connected(r).count(hasScreamingWall)
+            // Log BEFORE eliminate (P5 pattern compliance)
             if (adjacent > 0) {
-                self.power += adjacent
                 self.log(HymnOfSuffering.styled(FM) + ": removed Wall in", r, ", gained", adjacent.power)
+                self.power += adjacent
             } else {
                 self.log(HymnOfSuffering.styled(FM) + ": removed Wall in", r, "(no adjacent Walls)")
             }
+            game.eliminate(wall)
             self.oncePerAction :+= HymnOfSuffering
             Force(AfterPowerGatherAction)
 

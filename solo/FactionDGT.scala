@@ -18,12 +18,13 @@ case object DGT extends Faction { f =>
     def short = "DGT"
     def style = "dgt"
 
-    // Dominion is the always-on unique ability.
+    // Dominion is the always-on unique ability (only spellbook available at game start).
     override def abilities = $(Dominion)
-    override def library   = $(
-        WhiteRider, RedRider, BlackRider, PaleRider, MartyrsCry, CosmicChaos,
-        Mayhem, Ruin, Rampage, Despair
-    )
+    // CRITICAL: The 6 earnable spellbooks. Mayhem/Ruin/Rampage/Despair are NOT separate
+    // spellbooks - they're the DUAL POWER NAMES on the Rider spellbooks (earned together
+    // with their Rider). GodsPlague/GodsSword/GodsScale/GodsHand are BACK SIDES that
+    // replace the Riders when flipped (via flipSpellbook() helper).
+    override def library   = $(WhiteRider, RedRider, BlackRider, PaleRider, MartyrsCry, CosmicChaos)
     override def requirements(options : $[GameOption]) =
         $(WhiteRiderReq, RedRiderReq, BlackRiderReq, PaleRiderReq, MartyrsCryReq, CosmicChaosReq)
 
