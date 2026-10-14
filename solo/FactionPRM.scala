@@ -706,6 +706,72 @@ object PRMExpansion extends Expansion {
                 enemy.log("Controlling", Ycgnagnnisssz.styled(PRM), "this turn (moves cost 0, protected from combat/elimination)")
                 Then(EndAction(enemy))
 
+            // ── MAIN ACTION ──────────────────────────────────────────────
+            // MAIN ACTION — the engine has NO generic active-player action menu; each faction's
+            // expansion assembles its own. Defer the passive/acted cases to Game's own handlers
+            // (UnknownContinue), and build the standard action menu for PRM's own turn. PRM-specific
+            // spellbook actions are appended alongside the stock builders. Without this, MainAction(PRM)
+            // matches nothing and the game crashes on PRM's first turn.
+            case MainAction(f : PRM.type) if f.active.not =>
+                UnknownContinue
+
+            case MainAction(f : PRM.type) if f.acted =>
+                UnknownContinue
+
+            case MainAction(f : PRM.type) =>
+                implicit val asking = Asking(f)
+
+                game.moves(f)
+                game.recruits(f)
+                game.battles(f)
+                game.captures(f)
+                game.builds(f)
+                game.summons(f)
+                game.awakens(f)
+                game.independents(f)
+
+                // PRM spellbook actions
+                // Ycgna awaken (custom, offered from main menu, not standard awakens())
+                if (f.pool(Ycgnagnnisssz).any)
+                    + YcgnaAwakenMainAction(f)
+
+                // Atomic Unity: eliminate a monster to gain power
+                if (f.can(AtomicUnity) && f.allInPlay.%(_.uclass.utype == Monster).any && f.power >= 1)
+                    + AtomicUnityMainAction(f)
+
+                // Eldritch Love: gain ES if 2+ face-down spellbooks, flip this spellbook
+                if (f.can(EldritchLove) && f.power >= 1)
+                    + EldritchLoveAction(f)
+
+                // Osmosis: distribute units in adjacent areas
+                if (f.can(Osmosis) && f.power >= 2)
+                    + OsmosisMainAction(f)
+
+                // Protogenesis: place lowest-cost monster
+                if (f.can(Protogenesis) && f.power >= 2 && f.pool.%(_.uclass.utype == Monster).any)
+                    + ProtogenesisMainAction(f)
+
+                // Speak Reality: spend power to command an enemy
+                if (f.can(SpeakReality) && f.goo(Ycgnagnnisssz).region != null)
+                    + SpeakRealityMainAction(f)
+
+                // Zealous Spark: move any monster (costs 1 doom)
+                if (f.can(ZealousSpark) && f.doom >= 1)
+                    + ZealousSparkMainAction(f)
+
+                // Pay 2 Doom and Flip Spellbook (requirement action)
+                if (f.needs(Pay2DoomFlipSpellbookReq) && f.doom >= 2)
+                    + Pay2DoomFlipSpellbookMainAction(f)
+
+                game.neutralSpellbooks(f)
+                game.libraryActions(f)
+                game.highPriests(f)
+                game.reveals(f)
+
+                game.endTurn(f)(f.battled.any || game.nexed.any)
+
+                asking
+
             // ── END TURN ────────────────────────────────────────────────
             // Note: Mother's Aid and Speak Reality cleanup now handled in Game.scala NextPlayerAction
 

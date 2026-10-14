@@ -22,8 +22,7 @@ case object DGT extends Faction { f =>
     override def abilities = $(Dominion)
     override def library   = $(
         WhiteRider, RedRider, BlackRider, PaleRider, MartyrsCry, CosmicChaos,
-        Mayhem, Ruin, Rampage, Despair,
-        GodsPlague, GodsSword, GodsScale, GodsHand
+        Mayhem, Ruin, Rampage, Despair
     )
     override def requirements(options : $[GameOption]) =
         $(WhiteRiderReq, RedRiderReq, BlackRiderReq, PaleRiderReq, MartyrsCryReq, CosmicChaosReq)
