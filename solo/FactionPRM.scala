@@ -302,9 +302,9 @@ object PRMExpansion extends Expansion {
 
                 implicit val asking = Asking(PRM)
                 if (emptySeaAreas.any)
-                    Ask(PRM, emptySeaAreas./(r => StartingRegionAction(PRM, r)))
+                    Ask(PRM, emptySeaAreas./(r => StartingRegionAction(PRM, r).as(r)(PRM, "starts in")))
                 else
-                    Ask(PRM, seaAreas.%(r => !otherStarts.contains(r))./(r => StartingRegionAction(PRM, r)))
+                    Ask(PRM, seaAreas.%(r => !otherStarts.contains(r))./(r => StartingRegionAction(PRM, r).as(r)(PRM, "starts in")))
 
             // ── YCGN'ÀGNNISSSZ AWAKEN ──────────────────────────────────
             case YcgnaAwakenMainAction(f) =>
@@ -624,13 +624,24 @@ object PRMExpansion extends Expansion {
 
             // ── DOOM PHASE ──────────────────────────────────────────────
             case DoomAction(f : PRM.type) =>
+                implicit val asking = Asking(f)
+
                 // Restore flipped-down spellbooks at start of Doom Phase
                 game.prmFlippedDownSpellbooks.foreach { sb =>
                     f.oncePerAction = f.oncePerAction.but(sb)
                     f.log(sb.styled(f), "restored (Face Up)")
                 }
                 game.prmFlippedDownSpellbooks = $()
-                Force(DoomAction(f))
+
+                game.rituals(f)
+                game.reveals(f)
+                game.highPriests(f)
+                game.hires(f)
+                game.recruitsWhateley(f)
+                game.motherOfMonsters(f)
+                game.doomDone(f)
+
+                asking
 
             // ── MAKE AS ONE ─────────────────────────────────────────────
             case MakeAsOneOfferAction(self, enemy, eligibleSBs) =>
