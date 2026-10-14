@@ -443,8 +443,9 @@ object DGTExpansion extends Expansion {
             // The sacrificed cultist already contributed to DGT's power during the Gather Power
             // calculations (at line ~4059), so no extra power is gained here.
             // Return cultist to owner's pool using eliminate() (the proper way to return captured cultists)
-            game.eliminate(unitFig)
+            // Log BEFORE eliminate to avoid None.get crash (Pattern #1: eliminate-then-log)
             self.log(BlackRider.styled(DGT) + " (Rampage): sacrificed", originalOwner.name + "'s", unitFig.uclass.styled(originalOwner))
+            game.eliminate(unitFig)
             // Flip Black Rider to God's Scale and gain 1 ES
             DGTExpansion.flipSpellbook(DGT, BlackRider, GodsScale, "Rampage")
             // Continue with PowerGatherAction so the release loop handles the rest of the captives
