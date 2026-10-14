@@ -30,26 +30,27 @@ case object DGT extends Faction { f =>
 
     // 6 Acolytes + 4 Conquest + 1 each of the four Terrors (starts out of pool).
     val allUnits =
-        6.times(Acolyte)    ++
-        4.times(Conquest)   ++
-        1.times(Pestilence) ++
-        1.times(War)        ++
-        1.times(Famine)     ++
-        1.times(Death)
+        DGTValues.Acolyte_count.times(Acolyte)       ++
+        DGTValues.Conquest_count.times(Conquest)     ++
+        DGTValues.Pestilence_count.times(Pestilence) ++
+        DGTValues.War_count.times(War)               ++
+        DGTValues.Famine_count.times(Famine)         ++
+        DGTValues.Death_count.times(Death)
 
     // Standard strength calculation: cost-based combat for Monsters/Terrors, 0 for Acolytes.
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
         // Conquest and the four Terrors use their cost as combat.
         // War has 6 Combat with Red Rider, 12 with God's Sword.
         val warBonus = if (units.exists(_.uclass == War)) {
-            if (f.has(GodsSword)) 12 - 3  // +9 from base 3
-            else if (f.has(RedRider)) 6 - 3  // +3 from base 3
+            // Numbers from DGTValues (faction-values/dgt.json)
+            if (f.has(GodsSword)) DGTValues.War_combatGodsSword - DGTValues.War_combat
+            else if (f.has(RedRider)) DGTValues.War_combatRedRider - DGTValues.War_combat
             else 0
         } else 0
 
         units.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror)
             .not(Zeroed)
-            ./(_.uclass.cost)
+            ./(u => DGTExpansion.combatOf(u.uclass))
             .sum + warBonus + neutralStrength(units, opponent)
     }
 }
@@ -59,11 +60,11 @@ case object DGT extends Faction { f =>
 // DGT uses the standard Acolyte UnitClass for its 6 Acolytes.
 // Conquest: Monster cost 1, combat 1, pool 4.
 // Pestilence, War, Famine, Death: Terrors cost 3, combat 3 each, pool 1 each.
-case object Conquest   extends FactionUnitClass(DGT, "Conquest",   Monster, 1)
-case object Pestilence extends FactionUnitClass(DGT, "Pestilence", Terror,  3)
-case object War        extends FactionUnitClass(DGT, "War",        Terror,  3)
-case object Famine     extends FactionUnitClass(DGT, "Famine",     Terror,  3)
-case object Death      extends FactionUnitClass(DGT, "Death",      Terror,  3)
+case object Conquest   extends FactionUnitClass(DGT, "Conquest",   Monster, DGTValues.Conquest_cost)
+case object Pestilence extends FactionUnitClass(DGT, "Pestilence", Terror,  DGTValues.Pestilence_cost)
+case object War        extends FactionUnitClass(DGT, "War",        Terror,  DGTValues.War_cost)
+case object Famine     extends FactionUnitClass(DGT, "Famine",     Terror,  DGTValues.Famine_cost)
+case object Death      extends FactionUnitClass(DGT, "Death",      Terror,  DGTValues.Death_cost)
 
 
 // ── SPELLBOOKS ──────────────────────────────────────────────────────────────
@@ -151,7 +152,7 @@ case class DistributeDoomCancelAction(self : Faction)
 
 // ── GOD'S PLAGUE (Action, White Rider back side) ────────────────────────────
 case class GodsPlagueMainAction(self : Faction)
-    extends BaseFactionAction(GodsPlague.styled(DGT), "Use ability (2 Power)") with MainQuestion {
+    extends BaseFactionAction(GodsPlague.styled(DGT), "Use ability (" + DGTValues.GodsPlague_cost + " Power)") with MainQuestion {
     override def question(implicit game : Game) = GodsPlague.styled(DGT)
 }
 
@@ -200,11 +201,11 @@ case class GodsScalePromptAction(self : Faction, then : ForcedAction)
 case class GodsScaleMainAction(self : Faction, then : ForcedAction)
     extends OptionFactionAction(implicit g => "Flip " + GodsScale.styled(DGT) + " face-down") with MainQuestion with Soft with OutOfTurn {
     override def question(implicit game : Game) =
-        GodsScale.styled(DGT) + ": flip face-down for " + DGT.name + " to gain 1 Elder Sign?"
+        GodsScale.styled(DGT) + ": flip face-down for " + DGT.name + " to gain " + DGTValues.GodsScale_elderSigns + " Elder Sign" + (DGTValues.GodsScale_elderSigns != 1).??("s") + "?"
 }
 
 case class GodsScaleFlipAction(self : Faction, then : ForcedAction)
-    extends BaseFactionAction(implicit g => "Flip " + GodsScale.styled(DGT) + " face-down", implicit g => DGT.name + " gains " + 1.es)
+    extends BaseFactionAction(implicit g => "Flip " + GodsScale.styled(DGT) + " face-down", implicit g => DGT.name + " gains " + DGTValues.GodsScale_elderSigns.es)
 
 
 // ============================================================================
@@ -212,14 +213,25 @@ case class GodsScaleFlipAction(self : Faction, then : ForcedAction)
 // ============================================================================
 object DGTExpansion extends Expansion {
 
+    // Base combat dice per unit type, from DGTValues (faction-values/dgt.json).
+    // War's Red Rider / God's Sword bonus is added separately in DGT.strength.
+    def combatOf(uc : UnitClass) : Int = uc match {
+        case Conquest   => DGTValues.Conquest_combat
+        case Pestilence => DGTValues.Pestilence_combat
+        case War        => DGTValues.War_combat
+        case Famine     => DGTValues.Famine_combat
+        case Death      => DGTValues.Death_combat
+        case other      => other.cost
+    }
+
     // Helper: flip a dual-sided spellbook and gain 1 Elder Sign
     def flipSpellbook(f : Faction, front : Spellbook, back : Spellbook, triggerName : String)(implicit game : Game) {
         if (f.has(front) && !f.has(back) && !f.oncePerGame.has(back)) {
             f.spellbooks = f.spellbooks.but(front)
             f.spellbooks = f.spellbooks :+ back
             f.oncePerGame :+= back  // Mark as flipped (once only)
-            f.takeES(1)
-            f.log(triggerName.styled(DGT) + ": flipped", front.styled(DGT), "to", back.styled(DGT), "and gained", 1.es)
+            f.takeES(DGTValues.RiderFlip_elderSigns)
+            f.log(triggerName.styled(DGT) + ": flipped", front.styled(DGT), "to", back.styled(DGT), "and gained", DGTValues.RiderFlip_elderSigns.es)
         }
     }
 
@@ -253,7 +265,7 @@ object DGTExpansion extends Expansion {
             game.independents(f)
 
             // God's Plague (White Rider back, 2 Power Action)
-            if (f.has(GodsPlague) && f.power >= 2) {
+            if (f.has(GodsPlague) && f.power >= DGTValues.GodsPlague_cost) {
                 val pestilenceArea = f.units.%(_.uclass == Pestilence)./(_.region).headOption
                 pestilenceArea.foreach { r =>
                     if (f.enemies.exists(e => e.at(r).any)) {
@@ -342,7 +354,7 @@ object DGTExpansion extends Expansion {
 
         // ── GOD'S PLAGUE ─────────────────────────────────────────────────────────
         case GodsPlagueMainAction(f) =>
-            f.power -= 2
+            f.power -= DGTValues.GodsPlague_cost
             val pestilenceArea = f.units.%(_.uclass == Pestilence)./(_.region).headOption
             pestilenceArea match {
                 case Some(r) =>
@@ -417,9 +429,9 @@ object DGTExpansion extends Expansion {
 
         case GodsScaleFlipAction(self, then) =>
             // Flip God's Scale face-down and give DGT 1 ES
-            DGT.takeES(1)
+            DGT.takeES(DGTValues.GodsScale_elderSigns)
             game.dgtGodsScaleFaceDown = true
-            self.log("flipped", GodsScale.styled(DGT), "face-down,", DGT.name, "gained", 1.es)
+            self.log("flipped", GodsScale.styled(DGT), "face-down,", DGT.name, "gained", DGTValues.GodsScale_elderSigns.es)
             // Mark that this enemy has reacted (same as Devolve pattern)
             self.oncePerAction :+= GodsScale
             Then(then)
@@ -480,7 +492,7 @@ object DGTExpansion extends Expansion {
             ).num
             val total = acolytesInPool + acolytesCaptured
             if (total > 0) {
-                val powerGained = total * 2
+                val powerGained = total * DGTValues.MartyrsCry_powerPerAcolyte
                 DGT.power += powerGained
                 val breakdown = if (acolytesInPool > 0 && acolytesCaptured > 0)
                     " (" + acolytesInPool + " in pool, " + acolytesCaptured + " captured)"

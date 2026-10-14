@@ -2858,8 +2858,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // PRM: Control 2 Gates in Land Areas
         if (factions.has(PRM) && self == PRM) {
             val landGates = PRM.gates.%(r => !r.glyph.is[Ocean.type])
-            if (landGates.num >= 2)
-                PRM.satisfy(Control2LandGatesReq, "Control 2 Gates in Land Areas")
+            if (landGates.num >= PRMValues.Control2LandGatesReq_gates)
+                PRM.satisfy(Control2LandGatesReq, Control2LandGatesReq.text)
         }
     }
 
@@ -4809,8 +4809,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             // PRM: Another Faction has 3 or more Spellbooks
             if (factions.has(PRM) && f != PRM) {
-                if (f.spellbooks.num >= 3)
-                    PRM.satisfy(EnemyHas3SpellbooksReq, "Another Faction has 3 or more Spellbooks")
+                if (f.spellbooks.num >= PRMValues.EnemyHas3SpellbooksReq_spellbooks)
+                    PRM.satisfy(EnemyHas3SpellbooksReq, "Another Faction has " + PRMValues.EnemyHas3SpellbooksReq_spellbooks + " or more Spellbooks")
             }
 
             f.ignorePerInstant = $

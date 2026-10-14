@@ -12,10 +12,10 @@ import html._
 
 
 // ── UNITS ───────────────────────────────────────────────────────────────────
-case object BoneSculptor   extends FactionUnitClass(FM, "Bone Sculptor",   Monster,  1)
-case object MuscleStitcher extends FactionUnitClass(FM, "Muscle Stitcher", Monster,  2)
-case object BodyArchitect  extends FactionUnitClass(FM, "Body Architect",  Terror,   3)
-case object ScreamingWall  extends FactionUnitClass(FM, "Screaming Wall",  Building, 2)
+case object BoneSculptor   extends FactionUnitClass(FM, "Bone Sculptor",   Monster,  FMValues.BoneSculptor_cost)
+case object MuscleStitcher extends FactionUnitClass(FM, "Muscle Stitcher", Monster,  FMValues.MuscleStitcher_cost)
+case object BodyArchitect  extends FactionUnitClass(FM, "Body Architect",  Terror,   FMValues.BodyArchitect_cost)
+case object ScreamingWall  extends FactionUnitClass(FM, "Screaming Wall",  Building, FMValues.ScreamingWall_cost)
 
 
 // ── SPELLBOOKS ──────────────────────────────────────────────────────────────
@@ -33,13 +33,14 @@ case object FrenzyingAdze     extends FactionSpellbook(FM, "Frenzying Adze")
 case object SpitefulChisel extends FactionSpellbook(FM, "Spiteful Chisel")
 
 
-// ── SPELLBOOK REQUIREMENTS ──────────────────────────────────────────────────
-case object CrumblingYawpReq     extends Requirement("Roll 9 or more dice in a single Combat")
-case object HymnOfSufferingReq   extends Requirement("Your Units in play have 12 or more Combat")
-case object TerrifyingShriekReq  extends Requirement("The Screaming Wall is in Areas with 2 of the 3 Glyph types")
-case object TendonFlayingReq     extends Requirement("As an Action, Pay 6 Power, minus the number of Screaming Walls in play")
-case object BlueprintsInBloodReq extends Requirement("Have 3 Screaming Walls in Play")
-case object MannedBattlementsReq extends Requirement("Have 6 Screaming Walls in Play")
+// ── SPELLBOOK REQUIREMENTS ──
+// Every number below comes from FMValues (solo/faction-values/fm.json) - change it there.────────────────────────────────────────────────
+case object CrumblingYawpReq     extends Requirement("Roll " + FMValues.CrumblingYawpReq_dice + " or more dice in a single Combat")
+case object HymnOfSufferingReq   extends Requirement("Your Units in play have " + FMValues.HymnOfSufferingReq_combat + " or more Combat")
+case object TerrifyingShriekReq  extends Requirement("The Screaming Wall is in Areas with " + FMValues.TerrifyingShriekReq_glyphs + " of the 3 Glyph types")
+case object TendonFlayingReq     extends Requirement("As an Action, Pay " + FMValues.TendonFlayingReq_power + " Power, minus the number of Screaming Walls in play")
+case object BlueprintsInBloodReq extends Requirement("Have " + FMValues.BlueprintsInBloodReq_walls + " Screaming Walls in Play")
+case object MannedBattlementsReq extends Requirement("Have " + FMValues.MannedBattlementsReq_walls + " Screaming Walls in Play")
 
 
 // ============================================================================
@@ -56,14 +57,14 @@ case object FM extends Faction { f =>
         $(CrumblingYawpReq, HymnOfSufferingReq, TerrifyingShriekReq, TendonFlayingReq, BlueprintsInBloodReq, MannedBattlementsReq)
 
     val allUnits =
-        6.times(Acolyte)         ++
-        3.times(BoneSculptor)    ++
-        3.times(MuscleStitcher)  ++
-        3.times(BodyArchitect)   ++
-        6.times(ScreamingWall)
+        FMValues.Acolyte_count.times(Acolyte)                ++
+        FMValues.BoneSculptor_count.times(BoneSculptor)      ++
+        FMValues.MuscleStitcher_count.times(MuscleStitcher)  ++
+        FMValues.BodyArchitect_count.times(BodyArchitect)    ++
+        FMValues.ScreamingWall_count.times(ScreamingWall)
 
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
-        units.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror).not(Zeroed)./(_.uclass.cost).sum +
+        units.%(u => u.uclass.utype == Monster || u.uclass.utype == Terror).not(Zeroed)./(u => FMExpansion.combatOf(u.uclass)).sum +
         neutralStrength(units, opponent) +
         FMExpansion.strengthBonus(units, opponent)
     }
@@ -87,12 +88,12 @@ case class CrumblingYawpSkipAction(self : Faction)
     extends OptionFactionAction(("Skip " + CrumblingYawp.name).styled(FM)) with DoomQuestion with Soft
 case class CrumblingYawpOption1Action(self : Faction)
     extends OptionFactionAction(implicit g => {
-        val count = g.board.regions.count(r => g.gates.contains(r) && g.factions.find(_.gates.has(r)).exists(_ != FM) && FMExpansion.hasScreamingWall(r)(g))
+        val count = g.board.regions.count(r => g.gates.contains(r) && g.factions.find(_.gates.has(r)).exists(_ != FM) && FMExpansion.hasScreamingWall(r)(g)) * FMValues.CrumblingYawp_powerPerArea
         CrumblingYawp.styled(FM) + ": Gain " + count + " Power"
     }) { def question(implicit game : Game) = CrumblingYawp.styled(FM) }
 case class CrumblingYawpOption2Action(self : Faction)
     extends OptionFactionAction(implicit g => {
-        val es = FMExpansion.screamingWallsInPlay / 3
+        val es = FMExpansion.screamingWallsInPlay / FMValues.CrumblingYawp_wallsPerSign
         CrumblingYawp.styled(FM) + ": Gain " + es + " Elder Sign" + (es != 1).??("s")
     }) { def question(implicit game : Game) = CrumblingYawp.styled(FM) }
 
@@ -106,7 +107,7 @@ case class HymnOfSufferingSkipAction(self : Faction)
 }
 case class HymnOfSufferingAreaAction(self : Faction, r : Region)
     extends BaseFactionAction(HymnOfSuffering.styled(FM), implicit g => {
-        val adj = g.board.connected(r).count(FMExpansion.hasScreamingWall)
+        val adj = g.board.connected(r).count(FMExpansion.hasScreamingWall) * FMValues.HymnOfSuffering_powerPerArea
         g.desc(r) + " (+" + adj + " Power)"
     })
 
@@ -122,11 +123,11 @@ case class TendonFlayingChoiceAction(self : Faction, stitcher : UnitRef, remaini
     override def question(implicit game : Game) = TendonFlaying.styled(FM)
 }
 case class TendonFlayingOption1Action(self : Faction, stitcher : UnitRef, remaining : $[UnitRef], availableOptions : $[Int])
-    extends OptionFactionAction("Gain 1 Power (option 1)") with PowerNeutral { def question(implicit game : Game) = TendonFlaying.styled(FM) }
+    extends OptionFactionAction("Gain " + FMValues.TendonFlaying_option1Power + " Power (option 1)") with PowerNeutral { def question(implicit game : Game) = TendonFlaying.styled(FM) }
 case class TendonFlayingOption2Action(self : Faction, stitcher : UnitRef, remaining : $[UnitRef], availableOptions : $[Int])
-    extends OptionFactionAction("Gain 1 Power (option 2)") with PowerNeutral { def question(implicit game : Game) = TendonFlaying.styled(FM) }
+    extends OptionFactionAction("Gain " + FMValues.TendonFlaying_option2Power + " Power (option 2)") with PowerNeutral { def question(implicit game : Game) = TendonFlaying.styled(FM) }
 case class TendonFlayingOption3Action(self : Faction, stitcher : UnitRef, remaining : $[UnitRef], availableOptions : $[Int])
-    extends OptionFactionAction("Gain 1 Doom") with PowerNeutral { def question(implicit game : Game) = TendonFlaying.styled(FM) }
+    extends OptionFactionAction("Gain " + FMValues.TendonFlaying_option3Doom + " Doom") with PowerNeutral { def question(implicit game : Game) = TendonFlaying.styled(FM) }
 
 case class MannedBattlementsMainAction(self : Faction)
     extends OptionFactionAction(MannedBattlements.styled(FM)) with MainQuestion with Soft
@@ -165,6 +166,15 @@ case class TendonFlayingReqMainAction(self : Faction, cost : Int)
 // ============================================================================
 object FMExpansion extends Expansion {
 
+    // Combat dice per unit type. Read from FMValues (faction-values/fm.json) so combat
+    // can be changed separately from cost. Defaults equal the old cost-as-combat rule.
+    def combatOf(uc : UnitClass) : Int = uc match {
+        case BoneSculptor   => FMValues.BoneSculptor_combat
+        case MuscleStitcher => FMValues.MuscleStitcher_combat
+        case BodyArchitect  => FMValues.BodyArchitect_combat
+        case other          => other.cost
+    }
+
     def screamingWallsInPlay(implicit game : Game) : Int =
         FM.units.count(u => u.uclass == ScreamingWall && u.region.onMap)
 
@@ -187,7 +197,7 @@ object FMExpansion extends Expansion {
     def onRoll(dice : Int)(implicit game : Game) {
         if (!game.setup.has(FM)) return
         game.battle.foreach { b =>
-            if ((b.attacker == FM || b.defender == FM) && dice >= 9 && FM.needs(CrumblingYawpReq))
+            if ((b.attacker == FM || b.defender == FM) && dice >= FMValues.CrumblingYawpReq_dice && FM.needs(CrumblingYawpReq))
                 FM.satisfy(CrumblingYawpReq, CrumblingYawpReq.text)
         }
     }
@@ -196,23 +206,26 @@ object FMExpansion extends Expansion {
         if (!game.setup.has(FM)) return
         val f = FM
 
-        val totalCombat = f.units.filter(_.region.onMap).filter(u => u.uclass.utype == Monster || u.uclass.utype == Terror)./(_.uclass.cost).sum
-        f.satisfyIf(HymnOfSufferingReq, HymnOfSufferingReq.text, totalCombat >= 12)
+        val totalCombat = f.units.filter(_.region.onMap).filter(u => u.uclass.utype == Monster || u.uclass.utype == Terror)./(u => combatOf(u.uclass)).sum
+        f.satisfyIf(HymnOfSufferingReq, HymnOfSufferingReq.text, totalCombat >= FMValues.HymnOfSufferingReq_combat)
 
         val wallRegions = FM.units.filter(u => u.uclass == ScreamingWall && u.region.onMap).map(_.region)
         val distinctGlyphs = wallRegions.map(_.glyph).%(g => g == GlyphAA || g == GlyphOO || g == GlyphWW).distinct
-        f.satisfyIf(TerrifyingShriekReq, TerrifyingShriekReq.text, distinctGlyphs.num >= 2)
+        f.satisfyIf(TerrifyingShriekReq, TerrifyingShriekReq.text, distinctGlyphs.num >= FMValues.TerrifyingShriekReq_glyphs)
 
-        f.satisfyIf(BlueprintsInBloodReq, BlueprintsInBloodReq.text, screamingWallsInPlay >= 3)
-        f.satisfyIf(MannedBattlementsReq, MannedBattlementsReq.text, screamingWallsInPlay >= 6)
+        f.satisfyIf(BlueprintsInBloodReq, BlueprintsInBloodReq.text, screamingWallsInPlay >= FMValues.BlueprintsInBloodReq_walls)
+        f.satisfyIf(MannedBattlementsReq, MannedBattlementsReq.text, screamingWallsInPlay >= FMValues.MannedBattlementsReq_walls)
     }
 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) = action @@ {
 
         case StartingRegionAction(f : FM.type, r) =>
-            val wall = f.pool.%(_.uclass == ScreamingWall).head
-            f.place(ScreamingWall, r)
-            f.log("placed", ScreamingWall.styled(FM), "in", r, "(setup)")
+            (1 to FMValues.ScreamingWall_setupCount).foreach { _ =>
+                if (f.pool.%(_.uclass == ScreamingWall).any) {
+                    f.place(ScreamingWall, r)
+                    f.log("placed", ScreamingWall.styled(FM), "in", r, "(setup)")
+                }
+            }
             UnknownContinue
 
         case DoomAction(f : FM.type) =>
@@ -237,7 +250,7 @@ object FMExpansion extends Expansion {
 
         case CrumblingYawpOption1Action(self) =>
             val areas = game.board.regions.filter(r => game.gates.contains(r) && game.factions.find(_.gates.has(r)).exists(_ != FM) && hasScreamingWall(r))
-            val power = areas.num
+            val power = areas.num * FMValues.CrumblingYawp_powerPerArea
             if (power > 0) {
                 self.power += power
                 self.log(CrumblingYawp.styled(FM) + ": gained", power.power)
@@ -249,7 +262,7 @@ object FMExpansion extends Expansion {
 
         case CrumblingYawpOption2Action(self) =>
             val walls = screamingWallsInPlay
-            val es = walls / 3
+            val es = walls / FMValues.CrumblingYawp_wallsPerSign
             if (es > 0) {
                 self.es ++= es.times(ElderSign(0))
                 self.log(CrumblingYawp.styled(FM) + ": gained", es.es)
@@ -280,7 +293,7 @@ object FMExpansion extends Expansion {
 
         case HymnOfSufferingAreaAction(self, r) =>
             val wall = self.at(r).%(_.uclass == ScreamingWall).head
-            val adjacent = game.board.connected(r).count(hasScreamingWall)
+            val adjacent = game.board.connected(r).count(hasScreamingWall) * FMValues.HymnOfSuffering_powerPerArea
             // Log BEFORE eliminate (P5 pattern compliance)
             if (adjacent > 0) {
                 self.log(HymnOfSuffering.styled(FM) + ": removed Wall in", r, ", gained", adjacent.power)
@@ -314,23 +327,23 @@ object FMExpansion extends Expansion {
             val wallAreas = game.board.regions.filter { r =>
                 f.at(r).cultists.any && f.pool.%(_.uclass == ScreamingWall).any
             }
-            if (f.power >= 3 && wallAreas.any)
+            if (f.power >= FMValues.ScreamingWall_createCost && wallAreas.any)
                 + CreateScreamingWallMainAction(f)
 
             val gateWallAreas = game.board.regions.nex.filter { r =>
                 !game.gates.contains(r) && !hasScreamingWall(r) && f.at(r).%(_.canControlGate).any
-            }.%(r => f.affords(4)(r))
-            if (f.power >= 4 && f.pool.%(_.uclass == ScreamingWall).any && gateWallAreas.any)
+            }.%(r => f.affords(FMValues.GateWithWall_cost)(r))
+            if (f.power >= FMValues.GateWithWall_cost && f.pool.%(_.uclass == ScreamingWall).any && gateWallAreas.any)
                 + CreateGateWithWallMainAction(f, gateWallAreas)
 
-            if (f.can(MannedBattlements) && f.power >= 1) {
+            if (f.can(MannedBattlements) && f.power >= FMValues.MannedBattlements_cost) {
                 val sourceAreas = game.board.regions.filter(r => hasScreamingWall(r) && f.at(r).any)
                 if (sourceAreas.any)
                     + MannedBattlementsMainAction(f)
             }
 
             val wallCount = screamingWallsInPlay
-            val cost = math.max(0, 6 - wallCount)
+            val cost = math.max(0, FMValues.TendonFlayingReq_power - wallCount)
             if (f.needs(TendonFlayingReq) && f.power >= cost)
                 + TendonFlayingReqMainAction(f, cost)
 
@@ -350,7 +363,7 @@ object FMExpansion extends Expansion {
             Ask(self).each(wallAreas)(r => CreateScreamingWallAction(self, r)).cancel
 
         case CreateScreamingWallAction(self, r) =>
-            self.power -= 3
+            self.power -= FMValues.ScreamingWall_createCost
             val wall = self.pool.%(_.uclass == ScreamingWall).head
             self.place(ScreamingWall, r)
             self.log("created", ScreamingWall.styled(FM), "in", r)
@@ -360,8 +373,8 @@ object FMExpansion extends Expansion {
             Ask(self).each(locations)(r => CreateGateWithWallAction(self, r)).cancel
 
         case CreateGateWithWallAction(self, r) =>
-            self.power -= 4
-            self.doom += 1
+            self.power -= FMValues.GateWithWall_cost
+            self.doom += FMValues.GateWithWall_doom
             game.gates :+= r
             val wall = self.pool.%(_.uclass == ScreamingWall).head
             self.place(ScreamingWall, r)
@@ -399,7 +412,7 @@ object FMExpansion extends Expansion {
             Ask(self).each(destAreas)(r => MannedBattlementsDestAction(self, source, units, r)).cancel
 
         case MannedBattlementsDestAction(self, source, units, dest) =>
-            self.power -= 1
+            self.power -= FMValues.MannedBattlements_cost
             units.foreach { ur =>
                 val u = game.unit(ur)
                 u.region = dest
@@ -416,8 +429,8 @@ object FMExpansion extends Expansion {
             Then(MainAction(self))
 
         case BuildGateAction(f : FM.type, r) if game.setup.has(FM) =>
-            f.power -= 3
-            f.doom += 1
+            f.power -= FMValues.BuildGate_cost
+            f.doom += FMValues.BuildGate_doom
             game.gates :+= r
             f.log("built a gate in", r)
             Then(MainAction(f))
@@ -440,8 +453,8 @@ object FMExpansion extends Expansion {
             result
 
         case TendonFlayingOption1Action(self, stitcher, remaining, availableOptions) =>
-            self.power += 1
-            self.log(TendonFlaying.styled(FM) + ": gained", 1.power, "(Muscle Stitcher pained, option 1)")
+            self.power += FMValues.TendonFlaying_option1Power
+            self.log(TendonFlaying.styled(FM) + ": gained", FMValues.TendonFlaying_option1Power.power, "(Muscle Stitcher pained, option 1)")
             val newAvailable = availableOptions.but(1)
             if (remaining.any && newAvailable.any)
                 Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1), newAvailable))
@@ -452,8 +465,8 @@ object FMExpansion extends Expansion {
                 UnknownContinue
 
         case TendonFlayingOption2Action(self, stitcher, remaining, availableOptions) =>
-            self.power += 1
-            self.log(TendonFlaying.styled(FM) + ": gained", 1.power, "(Muscle Stitcher pained, option 2)")
+            self.power += FMValues.TendonFlaying_option2Power
+            self.log(TendonFlaying.styled(FM) + ": gained", FMValues.TendonFlaying_option2Power.power, "(Muscle Stitcher pained, option 2)")
             val newAvailable = availableOptions.but(2)
             if (remaining.any && newAvailable.any)
                 Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1), newAvailable))
@@ -464,8 +477,8 @@ object FMExpansion extends Expansion {
                 UnknownContinue
 
         case TendonFlayingOption3Action(self, stitcher, remaining, availableOptions) =>
-            self.doom += 1
-            self.log(TendonFlaying.styled(FM) + ": gained", 1.doom, "(Muscle Stitcher pained)")
+            self.doom += FMValues.TendonFlaying_option3Doom
+            self.log(TendonFlaying.styled(FM) + ": gained", FMValues.TendonFlaying_option3Doom.doom, "(Muscle Stitcher pained)")
             val newAvailable = availableOptions.but(3)
             if (remaining.any && newAvailable.any)
                 Then(TendonFlayingChoiceAction(self, remaining.head, remaining.drop(1), newAvailable))

@@ -813,9 +813,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val side = if (s == attacker) defenders else attackers
             val enemyUnits = side.forces.%(u => canAssignPains(u) > 0).sortBy(_.uclass.cost)
             if (enemyUnits.any) {
-                val target = enemyUnits.head
-                target.health = Pained
-                log(s, TerrifyingShriek.styled(FM) + ":", target.short, "pained pre-battle (Bone Sculptor present)")
+                // Pain count comes from FMValues.TerrifyingShriek_pains (faction-values/fm.json)
+                enemyUnits.take(FMValues.TerrifyingShriek_pains).foreach { target =>
+                    target.health = Pained
+                    log(s, TerrifyingShriek.styled(FM) + ":", target.short, "pained pre-battle (Bone Sculptor present)")
+                }
                 s.oncePerAction :+= TerrifyingShriek
             }
         }
@@ -1736,8 +1738,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     FMExpansion.hasScreamingWall(arena)(game) &&
                     FM.forces.%(_.uclass == BoneSculptor).none) {
                     val fmSide = if (attacker == FM) attackers else defenders
-                    fmSide.rolls :+= Pain
-                    log(FM, TerrifyingShriek.styled(FM) + ": added", Pain, "to combat results (Screaming Wall present)")
+                    // Pain count comes from FMValues.TerrifyingShriek_pains (faction-values/fm.json)
+                    (1 to FMValues.TerrifyingShriek_pains).foreach { _ =>
+                        fmSide.rolls :+= Pain
+                        log(FM, TerrifyingShriek.styled(FM) + ": added", Pain, "to combat results (Screaming Wall present)")
+                    }
                     FM.oncePerAction :+= TerrifyingShriek
                 }
 
@@ -1837,8 +1842,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // Tribulation (DGT) Pale Rider: +1 Kill if Death is present
     sides.%(f => f == DGT).foreach { dgtSide =>
         if (game.setup.has(DGT) && DGT.has(PaleRider) && dgtSide.forces.%(_.uclass == Death).not(Zeroed).any) {
-            dgtSide.rolls :+= Kill
-            log(PaleRider.styled(DGT) + ":", DGT.full, "gains 1", "Kill".styled("kill"))
+            // Kill count from DGTValues.PaleRider_kills (faction-values/dgt.json)
+            (1 to DGTValues.PaleRider_kills).foreach { _ => dgtSide.rolls :+= Kill }
+            log(PaleRider.styled(DGT) + ":", DGT.full, "gains " + DGTValues.PaleRider_kills, "Kill".styled("kill"))
         }
     }
 
@@ -2961,7 +2967,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     if (pestilencePresent) {
                         // Count pains assigned to enemy units (health == Pained)
                         val enemyPains = sides.but(DGT)./~(_.forces).count(_.health == Pained)
-                        if (enemyPains >= 2) {
+                        if (enemyPains >= DGTValues.Mayhem_pains) {
                             DGTExpansion.flipSpellbook(DGT, WhiteRider, GodsPlague, "Mayhem")
                         }
                     }
@@ -3485,7 +3491,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // DGT rolls 10 or more combat dice total, flip the spellbook and gain 1 ES.
             if (game.setup.has(DGT) && f == DGT && DGT.has(RedRider) && !DGT.has(GodsSword)) {
                 val warPresent = f.forces.exists(_.uclass == War)
-                if (warPresent && f.rolls.num >= 10) {
+                if (warPresent && f.rolls.num >= DGTValues.Ruin_dice) {
                     DGTExpansion.flipSpellbook(DGT, RedRider, GodsSword, "Ruin")
                 }
             }
@@ -3502,7 +3508,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 val deathPresent = DGT.forces.exists(_.uclass == Death)
                 val enemyUnit = game.unit(u)
                 val isEnemy = enemyUnit.faction != DGT
-                val is3PlusCost = enemyUnit.uclass.cost >= 3
+                val is3PlusCost = enemyUnit.uclass.cost >= DGTValues.Despair_minCost
                 if (deathPresent && isEnemy && is3PlusCost && enemyUnit.health == Killed) {
                     DGTExpansion.flipSpellbook(DGT, PaleRider, GodsHand, "Despair")
                 }

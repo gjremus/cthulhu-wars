@@ -620,31 +620,32 @@ object Overlays {
 
     def infoFM(s : $[Any]) : |[String] = (s @@ {
         // ── FLESHMASON (FM) — HOMEBREW DESIGNER FACTION ──
+        // All numbers on this card come from FMValues (solo/faction-values/fm.json).
         case $("FM") => faction(FM, "info:fm-background", FrenzyingAdze, "Battle", "If you are the Attacker in an Area with the Screaming Wall, increase your Combat by the number of Screaming Walls in play.",
             $(), $(
-            (Acolyte,        6, "1", "0", ""),
-            (BoneSculptor,   3, "1", "1", s"""<div class=p>Spellbook: ${reference(FM, TerrifyingShriek)}</div>"""),
-            (MuscleStitcher, 3, "2", "2", s"""<div class=p>Spellbook: ${reference(FM, TendonFlaying)}</div>"""),
-            (BodyArchitect,  3, "3", "3", s"""<div class=p>Spellbook: ${reference(FM, BlueprintsInBlood)}</div>"""),
-            (ScreamingWall,  6, "2", "—", s"""
-                <div class=p>You may use the Create Gate Action to Create Screaming Walls instead of Gates (3 Power). You may also perform a joint Create Gate with Screaming Wall Action (4 Power) in an Area that lacks both a Gate and a Screaming Wall.</div>
+            (Acolyte,        FMValues.Acolyte_count, "1", "0", ""),
+            (BoneSculptor,   FMValues.BoneSculptor_count,   "" + FMValues.BoneSculptor_cost,   "" + FMValues.BoneSculptor_combat,   s"""<div class=p>Spellbook: ${reference(FM, TerrifyingShriek)}</div>"""),
+            (MuscleStitcher, FMValues.MuscleStitcher_count, "" + FMValues.MuscleStitcher_cost, "" + FMValues.MuscleStitcher_combat, s"""<div class=p>Spellbook: ${reference(FM, TendonFlaying)}</div>"""),
+            (BodyArchitect,  FMValues.BodyArchitect_count,  "" + FMValues.BodyArchitect_cost,  "" + FMValues.BodyArchitect_combat,  s"""<div class=p>Spellbook: ${reference(FM, BlueprintsInBlood)}</div>"""),
+            (ScreamingWall,  FMValues.ScreamingWall_count,  "" + FMValues.ScreamingWall_cost,  "—", s"""
+                <div class=p>You may use the Create Gate Action to Create Screaming Walls instead of Gates (${FMValues.ScreamingWall_createCost} Power). You may also perform a joint Create Gate with Screaming Wall Action (${FMValues.GateWithWall_cost} Power) in an Area that lacks both a Gate and a Screaming Wall.</div>
                 <div class=p>Spellbooks: ${reference(FM, TerrifyingShriek)}, ${reference(FM, CrumblingYawp)}, ${reference(FM, MannedBattlements)}, ${reference(FM, HymnOfSuffering)}</div>
                 <div class=p><strong>Spiteful Chisel</strong> ${cost("(Post-Battle):")} If there are no Screaming Walls in your Pool and an enemy Great Old One was assigned a Result, return one of your Captured Acolytes from their Faction Card to the Battle Area.</div>""")
         ))
 
-        case $("FM", CrumblingYawpReq.text) => requirement("Roll 9 or more dice in a single Combat.")
-        case $("FM", HymnOfSufferingReq.text) => requirement("Your Units in play have 12 or more Combat.")
-        case $("FM", TerrifyingShriekReq.text) => requirement("The Screaming Wall is in Areas with 2 of the 3 Glyph types (the Yellow Sign Glyphs).")
-        case $("FM", TendonFlayingReq.text) => requirement("As an Action, Pay 6 Power, minus the number of Screaming Walls in play.")
-        case $("FM", BlueprintsInBloodReq.text) => requirement("Have 3 Screaming Walls in Play.")
-        case $("FM", MannedBattlementsReq.text) => requirement("Have 6 Screaming Walls in Play.")
+        case $("FM", CrumblingYawpReq.text) => requirement(s"Roll ${FMValues.CrumblingYawpReq_dice} or more dice in a single Combat.")
+        case $("FM", HymnOfSufferingReq.text) => requirement(s"Your Units in play have ${FMValues.HymnOfSufferingReq_combat} or more Combat.")
+        case $("FM", TerrifyingShriekReq.text) => requirement(s"The Screaming Wall is in Areas with ${FMValues.TerrifyingShriekReq_glyphs} of the 3 Glyph types (the Yellow Sign Glyphs).")
+        case $("FM", TendonFlayingReq.text) => requirement(s"As an Action, Pay ${FMValues.TendonFlayingReq_power} Power, minus the number of Screaming Walls in play.")
+        case $("FM", BlueprintsInBloodReq.text) => requirement(s"Have ${FMValues.BlueprintsInBloodReq_walls} Screaming Walls in Play.")
+        case $("FM", MannedBattlementsReq.text) => requirement(s"Have ${FMValues.MannedBattlementsReq_walls} Screaming Walls in Play.")
 
-        case $("FM", CrumblingYawp.name) => spellbook(CrumblingYawp.name, "Doom Phase", "Whenever you perform the Ritual of Annihilation, choose one:<br/>1) Gain 1 Power for each Area with an enemy controlled gate and the Screaming Wall.<br/>2) Gain 1 Elder Sign for every 3 Screaming Walls in Play.")
-        case $("FM", HymnOfSuffering.name) => spellbook(HymnOfSuffering.name, "Gather Power Phase", "Choose an Area with your Acolyte and the Screaming Wall to remove that Screaming Wall and gain 1 Power for each adjacent Area containing the Screaming Wall.")
-        case $("FM", TerrifyingShriek.name) => spellbook(TerrifyingShriek.name, "Post-Battle", "The Screaming Wall adds 1 Pain to your combat results. If a Bone Sculptor is in the Battle, apply that pain Pre-Battle instead.")
-        case $("FM", TendonFlaying.name) => spellbook(TendonFlaying.name, "Post-Battle", "For Each Muscle Stitcher that Received a Pain, choose a different option:<br/>1) Gain 1 Power<br/>2) Gain 1 Power<br/>3) Gain 1 Doom")
+        case $("FM", CrumblingYawp.name) => spellbook(CrumblingYawp.name, "Doom Phase", s"Whenever you perform the Ritual of Annihilation, choose one:<br/>1) Gain ${FMValues.CrumblingYawp_powerPerArea} Power for each Area with an enemy controlled gate and the Screaming Wall.<br/>2) Gain 1 Elder Sign for every ${FMValues.CrumblingYawp_wallsPerSign} Screaming Walls in Play.")
+        case $("FM", HymnOfSuffering.name) => spellbook(HymnOfSuffering.name, "Gather Power Phase", s"Choose an Area with your Acolyte and the Screaming Wall to remove that Screaming Wall and gain ${FMValues.HymnOfSuffering_powerPerArea} Power for each adjacent Area containing the Screaming Wall.")
+        case $("FM", TerrifyingShriek.name) => spellbook(TerrifyingShriek.name, "Post-Battle", s"The Screaming Wall adds ${FMValues.TerrifyingShriek_pains} Pain to your combat results. If a Bone Sculptor is in the Battle, apply that pain Pre-Battle instead.")
+        case $("FM", TendonFlaying.name) => spellbook(TendonFlaying.name, "Post-Battle", s"For Each Muscle Stitcher that Received a Pain, choose a different option:<br/>1) Gain ${FMValues.TendonFlaying_option1Power} Power<br/>2) Gain ${FMValues.TendonFlaying_option2Power} Power<br/>3) Gain ${FMValues.TendonFlaying_option3Doom} Doom")
         case $("FM", BlueprintsInBlood.name) => spellbook(BlueprintsInBlood.name, "Ongoing", "Body Architects count as Screaming Walls for all purposes in Areas without Screaming Walls.")
-        case $("FM", MannedBattlements.name) => spellbook(MannedBattlements.name, "Action: Cost 1", "Choose an Area containing a Screaming Wall. Move any number of Units from that Area to any adjacent Areas containing the Screaming Wall.")
+        case $("FM", MannedBattlements.name) => spellbook(MannedBattlements.name, s"Action: Cost ${FMValues.MannedBattlements_cost}", "Choose an Area containing a Screaming Wall. Move any number of Units from that Area to any adjacent Areas containing the Screaming Wall.")
 
         case _ => ""
     }).but("")
@@ -668,16 +669,16 @@ object Overlays {
         // ── TRIBULATION (DGT) — HOMEBREW FACTION ──
         case $("DGT") => faction(DGT, "info:dgt-background", Dominion, "Ongoing", "When performing the Move Action, Areas with Units you control are adjacent to each other.",
             $(WhiteRider, RedRider, BlackRider, PaleRider, MartyrsCry, CosmicChaos), $(
-            (Acolyte,    6, "1", "0", s"""<div class=p>Spellbook: ${reference(DGT, MartyrsCry)}</div>"""),
-            (Conquest,   4, "1", "1", s"""<div class=p>Spellbook: ${reference(DGT, CosmicChaos)}</div>"""),
-            (Pestilence, 1, "3", "3", s"""<div class=p>Spellbooks: ${reference(DGT, WhiteRider)}, ${reference(DGT, GodsPlague)}</div>"""),
-            (War,        1, "3/6/12", "3/6/12", s"""
-                <div class=p><span class=cost-color>Cost:</span> 3 Power</div>
-                <div class=p><span class=combat-color>Combat</span> 3 base, 6 with ${reference(DGT, RedRider)}, 12 with ${reference(DGT, GodsSword)}</div>
+            (Acolyte,    DGTValues.Acolyte_count, "1", "0", s"""<div class=p>Spellbook: ${reference(DGT, MartyrsCry)}</div>"""),
+            (Conquest,   DGTValues.Conquest_count, "" + DGTValues.Conquest_cost, "" + DGTValues.Conquest_combat, s"""<div class=p>Spellbook: ${reference(DGT, CosmicChaos)}</div>"""),
+            (Pestilence, DGTValues.Pestilence_count, "" + DGTValues.Pestilence_cost, "" + DGTValues.Pestilence_combat, s"""<div class=p>Spellbooks: ${reference(DGT, WhiteRider)}, ${reference(DGT, GodsPlague)}</div>"""),
+            (War,        DGTValues.War_count, "" + DGTValues.War_cost, "" + DGTValues.War_combat + "/" + DGTValues.War_combatRedRider + "/" + DGTValues.War_combatGodsSword, s"""
+                <div class=p><span class=cost-color>Cost:</span> ${DGTValues.War_cost} Power</div>
+                <div class=p><span class=combat-color>Combat</span> ${DGTValues.War_combat} base, ${DGTValues.War_combatRedRider} with ${reference(DGT, RedRider)}, ${DGTValues.War_combatGodsSword} with ${reference(DGT, GodsSword)}</div>
                 <div class=p>Spellbooks: ${reference(DGT, RedRider)}, ${reference(DGT, GodsSword)}</div>"""
             ),
-            (Famine,     1, "3", "3", s"""<div class=p>Spellbooks: ${reference(DGT, BlackRider)}, ${reference(DGT, GodsScale)}</div>"""),
-            (Death,      1, "3", "3", s"""<div class=p>Death counts as a Great Old One to Awaken Independent Great Old Ones.</div><div class=p>Spellbooks: ${reference(DGT, PaleRider)}, ${reference(DGT, GodsHand)}</div>"""),
+            (Famine,     DGTValues.Famine_count, "" + DGTValues.Famine_cost, "" + DGTValues.Famine_combat, s"""<div class=p>Spellbooks: ${reference(DGT, BlackRider)}, ${reference(DGT, GodsScale)}</div>"""),
+            (Death,      DGTValues.Death_count, "" + DGTValues.Death_cost, "" + DGTValues.Death_combat, s"""<div class=p>Death counts as a Great Old One to Awaken Independent Great Old Ones.</div><div class=p>Spellbooks: ${reference(DGT, PaleRider)}, ${reference(DGT, GodsHand)}</div>"""),
         ))
 
         case $("DGT", "Setup") => requirement("After Anubi, 8 Power, 6 Acolytes and a Controlled Gate in an empty Area not adjacent to another faction's Start Area.")
@@ -690,22 +691,22 @@ object Overlays {
         case $("DGT", CosmicChaosReq.text) => requirement("As an Action, distribute Doom equal to number of players to enemy Factions.")
 
         case $("DGT", WhiteRider.name) => spellbook(WhiteRider.name, "Ongoing", "Enemy Units in Pestilence's Area cannot move out and cannot retreat from that Area.")
-        case $("DGT", "Mayhem") => spellbook("Mayhem", "Once Only", "During Post-Battle, if Pestilence is present and 2 or more Pains are assigned to enemy Units, Gain 1 Elder Sign and flip this Spellbook.")
-        case $("DGT", GodsPlague.name) => spellbook(GodsPlague.name, "Action: Cost 2", "All enemy Factions with one or more Units in Pestilence's Area choose one of their Units to be Pained away. You choose the Area into which each Unit is Pained.")
+        case $("DGT", "Mayhem") => spellbook("Mayhem", "Once Only", s"During Post-Battle, if Pestilence is present and ${DGTValues.Mayhem_pains} or more Pains are assigned to enemy Units, Gain ${DGTValues.RiderFlip_elderSigns} Elder Sign and flip this Spellbook.")
+        case $("DGT", GodsPlague.name) => spellbook(GodsPlague.name, s"Action: Cost ${DGTValues.GodsPlague_cost}", "All enemy Factions with one or more Units in Pestilence's Area choose one of their Units to be Pained away. You choose the Area into which each Unit is Pained.")
 
-        case $("DGT", RedRider.name) => spellbook(RedRider.name, "Ongoing", "War now has 6 Combat.")
-        case $("DGT", "Ruin") => spellbook("Ruin", "Once Only", "During Battle, if War is present and you roll 10 or more Combat dice, Gain 1 Elder Sign and flip this Spellbook.")
-        case $("DGT", GodsSword.name) => spellbook(GodsSword.name, "Ongoing", "War now has 12 Combat.")
+        case $("DGT", RedRider.name) => spellbook(RedRider.name, "Ongoing", s"War now has ${DGTValues.War_combatRedRider} Combat.")
+        case $("DGT", "Ruin") => spellbook("Ruin", "Once Only", s"During Battle, if War is present and you roll ${DGTValues.Ruin_dice} or more Combat dice, Gain ${DGTValues.RiderFlip_elderSigns} Elder Sign and flip this Spellbook.")
+        case $("DGT", GodsSword.name) => spellbook(GodsSword.name, "Ongoing", s"War now has ${DGTValues.War_combatGodsSword} Combat.")
 
         case $("DGT", BlackRider.name) => spellbook(BlackRider.name, "Ongoing", "In Famine's Area, ignore the presence of enemy Monsters and Terrors when you Capture an enemy Cultist.")
-        case $("DGT", "Rampage") => spellbook("Rampage", "Once Only", "During Gather Power Phase, if you Sacrifice one enemy Cultist, Gain 1 Elder Sign and flip this Spellbook.")
-        case $("DGT", GodsScale.name) => spellbook(GodsScale.name, "Ongoing", "Enemy Spellbooks are ignored in Famine's Area. After any Faction Action, each enemy Faction may choose (in response) to have you Gain 1 Elder Sign to flip this Spellbook face-down. At the end of the Doom Phase, flip it face-up.")
+        case $("DGT", "Rampage") => spellbook("Rampage", "Once Only", s"During Gather Power Phase, if you Sacrifice one enemy Cultist, Gain ${DGTValues.RiderFlip_elderSigns} Elder Sign and flip this Spellbook.")
+        case $("DGT", GodsScale.name) => spellbook(GodsScale.name, "Ongoing", s"Enemy Spellbooks are ignored in Famine's Area. After any Faction Action, each enemy Faction may choose (in response) to have you Gain ${DGTValues.GodsScale_elderSigns} Elder Sign to flip this Spellbook face-down. At the end of the Doom Phase, flip it face-up.")
 
-        case $("DGT", PaleRider.name) => spellbook(PaleRider.name, "Post-Battle", "If Death is present, add 1 Kill to your results.")
-        case $("DGT", "Despair") => spellbook("Despair", "Once Only", "During Post-Battle, if Death is present and a Kill is assigned to a 3-cost or higher enemy Unit, Gain 1 Elder Sign and flip this Spellbook.")
+        case $("DGT", PaleRider.name) => spellbook(PaleRider.name, "Post-Battle", s"If Death is present, add ${DGTValues.PaleRider_kills} Kill to your results.")
+        case $("DGT", "Despair") => spellbook("Despair", "Once Only", s"During Post-Battle, if Death is present and a Kill is assigned to a ${DGTValues.Despair_minCost}-cost or higher enemy Unit, Gain ${DGTValues.RiderFlip_elderSigns} Elder Sign and flip this Spellbook.")
         case $("DGT", GodsHand.name) => spellbook(GodsHand.name, "Ongoing", "Your Units ignore Kills and Eliminations in Death's Area.")
 
-        case $("DGT", MartyrsCry.name) => spellbook(MartyrsCry.name, "Gather Power Phase", "Gain 2 Power for each Tribulation Acolyte in your pool and on enemy Faction Cards.")
+        case $("DGT", MartyrsCry.name) => spellbook(MartyrsCry.name, "Gather Power Phase", s"Gain ${DGTValues.MartyrsCry_powerPerAcolyte} Power for each Tribulation Acolyte in your pool and on enemy Faction Cards.")
         case $("DGT", CosmicChaos.name) => spellbook(CosmicChaos.name, "Ongoing", "Move any number of Conquests for free when you perform a Move Action during which you spend 1 or more Power.")
         case $("DGT", Dominion.name) => spellbook(Dominion.name, "Ongoing", "When performing the Move Action, Areas with Units you control are adjacent to each other.")
 
@@ -2942,20 +2943,20 @@ object Overlays {
 
         case $("PRM", "Setup") => requirement("After Windwalker and Before Anubi, 8 Power, 6 Acolytes and a Controlled Gate in an empty Sea Area.")
 
-        case $("PRM", Control2LandGatesReq.text)     => requirement("Control 2 Gates in Land Areas.")
-        case $("PRM", Pay2DoomFlipSpellbookReq.text) => requirement("As an Action, Pay 2 Doom and Flip one of your Face Up Spellbooks Face Down until the Doom Phase.")
+        case $("PRM", Control2LandGatesReq.text)     => requirement(s"Control ${PRMValues.Control2LandGatesReq_gates} Gates in Land Areas.")
+        case $("PRM", Pay2DoomFlipSpellbookReq.text) => requirement(s"As an Action, Pay ${PRMValues.Pay2DoomFlipSpellbookReq_doom} Doom and Flip one of your Face Up Spellbooks Face Down until the Doom Phase.")
         case $("PRM", NoFledglingsInPoolReq.text)    => requirement("Have no Celestial Fledglings in your Pool.")
-        case $("PRM", EnemyHas3SpellbooksReq.text)   => requirement("Another Faction has 3 or more Spellbooks on its Faction Card.")
+        case $("PRM", EnemyHas3SpellbooksReq.text)   => requirement(s"Another Faction has ${PRMValues.EnemyHas3SpellbooksReq_spellbooks} or more Spellbooks on its Faction Card.")
         case $("PRM", YcgnaAttackerInBattleReq.text) => requirement("Ycgn'àgnnisssz is an Attacker in a Battle.")
         case $("PRM", AwakenYcgnaReq.text)           => requirement("Awaken Ycgn'àgnnisssz.")
 
         case $("PRM", MakeAsOne.name)     => spellbook(MakeAsOne.name,     "Ongoing (Faction Ability)", "Other Factions may activate your Spellbook Abilities by Paying your their Power Costs. You gain a Doom whenever this causes your Spellbook to become Flipped.")
-        case $("PRM", AtomicUnity.name)   => spellbook(AtomicUnity.name,   "Action: Cost 1", "Eliminate a Monster you control to gain Power equal to its Cost minus one. Flip this Spellbook Face Down until the Doom Phase if you gained 2 or more Power this way.")
-        case $("PRM", EldritchLove.name)  => spellbook(EldritchLove.name,  "Action: Cost 1", "Gain an Elder Sign if you have 2 or more Face Down Spellbooks. Flip this Spellbook Face Down until the Doom Phase.")
-        case $("PRM", Osmosis.name)       => spellbook(Osmosis.name,       "Action: Cost 2", "Choose two adjacent Areas. Each faction with units in at least one of those Areas, beginning with you and proceeding in turn order, evenly distributes their Units present between those Areas.")
-        case $("PRM", Protogenesis.name)  => spellbook(Protogenesis.name,  "Action: Cost 2", "Place the lowest cost Monster from your Pool into any Area already containing your Units. Flip this Spellbook Face Down until the Doom Phase if you have no Monsters remain in your Pool.")
+        case $("PRM", AtomicUnity.name)   => spellbook(AtomicUnity.name,   s"Action: Cost ${PRMValues.AtomicUnity_cost}", "Eliminate a Monster you control to gain Power equal to its Cost minus one. Flip this Spellbook Face Down until the Doom Phase if you gained 2 or more Power this way.")
+        case $("PRM", EldritchLove.name)  => spellbook(EldritchLove.name,  s"Action: Cost ${PRMValues.EldritchLove_cost}", s"Gain an Elder Sign if you have ${PRMValues.EldritchLove_faceDownNeeded} or more Face Down Spellbooks. Flip this Spellbook Face Down until the Doom Phase.")
+        case $("PRM", Osmosis.name)       => spellbook(Osmosis.name,       s"Action: Cost ${PRMValues.Osmosis_cost}", "Choose two adjacent Areas. Each faction with units in at least one of those Areas, beginning with you and proceeding in turn order, evenly distributes their Units present between those Areas.")
+        case $("PRM", Protogenesis.name)  => spellbook(Protogenesis.name,  s"Action: Cost ${PRMValues.Protogenesis_cost}", "Place the lowest cost Monster from your Pool into any Area already containing your Units. Flip this Spellbook Face Down until the Doom Phase if you have no Monsters remain in your Pool.")
         case $("PRM", SpeakReality.name)  => spellbook(SpeakReality.name,  "Action: Cost X", "Choose a Faction with Units in Ycgn'àgnnisssz's Area and name a Common Action (Move, Summon, Battle, Capture, Build Gate, or Recruit). They can take no other Action on their next turn if they are able to perform the named Action spending at least as much Power as you spent. If you spend less than the required Cost, nothing happens.")
-        case $("PRM", ZealousSpark.name)  => spellbook(ZealousSpark.name,  "Unlimited Action: Cost 1 Doom", "Move ANY Monster from its Area to an Adjacent Area.")
+        case $("PRM", ZealousSpark.name)  => spellbook(ZealousSpark.name,  s"Unlimited Action: Cost ${PRMValues.ZealousSpark_doomCost} Doom", "Move ANY Monster from its Area to an Adjacent Area.")
 
         case _ => ""
     }
@@ -2973,16 +2974,16 @@ object Overlays {
         def ref(sb : Spellbook) = s"""<span class="ability-color">${sb.name}</span>"""
         faction(DGT, "info:dgt-background", Dominion, "Ongoing", "When performing the Move Action, Areas with Units you control are adjacent to each other.",
             $(WhiteRider, RedRider, BlackRider, PaleRider, MartyrsCry, CosmicChaos), $(
-            (Acolyte,    6, "1", "0", s"""<div class=p>Spellbook: ${dgtRef(MartyrsCry)}</div>"""),
-            (Conquest,   4, "1", "1", s"""<div class=p>Spellbook: ${dgtRef(CosmicChaos)}</div>"""),
-            (Pestilence, 1, "3", "3", s"""<div class=p>Spellbooks: ${dgtRef(WhiteRider)}, ${dgtRef(GodsPlague)}</div>"""),
-            (War,        1, "3/6/12", "3/6/12", s"""
-                <div class=p>${cost("Cost:")} 3 Power</div>
-                <div class=p>${combat} 3 base, 6 with ${dgtRef(RedRider)}, 12 with ${dgtRef(GodsSword)}</div>
+            (Acolyte,    DGTValues.Acolyte_count, "1", "0", s"""<div class=p>Spellbook: ${dgtRef(MartyrsCry)}</div>"""),
+            (Conquest,   DGTValues.Conquest_count, "" + DGTValues.Conquest_cost, "" + DGTValues.Conquest_combat, s"""<div class=p>Spellbook: ${dgtRef(CosmicChaos)}</div>"""),
+            (Pestilence, DGTValues.Pestilence_count, "" + DGTValues.Pestilence_cost, "" + DGTValues.Pestilence_combat, s"""<div class=p>Spellbooks: ${dgtRef(WhiteRider)}, ${dgtRef(GodsPlague)}</div>"""),
+            (War,        DGTValues.War_count, "" + DGTValues.War_cost, "" + DGTValues.War_combat + "/" + DGTValues.War_combatRedRider + "/" + DGTValues.War_combatGodsSword, s"""
+                <div class=p>${cost("Cost:")} ${DGTValues.War_cost} Power</div>
+                <div class=p>${combat} ${DGTValues.War_combat} base, ${DGTValues.War_combatRedRider} with ${dgtRef(RedRider)}, ${DGTValues.War_combatGodsSword} with ${dgtRef(GodsSword)}</div>
                 <div class=p>Spellbooks: ${dgtRef(RedRider)}, ${dgtRef(GodsSword)}</div>"""
             ),
-            (Famine,     1, "3", "3", s"""<div class=p>Spellbooks: ${dgtRef(BlackRider)}, ${dgtRef(GodsScale)}</div>"""),
-            (Death,      1, "3", "3", s"""<div class=p>Death counts as a Great Old One to Awaken Independent Great Old Ones.</div><div class=p>Spellbooks: ${dgtRef(PaleRider)}, ${dgtRef(GodsHand)}</div>"""),
+            (Famine,     DGTValues.Famine_count, "" + DGTValues.Famine_cost, "" + DGTValues.Famine_combat, s"""<div class=p>Spellbooks: ${dgtRef(BlackRider)}, ${dgtRef(GodsScale)}</div>"""),
+            (Death,      DGTValues.Death_count, "" + DGTValues.Death_cost, "" + DGTValues.Death_combat, s"""<div class=p>Death counts as a Great Old One to Awaken Independent Great Old Ones.</div><div class=p>Spellbooks: ${dgtRef(PaleRider)}, ${dgtRef(GodsHand)}</div>"""),
         ), setup = true)
     }
 
@@ -2993,16 +2994,16 @@ object Overlays {
         def ref(sb : Spellbook) = s"""<span class="ability-color">${sb.name}</span>"""
         faction(PRM, "info:prm-background", MakeAsOne, "Ongoing", "Other Factions may activate your Spellbook Abilities by Paying you their Power Costs. You gain a Doom whenever this causes your Spellbook to become Flipped.",
             $(AtomicUnity, EldritchLove, Osmosis, Protogenesis, SpeakReality, ZealousSpark), $(
-            (Acolyte,           6, "1", "0", s"""<div class=p>Setup: 6 Acolytes + a Controlled Gate in an empty Sea Area.</div>"""),
-            (AstralEgg,         4, "1", "1", s"""<div class=p>Replace with ${Ycgnagnnisssz.name} when Awakening.</div>"""),
-            (CelestialFledgling, 4, "1+", "1+", s"""<div class=p>${cost("Cost")} and ${combat} equal to the number of Fledglings in play plus one.</div><div class=p>Spellbook: ${prmRef(Protogenesis)}</div>"""),
+            (Acolyte,           PRMValues.Acolyte_count, "1", "0", s"""<div class=p>Setup: ${PRMValues.Acolyte_count} Acolytes + a Controlled Gate in an empty Sea Area.</div>"""),
+            (AstralEgg,         PRMValues.AstralEgg_count, "" + PRMValues.AstralEgg_cost, "" + PRMValues.AstralEgg_combat, s"""<div class=p>Replace with ${Ycgnagnnisssz.name} when Awakening.</div>"""),
+            (CelestialFledgling, PRMValues.CelestialFledgling_count, "1+", "1+", s"""<div class=p>${cost("Cost")} and ${combat} equal to the number of Fledglings in play plus one.</div><div class=p>Spellbook: ${prmRef(Protogenesis)}</div>"""),
             (Ycgnagnnisssz,     1, "?", "?", s"""
                 <div class=p>${cost(s"How to Awaken ${Ycgnagnnisssz.name}:")}</div>
                 <div class=p>${cost("1)")} Have an Astral Egg in play.</div>
-                <div class=p>${cost("2)")} Pay 7 Power.</div>
+                <div class=p>${cost("2)")} Pay ${PRMValues.Ycgnagnnisssz_awakenCost} Power.</div>
                 <div class=p>${cost("3)")} Replace the Egg with ${Ycgnagnnisssz.name}.</div>
                 <div class=p>${combat} Equal to your number of Earned Spellbooks plus the total number of Face Down Spellbooks on all Faction Cards.</div>
-                <div class=p>Mother's Aid ${cost("(Ongoing):")} On their turn, any opponent may pay you 1 Power to control ${Ycgnagnnisssz.name} this turn. Moving her costs 0 Power for them.</div>
+                <div class=p>Mother's Aid ${cost("(Ongoing):")} On their turn, any opponent may pay you ${PRMValues.MothersAid_power} Power to control ${Ycgnagnnisssz.name} this turn. Moving her costs 0 Power for them.</div>
                 <div class=p>Fathomless Progenitor ${cost("(Ongoing):")} While controlled by another player, ${Ycgnagnnisssz.name} cannot be assigned Combat results or Eliminated. She can only be moved by the Move Action. If that player battles you in her Area, she does not take part: she adds no Combat and cannot receive results. This ability is not optional.</div>
                 <div class=p>Spellbook: ${prmRef(SpeakReality)}</div>""")
         ), setup = true)
