@@ -351,24 +351,20 @@ object PRMExpansion extends Expansion {
 
             case AtomicUnityAction(f, monsterRef) =>
                 val monster = game.unit(monsterRef)
+                val monsterCost = f.summonCost(monster.uclass, monster.region)
+                val powerGained = math.max(0, monsterCost - 1)
+
                 f.log(AtomicUnity.styled(f) + ":", "Eliminated", monster.uclass.styled(f), "in", monster.region)
                 f.power -= PRMValues.AtomicUnity_cost
                 game.eliminate(monster)
 
-                val cultistAreas = f.allInPlay.%(_.uclass == Acolyte)./(_.region).distinct
-                if (cultistAreas.any) {
-                    cultistAreas.foreach { r =>
-                        val egg = f.pool(AstralEgg).first
-                        egg.region = r
-                        f.log("Placed", AstralEgg.styled(f), "in", r)
-                    }
-                } else {
-                    f.log("No", Acolyte.styled(f), "on the map")
+                if (powerGained > 0) {
+                    f.power += powerGained
+                    f.log("Gained", powerGained.power)
                 }
 
-                // Flip if no monsters remain in play
-                val remainingMonsters = f.allInPlay.%(_.uclass.utype == Monster)
-                if (remainingMonsters.none) {
+                // Flip if gained 2 or more Power
+                if (powerGained >= 2) {
                     f.oncePerAction :+= AtomicUnity
                     game.prmFlippedDownSpellbooks :+= AtomicUnity
                     f.log(AtomicUnity.styled(f), "flipped Face Down until Doom Phase")
@@ -482,7 +478,6 @@ object PRMExpansion extends Expansion {
             case OsmosisPickSecondAreaAction(f, first, adjacentToFirst) =>
                 implicit val asking = Asking(f)
                 Ask(f).each(adjacentToFirst)(r => {
-                    f.power -= PRMValues.Osmosis_cost
                     // Find all factions with units in either area
                     val factionsWithUnits = game.factions.%(fx => fx.allInPlay.%(u => u.region == first || u.region == r).any)
                     // Start with PRM, then continue in turn order
@@ -499,6 +494,11 @@ object PRMExpansion extends Expansion {
                 })
 
             case OsmosisDistributeAction(self, fx, area1, area2, units, placed) =>
+                // Deduct power on first execution (when this is the first faction starting distribution)
+                if (fx == self && placed.none) {
+                    self.power -= PRMValues.Osmosis_cost
+                }
+
                 if (units.none) {
                     // Done with this faction, move to next
                     val factionsWithUnits = game.factions.%(f => f.allInPlay.%(u => u.region == area1 || u.region == area2).any)
@@ -612,6 +612,7 @@ object PRMExpansion extends Expansion {
 
             // ── ELDRITCH LOVE ───────────────────────────────────────────
             case EldritchLoveAction(f) =>
+                f.power -= PRMValues.EldritchLove_cost
                 val flippedCount = game.prmFlippedDownSpellbooks.num
                 if (flippedCount >= PRMValues.EldritchLove_faceDownNeeded) {
                     f.log(EldritchLove.styled(f) + ":", "gained", PRMValues.EldritchLove_elderSigns.es)
