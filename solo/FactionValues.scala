@@ -23,6 +23,7 @@ object CSValues {
     val VermiculiteHypertrophy_cost              = 2  // Vermiculite Hypertrophy action cost (Power)
     val CoreExposure_cost                        = 1  // Core Exposure action cost (Power)
     val VermiculiteHypertrophy_excrescenceCombat = 6  // Effervescent Excrescence combat after Vermiculite Hypertrophy
+    val CosmicLandfall_awakenThreshold           = 4  // Minimum GOO awaken cost to trigger Cosmic Landfall
     val SpectralCollapse_doomPerPain             = 1  // Doom gained per pain roll from Spectral Collapse
     val SpectralCollapse_esPerKill               = 1  // Elder Signs gained per kill roll from Spectral Collapse
     val EffulgentSacrifice_doom                  = 1  // Doom gained by the sacrificing faction from Effulgent Sacrifice

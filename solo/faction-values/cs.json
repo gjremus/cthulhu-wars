@@ -16,6 +16,7 @@
     "VermiculiteHypertrophy.cost":              {"value": 2, "max": 20, "what": "Vermiculite Hypertrophy action cost (Power)", "designer": "sb.rows.csb00002.cost"},
     "CoreExposure.cost":                        {"value": 1, "max": 20, "what": "Core Exposure action cost (Power)", "designer": "sb.rows.csb00006.cost"},
     "VermiculiteHypertrophy.excrescenceCombat": {"value": 6, "max": 20, "what": "Effervescent Excrescence combat after Vermiculite Hypertrophy", "designer": "sb.rows.csb00002.text (6 combat)"},
+    "CosmicLandfall.awakenThreshold":           {"value": 4, "min": 1, "max": 20, "what": "Minimum GOO awaken cost to trigger Cosmic Landfall", "designer": "sb.rows.csb00003.text (4 power or more)"},
     "SpectralCollapse.doomPerPain":             {"value": 1, "max": 10, "what": "Doom gained per pain roll from Spectral Collapse", "designer": "sb.rows.csb00004.text (1 doom for pains)"},
     "SpectralCollapse.esPerKill":               {"value": 1, "max": 10, "what": "Elder Signs gained per kill roll from Spectral Collapse", "designer": "sb.rows.csb00004.text (1 ES for kills)"},
     "EffulgentSacrifice.doom":                  {"value": 1, "max": 10, "what": "Doom gained by the sacrificing faction from Effulgent Sacrifice", "designer": "sb.rows.csb00005.text (Gain 1 doom)"},

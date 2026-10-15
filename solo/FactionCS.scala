@@ -495,6 +495,15 @@ object CSExpansion extends Expansion {
             // AwakenedAction so downstream GOO-awaken hooks fire (incl. Cosmic Landfall SB3).
             AwakenedAction(CS, CSTulzscha, r, CSValues.Tulzscha_awakenCost)
 
+        // SB3 Cosmic Landfall detection (Task 3.10.3) — when ANY GOO (not just CS's) is awakened
+        // for CSValues.CosmicLandfall_awakenThreshold or more Power, CS may place a free Meteorite.
+        // Check all GOO awakenings (even non-CS, even in non-CS turns) and arm the pending flag.
+        // The generic case matches before Tulzscha's specific case, so it sees Tulzscha too.
+        case AwakenedAction(_, uc, _, cost) if uc.utype == GOO && cost >= CSValues.CosmicLandfall_awakenThreshold =>
+            if (CS.can(CosmicLandfall))
+                game.csCosmicLandfallPending = true
+            UnknownContinue
+
         // Terminal consumer for the AwakenedAction above — every custom-effect GOO awaken
         // needs one of these or the dispatcher crashes with "unknown continue" (this one was
         // missing, which is what crashed the game). Tulzscha has no further bonus effect here;
