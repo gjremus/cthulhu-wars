@@ -269,6 +269,10 @@ object CthulhuWarsSolo {
     val DoubleLine = "======================================================================================================================="
 
     def setupUI() {
+        // Load live value overrides for designer factions (CS, DGT, FBE, FM, PRM, XSS)
+        // This allows Simple Updates to work WITHOUT requiring rebuild/redeploy
+        LiveValues.loadAll()
+
         val (hash, quick) = dom.window.location.hash.drop(1) @@ {
             case "quick" => ("", true)
             case h if h != "" => (h, false)
