@@ -14,7 +14,7 @@
     "BodyArchitect.combat":         {"value": 3,  "max": 20, "what": "Body Architect combat dice", "designer": "units.rows.e5f6g7h8.dice"},
     "BodyArchitect.count":          {"value": 3,  "min": 1, "max": 12, "what": "Body Architects in the faction", "designer": "units.rows.e5f6g7h8.qty"},
     "ScreamingWall.cost":           {"value": 2,  "max": 20, "what": "Screaming Wall unit cost shown on the card (designer cost)", "designer": "units.rows.i9j0k1l2.cost"},
-    "ScreamingWall.createCost":     {"value": 3,  "max": 20, "what": "Power paid by the Create Screaming Wall action"},
+    "ScreamingWall.createCost":     {"value": 2,  "max": 20, "what": "Power paid by the Create Screaming Wall action"},
     "ScreamingWall.count":          {"value": 6,  "min": 1, "max": 12, "what": "Screaming Walls in the faction", "designer": "units.rows.i9j0k1l2.qty"},
     "ScreamingWall.setupCount":     {"value": 1,  "max": 6,  "what": "Screaming Walls placed in the start Area at setup", "designer": "setup.units.a1b2c3d4.qty"},
     "GateWithWall.cost":            {"value": 4,  "max": 20, "what": "Power paid by Create Gate with Screaming Wall"},
