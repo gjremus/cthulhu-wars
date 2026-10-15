@@ -2639,7 +2639,7 @@ object Overlays {
             "Globules transform all standard gates in their regions to prismatic wells. Prismatic wells give 3 power during gather power, and may only summon excrescences. Any excrescence in a region with a controlled well is owned by the controller of that well.",
             $(Insanity, VermiculiteHypertrophy, CosmicLandfall, SpectralCollapse, EffulgentSacrifice, CoreExposure), $(
             (Acolyte,                 6, "1", "0", ""),
-            (Meteorite,               4, "1", "1", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, CosmicLandfall)}, ${reference(CS, CoreExposure)}</div>"""),
+            (Meteorite,               CSValues.Meteorite_count, "" + CSValues.Meteorite_cost, "" + CSValues.Meteorite_combat, s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, CosmicLandfall)}, ${reference(CS, CoreExposure)}</div>"""),
             (EffervescentExcrescence, 4, "2", "2", s"""<div class=p>Spellbook: ${reference(CS, VermiculiteHypertrophy)}</div>"""),
             (LuminousGlobule,         3, "4", "—", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, VermiculiteHypertrophy)}, ${reference(CS, SpectralCollapse)}, ${reference(CS, CoreExposure)}, ${reference(CS, EffulgentSacrifice)}</div>"""),
             (CSTulzscha,              1, "5", calc(g => { implicit val gg : Game = g; 2 * CS.onMap(LuminousGlobule).not(Zeroed).num }), s"""

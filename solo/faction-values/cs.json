@@ -1,13 +1,10 @@
 {
   "acronym": "CS",
-  "name": "Colour Out of Space",
-  "designerId": "tpunhkcjo2c",
+  "faction": "Colour Out of Space",
+  "designerFid": "tpunhkcjo2c",
   "values": {
-    "Meteorite.combat": {
-      "value": 1,
-      "min": 0,
-      "max": 6,
-      "desc": "Meteorite combat"
-    }
+    "Meteorite.cost":   {"value": 1, "max": 20, "what": "Meteorite summon cost (Power)", "designer": "units.rows.csun0002.cost"},
+    "Meteorite.combat": {"value": 1, "max": 20, "what": "Meteorite combat dice", "designer": "units.rows.csun0002.dice"},
+    "Meteorite.count":  {"value": 4, "min": 1, "max": 12, "what": "Meteorites in the faction", "designer": "units.rows.csun0002.qty"}
   }
 }

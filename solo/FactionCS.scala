@@ -21,10 +21,10 @@ import html._
 
 
 // Colour Out of Space (CS) UNITS
-// Meteorite (Monster, cost 1, combat 1 -- designer Simple Update rev 2, was 0), Effervescent Excrescence (Monster,
+// Meteorite (Monster; cost/combat/count from CSValues = solo/faction-values/cs.json), Effervescent Excrescence (Monster,
 // cost 2, combat 2 -> 6 with Vermiculite Hypertrophy), Luminous Globule
 // (Terror, cost 4, does not fight), Tulzscha (GOO, awaken 5 Power + sacrifice).
-case object Meteorite extends FactionUnitClass(CS, "Meteorite", Monster, 1)
+case object Meteorite extends FactionUnitClass(CS, "Meteorite", Monster, CSValues.Meteorite_cost)
 case object EffervescentExcrescence extends FactionUnitClass(CS, "Effervescent Excrescence", Monster, 2) {
     // SB2 Vermiculite Hypertrophy (Task 3.10.2): while CS controls that spellbook, Excrescences
     // become immune to Move — they can neither be chosen for a Move action nor retreat out of a
@@ -94,7 +94,7 @@ case object CS extends Faction { f =>
 
     val allUnits =
         1.times(CSTulzscha) ++
-        4.times(Meteorite) ++
+        CSValues.Meteorite_count.times(Meteorite) ++
         4.times(EffervescentExcrescence) ++
         3.times(LuminousGlobule) ++
         6.times(Acolyte)
@@ -120,7 +120,7 @@ case object CS extends Faction { f =>
         val globulesOnBoard  = f.onMap(LuminousGlobule).not(Zeroed).num
         // Excrescence combat now lives in the shared Game.neutralStrength so it counts for whichever
         // faction holds the excrescence in battle (not only CS). Do NOT re-add it here or it double-counts.
-        units(Meteorite).not(Zeroed).num * 1 +
+        units(Meteorite).not(Zeroed).num * CSValues.Meteorite_combat +
         units(CSTulzscha).not(Zeroed).num * globulesOnBoard * 2 +
         neutralStrength(units, opponent)
     }

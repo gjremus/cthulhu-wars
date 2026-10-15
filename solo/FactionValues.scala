@@ -8,9 +8,11 @@ package cws
 // programmatically (no Claude). Faction code + overlay text both read these.
 // ============================================================================
 
-// CS (CS) - from faction-values/cs.json
+// Colour Out of Space (CS) - from faction-values/cs.json
 object CSValues {
-    val Meteorite_combat = 1
+    val Meteorite_cost   = 1  // Meteorite summon cost (Power)
+    val Meteorite_combat = 1  // Meteorite combat dice
+    val Meteorite_count  = 4  // Meteorites in the faction
 }
 
 // Tribulation (DGT) - from faction-values/dgt.json
