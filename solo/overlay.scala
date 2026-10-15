@@ -681,7 +681,7 @@ object Overlays {
             (Death,      DGTValues.Death_count, "" + DGTValues.Death_cost, "" + DGTValues.Death_combat, s"""<div class=p>Death counts as a Great Old One to Awaken Independent Great Old Ones.</div><div class=p>Spellbooks: ${reference(DGT, PaleRider)}, ${reference(DGT, GodsHand)}</div>"""),
         ))
 
-        case $("DGT", "Setup") => requirement("After Anubi, 8 Power, 6 Acolytes and a Controlled Gate in an empty Area not adjacent to another faction's Start Area.")
+        case $("DGT", "Setup") => requirement(s"After Anubi, 8 Power, ${DGTValues.Acolyte_count} Acolytes and a Controlled Gate in an empty Area not adjacent to another faction's Start Area.")
 
         case $("DGT", WhiteRiderReq.text) => requirement("Control a Gate in an Area marked with the Dragon Glyph. Unlocks Pestilence.")
         case $("DGT", RedRiderReq.text) => requirement("Control a Gate in an Area marked with the Thorn Glyph. Unlocks War.")
@@ -2946,7 +2946,7 @@ object Overlays {
     def prmOverlay(s : $[Any]) : String = s match {
         case $("PRM") => prmFactionOverlay()
 
-        case $("PRM", "Setup") => requirement("After Windwalker and Before Anubi, 8 Power, 6 Acolytes and a Controlled Gate in an empty Sea Area.")
+        case $("PRM", "Setup") => requirement(s"After Windwalker and Before Anubi, 8 Power, ${PRMValues.Acolyte_count} Acolytes and a Controlled Gate in an empty Sea Area.")
 
         case $("PRM", Control2LandGatesReq.text)     => requirement(s"Control ${PRMValues.Control2LandGatesReq_gates} Gates in Land Areas.")
         case $("PRM", Pay2DoomFlipSpellbookReq.text) => requirement(s"As an Action, Pay ${PRMValues.Pay2DoomFlipSpellbookReq_doom} Doom and Flip one of your Face Up Spellbooks Face Down until the Doom Phase.")
@@ -2955,9 +2955,9 @@ object Overlays {
         case $("PRM", YcgnaAttackerInBattleReq.text) => requirement("Ycgn'àgnnisssz is an Attacker in a Battle.")
         case $("PRM", AwakenYcgnaReq.text)           => requirement("Awaken Ycgn'àgnnisssz.")
 
-        case $("PRM", MakeAsOne.name)     => spellbook(MakeAsOne.name,     "Ongoing (Faction Ability)", "Other Factions may activate your Spellbook Abilities by Paying your their Power Costs. You gain a Doom whenever this causes your Spellbook to become Flipped.")
-        case $("PRM", AtomicUnity.name)   => spellbook(AtomicUnity.name,   s"Action: Cost ${PRMValues.AtomicUnity_cost}", "Eliminate a Monster you control to gain Power equal to its Cost minus one. Flip this Spellbook Face Down until the Doom Phase if you gained 2 or more Power this way.")
-        case $("PRM", EldritchLove.name)  => spellbook(EldritchLove.name,  s"Action: Cost ${PRMValues.EldritchLove_cost}", s"Gain an Elder Sign if you have ${PRMValues.EldritchLove_faceDownNeeded} or more Face Down Spellbooks. Flip this Spellbook Face Down until the Doom Phase.")
+        case $("PRM", MakeAsOne.name)     => spellbook(MakeAsOne.name,     "Ongoing (Faction Ability)", s"Other Factions may activate your Spellbook Abilities by Paying you their Power Costs. You gain ${PRMValues.MakeAsOne_doomPerFlip} Doom whenever this causes your Spellbook to become Flipped.")
+        case $("PRM", AtomicUnity.name)   => spellbook(AtomicUnity.name,   s"Action: Cost ${PRMValues.AtomicUnity_cost}", s"Eliminate a Monster you control to gain Power equal to its Cost minus one. Flip this Spellbook Face Down until the Doom Phase if you gained ${PRMValues.AtomicUnity_flipPower} or more Power this way.")
+        case $("PRM", EldritchLove.name)  => spellbook(EldritchLove.name,  s"Action: Cost ${PRMValues.EldritchLove_cost}", s"Gain ${PRMValues.EldritchLove_elderSigns} Elder Sign${(PRMValues.EldritchLove_elderSigns != 1).??("s")} if you have ${PRMValues.EldritchLove_faceDownNeeded} or more Face Down Spellbooks. Flip this Spellbook Face Down until the Doom Phase.")
         case $("PRM", Osmosis.name)       => spellbook(Osmosis.name,       s"Action: Cost ${PRMValues.Osmosis_cost}", "Choose two adjacent Areas. Each faction with units in at least one of those Areas, beginning with you and proceeding in turn order, evenly distributes their Units present between those Areas.")
         case $("PRM", Protogenesis.name)  => spellbook(Protogenesis.name,  s"Action: Cost ${PRMValues.Protogenesis_cost}", "Place the lowest cost Monster from your Pool into any Area already containing your Units. Flip this Spellbook Face Down until the Doom Phase if you have no Monsters remain in your Pool.")
         case $("PRM", SpeakReality.name)  => spellbook(SpeakReality.name,  "Action: Cost X", "Choose a Faction with Units in Ycgn'àgnnisssz's Area and name a Common Action (Move, Summon, Battle, Capture, Build Gate, or Recruit). They can take no other Action on their next turn if they are able to perform the named Action spending at least as much Power as you spent. If you spend less than the required Cost, nothing happens.")
@@ -2971,12 +2971,12 @@ object Overlays {
         def combat = """<span class="combat-color">Combat</span>"""
         def cost(s : String) = s"""<span class="cost-color">$s</span>"""
         def ref(sb : Spellbook) = s"""<span class="ability-color">${sb.name}</span>"""
-        faction(PRM, "info:prm-background", MakeAsOne, "Ongoing", "Other Factions may activate your Spellbook Abilities by Paying you their Power Costs. You gain a Doom whenever this causes your Spellbook to become Flipped.",
+        faction(PRM, "info:prm-background", MakeAsOne, "Ongoing", s"Other Factions may activate your Spellbook Abilities by Paying you their Power Costs. You gain ${PRMValues.MakeAsOne_doomPerFlip} Doom whenever this causes your Spellbook to become Flipped.",
             $(AtomicUnity, EldritchLove, Osmosis, Protogenesis, SpeakReality, ZealousSpark), $(
             (Acolyte,           PRMValues.Acolyte_count, "1", "0", s"""<div class=p>Setup: ${PRMValues.Acolyte_count} Acolytes + a Controlled Gate in an empty Sea Area.</div>"""),
             (AstralEgg,         PRMValues.AstralEgg_count, "" + PRMValues.AstralEgg_cost, "" + PRMValues.AstralEgg_combat, s"""<div class=p>Replace with ${Ycgnagnnisssz.name} when Awakening.</div>"""),
             (CelestialFledgling, PRMValues.CelestialFledgling_count, "1+", "1+", s"""<div class=p>${cost("Cost")} and ${combat} equal to the number of Fledglings in play plus one.</div><div class=p>Spellbook: ${prmRef(Protogenesis)}</div>"""),
-            (Ycgnagnnisssz,     1, "?", "?", s"""
+            (Ycgnagnnisssz,     PRMValues.Ycgnagnnisssz_count, "?", "?", s"""
                 <div class=p>${cost(s"How to Awaken ${Ycgnagnnisssz.name}:")}</div>
                 <div class=p>${cost("1)")} Have an Astral Egg in play.</div>
                 <div class=p>${cost("2)")} Pay ${PRMValues.Ycgnagnnisssz_awakenCost} Power.</div>

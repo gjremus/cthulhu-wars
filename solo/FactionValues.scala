@@ -82,7 +82,9 @@ object PRMValues {
     val AstralEgg_count                   = 4  // Astral Eggs in the faction
     val CelestialFledgling_count          = 4  // Celestial Fledglings in the faction (cost/combat are a calculation)
     val Ycgnagnnisssz_awakenCost          = 7  // Power to Awaken Ycgn'agnnisssz
+    val Ycgnagnnisssz_count               = 1  // Ycgn'agnnisssz figures (max 1: Mother's Aid and awaken code assume a single figure)
     val AtomicUnity_cost                  = 1  // Atomic Unity action cost (Power)
+    val AtomicUnity_flipPower             = 2  // Atomic Unity: flip Face Down if this much Power or more was gained
     val EldritchLove_cost                 = 1  // Eldritch Love action cost (Power) - menu check and label
     val EldritchLove_faceDownNeeded       = 2  // Eldritch Love: Face Down Spellbooks needed for the Elder Sign
     val EldritchLove_elderSigns           = 1  // Eldritch Love: Elder Signs gained

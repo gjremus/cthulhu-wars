@@ -77,7 +77,7 @@ case object PRM extends Faction { f =>
         PRMValues.Acolyte_count.times(Acolyte)                       ++
         PRMValues.AstralEgg_count.times(AstralEgg)                   ++
         PRMValues.CelestialFledgling_count.times(CelestialFledgling) ++
-        1.times(Ycgnagnnisssz)
+        PRMValues.Ycgnagnnisssz_count.times(Ycgnagnnisssz)
 
     // Ycgn'àgnnisssz awakens via a CUSTOM replacement procedure (replace an Astral Egg
     // + pay 7 Power), NOT the standard Power-cost awaken. Returning None here keeps
@@ -363,8 +363,8 @@ object PRMExpansion extends Expansion {
                     f.log("Gained", powerGained.power)
                 }
 
-                // Flip if gained 2 or more Power
-                if (powerGained >= 2) {
+                // Flip if gained PRMValues.AtomicUnity_flipPower or more Power
+                if (powerGained >= PRMValues.AtomicUnity_flipPower) {
                     f.oncePerAction :+= AtomicUnity
                     game.prmFlippedDownSpellbooks :+= AtomicUnity
                     f.log(AtomicUnity.styled(f), "flipped Face Down until Doom Phase")
