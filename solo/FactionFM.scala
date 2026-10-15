@@ -374,7 +374,6 @@ object FMExpansion extends Expansion {
 
         case CreateGateWithWallAction(self, r) =>
             self.power -= FMValues.GateWithWall_cost
-            self.doom += FMValues.GateWithWall_doom
             game.gates :+= r
             val wall = self.pool.%(_.uclass == ScreamingWall).head
             self.place(ScreamingWall, r)
@@ -430,7 +429,6 @@ object FMExpansion extends Expansion {
 
         case BuildGateAction(f : FM.type, r) if game.setup.has(FM) =>
             f.power -= FMValues.BuildGate_cost
-            f.doom += FMValues.BuildGate_doom
             game.gates :+= r
             f.log("built a gate in", r)
             Then(MainAction(f))
