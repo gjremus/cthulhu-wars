@@ -683,12 +683,12 @@ object Overlays {
 
         case $("DGT", "Setup") => requirement("After Anubi, 8 Power, 6 Acolytes and a Controlled Gate in an empty Area not adjacent to another faction's Start Area.")
 
-        case $("DGT", WhiteRiderReq.text) => requirement("Control a Gate in an Area marked with Dragon Glyph. Add Pestilence to your Pool.")
-        case $("DGT", RedRiderReq.text) => requirement("Control a Gate in an Area marked with Thorn Glyph. Add War to your Pool.")
-        case $("DGT", BlackRiderReq.text) => requirement("Control a Gate in an Area marked with Chevron Glyph. Add Famine to your Pool.")
-        case $("DGT", PaleRiderReq.text) => requirement("A player performs a Ritual of Annihilation. Add Death to your Pool.")
-        case $("DGT", MartyrsCryReq.text) => requirement("As an Action, distribute Power equal to number of players to enemy Factions.")
-        case $("DGT", CosmicChaosReq.text) => requirement("As an Action, distribute Doom equal to number of players to enemy Factions.")
+        case $("DGT", WhiteRiderReq.text) => requirement("Control a Gate in an Area marked with the Dragon Glyph. Unlocks Pestilence.")
+        case $("DGT", RedRiderReq.text) => requirement("Control a Gate in an Area marked with the Thorn Glyph. Unlocks War.")
+        case $("DGT", BlackRiderReq.text) => requirement("Control a Gate in an Area marked with the Chevron Glyph. Unlocks Famine.")
+        case $("DGT", PaleRiderReq.text) => requirement("A player performs a Ritual of Annihilation. Unlocks Death.")
+        case $("DGT", MartyrsCryReq.text) => requirement("As an Action, distribute a total amount of Power equal to the number of players to any enemy Factions of your choice.")
+        case $("DGT", CosmicChaosReq.text) => requirement("As an Action, distribute a total amount of Doom equal to the number of players to any enemy Factions of your choice.")
 
         case $("DGT", WhiteRider.name) => spellbook(WhiteRider.name, "Ongoing", "Enemy Units in Pestilence's Area cannot move out and cannot retreat from that Area.")
         case $("DGT", "Mayhem") => spellbook("Mayhem", "Once Only", s"During Post-Battle, if Pestilence is present and ${DGTValues.Mayhem_pains} or more Pains are assigned to enemy Units, Gain ${DGTValues.RiderFlip_elderSigns} Elder Sign and flip this Spellbook.")
@@ -1369,8 +1369,13 @@ object Overlays {
         // ── PERMEATION (PRM) — Homebrew faction overlays ─────────────────────
         case s2 if s2.headOption.exists(_ == "PRM") => prmOverlay(s2)
 
-        // ── TRIBULATION (DGT) — Homebrew faction overlays ──────────────────────
-        case s2 if s2.headOption.exists(_ == "DGT") => dgtOverlay(s2)
+        // NOTE: Tribulation (DGT) overlays are handled earlier in the info() chain
+        // by infoDGT (defined above, before infoMain is ever reached), which is the
+        // live, current copy. A second, stale "DGT" dispatch (dgtOverlay/
+        // dgtFactionOverlay, with wording that no longer matches the design) used to
+        // live here as dead code — removed 2026-10-14 per Faction Build Manual Task
+        // 1.11 ("if the faction card is defined in more than one info... function,
+        // the first one wins" — this exact DGT duplicate was the manual's example).
 
         // Bubastis (BB): alternate spellbooks info overlay.
         // Help text shows the FULL rulebook text of both replacement spellbooks
@@ -2961,32 +2966,6 @@ object Overlays {
         case _ => ""
     }
 
-    // Tribulation (DGT) — overlay dispatch helper (extracted from the giant `info`
-    // match so that method stays under the JVM 64KB method-size limit). Handles the
-    // faction info card, the 6 spellbook-requirement panels, and the 8 spellbook /
-    // ability info cards (verbatim from card art, §1.9 / §1.10).
-    // Tribulation (DGT) — faction info card. All text VERBATIM from the Tribulation
-    // implementation guide / §1.5–§1.10. Do not paraphrase.
-    def dgtFactionOverlay() = {
-        def dgtRef(sb : Spellbook) = s"""<span class="ability-color pointer" onclick="onExternalClick('DGT', '${sb.name}')">${sb.name}</span>"""
-        def combat = """<span class="combat-color">Combat</span>"""
-        def cost(s : String) = s"""<span class="cost-color">$s</span>"""
-        def ref(sb : Spellbook) = s"""<span class="ability-color">${sb.name}</span>"""
-        faction(DGT, "info:dgt-background", Dominion, "Ongoing", "When performing the Move Action, Areas with Units you control are adjacent to each other.",
-            $(WhiteRider, RedRider, BlackRider, PaleRider, MartyrsCry, CosmicChaos), $(
-            (Acolyte,    DGTValues.Acolyte_count, "1", "0", s"""<div class=p>Spellbook: ${dgtRef(MartyrsCry)}</div>"""),
-            (Conquest,   DGTValues.Conquest_count, "" + DGTValues.Conquest_cost, "" + DGTValues.Conquest_combat, s"""<div class=p>Spellbook: ${dgtRef(CosmicChaos)}</div>"""),
-            (Pestilence, DGTValues.Pestilence_count, "" + DGTValues.Pestilence_cost, "" + DGTValues.Pestilence_combat, s"""<div class=p>Spellbooks: ${dgtRef(WhiteRider)}, ${dgtRef(GodsPlague)}</div>"""),
-            (War,        DGTValues.War_count, "" + DGTValues.War_cost, "" + DGTValues.War_combat + "/" + DGTValues.War_combatRedRider + "/" + DGTValues.War_combatGodsSword, s"""
-                <div class=p>${cost("Cost:")} ${DGTValues.War_cost} Power</div>
-                <div class=p>${combat} ${DGTValues.War_combat} base, ${DGTValues.War_combatRedRider} with ${dgtRef(RedRider)}, ${DGTValues.War_combatGodsSword} with ${dgtRef(GodsSword)}</div>
-                <div class=p>Spellbooks: ${dgtRef(RedRider)}, ${dgtRef(GodsSword)}</div>"""
-            ),
-            (Famine,     DGTValues.Famine_count, "" + DGTValues.Famine_cost, "" + DGTValues.Famine_combat, s"""<div class=p>Spellbooks: ${dgtRef(BlackRider)}, ${dgtRef(GodsScale)}</div>"""),
-            (Death,      DGTValues.Death_count, "" + DGTValues.Death_cost, "" + DGTValues.Death_combat, s"""<div class=p>Death counts as a Great Old One to Awaken Independent Great Old Ones.</div><div class=p>Spellbooks: ${dgtRef(PaleRider)}, ${dgtRef(GodsHand)}</div>"""),
-        ), setup = true)
-    }
-
     def prmFactionOverlay() = {
         def prmRef(sb : Spellbook) = s"""<span class="ability-color pointer" onclick="onExternalClick('PRM', '${sb.name}')">${sb.name}</span>"""
         def combat = """<span class="combat-color">Combat</span>"""
@@ -3009,28 +2988,6 @@ object Overlays {
         ), setup = true)
     }
 
-    def dgtOverlay(s : $[Any]) : String = s match {
-        case $("DGT") => dgtFactionOverlay()
-
-        case $("DGT", "Setup") => requirement("6 Acolytes, 4 Conquest, and 1 each of Pestilence, War, Famine, and Death.")
-
-        case $("DGT", WhiteRiderReq.text)  => requirement("Control a Gate in an Area marked with Dragon Glyph; Add Pestilence to your Pool")
-        case $("DGT", RedRiderReq.text)    => requirement("Control a Gate in an Area marked with Thorn Glyph; Add War to your Pool")
-        case $("DGT", BlackRiderReq.text)  => requirement("Control a Gate in an Area marked with Chevron Glyph; Add Famine to your Pool")
-        case $("DGT", PaleRiderReq.text)   => requirement("A player performs a Ritual of Annihilation; Add Death to your Pool")
-        case $("DGT", MartyrsCryReq.text)  => requirement("As an Action, distribute Power equal to number of players to enemy Factions")
-        case $("DGT", CosmicChaosReq.text) => requirement("As an Action, distribute Doom equal to number of players to enemy Factions")
-
-        case $("DGT", Dominion.name)   => spellbook(Dominion.name,   "Ongoing", "When performing the Move Action, Areas with Units you control are adjacent to each other.")
-        case $("DGT", WhiteRider.name) => spellbook(WhiteRider.name, "Action: Cost 1", "Gain 1 Elder Sign. If Pestilence is in the Battle, it cannot be Assigned a Pains result.")
-        case $("DGT", RedRider.name)   => spellbook(RedRider.name,   "Action: Cost 1", "Gain 1 Elder Sign. War's Combat becomes 6 for this Battle; if it kills an enemy unit, gain 1 Power.")
-        case $("DGT", BlackRider.name) => spellbook(BlackRider.name, "Action: Cost 1", "Gain 1 Elder Sign. Famine captures units instead of eliminating them; captured units go into your Pool, not the enemy's.")
-        case $("DGT", PaleRider.name)  => spellbook(PaleRider.name,  "Action: Cost 1", "Gain 1 Elder Sign. Death is treated as a Great Old One for purposes of Awakening. It counts as one when Awakening cost is divided.")
-        case $("DGT", MartyrsCry.name) => spellbook(MartyrsCry.name, "Action: Cost X", "Distribute X Power equal to the number of players to enemy Factions; you gain 1 Doom per player (maximum = number of players).")
-        case $("DGT", CosmicChaos.name) => spellbook(CosmicChaos.name, "Action: Cost X", "Distribute X Doom equal to the number of players to enemy Factions; you gain 1 Power per player (maximum = number of players).")
-
-        case _ => ""
-    }
 
     def owFactionOverlay(cheapMutants : Boolean, yogCurseDie : Boolean) = {
         val mutantQty = 4

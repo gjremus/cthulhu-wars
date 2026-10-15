@@ -61,10 +61,23 @@ case object DGT extends Faction { f =>
 // Conquest: Monster cost 1, combat 1, pool 4.
 // Pestilence, War, Famine, Death: Terrors cost 3, combat 3 each, pool 1 each.
 case object Conquest   extends FactionUnitClass(DGT, "Conquest",   Monster, DGTValues.Conquest_cost)
-case object Pestilence extends FactionUnitClass(DGT, "Pestilence", Terror,  DGTValues.Pestilence_cost)
-case object War        extends FactionUnitClass(DGT, "War",        Terror,  DGTValues.War_cost)
-case object Famine     extends FactionUnitClass(DGT, "Famine",     Terror,  DGTValues.Famine_cost)
-case object Death      extends FactionUnitClass(DGT, "Death",      Terror,  DGTValues.Death_cost)
+
+// The four Horsemen "start out of your Unit Pool" (setup.text) — each is unlocked
+// by its matching Rider Spellbook Requirement (relatedSb in the designer record).
+// Once unlocked the Rider may later flip to its back side (God's Plague/Sword/
+// Scale/Hand); the Terror must stay summonable after that flip, so check both.
+case object Pestilence extends FactionUnitClass(DGT, "Pestilence", Terror,  DGTValues.Pestilence_cost) {
+    override def canBeSummoned(f : Faction)(implicit game : Game) = f.has(WhiteRider) || f.has(GodsPlague)
+}
+case object War        extends FactionUnitClass(DGT, "War",        Terror,  DGTValues.War_cost) {
+    override def canBeSummoned(f : Faction)(implicit game : Game) = f.has(RedRider) || f.has(GodsSword)
+}
+case object Famine     extends FactionUnitClass(DGT, "Famine",     Terror,  DGTValues.Famine_cost) {
+    override def canBeSummoned(f : Faction)(implicit game : Game) = f.has(BlackRider) || f.has(GodsScale)
+}
+case object Death      extends FactionUnitClass(DGT, "Death",      Terror,  DGTValues.Death_cost) {
+    override def canBeSummoned(f : Faction)(implicit game : Game) = f.has(PaleRider) || f.has(GodsHand)
+}
 
 
 // ── SPELLBOOKS ──────────────────────────────────────────────────────────────
@@ -92,12 +105,16 @@ case object Dominion extends FactionSpellbook(DGT, "Dominion")
 
 
 // ── SPELLBOOK REQUIREMENTS ──────────────────────────────────────────────────
-case object WhiteRiderReq  extends Requirement("Control a Gate in an Area marked with Dragon Glyph; Add Pestilence to your Pool")
-case object RedRiderReq    extends Requirement("Control a Gate in an Area marked with Thorn Glyph; Add War to your Pool")
-case object BlackRiderReq  extends Requirement("Control a Gate in an Area marked with Chevron Glyph; Add Famine to your Pool")
-case object PaleRiderReq   extends Requirement("A player performs a Ritual of Annihilation; Add Death to your Pool")
-case object MartyrsCryReq  extends Requirement("As an Action, distribute Power equal to number of players to enemy Factions")
-case object CosmicChaosReq extends Requirement("As an Action, distribute Doom equal to number of players to enemy Factions")
+// Text matches the designer record word for word (Task 1.10 rule — the overlay
+// looks these up by this exact text). The "Add <Terror> to your Pool" wording a
+// previous rebuild appended here was never in the design and is now handled the
+// correct way: via UnitClass.canBeSummoned on each Terror, above.
+case object WhiteRiderReq  extends Requirement("Control a Gate in an Area marked with the Dragon Glyph.")
+case object RedRiderReq    extends Requirement("Control a Gate in an Area marked with the Thorn Glyph.")
+case object BlackRiderReq  extends Requirement("Control a Gate in an Area marked with the Chevron Glyph.")
+case object PaleRiderReq   extends Requirement("A player performs a Ritual of Annihilation.")
+case object MartyrsCryReq  extends Requirement("As an Action, distribute a total amount of Power equal to the number of players to any enemy Factions of your choice")
+case object CosmicChaosReq extends Requirement("As an Action, distribute a total amount of Doom equal to the number of players to any enemy Factions of your choice")
 
 
 // ============================================================================
@@ -529,21 +546,33 @@ object DGTExpansion extends Expansion {
     }
 
     // ── SPELLBOOK REQUIREMENTS (continuous evaluation) ──────────────────────
+    // CRASH/BUG FIX (2026-10-14): these three used to also require
+    // "!f.pool.exists(_.uclass == <Terror>)" before granting the Spellbook.
+    // Every DGT unit (including the four Terrors) starts life at f.reserve,
+    // which IS f.pool by definition (Game.scala: def pool = units.%(_.region
+    // == f.reserve)) — nothing ever moves them out of the pool region. So
+    // that extra clause was always false and WhiteRiderReq/RedRiderReq/
+    // BlackRiderReq (and PaleRiderReq, see Game.notifyRoAReactors) could
+    // NEVER be satisfied: 4 of DGT's 6 Spellbooks were permanently
+    // unreachable. satisfyIf() already guards re-triggering via f.needs(rq),
+    // so the pool check was both redundant and broken. The actual "Terrors
+    // start out of your Unit Pool" rule (setup.text) is now enforced the
+    // right way, by gating availability with UnitClass.canBeSummoned below.
     override def triggers()(implicit game : Game) {
         if (!game.setup.has(DGT)) return
         val f = DGT
 
         // SBR 1 — White Rider: Control a Gate in Dragon Glyph (GlyphOO) area
         f.satisfyIf(WhiteRiderReq, WhiteRiderReq.text,
-            game.board.regions.exists(r => r.glyph == GlyphOO && f.gates.contains(r)) && !f.pool.exists(_.uclass == Pestilence))
+            game.board.regions.exists(r => r.glyph == GlyphOO && f.gates.contains(r)))
 
         // SBR 2 — Red Rider: Control a Gate in Thorn Glyph (GlyphWW) area
         f.satisfyIf(RedRiderReq, RedRiderReq.text,
-            game.board.regions.exists(r => r.glyph == GlyphWW && f.gates.contains(r)) && !f.pool.exists(_.uclass == War))
+            game.board.regions.exists(r => r.glyph == GlyphWW && f.gates.contains(r)))
 
         // SBR 3 — Black Rider: Control a Gate in Chevron Glyph (GlyphAA) area
         f.satisfyIf(BlackRiderReq, BlackRiderReq.text,
-            game.board.regions.exists(r => r.glyph == GlyphAA && f.gates.contains(r)) && !f.pool.exists(_.uclass == Famine))
+            game.board.regions.exists(r => r.glyph == GlyphAA && f.gates.contains(r)))
     }
 
     // ── GOD'S HAND: DGT units in Death's area can't be eliminated ──────────
@@ -565,59 +594,11 @@ object DGTExpansion extends Expansion {
         // Future: God's Scale flip prompts could go here
     }
 
-    // ── OVERLAY INFO FUNCTION — Faction card text HTML ──────────────────────
-    // Provides formatted HTML for the faction card display showing faction name,
-    // unique ability (Dominion), core spellbooks, units, and key mechanics.
-    def overlayInfo : String = {
-        s"""
-        <div class="faction-card dgt-faction">
-            <div class="faction-header">
-                <h2 class="faction-name">${DGT.name}</h2>
-                <p class="faction-short">(${DGT.short})</p>
-            </div>
-            <div class="faction-color-indicator" style="background-color: #808080;"></div>
-            <div class="unique-ability">
-                <strong>Dominion</strong> (Ongoing):
-                When performing the Move Action, Areas with Units you control are adjacent to each other.
-            </div>
-            <div class="spellbooks-section">
-                <h3>Core Spellbooks</h3>
-                <ul>
-                    <li>${WhiteRider.name} — Pestilence theme</li>
-                    <li>${RedRider.name} — War theme</li>
-                    <li>${BlackRider.name} — Famine theme</li>
-                    <li>${PaleRider.name} — Death theme</li>
-                    <li>${MartyrsCry.name} — Power distribution</li>
-                    <li>${CosmicChaos.name} — Doom distribution</li>
-                </ul>
-            </div>
-            <div class="units-section">
-                <h3>Units</h3>
-                <ul>
-                    <li>6 Acolytes (standard cultist)</li>
-                    <li>4 Conquest (Monster, cost 1)</li>
-                    <li>Pestilence (Terror, cost 3, unlocked via ${WhiteRider.name})</li>
-                    <li>War (Terror, cost 3, unlocked via ${RedRider.name})</li>
-                    <li>Famine (Terror, cost 3, unlocked via ${BlackRider.name})</li>
-                    <li>Death (Terror, cost 3, unlocked via ${PaleRider.name})</li>
-                </ul>
-            </div>
-            <div class="mechanics-section">
-                <h3>Special Mechanics</h3>
-                <p>
-                    <strong>Four Horsemen Theme:</strong> The faction unlocks special Terror units
-                    (Pestilence, War, Famine, Death) by controlling gates in specific Glyph areas.
-                    Each rider spellbook has a dual-sided back (Mayhem, Ruin, Rampage, Despair)
-                    that flips under specific conditions.
-                </p>
-                <p>
-                    <strong>Dual-Sided Spellbooks:</strong> Front sides (Riders) remain active;
-                    back sides (God's Plagues/Swords/Scales/Hands) unlock advanced effects through
-                    battle/gate/ritual triggers.
-                </p>
-            </div>
-        </div>
-        """
-    }
-
+    // NOTE: a standalone overlayInfo HTML-builder used to live here. It was never
+    // called from anywhere (the real faction-card overlay is overlay.scala's
+    // infoDGT, wired into the info() chain) and its text had drifted out of sync
+    // with the live design. Removed 2026-10-14 to avoid a second, stale copy of
+    // the faction card text — the exact trap flagged in the Faction Build Manual
+    // Task 1.11 ("if the faction card is defined in more than one info... function,
+    // the first one wins" — FM/PRM/DGT all had this problem before).
 }

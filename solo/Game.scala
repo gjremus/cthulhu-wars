@@ -1925,7 +1925,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             DC.satisfyIf(PilgrimageReq, "A player performed a Ritual of Annihilation", true)
         if (setup.has(TT) && performer != TT)
             TT.satisfyIf(TTSycophancyTrigger, "Another faction ritualed or reached 15 Doom", true)
-        if (setup.has(DGT) && DGT.needs(PaleRiderReq) && !DGT.pool.exists(_.uclass == Death))
+        // CRASH/BUG FIX (2026-10-14): dropped the "!DGT.pool.exists(_.uclass == Death)"
+        // clause — Death starts in f.reserve (= f.pool) like every unit and nothing ever
+        // moves it out, so that clause was always false and PaleRiderReq could never be
+        // satisfied. satisfyIf() already no-ops once needs(rq) is false, so the extra
+        // check was both redundant and broken. Death's actual pool-gating is now done via
+        // UnitClass.canBeSummoned in FactionDGT.scala.
+        if (setup.has(DGT) && DGT.needs(PaleRiderReq))
             DGT.satisfyIf(PaleRiderReq, "A player performed a Ritual of Annihilation", true)
     }
     var battle : |[Battle] = None
