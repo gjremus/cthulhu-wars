@@ -8,6 +8,11 @@ package cws
 // programmatically (no Claude). Faction code + overlay text both read these.
 // ============================================================================
 
+// CS (CS) - from faction-values/cs.json
+object CSValues {
+    val Meteorite_combat = 1
+}
+
 // Tribulation (DGT) - from faction-values/dgt.json
 object DGTValues {
     val Acolyte_count              = 6  // Acolytes in the faction
@@ -51,7 +56,7 @@ object FMValues {
     val BodyArchitect_combat         = 3  // Body Architect combat dice
     val BodyArchitect_count          = 3  // Body Architects in the faction
     val ScreamingWall_cost           = 2  // Screaming Wall unit cost shown on the card (designer cost)
-    val ScreamingWall_createCost     = 3  // Power paid by the Create Screaming Wall action
+    val ScreamingWall_createCost     = 2  // Power paid by the Create Screaming Wall action
     val ScreamingWall_count          = 6  // Screaming Walls in the faction
     val ScreamingWall_setupCount     = 1  // Screaming Walls placed in the start Area at setup
     val GateWithWall_cost            = 4  // Power paid by Create Gate with Screaming Wall

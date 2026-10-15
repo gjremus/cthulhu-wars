@@ -1,0 +1,13 @@
+{
+  "acronym": "CS",
+  "name": "Colour Out of Space",
+  "designerId": "tpunhkcjo2c",
+  "values": {
+    "Meteorite.combat": {
+      "value": 1,
+      "min": 0,
+      "max": 6,
+      "desc": "Meteorite combat"
+    }
+  }
+}
