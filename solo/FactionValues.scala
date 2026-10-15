@@ -132,17 +132,21 @@ object PRMValues {
 
 // Xyrious Storm (XSS) - from faction-values/xss.json
 object XSSValues {
-    val Setup_power             = 8  // Starting Power
-    val Setup_Acolyte           = 6  // Acolytes placed during setup
-    val Acolyte_count           = 6  // Acolytes in the faction
-    val AmphibianCrawler_count  = 2  // Amphibian Crawlers in the faction
-    val AmphibianCrawler_cost   = 1  // Amphibian Crawler summon cost (Power)
-    val AmphibianCrawler_combat = 0  // Amphibian Crawler combat dice
-    val Twister_count           = 4  // Twisters in the faction
-    val Twister_cost            = 2  // Twister summon cost (Power)
-    val EyeOfTheStorm_count     = 3  // Eye of the Storms in the faction
-    val EyeOfTheStorm_cost      = 3  // Eye of the Storm summon cost (Power)
-    val Petrichor_count         = 1  // Petrichors in the faction
-    val Petrichor_awakenCost    = 8  // Power to Awaken Petrichor
-    val Tsunami_cost            = 1  // Tsunami action cost (Power)
+    val Setup_power               = 8  // Starting Power
+    val Setup_Acolyte             = 6  // Acolytes placed during setup
+    val Acolyte_count             = 6  // Acolytes in the faction
+    val AmphibianCrawler_count    = 2  // Amphibian Crawlers in the faction
+    val AmphibianCrawler_cost     = 1  // Amphibian Crawler summon cost (Power)
+    val AmphibianCrawler_combat   = 0  // Amphibian Crawler combat dice
+    val Twister_count             = 4  // Twisters in the faction
+    val Twister_cost              = 2  // Twister summon cost (Power)
+    val Twister_combatLand        = 3  // Twister combat dice in Land Areas
+    val Twister_combatOther       = 1  // Twister combat dice in other Areas
+    val EyeOfTheStorm_count       = 3  // Eye of the Storms in the faction
+    val EyeOfTheStorm_cost        = 3  // Eye of the Storm summon cost (Power)
+    val EyeOfTheStorm_combatSea   = 4  // Eye of the Storm combat dice in Sea Areas
+    val EyeOfTheStorm_combatOther = 1  // Eye of the Storm combat dice in other Areas
+    val Petrichor_count           = 1  // Petrichors in the faction
+    val Petrichor_awakenCost      = 8  // Power to Awaken Petrichor
+    val Tsunami_cost              = 1  // Tsunami action cost (Power)
 }

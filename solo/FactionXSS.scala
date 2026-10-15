@@ -20,7 +20,8 @@ import html._
 //  * Precipitation (§1.5) reorders Battle pain-assignment so XSS picks first,
 //    regardless of Attacker/Defender role. Fully cancelled by CC Madness.
 //  * Petrichor Combat = count of XSS Units in play with Cost >= 2 (includes self).
-//  * Twister Combat = 3 in Land Areas, 1 elsewhere. Eye of the Storm = 4 in Sea, 1 elsewhere.
+//  * Twister Combat = combatLand in Land Areas, combatOther elsewhere (from XSSValues).
+//  * Eye of the Storm Combat = combatSea in Sea Areas, combatOther elsewhere (from XSSValues).
 //  * XSS sets startArea at Setup (not on first Awaken, unlike DC).
 //  * XSS has NO hard 2-player restriction, NO special map tile, NO unique resource.
 // ============================================================================
@@ -95,12 +96,12 @@ case object XSS extends Faction { f =>
         // Petrichor: dice = count of XSS Units in play with Cost >= 2 (includes himself, §1.8)
         val petrichorCount = units.%(_.uclass == Petrichor).not(Zeroed).num
         val petrichorStr   = (petrichorCount > 0).??(f.allInPlay.%(_.uclass.cost >= 2).num)
-        // Twister: 3 in Land, 1 elsewhere (§1.7)
+        // Twister: combatLand in Land, combatOther elsewhere (§1.7)
         val twisters = units.%(_.uclass == Twister).not(Zeroed)
-        val twisterStr = twisters./(u => (u.region.glyph != Ocean).?(3).|(1)).sum
-        // Eye of the Storm: 4 in Sea, 1 elsewhere (§1.7)
+        val twisterStr = twisters./(u => (u.region.glyph != Ocean).?(XSSValues.Twister_combatLand).|(XSSValues.Twister_combatOther)).sum
+        // Eye of the Storm: combatSea in Sea, combatOther elsewhere (§1.7)
         val eyes = units.%(_.uclass == EyeOfTheStorm).not(Zeroed)
-        val eyeStr = eyes./(u => (u.region.glyph == Ocean).?(4).|(1)).sum
+        val eyeStr = eyes./(u => (u.region.glyph == Ocean).?(XSSValues.EyeOfTheStorm_combatSea).|(XSSValues.EyeOfTheStorm_combatOther)).sum
         // Amphibian Crawlers: fixed combat from xss.json (0 by design); Acolytes contribute 0 combat
         val crawlerStr = units.%(_.uclass == AmphibianCrawler).not(Zeroed).num * XSSValues.AmphibianCrawler_combat
         twisterStr + eyeStr + crawlerStr + petrichorStr + neutralStrength(units, opponent)
