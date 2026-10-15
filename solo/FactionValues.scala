@@ -23,7 +23,6 @@ object CSValues {
     val VermiculiteHypertrophy_cost              = 2  // Vermiculite Hypertrophy action cost (Power)
     val CoreExposure_cost                        = 1  // Core Exposure action cost (Power)
     val VermiculiteHypertrophy_excrescenceCombat = 6  // Effervescent Excrescence combat after Vermiculite Hypertrophy
-    val CosmicLandfall_awakenThreshold           = 4  // Minimum GOO awaken cost to trigger Cosmic Landfall
     val SpectralCollapse_doomPerPain             = 1  // Doom gained per pain roll from Spectral Collapse
     val SpectralCollapse_esPerKill               = 1  // Elder Signs gained per kill roll from Spectral Collapse
     val EffulgentSacrifice_doom                  = 1  // Doom gained by the sacrificing faction from Effulgent Sacrifice
@@ -89,9 +88,7 @@ object FMValues {
     val ScreamingWall_count          = 6  // Screaming Walls in the faction
     val ScreamingWall_setupCount     = 1  // Screaming Walls placed in the start Area at setup
     val GateWithWall_cost            = 4  // Power paid by Create Gate with Screaming Wall
-    val GateWithWall_doom            = 1  // Doom gained by Create Gate with Screaming Wall
     val BuildGate_cost               = 3  // Power FM pays for a normal Build Gate
-    val BuildGate_doom               = 1  // Doom FM gains for a normal Build Gate
     val CrumblingYawpReq_dice        = 9  // SBR: dice rolled in a single Combat
     val HymnOfSufferingReq_combat    = 12  // SBR: total Combat of your Units in play
     val TerrifyingShriekReq_glyphs   = 2  // SBR: different Glyph types with a Screaming Wall

@@ -1,0 +1,164 @@
+package cws
+
+import hrf.colmat._
+
+// ════════════════════════════════════════════════════════════════════════════
+// Yuggoth Map — Phase 2: The Watcher (Neutral GOO, homebrew mechanics)
+//
+// ARCHITECTURE:
+// - The Watcher is a neutral GOO that appears on Yuggoth maps
+// - State: watcherAsleep, watcherPosition (0-12, combat value), watcherOnBoard, watcherLocation
+// - Awakens during Doom Phase if a Green Pyramid region has a controlled gate or Yog present
+// - Dies (resets) when position reaches 0
+// - Immune to Pain (all Pains converted to Kills)
+// - Combat computed dynamically from game.watcherPosition
+// - Not recruitable/summonable through normal channels
+//
+// GAME FLOW:
+// 1. Doom Phase: Check if Watcher should awaken (awakens if die roll matches region number)
+// 2. Each Doom Phase: Watcher position decays (d6 reduction)
+// 3. Action Phase: Watcher attacks each player in turn (multi-battle sequence)
+// 4. Battle: Watcher fights with combat = current position, immune to Pain
+// ════════════════════════════════════════════════════════════════════════════
+
+// The Watcher unit class — neutral GOO that appears on board
+case object WatcherUnit extends MapUnitClass("The Watcher") {
+    override val isGOO = true
+
+    // Combat is computed dynamically from game.watcherPosition, NOT static
+    override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBattle(u : UnitFigure)(implicit game : Game) : Boolean = true
+    override def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBeCaptured(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canControlGate(u : UnitFigure)(implicit game : Game) : Boolean = false
+}
+
+// Helper object for The Watcher mechanics
+object YuggothPhase2 {
+    // Check if the Watcher should awaken this Doom Phase
+    // Watcher awakens if: asleep && (any Green Pyramid region has Controlled Gate OR Yog present)
+    def shouldWatcherAwaken(implicit game : Game) : Boolean = {
+        if (!game.watcherAsleep || !game.board.isYuggothMap) return false
+
+        val pyramidRegions = game.board.greenPyramidRegions
+        pyramidRegions.exists { r =>
+            game.factions.exists(f => f.gates.has(r)) ||  // Any faction controls a pyramid gate
+            game.factions.exists(f => f == OW && f.units.exists(u => u.uclass == YogSothoth && u.region == r))  // Yog in pyramid region
+        }
+    }
+
+    // Get the printed number for a Green Pyramid region (for awaken check)
+    // TODO: Map this per region — spec says each pyramid region has a printed die number
+    def getPyramidRegionNumber(region : Region)(implicit game : Game) : Int = {
+        // Placeholder: implement per board variant
+        // Yuggoth3: GreenPyramidSlopes = X, TheWatchersPostern = Y
+        // etc.
+        1
+    }
+
+    // Check if a faction controls a gate in any Green Pyramid region
+    def factionControlsPyramidGate(faction : Faction)(implicit game : Game) : Boolean = {
+        game.board.greenPyramidRegions.exists(r => faction.gates.has(r))
+    }
+
+    // Get Watcher's current combat value (based on position)
+    def getWatcherCombat(implicit game : Game) : Int = game.watcherPosition
+
+    // Watcher immune to Pain: force all Pains to Kills in battle
+    def applyWatcherPainImmunity(implicit game : Game) : Unit = {
+        // This is called during Battle.scala pain assignment
+        // All Pain results become Kill results
+    }
+}
+
+// ── WATCHER ACTION CLASSES ──
+
+// WatcherAwakenCheckAction: Called at Doom Phase start if Watcher asleep
+// Hard action: Roll 1d6, check all pyramid regions for matching number
+// If match found, place Watcher at Watcher's Postern and set awake
+@scala.scalajs.reflect.annotation.EnableReflectiveInstantiation
+case class WatcherAwakenCheckAction(
+) extends Action {
+    val short = "Check if Watcher awakens"
+}
+
+// WatcherDecayAction: Called at Doom Phase start if Watcher awake
+// Hard action: Roll 1d6, reduce position by roll
+// If position reaches 0, remove from board and reset to asleep
+@scala.scalajs.reflect.annotation.EnableReflectiveInstantiation
+case class WatcherDecayAction(
+) extends Action {
+    val short = "Watcher position decays"
+}
+
+// WatcherAttackSequenceAction: Called at Action Phase start if Watcher awake on board
+// Loops through all players, each gets to control one attack
+@scala.scalajs.reflect.annotation.EnableReflectiveInstantiation
+case class WatcherAttackSequenceAction(
+    playerIndex: Int  // Which player's turn it is (0-N)
+) extends Action {
+    val short = "Watcher attacks"
+}
+
+// WatcherMoveChoiceAction: Soft action to pick where Watcher attacks
+// Player chooses adjacent region with units (or any region if none adjacent)
+@scala.scalajs.reflect.annotation.EnableReflectiveInstantiation
+case class WatcherMoveChoiceAction(
+    playerIndex: Int
+) extends Action {
+    val short = "Choose Watcher attack target"
+}
+
+// WatcherBattleAction: Hard action to resolve battle with Watcher
+// Watcher rolls watcherPosition dice, all Pain results forced to Kills
+@scala.scalajs.reflect.annotation.EnableReflectiveInstantiation
+case class WatcherBattleAction(
+    playerIndex: Int,
+    targetRegion: Region
+) extends Action {
+    val short = "Watcher battles"
+}
+
+// WatcherKilledAction: Called when Watcher takes a Kill in battle
+// Reduce watcherPosition by 1, check if reaches 0 (dead)
+@scala.scalajs.reflect.annotation.EnableReflectiveInstantiation
+case class WatcherKilledAction(
+    dieRoll: Int  // The roll that killed the Watcher (for logging)
+) extends Action {
+    val short = "Watcher takes damage"
+}
+
+// ── YUGGOTH EXPANSION ──
+// Handles all Phase 2 actions for The Watcher
+object YuggothExpansion extends Expansion {
+    def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
+
+        // PHASE 2: THE WATCHER
+        case WatcherAwakenCheckAction() =>
+            // TODO: Implement awaken check logic
+            UnknownContinue
+
+        case WatcherDecayAction() =>
+            // TODO: Implement decay logic
+            UnknownContinue
+
+        case WatcherAttackSequenceAction(playerIndex) =>
+            // TODO: Implement attack sequence logic
+            UnknownContinue
+
+        case WatcherMoveChoiceAction(playerIndex) =>
+            // TODO: Implement move choice menu logic
+            UnknownContinue
+
+        case WatcherBattleAction(playerIndex, targetRegion) =>
+            // TODO: Implement battle logic
+            UnknownContinue
+
+        case WatcherKilledAction(dieRoll) =>
+            // TODO: Implement kill logic (reduce position, check if dead)
+            UnknownContinue
+
+        case _ => UnknownContinue
+    }
+}

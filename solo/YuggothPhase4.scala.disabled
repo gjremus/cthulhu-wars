@@ -1,0 +1,92 @@
+package cws
+
+import hrf.colmat._
+
+// ════════════════════════════════════════════════════════════════════════════
+// Yuggoth Map — Phase 4: Surgery & Brain Cylinders (homebrew mechanics)
+//
+// ARCHITECTURE:
+// - Brain Cylinders tracked by ID in Game.brainCylinders
+// - Each BC has: id, faction, location (region), carriedBy (optional UnitRef)
+// - Max 4 per faction (enforced on creation)
+// - Treated as cultists for gate control and Gather Power
+// - Immune to Pain (converted to Kill or skipped in battle)
+// - Don't block Pain into their region
+// - Carried by other units during movement
+//
+// ACTIONS:
+// 1. SurgeryMainAction: opens menu if faction controls Laboratory
+// 2. SurgeryPerformAction: replaces cultists with BCs (1-4 at a time)
+// 3. BrainCylinderMoveAction: attached to regular move, offers to carry BCs
+// 4. BrainCylinderCaptureChoiceAction: convert to captor's faction or sacrifice
+// ════════════════════════════════════════════════════════════════════════════
+
+// Helper functions for Brain Cylinder management
+object YuggothPhase4 {
+    implicit def game: Game = ???  // Will be implicit in context where called
+
+    // Check if a faction can perform Surgery (controls Laboratory gate)
+    def canPerformSurgery(faction: Faction)(implicit game: Game): Boolean = {
+        board.laboratoryRegion match {
+            case Some(lab) => faction.gates.has(lab)
+            case None => false
+        }
+    }
+
+    // Count friendly cultists in a region (on map, submerged, or on slumber gate)
+    def countAvailableCultists(faction: Faction, region: Region)(implicit game: Game): Int = {
+        region.units.count(u => u.faction == faction && u.uclass == Acolyte)
+    }
+
+    // List all available cultists that could be converted to Brain Cylinders
+    def getAvailableCultstsForSurgery(faction: Faction)(implicit game: Game): $[UnitRef] = {
+        // Can be on map, submerged, or on Cursed Slumbering Gate
+        // For now, collect all acolytes belonging to the faction
+        $() // TODO: implement full logic
+    }
+
+    // Create a new Brain Cylinder
+    def createBrainCylinder(faction: Faction, location: Region)(implicit game: Game): BrainCylinderUnit = {
+        val bcId = game.brainCylinderNextId
+        game.brainCylinderNextId += 1
+        BrainCylinderUnit(bcId, faction, location, None)
+    }
+
+    // Check if a Brain Cylinder can be carried (under current circumstances)
+    def canCarryCulinder(movingUnit: UnitRef, bc: BrainCylinderUnit)(implicit game: Game): Boolean = {
+        // Cannot carry via abilities that specify unit types
+        // For now, assume standard moves can carry
+        true
+    }
+
+    // Get list of friendly BCs in a region
+    def getCarriedBrainCylinders(faction: Faction, region: Region)(implicit game: Game): $[BrainCylinderUnit] = {
+        game.brainCylinders.filter(bc => bc.faction == faction && bc.location == region)
+    }
+
+    // Count BCs a faction currently owns
+    def countBrainCylinders(faction: Faction)(implicit game: Game): Int = {
+        game.brainCylinders.count(_.faction == faction)
+    }
+
+    // Check if faction can receive more BCs (under 4-unit limit)
+    def canReceiveMoreBCs(faction: Faction)(implicit game: Game): Boolean = {
+        countBrainCylinders(faction) < 4
+    }
+}
+
+// Extension methods for Board to support Laboratory region
+object BoardExtensions {
+    implicit class YuggothBoardExt(board: Board) {
+        def laboratoryRegion: |[Region] = {
+            // Will be implemented per board variant
+            // Yuggoth3, Yuggoth4a, Yuggoth4b, Yuggoth5 each have a Laboratory region
+            None
+        }
+
+        def isGreenPyramidRegion(region: Region): Boolean = {
+            // Check if region is in the Green Pyramid set
+            false // TODO: implement per board
+        }
+    }
+}

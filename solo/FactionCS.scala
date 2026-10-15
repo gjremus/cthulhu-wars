@@ -289,7 +289,7 @@ object CSExpansion extends Expansion {
             // Moon) sharing a region with a Globule becomes a Prismatic Well, keeping its
             // current controller. Chaos Gates (DS) never convert.
             game.gates.foreach { r =>
-                if (game.csPrismaticWellRegions.has(r).not && DS.chaosGateRegions.has(r).not && globuleIn(r)) {
+                if (game.csPrismaticWellRegions.has(r).not && DS.chaosGateRegions.has(r).not && globuleIn(r) && game.csPrismaticWellRegions.num < CSValues.PrismaticWell_count) {
                     game.csPrismaticWellRegions :+= r
                     CS.log("Gate in", r, "became a", "Prismatic Well".styled(CS))
                 }
