@@ -12,7 +12,7 @@ package cws
 object CSValues {
     val Acolyte_count                            = 6  // Acolytes in the faction
     val Meteorite_cost                           = 1  // Meteorite summon cost (Power)
-    val Meteorite_combat                         = 1  // Meteorite combat dice
+    val Meteorite_combat                         = 0  // Meteorite combat dice
     val Meteorite_count                          = 4  // Meteorites in the faction
     val EffervescentExcrescence_cost             = 2  // Effervescent Excrescence summon cost (Power)
     val EffervescentExcrescence_count            = 4  // Effervescent Excrescences in the faction
