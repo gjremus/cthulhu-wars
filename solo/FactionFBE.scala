@@ -38,7 +38,7 @@ import html._
 // FBE uses the standard Acolyte UnitClass for its 6 Acolytes (no FBE-specific
 // Cultist subclass — §2.1). FungalThrall: Monster cost 2, combat 2, pool 10.
 // Byagoona: GreatOldOne (GOO) cost 10, combat = card-dice Kills+Pains (§1.8).
-case object FungalThrall extends FactionUnitClass(FBE, "Fungal Thrall", Monster, 2)
+case object FungalThrall extends FactionUnitClass(FBE, "Fungal Thrall", Monster, FBEValues.FungalThrall_cost)
 case object Byagoona     extends FactionUnitClass(FBE, "Byagoona",      GOO,     10)
 
 
@@ -81,9 +81,9 @@ case object FBE extends Faction { f =>
 
     // 6 Acolytes + 10 Fungal Thralls (pool) + 1 Byagoona. (§1.6 / §2.1)
     val allUnits =
-        6.times(Acolyte)      ++
-        10.times(FungalThrall) ++
-        1.times(Byagoona)
+        FBEValues.Acolyte_count.times(Acolyte)           ++
+        FBEValues.FungalThrall_count.times(FungalThrall) ++
+        FBEValues.Byagoona_count.times(Byagoona)
 
     // Byagoona awakens via a CUSTOM Monster-sacrifice procedure (§1.8), NOT the
     // standard Power-cost awaken. Returning None here keeps game.awakens() from
@@ -104,7 +104,8 @@ case object FBE extends Faction { f =>
         // monsters are not NeutralMonster classes, so they stay counted here.
         val byagoonaCount = units.%(_.uclass == Byagoona).num
         val byagoonaStr   = (byagoonaCount > 0).??(game.fbeCardDice.count(_ >= 4))
-        units.%(u => u.uclass != Byagoona && u.uclass.utype == Monster && !u.uclass.is[NeutralMonster]).not(Zeroed)./(_.uclass.cost).sum +
+        // Fungal Thrall combat comes from faction-values/fbe.json (FungalThrall.combat); other Monsters (Shapestolen) fight at their cost.
+        units.%(u => u.uclass != Byagoona && u.uclass.utype == Monster && !u.uclass.is[NeutralMonster]).not(Zeroed)./(u => (u.uclass == FungalThrall).?(FBEValues.FungalThrall_combat).|(u.uclass.cost)).sum +
         byagoonaStr +
         neutralStrength(units, opponent)
     }
@@ -532,7 +533,7 @@ object FBEExpansion extends Expansion {
             // cost): offer if Byagoona is in the pool and there exists an area where
             // (Monster count there) + current power >= 8.
             if (f.pool.%(_.uclass == Byagoona).any && controlledMonstersAnywhere./(_.region).distinct.exists(r =>
-                controlledMonsters(r).num + f.power >= 8))
+                controlledMonsters(r).num + f.power >= FBEValues.Byagoona_awakenCost))
                 + ByagoonaAwakenMainAction(f)
 
             // Necromantic Spores requirement — Eliminate Two Fungal Thralls (§3.12.2).
@@ -562,7 +563,7 @@ object FBEExpansion extends Expansion {
         case ByagoonaAwakenMainAction(self) =>
             // Only show areas where (Monster count there) + current power >= 8 (§1.8, corrected).
             val eligibleAreas = controlledMonstersAnywhere./(_.region).distinct.%(r =>
-                controlledMonsters(r).num + self.power >= 8)
+                controlledMonsters(r).num + self.power >= FBEValues.Byagoona_awakenCost)
             Ask(self).each(eligibleAreas)(r => ByagoonaAwakenAreaAction(self, r)).cancel
 
         case ByagoonaAwakenAreaAction(self, r) =>
@@ -603,7 +604,7 @@ object FBEExpansion extends Expansion {
             else {
                 // §1.8 (creator-corrected 2026-09-23): pay 8 Power minus 1 per Monster
                 // sacrificed (was 10 minus their summed recruitment cost).
-                val owed = math.max(0, 8 - n)
+                val owed = math.max(0, FBEValues.Byagoona_awakenCost - n)
                 // Eliminate the sacrificed Monsters (drives Self Consuming).
                 picked.foreach(ur => game.eliminate(game.unit(ur)))
                 // Place every rolled die (pip) on the Faction Card — re-Awaken ADDS

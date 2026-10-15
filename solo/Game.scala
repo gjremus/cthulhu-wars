@@ -496,7 +496,7 @@ trait Faction { f =>
         // so the combat lives here in the shared strength, not only in CS.strength. Otherwise an
         // excrescence fighting for (say) Firstborn joins the side but rolls no dice. Vermiculite
         // Hypertrophy (a CS spellbook) raises each excrescence's combat from 2 to 6 globally.
-        units(EffervescentExcrescence).not(Zeroed).num * (CS.can(VermiculiteHypertrophy).?(6).|(2))
+        units(EffervescentExcrescence).not(Zeroed).num * (CS.can(VermiculiteHypertrophy).?(CSValues.VermiculiteHypertrophy_excrescenceCombat).|(CSValues.EffervescentExcrescence_combat))
 }
 
 // Elder Thing Mind Control: suppress GOO special abilities when Elder Thing shares area
@@ -4102,7 +4102,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Prismatic Well yields 3 Power total (not 2). Each well-gate is already counted
                 // once in ownGates*2 (=2); add +1 each to make it 3. Applies to whichever faction
                 // controls the well-gate. Suppressed under Disaster Looms (which zeroes ownGates).
-                val csWellGates = if (disasterLooms || !factions.has(CS)) 0 else f.gates.%(r => csPrismaticWellRegions.has(r)).num
+                // (well Power comes from faction-values/cs.json PrismaticWell.gatherPower; the extra over a normal Gate's 2)
+                val csWellGateCount = if (disasterLooms || !factions.has(CS)) 0 else f.gates.%(r => csPrismaticWellRegions.has(r)).num
+                val csWellGates = csWellGateCount * (CSValues.PrismaticWell_gatherPower - 2)
                 // Colour Out of Space (CS): a GOO acting as a Gate (e.g. Opener of the Way's
                 // Yog-Sothoth, held in unitGate — not a real gate, so it never enters
                 // csPrismaticWellRegions) also becomes a Prismatic Well when a live Luminous
@@ -4110,7 +4112,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // already counted via yogGateCount in ownGates; add +1 here. Suppressed under
                 // Disaster Looms and when the unit-Gate is mind-controlled (matches yogGateCount).
                 val csUnitGateWell = (!disasterLooms && factions.has(CS) && !yogGateSuppressed &&
-                    f.unitGate.exists(u => CS.at(u.region).%(_.uclass == LuminousGlobule).not(Zeroed).any)).??(1)
+                    f.unitGate.exists(u => CS.at(u.region).%(_.uclass == LuminousGlobule).not(Zeroed).any)).??(CSValues.PrismaticWell_gatherPower - 2)
                 val oceanGates = (f.can(YhaNthlei) && f.has(Cthulhu)).??(f.enemies./(f => f.allGates.%(_.glyph == Ocean).num).sum)
                 val darkYoungs = f.can(RedSign).??(f.all(DarkYoung).num)
                 val feast = f.has(Feast).??(desecrated.%(r => f.at(r).any).num)
@@ -4161,9 +4163,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val fromBBCats = (bbCats > 0).?(bbCats.styled("region") + " Cat".s(bbCats))
                 val fromBBHP = (bbHP > 0).?(bbHP.styled("region") + " High Priest Bonus")
                 // Colour Out of Space (CS): log the +1-per-Prismatic-Well bonus (each well-gate = 3 Power total)
-                val fromWells = (csWellGates > 0).?(csWellGates.styled("region") + " Prismatic Well".s(csWellGates) + " (+1 each → 3 Power)")
+                val fromWells = (csWellGates > 0).?(csWellGateCount.styled("region") + " Prismatic Well".s(csWellGateCount) + " (+" + (CSValues.PrismaticWell_gatherPower - 2) + " each → " + CSValues.PrismaticWell_gatherPower + " Power)")
                 // Colour Out of Space (CS): log the +1 when a GOO unit-Gate (Yog-Sothoth) sits on a Prismatic Well
-                val fromUnitGateWell = (csUnitGateWell > 0).?(csUnitGateWell.styled("region") + " Prismatic Well gate (+1 → 3 Power)")
+                val fromUnitGateWell = (csUnitGateWell > 0).?(1.styled("region") + " Prismatic Well gate (+" + csUnitGateWell + " → " + CSValues.PrismaticWell_gatherPower + " Power)")
 
                 f.log(if (f == BB) "gained" else "got", f.power.power, "(" + $(fromHibernate, fromGates, fromWells, fromUnitGateWell, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP, fromTBTentacles, fromBBCats, fromBBHP).flatten.mkString(" + ") + ")")
 

@@ -31,10 +31,11 @@ import html._
 // Cultist subclass). AmphibianCrawler: Monster cost 1, combat 0. Twister: Monster
 // cost 2, combat 1+ (3 in Land). EyeOfTheStorm: Monster cost 3, combat 1+ (4 in Sea).
 // Petrichor: GOO cost 8, combat = count of XSS Units in play with Cost >= 2.
-case object AmphibianCrawler extends FactionUnitClass(XSS, "Amphibian Crawler", Monster, 1)
-case object Twister          extends FactionUnitClass(XSS, "Twister",           Monster, 2)
-case object EyeOfTheStorm    extends FactionUnitClass(XSS, "Eye of the Storm",  Monster, 3)
-case object Petrichor        extends FactionUnitClass(XSS, "Petrichor",         GOO,     8)
+// Costs / counts / awaken cost / setup numbers come from XSSValues = solo/faction-values/xss.json.
+case object AmphibianCrawler extends FactionUnitClass(XSS, "Amphibian Crawler", Monster, XSSValues.AmphibianCrawler_cost)
+case object Twister          extends FactionUnitClass(XSS, "Twister",           Monster, XSSValues.Twister_cost)
+case object EyeOfTheStorm    extends FactionUnitClass(XSS, "Eye of the Storm",  Monster, XSSValues.EyeOfTheStorm_cost)
+case object Petrichor        extends FactionUnitClass(XSS, "Petrichor",         GOO,     XSSValues.Petrichor_awakenCost)
 
 
 // -- SPELLBOOKS (§1.10) -------------------------------------------------------
@@ -75,18 +76,18 @@ case object XSS extends Faction { f =>
 
     // 6 Acolytes + 2 Amphibian Crawlers + 4 Twisters + 3 Eyes of the Storm + 1 Petrichor (§1.7)
     val allUnits =
-        6.times(Acolyte)           ++
-        2.times(AmphibianCrawler)  ++
-        4.times(Twister)           ++
-        3.times(EyeOfTheStorm)     ++
-        1.times(Petrichor)
+        XSSValues.Acolyte_count.times(Acolyte)                   ++
+        XSSValues.AmphibianCrawler_count.times(AmphibianCrawler) ++
+        XSSValues.Twister_count.times(Twister)                   ++
+        XSSValues.EyeOfTheStorm_count.times(EyeOfTheStorm)       ++
+        XSSValues.Petrichor_count.times(Petrichor)
 
     // Petrichor awakens via standard path with fixed cost 8, gated on controlling
     // a Unit with Cost >= 3 in the target region (§1.8).
     override def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = u match {
         case Petrichor =>
             // Requires XSS to control at least one Unit with Cost >= 3 in region r
-            f.at(r).%(_.uclass.cost >= 3).any.?(8)
+            f.at(r).%(_.uclass.cost >= 3).any.?(XSSValues.Petrichor_awakenCost)
         case _ => None
     }
 
@@ -100,8 +101,9 @@ case object XSS extends Faction { f =>
         // Eye of the Storm: 4 in Sea, 1 elsewhere (§1.7)
         val eyes = units.%(_.uclass == EyeOfTheStorm).not(Zeroed)
         val eyeStr = eyes./(u => (u.region.glyph == Ocean).?(4).|(1)).sum
-        // Amphibian Crawlers and Acolytes contribute 0 combat
-        twisterStr + eyeStr + petrichorStr + neutralStrength(units, opponent)
+        // Amphibian Crawlers: fixed combat from xss.json (0 by design); Acolytes contribute 0 combat
+        val crawlerStr = units.%(_.uclass == AmphibianCrawler).not(Zeroed).num * XSSValues.AmphibianCrawler_combat
+        twisterStr + eyeStr + crawlerStr + petrichorStr + neutralStrength(units, opponent)
     }
 }
 
@@ -120,7 +122,7 @@ case object XSS extends Faction { f =>
 // -- TSUNAMI (§1.10 SB4 / §3.10.4 / §4.4.4) ----------------------------------
 // Soft area/eye pick -> Soft land pick -> Soft extras pick -> Hard commit
 case class TsunamiMainAction(self : Faction)
-    extends OptionFactionAction(Tsunami.styled(XSS) + " (Cost " + 1.power + ")") with MainQuestion with Soft
+    extends OptionFactionAction(Tsunami.styled(XSS) + " (Cost " + XSSValues.Tsunami_cost.power + ")") with MainQuestion with Soft
 case class TsunamiEyePickAction(self : Faction, eyes : $[UnitRef])
     extends ForcedAction with Soft
 case class TsunamiDestPickAction(self : Faction, eye : UnitRef, source : Region)
@@ -312,11 +314,12 @@ object XSSExpansion extends Expansion {
         case StartingRegionAction(self : XSS.type, r) =>
             // Place 6 Acolytes and a Controlled Gate in the chosen Sea Area (§1.6)
             game.starting = game.starting + (XSS -> r)
-            1.to(6).foreach(_ => self.place(Acolyte, r))
+            1.to(XSSValues.Setup_Acolyte).foreach(_ => self.place(Acolyte, r))
+            self.power = XSSValues.Setup_power
             game.gates :+= r
             self.gates :+= r
             self.at(r).one(Acolyte).onGate = true
-            self.log("starts in", r, "with", 6, "Acolytes and a Controlled Gate")
+            self.log("starts in", r, "with", XSSValues.Setup_Acolyte, "Acolytes and a Controlled Gate")
             Force(SetupFactionsAction)
 
         // -- DOOM PHASE (§3.10.3 Cloud Of Ashes Doom return) -------------------
@@ -404,7 +407,7 @@ object XSSExpansion extends Expansion {
 
             // Tsunami (§1.10 SB4): Action, Cost 1. Requires an Eye of the Storm in
             // a Sea Area with an adjacent Land Area.
-            if (f.can(Tsunami) && f.power >= 1 &&
+            if (f.can(Tsunami) && f.power >= XSSValues.Tsunami_cost &&
                 f.onMap(EyeOfTheStorm).%(u => u.region.glyph == Ocean &&
                     game.board.connected(u.region).%(_.glyph != Ocean).any).any)
                 + TsunamiMainAction(f)
@@ -457,7 +460,7 @@ object XSSExpansion extends Expansion {
 
         case TsunamiAction(self, eye, source, dest, extras) =>
             // Pay Cost 1 Power
-            self.power -= 1
+            self.power -= XSSValues.Tsunami_cost
             // Move Eye of the Storm
             game.unit(eye).region = dest
             // Move extras

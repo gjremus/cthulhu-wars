@@ -10,8 +10,6 @@ package cws
 
 // Colour Out of Space (CS) - from faction-values/cs.json
 object CSValues {
-    val Acolyte_cost                             = 1  // Acolyte summon cost (Power)
-    val Acolyte_combat                           = 0  // Acolyte combat dice
     val Acolyte_count                            = 6  // Acolytes in the faction
     val Meteorite_cost                           = 1  // Meteorite summon cost (Power)
     val Meteorite_combat                         = 1  // Meteorite combat dice
@@ -24,14 +22,14 @@ object CSValues {
     val PrismaticWell_count                      = 3  // Prismatic Wells in the faction
     val VermiculiteHypertrophy_cost              = 2  // Vermiculite Hypertrophy action cost (Power)
     val CoreExposure_cost                        = 1  // Core Exposure action cost (Power)
-    val Setup_power                              = 8  // Starting Power
-    val Setup_Acolyte                            = 6  // Acolytes placed during setup
     val VermiculiteHypertrophy_excrescenceCombat = 6  // Effervescent Excrescence combat after Vermiculite Hypertrophy
     val CosmicLandfall_awakenThreshold           = 4  // Minimum GOO awaken cost to trigger Cosmic Landfall
     val SpectralCollapse_doomPerPain             = 1  // Doom gained per pain roll from Spectral Collapse
     val SpectralCollapse_esPerKill               = 1  // Elder Signs gained per kill roll from Spectral Collapse
     val EffulgentSacrifice_doom                  = 1  // Doom gained by the sacrificing faction from Effulgent Sacrifice
     val PrismaticWell_gatherPower                = 3  // Power given by a Prismatic Well during Gather Power
+    val EffervescentExcrescence_combat           = 2  // Effervescent Excrescence combat dice
+    val Tulzscha_awakenCost                      = 5  // Power to Awaken Tulzscha
 }
 
 // Tribulation (DGT) - from faction-values/dgt.json
@@ -62,6 +60,16 @@ object DGTValues {
     val GodsScale_elderSigns       = 1  // Elder Signs DGT gains when an enemy flips God's Scale
     val PaleRider_kills            = 1  // Kills added by The Pale Rider
     val MartyrsCry_powerPerAcolyte = 2  // Power per Acolyte in pool / on enemy cards
+}
+
+// Faceless Blight (FBE) - from faction-values/fbe.json
+object FBEValues {
+    val Acolyte_count       = 6  // Acolytes in the faction
+    val FungalThrall_count  = 10  // Fungal Thralls in the faction
+    val FungalThrall_cost   = 2  // Fungal Thrall summon cost (Power)
+    val FungalThrall_combat = 2  // Fungal Thrall combat dice
+    val Byagoona_count      = 1  // Byagoonas in the faction
+    val Byagoona_awakenCost = 8  // Power to Awaken Byagoona
 }
 
 // Fleshmason (FM) - from faction-values/fm.json
@@ -122,4 +130,21 @@ object PRMValues {
     val EnemyHas3SpellbooksReq_spellbooks = 3  // SBR: Spellbooks another Faction must have
     val MakeAsOne_doomPerFlip             = 1  // Make as One: Doom gained when an enemy activation flips a Spellbook
     val MothersAid_power                  = 1  // Mother's Aid: Power an enemy pays to control Ycgn'agnnisssz
+}
+
+// Xyrious Storm (XSS) - from faction-values/xss.json
+object XSSValues {
+    val Setup_power             = 8  // Starting Power
+    val Setup_Acolyte           = 6  // Acolytes placed during setup
+    val Acolyte_count           = 6  // Acolytes in the faction
+    val AmphibianCrawler_count  = 2  // Amphibian Crawlers in the faction
+    val AmphibianCrawler_cost   = 1  // Amphibian Crawler summon cost (Power)
+    val AmphibianCrawler_combat = 0  // Amphibian Crawler combat dice
+    val Twister_count           = 4  // Twisters in the faction
+    val Twister_cost            = 2  // Twister summon cost (Power)
+    val EyeOfTheStorm_count     = 3  // Eye of the Storms in the faction
+    val EyeOfTheStorm_cost      = 3  // Eye of the Storm summon cost (Power)
+    val Petrichor_count         = 1  // Petrichors in the faction
+    val Petrichor_awakenCost    = 8  // Power to Awaken Petrichor
+    val Tsunami_cost            = 1  // Tsunami action cost (Power)
 }

@@ -1,0 +1,13 @@
+{
+  "acronym": "FBE",
+  "faction": "Faceless Blight",
+  "designerFid": "tg3w6z5wmg",
+  "values": {
+    "Acolyte.count":       {"value": 6, "min": 1, "max": 12, "what": "Acolytes in the faction", "designer": "units.rows.m9m23bqh.qty"},
+    "FungalThrall.count":  {"value": 10, "min": 1, "max": 12, "what": "Fungal Thralls in the faction", "designer": "units.rows.mlbgdkt6.qty"},
+    "FungalThrall.cost":   {"value": 2, "max": 30, "what": "Fungal Thrall summon cost (Power)", "designer": "units.rows.mlbgdkt6.cost"},
+    "FungalThrall.combat": {"value": 2, "max": 30, "what": "Fungal Thrall combat dice", "designer": "units.rows.mlbgdkt6.dice"},
+    "Byagoona.count":      {"value": 1, "min": 1, "max": 12, "what": "Byagoonas in the faction", "designer": "units.rows.mz7tc21j.qty"},
+    "Byagoona.awakenCost": {"value": 8, "max": 30, "what": "Power to Awaken Byagoona", "designer": "units.rows.mz7tc21j.awakenPower"}
+  }
+}

@@ -25,7 +25,7 @@ import html._
 // cost 2, combat 2 -> 6 with Vermiculite Hypertrophy), Luminous Globule
 // (Terror, cost 4, does not fight), Tulzscha (GOO, awaken 5 Power + sacrifice).
 case object Meteorite extends FactionUnitClass(CS, "Meteorite", Monster, CSValues.Meteorite_cost)
-case object EffervescentExcrescence extends FactionUnitClass(CS, "Effervescent Excrescence", Monster, 2) {
+case object EffervescentExcrescence extends FactionUnitClass(CS, "Effervescent Excrescence", Monster, CSValues.EffervescentExcrescence_cost) {
     // SB2 Vermiculite Hypertrophy (Task 3.10.2): while CS controls that spellbook, Excrescences
     // become immune to Move — they can neither be chosen for a Move action nor retreat out of a
     // battle (so a battle Pain result against them can only be absorbed as a kill). Checked at
@@ -33,7 +33,7 @@ case object EffervescentExcrescence extends FactionUnitClass(CS, "Effervescent E
     override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = CS.can(VermiculiteHypertrophy).not
     override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = CS.can(VermiculiteHypertrophy).not
 }
-case object LuminousGlobule extends FactionUnitClass(CS, "Luminous Globule", Terror, 4) {
+case object LuminousGlobule extends FactionUnitClass(CS, "Luminous Globule", Terror, CSValues.LuminousGlobule_cost) {
     // SB6 Core Exposure (Task 3.10.6): once CS controls that spellbook, Globules "cannot be moved by
     // any other means" than for free alongside a Cultist. This override enforces the RESTRICTION —
     // it removes Globules from the normal (paid) Move menu once Core Exposure is active. The
@@ -43,7 +43,7 @@ case object LuminousGlobule extends FactionUnitClass(CS, "Luminous Globule", Ter
     override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = CS.can(CoreExposure).not
     override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = CS.can(CoreExposure).not
 }
-case object CSTulzscha extends FactionUnitClass(CS, "Tulzscha", GOO, 5)
+case object CSTulzscha extends FactionUnitClass(CS, "Tulzscha", GOO, CSValues.Tulzscha_awakenCost)
 // A Gate corrupted into a Prismatic Well is rendered as a Token in place of the normal Gate
 // (display-only; the well is not a placeable pool unit). Lives at top level (moved out of
 // CthulhuWarsSolo's render-token block) so the faction overlay card can list it too.
@@ -93,11 +93,11 @@ case object CS extends Faction { f =>
     override def requirements(options : $[GameOption]) = $(CSMeteoriteInEnemyStart, CSPrismaticWellExists, CSGlobuleEliminated, CSSacrificeGlobule, CSEnemyControlsExcrescence, CSAwakenTulzscha)
 
     val allUnits =
-        1.times(CSTulzscha) ++
+        CSValues.Tulzscha_count.times(CSTulzscha) ++
         CSValues.Meteorite_count.times(Meteorite) ++
-        4.times(EffervescentExcrescence) ++
-        3.times(LuminousGlobule) ++
-        6.times(Acolyte)
+        CSValues.EffervescentExcrescence_count.times(EffervescentExcrescence) ++
+        CSValues.LuminousGlobule_count.times(LuminousGlobule) ++
+        CSValues.Acolyte_count.times(Acolyte)
 
     // Tulzscha awakens for a fixed 5 Power (always, not variable) in a region that holds one
     // of CS's Acolytes AND a Luminous Globule — the sacrifice + kill-roll are injected by
@@ -108,7 +108,7 @@ case object CS extends Faction { f =>
         case CSTulzscha =>
             (f.at(r).%(_.uclass == Acolyte).not(Zeroed).any &&
              f.at(r).%(_.uclass == LuminousGlobule).not(Zeroed).any &&
-             f.pool(CSTulzscha).any).?(5)
+             f.pool(CSTulzscha).any).?(CSValues.Tulzscha_awakenCost)
         case _ => None
     }
 
@@ -158,7 +158,7 @@ case class CSTulzschaAwakenRollAction(r : Region, rolls : $[BattleRoll]) extends
 // SB2 Vermiculite Hypertrophy (Task 3.10.2): a Cultist sharing a region with a Globule may summon
 // an Excrescence there WITHOUT a Gate, sacrificing that Cultist and paying the 2-Power Excrescence cost.
 case class CSVermiculiteMainAction(l : $[Region]) extends OptionFactionAction("Sacrifice a " + Acolyte.styled(CS) + " to summon an " + EffervescentExcrescence.styled(CS) + " without a Gate") with MainQuestion with Soft { override def self = CS }
-case class CSVermiculiteAction(r : Region) extends BaseFactionAction(implicit g => VermiculiteHypertrophy.styled(CS) + ": Summon " + EffervescentExcrescence.styled(CS) + g.forNPowerWithTax(r, CS, EffervescentExcrescence.cost) + ", sacrificing a " + Acolyte.styled(CS) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
+case class CSVermiculiteAction(r : Region) extends BaseFactionAction(implicit g => VermiculiteHypertrophy.styled(CS) + ": Summon " + EffervescentExcrescence.styled(CS) + g.forNPowerWithTax(r, CS, CSValues.VermiculiteHypertrophy_cost) + ", sacrificing a " + Acolyte.styled(CS) + " in", implicit g => r + CS.iced(r)) { override def self = CS }
 
 // SB5 Effulgent Sacrifice (Task 3.10.5): sacrifice a controlled Globule for an Elder Sign (Cost 1);
 // any Cultists or Excrescences in that region are eliminated, each owner refunded half cost (round
@@ -381,7 +381,7 @@ object CSExpansion extends Expansion {
             if (f.can(VermiculiteHypertrophy) && f.pool(EffervescentExcrescence).any) {
                 val rs = f.onMap(LuminousGlobule).not(Zeroed)./(_.region).distinct
                     .%(r => f.at(r).%(_.uclass == Acolyte).not(Zeroed).any)
-                    .%(r => f.affords(EffervescentExcrescence.cost)(r))
+                    .%(r => f.affords(CSValues.VermiculiteHypertrophy_cost)(r))
                     .%(r => f.gates.has(r).not)
                 if (rs.any)
                     + CSVermiculiteMainAction(rs)
@@ -401,7 +401,7 @@ object CSExpansion extends Expansion {
             if (f.can(CoreExposure) && f.pool(LuminousGlobule).any) {
                 val rs = f.onMap(Meteorite).not(Zeroed)./(_.region).distinct
                     .%(r => f.at(r).%(_.uclass == Acolyte).not(Zeroed).any)
-                    .%(r => f.affords(1)(r))
+                    .%(r => f.affords(CSValues.CoreExposure_cost)(r))
                 if (rs.any)
                     + CSCoreExposureMainAction(rs)
             }
@@ -493,7 +493,7 @@ object CSExpansion extends Expansion {
             CS.log("awakened", CSTulzscha.styled(CS), "in", r)
             CS.satisfy(CSAwakenTulzscha, "Awaken Tulzscha")
             // AwakenedAction so downstream GOO-awaken hooks fire (incl. Cosmic Landfall SB3).
-            AwakenedAction(CS, CSTulzscha, r, 5)
+            AwakenedAction(CS, CSTulzscha, r, CSValues.Tulzscha_awakenCost)
 
         // Terminal consumer for the AwakenedAction above — every custom-effect GOO awaken
         // needs one of these or the dispatcher crashes with "unknown continue" (this one was
@@ -508,10 +508,10 @@ object CSExpansion extends Expansion {
 
         case CSVermiculiteAction(r) =>
             val cultists = CS.at(r).%(_.uclass == Acolyte).not(Zeroed)
-            if (CS.pool(EffervescentExcrescence).none || CS.affords(EffervescentExcrescence.cost)(r).not || cultists.none || globuleIn(r).not)
+            if (CS.pool(EffervescentExcrescence).none || CS.affords(CSValues.VermiculiteHypertrophy_cost)(r).not || cultists.none || globuleIn(r).not)
                 EndAction(CS)
             else {
-                CS.power -= EffervescentExcrescence.cost
+                CS.power -= CSValues.VermiculiteHypertrophy_cost
                 CS.payTax(r)
                 val a = cultists.head
                 game.eliminate(a)
@@ -620,8 +620,8 @@ object CSExpansion extends Expansion {
             // 2) Globule eliminated (a Prismatic Well always has a Globule).
             globs.foreach { g => f.log("eliminated", g, "in", r, sb); game.eliminate(g) }
             // 3) Doom awarded to the acting faction.
-            f.doom += 1
-            f.log("gained", 1.doom, sb)
+            f.doom += CSValues.EffulgentSacrifice_doom
+            f.log("gained", CSValues.EffulgentSacrifice_doom.doom, sb)
             // 4) Elder Sign awarded to CS no matter who acts (so if CS itself acts, it gains both).
             CS.takeES(1)
             CS.log("gained an", "Elder Sign".styled("es"), sb)
@@ -643,10 +643,10 @@ object CSExpansion extends Expansion {
         case CSCoreExposureAction(r) =>
             val mets = CS.at(r).%(_.uclass == Meteorite).not(Zeroed)
             val cultists = CS.at(r).%(_.uclass == Acolyte).not(Zeroed)
-            if (CS.pool(LuminousGlobule).none || mets.none || cultists.none || CS.affords(1)(r).not)
+            if (CS.pool(LuminousGlobule).none || mets.none || cultists.none || CS.affords(CSValues.CoreExposure_cost)(r).not)
                 EndAction(CS)
             else {
-                CS.power -= 1
+                CS.power -= CSValues.CoreExposure_cost
                 CS.payTax(r)
                 game.eliminate(mets.head)
                 CS.place(LuminousGlobule, r)
@@ -685,12 +685,12 @@ object CSExpansion extends Expansion {
         case CSSpectralCollapseRollAction(self, r, rolls) =>
             self.log("rolled", rolls.mkString(", "), "for", SpectralCollapse.styled(CS))
             if (rolls.has(Kill)) {
-                self.takeES(1)
-                self.log("Kill".styled("kill"), "— gained an", "Elder Sign".styled("es"))
+                self.takeES(CSValues.SpectralCollapse_esPerKill)
+                self.log("Kill".styled("kill"), "— gained", (CSValues.SpectralCollapse_esPerKill == 1).?("an").|(CSValues.SpectralCollapse_esPerKill.toString), "Elder Sign".s(CSValues.SpectralCollapse_esPerKill).styled("es"))
             }
             else if (rolls.has(Pain)) {
-                self.doom += 1
-                self.log("Pain".styled("pain"), "— gained", 1.doom)
+                self.doom += CSValues.SpectralCollapse_doomPerPain
+                self.log("Pain".styled("pain"), "— gained", CSValues.SpectralCollapse_doomPerPain.doom)
             }
             CS.at(r).%(_.uclass == LuminousGlobule).not(Zeroed).some.foreach { gs =>
                 game.eliminate(gs.head)

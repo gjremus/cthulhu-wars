@@ -1987,14 +1987,14 @@ object Overlays {
             faction(XSS, "info:xss-background", Precipitation, "Post-Battle",
             "You always Pain out of a Battle first, even if you are the Defender. Fully cancelled by Crawling Chaos Madness.",
             $(), $(
-            (Acolyte,           6, "1", "0", s""""""),
-            (AmphibianCrawler,  2, "1", "0", s"""<div class=p>Monster. 0 Combat.</div>"""),
-            (Twister,           4, "2", "1-3", s"""<div class=p>Combat: 3 in Land Areas, 1 elsewhere.</div>"""),
-            (EyeOfTheStorm,     3, "3", "1-4", s"""<div class=p>Combat: 4 in Sea Areas, 1 elsewhere.</div><div class=p>Spellbook: ${reference(XSS, Tsunami)}</div>"""),
-            (Petrichor,         1, "8", "?", s"""
+            (Acolyte,           XSSValues.Acolyte_count, "1", "0", s""""""),
+            (AmphibianCrawler,  XSSValues.AmphibianCrawler_count, "" + XSSValues.AmphibianCrawler_cost, "" + XSSValues.AmphibianCrawler_combat, s"""<div class=p>Monster. ${XSSValues.AmphibianCrawler_combat} Combat.</div>"""),
+            (Twister,           XSSValues.Twister_count, "" + XSSValues.Twister_cost, "1-3", s"""<div class=p>Combat: 3 in Land Areas, 1 elsewhere.</div>"""),
+            (EyeOfTheStorm,     XSSValues.EyeOfTheStorm_count, "" + XSSValues.EyeOfTheStorm_cost, "1-4", s"""<div class=p>Combat: 4 in Sea Areas, 1 elsewhere.</div><div class=p>Spellbook: ${reference(XSS, Tsunami)}</div>"""),
+            (Petrichor,         XSSValues.Petrichor_count, "" + XSSValues.Petrichor_awakenCost, "?", s"""
                 <div class=p>${cost(s"How to Awaken ${Petrichor.name}:")}</div>
                 <div class=p>${cost("1)")} You must Control a Unit with Cost 3+ in the target Area.</div>
-                <div class=p>${cost("2)")} Pay ${power(8)}. ${Petrichor.name} appears in the Area.</div>
+                <div class=p>${cost("2)")} Pay ${power(XSSValues.Petrichor_awakenCost)}. ${Petrichor.name} appears in the Area.</div>
                 <div class=p>${combat} Equals the count of XSS Units in play with Cost 2 or greater (includes Petrichor).</div>
                 <div class=p><span class=ability-color>Distant Thunderclap</span> ${cost("(Post-Battle, Optional):")} Assign your excess Pains to yourself. If no participating Units remain in the Battle Area and your opponent had a non-Cultist Unit present, gain an Elder Sign.</div>
                 <div class=p>Spellbooks: ${reference(XSS, StaticAccumulator)}, ${reference(XSS, CloudOfAshes)}</div>""")
@@ -2008,7 +2008,7 @@ object Overlays {
         case $("XSS", Whirlwind.name) => spellbook(Whirlwind.name, "Post-Battle", "While in Land Areas, Twisters may Retreat to Sea Areas containing enemy Units.")
         case $("XSS", StaticAccumulator.name) => spellbook(StaticAccumulator.name, "Pre-Battle", "Move Units with total Cost up to 4 from one adjacent Area into the Battle Area.")
         case $("XSS", CloudOfAshes.name) => spellbook(CloudOfAshes.name, "Ongoing", "When one of your Monsters is Killed, you may place it on your Faction Card instead of returning it to Pool. In the Doom Phase, return one Monster from the Faction Card to a Controlled Gate; remaining Monsters return to Pool.")
-        case $("XSS", Tsunami.name) => spellbook(Tsunami.name, "Action: Cost 1", "Move an Eye of the Storm from a Sea Area to an adjacent Land Area. Any or all of your other Units in the Sea Area may move with it.")
+        case $("XSS", Tsunami.name) => spellbook(Tsunami.name, s"Action: Cost ${XSSValues.Tsunami_cost}", "Move an Eye of the Storm from a Sea Area to an adjacent Land Area. Any or all of your other Units in the Sea Area may move with it.")
         case $("XSS", FrozenSolid.name) => spellbook(FrozenSolid.name, "Ongoing", "Your Acolytes controlling Gates in Areas with Faction Glyphs cannot be captured by Monsters. Cultist-source, GOO-ability, and Terror captures still apply.")
         case $("XSS", TorrentialDownpour.name) => spellbook(TorrentialDownpour.name, "Gather Power", "Gain 1 Power if you have Amphibian Crawlers in BOTH a Land Area AND a Sea Area. Gain +1 additional Power for each of those Amphibian Crawler Areas that contain an Enemy-Controlled Gate.")
         case $("TB") =>
@@ -2636,15 +2636,15 @@ object Overlays {
         // change is the creator-requested reorder of Tulzscha's Awaken steps
         // (pay Power first — guide §1.3/§1.12/§4.6). Do not paraphrase.
         faction(CS, "info:cs-background", ChromaticPerversion, "Ongoing",
-            "Globules transform all standard gates in their regions to prismatic wells. Prismatic wells give 3 power during gather power, and may only summon excrescences. Any excrescence in a region with a controlled well is owned by the controller of that well.",
+            s"Globules transform all standard gates in their regions to prismatic wells. Prismatic wells give ${CSValues.PrismaticWell_gatherPower} power during gather power, and may only summon excrescences. Any excrescence in a region with a controlled well is owned by the controller of that well.",
             $(Insanity, VermiculiteHypertrophy, CosmicLandfall, SpectralCollapse, EffulgentSacrifice, CoreExposure), $(
-            (Acolyte,                 6, "1", "0", ""),
+            (Acolyte,                 CSValues.Acolyte_count, "1", "0", ""),
             (Meteorite,               CSValues.Meteorite_count, "" + CSValues.Meteorite_cost, "" + CSValues.Meteorite_combat, s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, CosmicLandfall)}, ${reference(CS, CoreExposure)}</div>"""),
-            (EffervescentExcrescence, 4, "2", "2", s"""<div class=p>Spellbook: ${reference(CS, VermiculiteHypertrophy)}</div>"""),
-            (LuminousGlobule,         3, "4", "—", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, VermiculiteHypertrophy)}, ${reference(CS, SpectralCollapse)}, ${reference(CS, CoreExposure)}, ${reference(CS, EffulgentSacrifice)}</div>"""),
-            (CSTulzscha,              1, "5", calc(g => { implicit val gg : Game = g; 2 * CS.onMap(LuminousGlobule).not(Zeroed).num }), s"""
+            (EffervescentExcrescence, CSValues.EffervescentExcrescence_count, "" + CSValues.EffervescentExcrescence_cost, "" + CSValues.EffervescentExcrescence_combat, s"""<div class=p>Spellbook: ${reference(CS, VermiculiteHypertrophy)}</div>"""),
+            (LuminousGlobule,         CSValues.LuminousGlobule_count, "" + CSValues.LuminousGlobule_cost, "—", s"""<div class=p>Spellbooks: ${reference(CS, Insanity)}, ${reference(CS, VermiculiteHypertrophy)}, ${reference(CS, SpectralCollapse)}, ${reference(CS, CoreExposure)}, ${reference(CS, EffulgentSacrifice)}</div>"""),
+            (CSTulzscha,              CSValues.Tulzscha_count, "" + CSValues.Tulzscha_awakenCost, calc(g => { implicit val gg : Game = g; 2 * CS.onMap(LuminousGlobule).not(Zeroed).num }), s"""
                 <div class=p>${cost(s"How to Awaken ${CSTulzscha.name}:")}</div>
-                <div class=p>${cost("1)")} Pay ${power(5)}.</div>
+                <div class=p>${cost("1)")} Pay ${power(CSValues.Tulzscha_awakenCost)}.</div>
                 <div class=p>${cost("2)")} In a region with a cultist and a globule, eliminate the cultist, and roll a die. If you roll a kill, eliminate the globule and take an <span class=es>elder sign</span>. Tulzscha appears in the region.</div>
                 <div class=p>${combat} twice the globules on the map.</div>
                 <div class=p>${reference(CS, CorruptedRending)} ${cost("(1 Power, Action):")} Choose a region with a globule or meteorite and at least 2 factions. Initiate a battle between 2 factions. You choose attacking faction.</div>"""),
@@ -2673,14 +2673,14 @@ object Overlays {
         case $("CS", CSEnemyControlsExcrescence.text)   => requirement("Another player controls an excrescence.")
         case $("CS", CSAwakenTulzscha.text)             => requirement("Awaken Tulzscha.")
 
-        case $("CS", ChromaticPerversion.name)         => spellbook(ChromaticPerversion.name, "Ongoing (Faction Ability)", "Globules transform all standard gates in their regions to prismatic wells. Prismatic wells give 3 power during gather power, and may only summon excrescences. Any excrescence in a region with a controlled well is owned by the controller of that well.")
+        case $("CS", ChromaticPerversion.name)         => spellbook(ChromaticPerversion.name, "Ongoing (Faction Ability)", s"Globules transform all standard gates in their regions to prismatic wells. Prismatic wells give ${CSValues.PrismaticWell_gatherPower} power during gather power, and may only summon excrescences. Any excrescence in a region with a controlled well is owned by the controller of that well.")
         case $("CS", CorruptedRending.name)            => spellbook(CorruptedRending.name, "1 Power, Action (Faction Ability)", "Choose a region with a globule or meteorite and at least 2 factions. Initiate a battle between 2 factions. You choose attacking faction.")
         case $("CS", Insanity.name)                    => spellbook(Insanity.name, "Post Battle", "In areas with a meteorite or globule, extra, unapplied combat results are applied according to the following:<br>- Results against you are applied to the attacking faction<br>- Results in battles without you are applied to the rolling faction.")
-        case $("CS", VermiculiteHypertrophy.name)      => spellbook(VermiculiteHypertrophy.name, "Action: Cost 2", "You may summon an excrescence without a gate, by a cultist with a globule. Sacrifice that cultist. Effervescent Excrescences now have 6 combat and cannot be moved by any means. Any pain assigned to an excrescence is changed to a kill.")
+        case $("CS", VermiculiteHypertrophy.name)      => spellbook(VermiculiteHypertrophy.name, s"Action: Cost ${CSValues.VermiculiteHypertrophy_cost}", s"You may summon an excrescence without a gate, by a cultist with a globule. Sacrifice that cultist. Effervescent Excrescences now have ${CSValues.VermiculiteHypertrophy_excrescenceCombat} combat and cannot be moved by any means. Any pain assigned to an excrescence is changed to a kill.")
         case $("CS", CosmicLandfall.name)              => spellbook(CosmicLandfall.name, "Ongoing", "Any time a GOO is awakened for 4 power or more, place a meteorite for free in any empty region of your choice (a region with no units).")
-        case $("CS", SpectralCollapse.name)            => spellbook(SpectralCollapse.name, "Post Battle", "If 1 or more units are killed or eliminated in any region with a globule, you, or either battle faction, may choose to eliminate the globule. If it is eliminated, roll a combat die. You collect 1 doom for pains, 1 ES for kills.")
-        case $("CS", EffulgentSacrifice.name)          => spellbook(EffulgentSacrifice.name, "Action: Cost 0", "Any faction may take this action. In a region with a well controlled by a faction other than COoS, sacrifice your cultists in that region and eliminate the globule. Gain 1 doom. COoS gains an elder sign.")
-        case $("CS", CoreExposure.name)                => spellbook(CoreExposure.name, "Action: Cost 1", "Summon a globule in a region with a cultist and a meteorite. The meteorite is eliminated. A gate is not required. Globules can now only be moved (for free) alongside a cultist. They cannot be moved by any other means, and do not participate in combat.")
+        case $("CS", SpectralCollapse.name)            => spellbook(SpectralCollapse.name, "Post Battle", s"If 1 or more units are killed or eliminated in any region with a globule, you, or either battle faction, may choose to eliminate the globule. If it is eliminated, roll a combat die. You collect ${CSValues.SpectralCollapse_doomPerPain} doom for pains, ${CSValues.SpectralCollapse_esPerKill} ES for kills.")
+        case $("CS", EffulgentSacrifice.name)          => spellbook(EffulgentSacrifice.name, "Action: Cost 0", s"Any faction may take this action. In a region with a well controlled by a faction other than COoS, sacrifice your cultists in that region and eliminate the globule. Gain ${CSValues.EffulgentSacrifice_doom} doom. COoS gains an elder sign.")
+        case $("CS", CoreExposure.name)                => spellbook(CoreExposure.name, s"Action: Cost ${CSValues.CoreExposure_cost}", "Summon a globule in a region with a cultist and a meteorite. The meteorite is eliminated. A gate is not required. Globules can now only be moved (for free) alongside a cultist. They cannot be moved by any other means, and do not participate in combat.")
 
         case _ => ""
     }
@@ -2912,7 +2912,7 @@ object Overlays {
             s"""<div class=p>${cost("How to Awaken " + Byagoona.name + ":")}</div>
                 <div class=p>${cost("1)")} Eliminate one or more of your Monsters in a single Area and roll that many dice.</div>
                 <div class=p>${cost("2)")} Set all of the dice on your Faction Card.</div>
-                <div class=p>${cost("3)")} Pay Power equal to <span class=cost-color>max(0, 8 - the number of Monsters Eliminated)</span>.</div>
+                <div class=p>${cost("3)")} Pay Power equal to <span class=cost-color>max(0, ${FBEValues.Byagoona_awakenCost} - the number of Monsters Eliminated)</span>.</div>
                 <div class=p>${cost("4)")} ${Byagoona.name} appears in the Area.</div>
                 <div class=p>${combat} Equal to the number of Results (Kills and Pains) on dice on your Faction Card.</div>""")
     }
@@ -2926,13 +2926,13 @@ object Overlays {
         faction(FBE, "info:fbe-background", SelfConsuming, "Ongoing",
             "Whenever an Action causes two or more Units to be Killed or Eliminated in the same Area, if you had a Unit Present, gain 1 Power. Also gain 1 Doom if you controlled at least three of those Units.",
             $(ChangelingAdherents, NecromanticSpores, Shapestealing, AnimatedRush, Succor, OverlordOfDeath), $(
-            (Acolyte,      6, "1", "0", s"""<div class=p>Setup: 6 Acolytes + a Controlled Gate in an empty area not adjacent to another faction's start area. Spellbook: ${fbeRef(ChangelingAdherents)}</div>"""),
-            (FungalThrall, 10, "2", "2", s"""<div class=p>Spellbooks: ${fbeRef(NecromanticSpores)}, ${fbeRef(Succor)}</div>"""),
-            (Byagoona,     1, "?", calc(g => g.fbeCardDice.count(_ >= 4)), s"""
+            (Acolyte,      FBEValues.Acolyte_count, "1", "0", s"""<div class=p>Setup: 6 Acolytes + a Controlled Gate in an empty area not adjacent to another faction's start area. Spellbook: ${fbeRef(ChangelingAdherents)}</div>"""),
+            (FungalThrall, FBEValues.FungalThrall_count, "" + FBEValues.FungalThrall_cost, "" + FBEValues.FungalThrall_combat, s"""<div class=p>Spellbooks: ${fbeRef(NecromanticSpores)}, ${fbeRef(Succor)}</div>"""),
+            (Byagoona,     FBEValues.Byagoona_count, "?", calc(g => g.fbeCardDice.count(_ >= 4)), s"""
                 <div class=p>${cost(s"How to Awaken ${Byagoona.name}:")}</div>
                 <div class=p>${cost("1)")} Eliminate one or more of your Monsters in a single area and roll that many dice.</div>
                 <div class=p>${cost("2)")} Set all of the dice on your Faction Card.</div>
-                <div class=p>${cost("3)")} Pay Power equal to 8 minus the number of Monsters Eliminated (floored at 0).</div>
+                <div class=p>${cost("3)")} Pay Power equal to ${FBEValues.Byagoona_awakenCost} minus the number of Monsters Eliminated (floored at 0).</div>
                 <div class=p>${cost("4)")} Byagoona appears in the Area.</div>
                 <div class=p>${combat} Equal to the number of Results (Kills and Pains) on dice on your Faction Card.</div>
                 <div class=p>${ref(Shapestealing)} ${cost("(Pre-Battle):")} Choose an Enemy Monster and roll a die from your Faction Card. If the value exceeds that Monster's Cost, it fights for you this Combat.</div>
