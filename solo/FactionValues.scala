@@ -10,9 +10,28 @@ package cws
 
 // Colour Out of Space (CS) - from faction-values/cs.json
 object CSValues {
-    val Meteorite_cost   = 1  // Meteorite summon cost (Power)
-    val Meteorite_combat = 1  // Meteorite combat dice
-    val Meteorite_count  = 4  // Meteorites in the faction
+    val Acolyte_cost                             = 1  // Acolyte summon cost (Power)
+    val Acolyte_combat                           = 0  // Acolyte combat dice
+    val Acolyte_count                            = 6  // Acolytes in the faction
+    val Meteorite_cost                           = 1  // Meteorite summon cost (Power)
+    val Meteorite_combat                         = 1  // Meteorite combat dice
+    val Meteorite_count                          = 4  // Meteorites in the faction
+    val EffervescentExcrescence_cost             = 2  // Effervescent Excrescence summon cost (Power)
+    val EffervescentExcrescence_count            = 4  // Effervescent Excrescences in the faction
+    val LuminousGlobule_cost                     = 4  // Luminous Globule summon cost (Power)
+    val LuminousGlobule_count                    = 3  // Luminous Globules in the faction
+    val Tulzscha_count                           = 1  // Tulzschas in the faction
+    val PrismaticWell_count                      = 3  // Prismatic Wells in the faction
+    val VermiculiteHypertrophy_cost              = 2  // Vermiculite Hypertrophy action cost (Power)
+    val CoreExposure_cost                        = 1  // Core Exposure action cost (Power)
+    val Setup_power                              = 8  // Starting Power
+    val Setup_Acolyte                            = 6  // Acolytes placed during setup
+    val VermiculiteHypertrophy_excrescenceCombat = 6  // Effervescent Excrescence combat after Vermiculite Hypertrophy
+    val CosmicLandfall_awakenThreshold           = 4  // Minimum GOO awaken cost to trigger Cosmic Landfall
+    val SpectralCollapse_doomPerPain             = 1  // Doom gained per pain roll from Spectral Collapse
+    val SpectralCollapse_esPerKill               = 1  // Elder Signs gained per kill roll from Spectral Collapse
+    val EffulgentSacrifice_doom                  = 1  // Doom gained by the sacrificing faction from Effulgent Sacrifice
+    val PrismaticWell_gatherPower                = 3  // Power given by a Prismatic Well during Gather Power
 }
 
 // Tribulation (DGT) - from faction-values/dgt.json
