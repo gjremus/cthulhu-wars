@@ -99,6 +99,8 @@ object EarthMap3 extends Board {
         // (non-faction, not adjacent to ANY enemy start area) filtered at selection
         // time in Game.scala SetupFactionsAction (§1.6).
         case FBE => regions; case FM => regions
+        // Sphinx Worshippers (SW): multi-area setup, land areas only (no Ocean)
+        case SW => regions.%(_.glyph != Ocean)
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
         // Tribulation (DGT): regular multi-area setup
@@ -226,6 +228,8 @@ object EarthMap4v35 extends Board {
         // (non-faction, not adjacent to ANY enemy start area) filtered at selection
         // time in Game.scala SetupFactionsAction (§1.6).
         case FBE => regions; case FM => regions
+        // Sphinx Worshippers (SW): multi-area setup, land areas only (no Ocean)
+        case SW => regions.%(_.glyph != Ocean)
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
         // Tribulation (DGT): regular multi-area setup
@@ -357,6 +361,8 @@ object EarthMap4v53 extends Board {
         // (non-faction, not adjacent to ANY enemy start area) filtered at selection
         // time in Game.scala SetupFactionsAction (§1.6).
         case FBE => regions; case FM => regions
+        // Sphinx Worshippers (SW): multi-area setup, land areas only (no Ocean)
+        case SW => regions.%(_.glyph != Ocean)
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
         // Tribulation (DGT): regular multi-area setup
@@ -496,6 +502,8 @@ object EarthMap5 extends Board {
         // (non-faction, not adjacent to ANY enemy start area) filtered at selection
         // time in Game.scala SetupFactionsAction (§1.6).
         case FBE => regions; case FM => regions
+        // Sphinx Worshippers (SW): multi-area setup, land areas only (no Ocean)
+        case SW => regions.%(_.glyph != Ocean)
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
         // Tribulation (DGT): regular multi-area setup
@@ -645,6 +653,8 @@ object EarthMap6 extends Board {
         // (non-faction, not adjacent to ANY enemy start area) filtered at selection
         // time in Game.scala SetupFactionsAction (§1.6).
         case FBE => regions; case FM => regions
+        // Sphinx Worshippers (SW): multi-area setup, land areas only (no Ocean)
+        case SW => regions.%(_.glyph != Ocean)
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
         // Tribulation (DGT): regular multi-area setup
@@ -920,6 +930,8 @@ object LibraryCelaeno55 extends Board {
         // (non-faction, not adjacent to ANY enemy start area) filtered at selection
         // time in Game.scala SetupFactionsAction (§1.6).
         case FBE => regions; case FM => regions
+        // Sphinx Worshippers (SW): multi-area setup, land areas only (no Ocean)
+        case SW => regions.%(_.glyph != Ocean)
         // Xyrious Storm (XSS): no map starting area — Setup handled by XSSExpansion (picks a Sea Area)
         case XSS => $()
         // Tribulation (DGT): regular multi-area setup

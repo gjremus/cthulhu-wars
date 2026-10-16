@@ -225,9 +225,14 @@ abstract class UnitClass(val name : String, val utype : UnitType, val cost : Int
     def isGOO     : Boolean = utype == GOO || utype == ElderGod
     def isElderGod: Boolean = utype == ElderGod
 
-    def canMove(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !MindParasite.isParasitized(u)
-    def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !MindParasite.isParasitized(u)
-    def canBattle(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref)
+    // Sphinx Worshippers (SW) Kidnap: a kidnapped enemy Monster "lies sideways" — exempt from
+    // battle (including abilities), cannot be moved by its own owner or any other means, and
+    // moves only via SW's own direct carry (SWCarryAction in FactionSW.scala, which mutates
+    // .region directly and so never calls through this gate). Same shared-gate idiom as
+    // game.mummifiedCultists / MindParasite above.
+    def canMove(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !MindParasite.isParasitized(u) && !game.swKidnapped.has(u.ref)
+    def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !MindParasite.isParasitized(u) && !game.swKidnapped.has(u.ref)
+    def canBattle(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !game.swKidnapped.has(u.ref)
     def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = true
     def canBeCaptured(u : UnitFigure)(implicit game : Game) : Boolean = true
     def canControlGate(u : UnitFigure)(implicit game : Game) : Boolean = false
@@ -1760,6 +1765,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case TI => $(TIExpansion)
             // Desert Guardian (DGT): register DGT expansion handler for Martyr's Cry reset
             case DGT => $(DGTExpansion)
+            // Sphinx Worshippers (SW): Homebrew designer faction
+            case SW => $(SWExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any || options.of[WhateleyClanOption].any).$(NeutralMonstersExpansion) ++
@@ -2281,6 +2288,23 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var azathothAwakenGateRegion : |[Region] = None
     // Messenger of Yig: track which enemies have been asked this Doom Phase
     var messengerOfYigAsked : $[Faction] = $
+
+    // Sphinx Worshippers (SW) state — all kept on Game so undo/replay rebuild it correctly.
+    // Hunger track (SW's alternate economy). +1 on Black Sphinx awaken/pained/action-phase
+    // start (while on map), +3 on kill/elimination, -1 on Bottomless Pit, +1 on Hunger
+    // Discounted Ritual (Starvation). Doom phase forces a sacrifice of cultists and/or doom
+    // equal to this value (see swHungerSacrificeDoneThisDoom below / FactionSW DoomAction).
+    var swHunger : Int = 0
+    // Units kidnapped via SW's "Kidnap" UFA: exempt from battle, move only with Nitokris,
+    // cannot be moved by their own owner. Kept as a plain list (not Set) to match the
+    // existing $[UnitRef] convention used by fbCraters / fbWritheUsedUnits etc.
+    var swKidnapped : $[UnitRef] = $
+    // Dual-power SB6 (Mummies Curse / Life from Death) same-battle mutual exclusion: true for
+    // the rest of THIS battle once Life from Death is used in pre-battle. Cleared at battle end.
+    var swLifeFromDeathUsedThisBattle : Boolean = false
+    // Re-armed each Doom Phase (DoomPhaseAction) — guards the once-per-doom-phase forced
+    // Hunger sacrifice, same idiom as tiSacramentDoneThisDoom.
+    var swHungerSacrificeDoneThisDoom : Boolean = false
     // Mind Parasite: track original faction for each parasitized cultist
     var mindParasiteOriginalFaction : Map[UnitRef, Faction] = Map()
     var mindParasiteCaptureRejected : $[UnitRef] = $
@@ -3678,6 +3702,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     + CSEffulgentSacrificeAction(f, r)
             }
 
+        // Sphinx Worshippers (SW): Bottomless Pit — once SW has earned the spellbook, ANY
+        // faction may use it (SW's own use is instead offered from its own MainAction in
+        // FactionSW.scala, gated the same way). Only offered here for non-SW factions to avoid
+        // double-offering SW the same menu twice in one turn.
+        if (factions.has(SW) && f != SW && SW.has(BottomlessPit) && swHunger > 0) {
+            val pitRegions = SWExpansion.bottomlessPitRegions.%(r => factions.but(f).exists(e => e.at(r).%(_.uclass.utype == Monster).not(Zeroed).any))
+            if (f.power >= SWValues.BottomlessPit_cost && pitRegions.any)
+                + SWBottomlessPitMainAction(f, pitRegions)
+        }
+
         // Permeation (PRM): Make as One — enemies may activate PRM's face-up spellbooks by paying
         // their Power cost. Only offer this during the enemy's action phase (not doom phase).
         // Must check oncePerAction to see which books are face-up.
@@ -4448,6 +4482,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Sacrament of Flesh (§1.8): re-arm the forced removal for this Doom Phase.
                 tiSacramentDoneThisDoom = false
             }
+
+            // Sphinx Worshippers (SW): re-arm the forced Hunger sacrifice for this Doom Phase.
+            if (factions.has(SW))
+                swHungerSacrificeDoneThisDoom = false
 
             // Library at Celaeno: distribute Silence Tokens at start of Doom Phase
             if (board.isLibraryMap) {

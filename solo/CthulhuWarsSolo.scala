@@ -1115,6 +1115,8 @@ object CthulhuWarsSolo {
                     case TI => Processing(|("#94382b"), |("#333333"), None)
                     // The Burrowers Beneath (TB): earthy brown #8b6914
                     case TB => Processing(|("#8b6914"), |("#333333"), None)
+                    // Sphinx Worshippers (SW): dusty rose #c399af
+                    case SW => Processing(|("#c399af"), |("#333333"), None)
                     // Library map units: no tint (use original icon images)
                     case LibraryFaction => defaultProcessing
                     case _  => defaultProcessing
@@ -1142,6 +1144,7 @@ object CthulhuWarsSolo {
                     case TB => Processing(|("#8b6914"), |("#333333"), None)
                     case CS => Processing(None, None, None)
                     case TI => Processing(|("#94382b"), |("#333333"), None)
+                    case SW => Processing(|("#c399af"), |("#333333"), None)
                     case _  => defaultProcessing
                 }
 
@@ -1183,6 +1186,8 @@ object CthulhuWarsSolo {
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
                         // Colour Out of Space (CS): acolyte unit sprite
                         case CS => DrawRect("cs-acolyte", None, x - 17, y - 54, 34, 60)
+                        // Sphinx Worshippers (SW): placeholder acolyte sprite (reuse dc-acolyte tinted)
+                        case SW => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -1591,6 +1596,16 @@ object CthulhuWarsSolo {
                     case War         => DrawRect("dgt-war", None, x - 35, y - 75, 70, 85)
                     case Famine      => DrawRect("dgt-famine", None, x - 35, y - 75, 70, 85)
                     case Death       => DrawRect("dgt-death", None, x - 35, y - 75, 70, 85)
+
+                    // Sphinx Worshippers (SW): real art for Pharoah Kephren, Queen Nitokris and
+                    // Black Sphinx (downloaded from the designer); Hybrid Mummy reuses the shared
+                    // n-dimensional-shambler sprite. Art is pre-rendered (not faction-tinted), so
+                    // tint is None, matching the TI/DGT real-art idiom above.
+                    case HybridMummy    => if (region != null) DrawRect("n-dimensional-shambler", |(tint), x - 35, y - 75, 70, 85)
+                                           else DrawRect("n-dimensional-shambler", |(tint), x - 29, y - 60, 58, 70)
+                    case PharoahKephren => DrawRect("sw-pharoah-kephren", None, x - 33, y - 80, 66, 80)
+                    case QueenNitokris  => DrawRect("sw-queen-nitokris",  None, x - 38, y - 76, 76, 76)
+                    case BlackSphinx    => DrawRect("sw-black-sphinx",    None, x - 45, y - 90, 90, 90)
 
                     case _ => null
                 }
@@ -5958,7 +5973,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Faceless Blight (FBE): Homebrew faction appended (§3.13.1)
         // Xyrious Storm (XSS): Homebrew faction appended
         // Fleshmason (FM), Permeation (PRM), Tribulation (DGT): Designer factions appended
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT, SW)
 
         // Alt picker display order (may differ from allFactions).
         // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB, DC.
@@ -6020,6 +6035,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             "PRM" -> "alpha",  // Permeation
             "DGT" -> "alpha",  // Tribulation
             "XSS" -> "alpha",  // Xothic Starspawn
+            "SW" -> "alpha",   // Sphinx Worshippers
             // Homebrew-only factions (beta pending owner confirmation)
             "DC" -> "stable"   // Defilers Court
         )
@@ -6065,7 +6081,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // Separate from stabilityMap so getCategory can distinguish designer factions
             // from built-in official ones.
             val designerAcronyms = scala.collection.mutable.Set[String]()
-            val fallbackDesignerAcronyms = Set("FM", "PRM", "DGT", "XSS")
+            val fallbackDesignerAcronyms = Set("FM", "PRM", "DGT", "XSS", "SW")
 
             // [2026-10-12] Rerender callback: set once render() exists, called after XHR loads.
             var rerender : () => Unit = () => ()
@@ -6343,7 +6359,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // Official factions (per owner) are all of the rest (includes TI).
             def getCategory(e : PickerEntry) : String = {
                 val baseFactions = Set("GC", "CC", "BG", "YS")
-                val homebrewOnlyFactions = Set("TS", "FB", "DC", "CS", "FBE", "TB", "FM", "PRM", "DGT")
+                val homebrewOnlyFactions = Set("TS", "FB", "DC", "CS", "FBE", "TB", "FM", "PRM", "DGT", "SW")
                 val designerBuilt = (designerAcronyms.toSet ++ fallbackDesignerAcronyms) -- baseFactions
                 val allHomebrews = homebrewOnlyFactions ++ designerBuilt
                 val isHomebrew = allHomebrews.contains(e.faction.short)

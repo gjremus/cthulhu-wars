@@ -90,6 +90,42 @@ object FactionValuesMapping {
             "units.rows.yg4kP9qZ.awakenPower" -> "Ycgnagnnisssz_awakenCost",
             "units.rows.yg4kP9qZ.qty" -> "Ycgnagnnisssz_count",
         ),
+        "SW" -> Map(
+            "ae.rows.1y8bfa91.qty" -> "Hunger_actionPhaseGain",
+            "ae.rows.Y8NGqHCs.qty" -> "Hunger_awakenGain",
+            "ae.rows.mq5x48fu.qty" -> "Hunger_killedGain",
+            "ae.rows.rdnrwvr2.qty" -> "Hunger_bottomlessPitSpend",
+            "ae.rows.t9erkfnh.qty" -> "Hunger_painedGain",
+            "ae.rows.xm6rstsh.qty" -> "Hunger_discountedRitualGain",
+            "sb.rows.5EwQF2ol.text (Advance the Hunger track by 1)" -> "Starvation_hungerGain",
+            "sb.rows.5EwQF2ol.text (Divide the current value of Hunger Track by 3, rounded down)" -> "Starvation_esDivisor",
+            "sb.rows.dVPTSOJ1.text (Action: Cost 1)" -> "BottomlessPit_cost",
+            "sb.rows.dVPTSOJ1.text (Sphinx Worshippers gain 1 power and 1 Elder Sign when an opponent uses this ability)" -> "BottomlessPit_swBonusES",
+            "sb.rows.dVPTSOJ1.text (gain elder signs equal to its printed cost - 1)" -> "BottomlessPit_costMinus",
+            "sb.rows.guDpNAbs.effect" -> "MummiesCurse_pains",
+            "sb.rows.guDpNAbs.effect2" -> "LifeFromDeath_cultists",
+            "sb.rows.xLzQzD_m.cost" -> "GhoulQueen_cost",
+            "sbr.rows.JUkyIx9V.num" -> "HungerReq4_threshold",
+            "sbr.rows.hPZlRNxH.num" -> "HungerReq2_threshold",
+            "setup.aeStart" -> "Setup_aeStart",
+            "setup.power" -> "Setup_power",
+            "setup.units.eYZ6L7qA.qty" -> "Setup_Acolyte",
+            "ufa.effect" -> "Kidnap_minMummies",
+            "units.rows.bs8MvPnK.awakenPower" -> "BlackSphinx_awakenBaseCost",
+            "units.rows.bs8MvPnK.awakenReq (Pay 3 less the monster is kidnapped)" -> "BlackSphinx_kidnapDiscount",
+            "units.rows.bs8MvPnK.qty" -> "BlackSphinx_count",
+            "units.rows.bs8MvPnK.resultsCalc (Adds pains = 1 + current Hunger Track)" -> "BlackSphinx_painsBase",
+            "units.rows.kf9FMV9m.cost" -> "HybridMummy_cost",
+            "units.rows.kf9FMV9m.dice" -> "HybridMummy_combat",
+            "units.rows.kf9FMV9m.qty" -> "HybridMummy_count",
+            "units.rows.pgBdiXoY.cost" -> "PharoahKephren_cost",
+            "units.rows.pgBdiXoY.dice" -> "PharoahKephren_combat",
+            "units.rows.pgBdiXoY.qty" -> "PharoahKephren_count",
+            "units.rows.qn1EvCxR.cost" -> "QueenNitokris_cost",
+            "units.rows.qn1EvCxR.qty" -> "QueenNitokris_count",
+            "units.rows.qn1EvCxR.resultsCalc (2+Current Hunger Track)" -> "QueenNitokris_combatBase",
+            "units.rows.uobjhDTS.qty" -> "Acolyte_count",
+        ),
         "XSS" -> Map(
             "sb.rows.xsb00004.cost" -> "Tsunami_cost",
             "setup.power" -> "Setup_power",
@@ -232,6 +268,45 @@ object PRMValues {
     def EnemyHas3SpellbooksReq_spellbooks = LiveValues.get("PRM", "EnemyHas3SpellbooksReq_spellbooks", 3)  // SBR: Spellbooks another Faction must have
     def MakeAsOne_doomPerFlip             = LiveValues.get("PRM", "MakeAsOne_doomPerFlip", 1)  // Make as One: Doom gained when an enemy activation flips a Spellbook
     def MothersAid_power                  = LiveValues.get("PRM", "MothersAid_power", 1)  // Mother's Aid: Power an enemy pays to control Ycgn'agnnisssz
+}
+
+// Sphinx Worshippers (SW) - from faction-values/sw.json
+object SWValues {
+    def Acolyte_count               = LiveValues.get("SW", "Acolyte_count", 6)  // Acolytes in the faction
+    def HybridMummy_cost            = LiveValues.get("SW", "HybridMummy_cost", 2)  // Hybrid Mummy summon cost (Power)
+    def HybridMummy_combat          = LiveValues.get("SW", "HybridMummy_combat", 2)  // Hybrid Mummy combat dice
+    def HybridMummy_count           = LiveValues.get("SW", "HybridMummy_count", 4)  // Hybrid Mummies in the faction
+    def PharoahKephren_cost         = LiveValues.get("SW", "PharoahKephren_cost", 3)  // Pharoah Kephren summon cost (Power)
+    def PharoahKephren_combat       = LiveValues.get("SW", "PharoahKephren_combat", 3)  // Pharoah Kephren combat dice
+    def PharoahKephren_count        = LiveValues.get("SW", "PharoahKephren_count", 1)  // Pharoah Kephrens in the faction
+    def QueenNitokris_cost          = LiveValues.get("SW", "QueenNitokris_cost", 4)  // Queen Nitokris summon cost (Power)
+    def QueenNitokris_combatBase    = LiveValues.get("SW", "QueenNitokris_combatBase", 2)  // Queen Nitokris automatic Pains base (before adding current Hunger)
+    def QueenNitokris_count         = LiveValues.get("SW", "QueenNitokris_count", 1)  // Queen Nitokrises in the faction
+    def BlackSphinx_awakenBaseCost  = LiveValues.get("SW", "BlackSphinx_awakenBaseCost", 8)  // Base Power to Awaken Black Sphinx (before subtracting sacrificed monster's cost)
+    def BlackSphinx_kidnapDiscount  = LiveValues.get("SW", "BlackSphinx_kidnapDiscount", 3)  // Extra discount to the awaken cost if the sacrificed monster was kidnapped
+    def BlackSphinx_painsBase       = LiveValues.get("SW", "BlackSphinx_painsBase", 1)  // Black Sphinx automatic Pains base (before adding current Hunger)
+    def BlackSphinx_count           = LiveValues.get("SW", "BlackSphinx_count", 1)  // Black Sphinxes in the faction
+    def Setup_power                 = LiveValues.get("SW", "Setup_power", 8)  // Starting Power
+    def Setup_aeStart               = LiveValues.get("SW", "Setup_aeStart", 0)  // Starting Hunger value
+    def Setup_Acolyte               = LiveValues.get("SW", "Setup_Acolyte", 6)  // Acolytes placed in the start Area at setup
+    def HungerReq2_threshold        = LiveValues.get("SW", "HungerReq2_threshold", 2)  // SBR: Hunger Track value to reach
+    def HungerReq4_threshold        = LiveValues.get("SW", "HungerReq4_threshold", 4)  // SBR: Hunger Track value to reach
+    def Hunger_awakenGain           = LiveValues.get("SW", "Hunger_awakenGain", 1)  // Hunger gained when Black Sphinx is Awakened
+    def Hunger_actionPhaseGain      = LiveValues.get("SW", "Hunger_actionPhaseGain", 1)  // Hunger gained at start of Action Phase while Black Sphinx is on the map
+    def Hunger_painedGain           = LiveValues.get("SW", "Hunger_painedGain", 1)  // Hunger gained when Black Sphinx is Pained
+    def Hunger_killedGain           = LiveValues.get("SW", "Hunger_killedGain", 3)  // Hunger gained when Black Sphinx is Killed or eliminated
+    def Hunger_bottomlessPitSpend   = LiveValues.get("SW", "Hunger_bottomlessPitSpend", 1)  // Hunger spent (reduced) when Bottomless Pit is performed
+    def Hunger_discountedRitualGain = LiveValues.get("SW", "Hunger_discountedRitualGain", 1)  // Hunger gained when Hunger Discounted Ritual (Starvation) is performed
+    def Kidnap_minMummies           = LiveValues.get("SW", "Kidnap_minMummies", 2)  // UFA: minimum Hybrid Mummies (with Nitokris) required to hold a Kidnapped monster
+    def GhoulQueen_cost             = LiveValues.get("SW", "GhoulQueen_cost", 1)  // SB action cost (Power)
+    def BottomlessPit_cost          = LiveValues.get("SW", "BottomlessPit_cost", 1)  // SB action cost (Power)
+    def BottomlessPit_costMinus     = LiveValues.get("SW", "BottomlessPit_costMinus", 1)  // Elder Signs gained = sacrificed monster's printed cost minus this
+    def BottomlessPit_swBonusPower  = LiveValues.get("SW", "BottomlessPit_swBonusPower", 1)  // Power SW gains when an opponent uses Bottomless Pit
+    def BottomlessPit_swBonusES     = LiveValues.get("SW", "BottomlessPit_swBonusES", 1)  // Elder Signs SW gains when an opponent uses Bottomless Pit
+    def MummiesCurse_pains          = LiveValues.get("SW", "MummiesCurse_pains", 3)  // SB (side A): Pains added to battle results
+    def LifeFromDeath_cultists      = LiveValues.get("SW", "LifeFromDeath_cultists", 2)  // SB (side B): Cultists gained replacing the sacrificed Hybrid Mummy
+    def Starvation_esDivisor        = LiveValues.get("SW", "Starvation_esDivisor", 3)  // SB: Hunger Track value is divided by this (rounded down) for Elder Signs gained
+    def Starvation_hungerGain       = LiveValues.get("SW", "Starvation_hungerGain", 1)  // SB: Hunger gained when Starvation's ritual discount is used
 }
 
 // Xyrious Storm (XSS) - from faction-values/xss.json

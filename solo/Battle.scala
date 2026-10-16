@@ -822,6 +822,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             }
         }
 
+        // Sphinx Worshippers (SW) — Life from Death (Pre-Battle, side B of the dual-power SB6).
+        // Offer if SW has the SB and has a Hybrid Mummy in this battle. Using it sets
+        // game.swLifeFromDeathUsedThisBattle, which blocks Mummies Curse later in THIS same
+        // battle (design's explicit mutual exclusion) — cleared at battle-end.
+        if (s == SW && s.can(MummiesCurse) && s.forces.%(_.uclass == HybridMummy).any)
+            options :+= SWLifeFromDeathMainAction(SW)
+
         // Cat from Mercury — Needs Affection (Pre-Battle): if a Cat from Mercury is in battle,
         // the owner can replace one or more of their Monsters with Acolytes from pool.
         if (s.loyaltyCards.has(CatFromMercuryCard) && s.forces.%(_.uclass == CatFromMercury).any &&
@@ -2839,6 +2846,40 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // Sphinx Worshippers (SW) — Kidnap (UFA, Post-Battle): if SW's side in this
+                // battle has Queen Nitokris plus at least SWValues.Kidnap_minMummies Hybrid
+                // Mummies present, offer to Kidnap one of the enemy's PAINED Monsters here.
+                // Once kidnapped, the unit is exempt from battle and movement (see the
+                // swKidnapped checks folded into UnitClass.canMove/canBeMoved/canBattle in
+                // Game.scala) until it moves for free with Nitokris (Funeral Procession) or is
+                // sacrificed to Awaken Black Sphinx.
+                if (factions.has(SW) && sides.has(SW) && !SW.oncePerAction.has(Kidnap)) {
+                    val swSide = if (attacker == SW) attackers else defenders
+                    val enemy = if (attacker == SW) defender else attacker
+                    val enemySide = if (attacker == SW) defenders else attackers
+                    val mummiesHere = swSide.forces.%(_.uclass == HybridMummy).num
+                    val nitokrisHere = swSide.forces.%(_.uclass == QueenNitokris).any
+                    val candidates = enemySide.forces.%(u => u.uclass.utype == Monster && u.health == Pained)./(_.ref)
+                    if (nitokrisHere && mummiesHere >= SWValues.Kidnap_minMummies && candidates.any) {
+                        SW.oncePerAction :+= Kidnap
+                        return Ask(SW).each(candidates)(v => SWKidnapAction(SW, enemy, v)).add(SWKidnapSkipAction(SW, enemy))
+                    }
+                }
+
+                // Sphinx Worshippers (SW) — Mummies Curse (Post-Battle, side A of the dual-power
+                // SB6). Offer if SW has the SB, has a currently-Pained Hybrid Mummy in this
+                // battle, and Life from Death was NOT used earlier in this same battle (the
+                // design's explicit same-battle mutual exclusion; the flag is cleared at
+                // battle-end below).
+                if (factions.has(SW) && SW.can(MummiesCurse) && sides.has(SW) && !game.swLifeFromDeathUsedThisBattle && !SW.oncePerAction.has(MummiesCurse)) {
+                    val swSide = if (attacker == SW) attackers else defenders
+                    val painedMummies = swSide.forces.%(u => u.uclass == HybridMummy && u.health == Pained)./(_.ref)
+                    if (painedMummies.any) {
+                        SW.oncePerAction :+= MummiesCurse
+                        return Ask(SW).each(painedMummies)(m => SWMummiesCurseAction(SW, m)).add(SWMummiesCurseSkipAction(SW))
+                    }
+                }
+
                 // Faceless Blight (FBE) — Necromantic Spores (Post-Battle, §3.14.4):
                 // if FBE participated, has the SB, controls a Monster in the arena, and
                 // an enemy Unit was Killed, offer to Eliminate a controlled Monster and
@@ -3080,6 +3121,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 }
                 game.fbeShapestolen = $
                 game.fbeByagoonaKillPrevented = false
+
+                // Sphinx Worshippers (SW): clear the dual-power (Mummies Curse / Life from
+                // Death) same-battle mutual-exclusion flag — it only applies within one battle.
+                game.swLifeFromDeathUsedThisBattle = false
 
                 game.battle = None
 
@@ -3460,6 +3505,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 val pains = $(Pain, Pain, Pain)
                 f.rolls ++= pains
                 log(HagargRyonis.styled(f), "adds", pains.mkString(" "))
+            }
+
+            // Sphinx Worshippers (SW) — Queen Nitokris: adds (2 + current Hunger) Pains
+            // automatically (rolls no dice). Same idiom as Hagarg Ryonis above.
+            if (game.factions.has(SW)) {
+                val qn = f.forces(QueenNitokris).not(Zeroed)
+                if (qn.any) {
+                    val n = SWValues.QueenNitokris_combatBase + game.swHunger
+                    val pains = n.times(Pain)
+                    f.rolls ++= pains
+                    log(QueenNitokris.styled(f), "adds", pains.mkString(" "))
+                }
+
+                // Sphinx Worshippers (SW) — Black Sphinx: adds (1 + current Hunger) Pains
+                // automatically (rolls no dice). Elder Thing Mind Control can fully suppress
+                // this (Ceaseless Hunger is an Ongoing ability) — see ability interaction below.
+                val bs = f.forces(BlackSphinx).not(Zeroed)
+                if (bs.any && !ElderThingMindControl.suppresses(bs.head)) {
+                    val n = SWValues.BlackSphinx_painsBase + game.swHunger
+                    val pains = n.times(Pain)
+                    f.rolls ++= pains
+                    log(BlackSphinx.styled(f), "adds", pains.mkString(" "))
+                }
             }
 
             val sv = f.forces(StarVampire)
