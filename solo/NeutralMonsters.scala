@@ -512,10 +512,8 @@ object NeutralMonstersExpansion extends Expansion {
 
             if (f.at(ShamblerHold(f), DimensionalShamblerUnit).any)
                 Ask(f).each(areas.nex :+ BB.moon)(r => ShamblerDeployAction(f, r, then)).add(then.as("Done".styled("power")))
-            else {
-                game.triggers()
+            else
                 then
-            }
             }
 
         // ...

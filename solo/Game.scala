@@ -3934,11 +3934,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // DS deploy: always show when "always prompt" is set, or when conditions match
                 if (f.loyaltyCards.has(DimensionalShamblerCard) && f.at(ShamblerHold(f), DimensionalShamblerUnit).any) {
                     if (f.commands.has(ShamblerPrompt))
-                        + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(e))).as(DimensionalShamblerUnit.styled(f), "to Map")("(always prompted)")
+                        + ShamblerDeployPromptAction(f, PreActionPromptsAction(e, l.but(f))).as(DimensionalShamblerUnit.styled(f), "to Map")("(always prompted)")
                     else {
                         val dsReason = dsDeployReason(f)
                         if (dsReason.any)
-                            + ShamblerDeployPromptAction(f, CheckSpellbooksAction(PreMainAction(e))).as(DimensionalShamblerUnit.styled(f), "to Map")("(" + dsReason.get + ")")
+                            + ShamblerDeployPromptAction(f, PreActionPromptsAction(e, l.but(f))).as(DimensionalShamblerUnit.styled(f), "to Map")("(" + dsReason.get + ")")
                     }
                 }
 
@@ -3953,11 +3953,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
                 if (e.loyaltyCards.has(DimensionalShamblerCard) && e.at(ShamblerHold(e), DimensionalShamblerUnit).any) {
                     if (e.commands.has(ShamblerPrompt))
-                        + ShamblerDeployPromptAction(e, CheckSpellbooksAction(PreMainAction(e))).as(DimensionalShamblerUnit.styled(e), "to Map")("(always prompted)")
+                        + ShamblerDeployPromptAction(e, MainGatesAction(e)).as(DimensionalShamblerUnit.styled(e), "to Map")("(always prompted)")
                     else {
                         val dsReason = dsDeployReason(e)
                         if (dsReason.any)
-                            + ShamblerDeployPromptAction(e, CheckSpellbooksAction(PreMainAction(e))).as(DimensionalShamblerUnit.styled(e), "to Map")("(" + dsReason.get + ")")
+                            + ShamblerDeployPromptAction(e, MainGatesAction(e)).as(DimensionalShamblerUnit.styled(e), "to Map")("(" + dsReason.get + ")")
                     }
                 }
 
