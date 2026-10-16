@@ -123,6 +123,8 @@ object FactionValuesMapping {
             "units.rows.qn1EvCxR.cost" -> "QueenNitokris_cost",
             "units.rows.qn1EvCxR.qty" -> "QueenNitokris_count",
             "units.rows.qn1EvCxR.resultsCalc (2+Current Hunger Track)" -> "QueenNitokris_combatBase",
+            "units.rows.uobjhDTS.kills" -> "Acolyte_kills",
+            "units.rows.uobjhDTS.pains" -> "Acolyte_pains",
             "units.rows.uobjhDTS.qty" -> "Acolyte_count",
         ),
         "XSS" -> Map(
@@ -305,6 +307,8 @@ object SWValues {
     def MummiesCurse_pains          = LiveValues.get("SW", "MummiesCurse_pains", 3)  // SB (side A): Pains added to battle results
     def LifeFromDeath_cultists      = LiveValues.get("SW", "LifeFromDeath_cultists", 2)  // SB (side B): Cultists gained replacing the sacrificed Hybrid Mummy
     def Starvation_esDivisor        = LiveValues.get("SW", "Starvation_esDivisor", 3)  // SB: Hunger Track value is divided by this (rounded down) for Elder Signs gained
+    def Acolyte_pains               = LiveValues.get("SW", "Acolyte_pains", 0)  // Acolyte fixed Pain results
+    def Acolyte_kills               = LiveValues.get("SW", "Acolyte_kills", 0)  // Acolyte fixed Kill results
 }
 
 // Xyrious Storm (XSS) - from faction-values/xss.json
