@@ -1059,8 +1059,6 @@ object CthulhuWarsSolo {
                         case DS => DrawRect("ds-acolyte", None, x - 17, y - 54, 38, 60)
                         // Bubastis (BB): acolyte unit sprite (placeholder until Task 3.9.1)
                         case BB => DrawRect("bb-acolyte", |(tint), x - 17, y - 54, 39, 60)
-                        // Tribulation (DGT): acolyte unit sprite
-                        case DGT => DrawRect("dgt-acolyte", None, x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -1122,8 +1120,6 @@ object CthulhuWarsSolo {
                         // NOT FOR THE GAME ITSELF. In-game rendering always uses the standard
                         // bb-glyph regardless of the BBAlternateSpellbooks option.
                         case BB => DrawRect("bb-glyph", |(tint), x - 50, y - 50, 100, 100)
-                        // Tribulation (DGT): faction glyph sprite
-                        case DGT => DrawRect("dgt-glyph", None, x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
                         case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
