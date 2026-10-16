@@ -3502,12 +3502,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             case Ghatanothoa   => "fb-ghatanothoa"
                             case ProtoShoggoth => "tt-proto-shoggoth"
                             case UbboSathla    => "tt-ubbo-sathla"
-                            // Tribulation (DGT): unit sprites (can end up on Moon via various mechanics)
-                            case Conquest      => "dgt-conquest"
-                            case Pestilence    => "dgt-pestilence"
-                            case War           => "dgt-war"
-                            case Famine        => "dgt-famine"
-                            case Death         => "dgt-death"
                             // Neutral monsters/terrors/IGOOs (can end up on Moon via Catnapping)
                             case Ghast              => "n-ghast"
                             case Gug                => "n-gug"
