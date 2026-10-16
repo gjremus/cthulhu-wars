@@ -686,7 +686,7 @@ object Overlays {
         case $("DGT", WhiteRiderReq.text) => requirement("Control a Gate in an Area marked with the Dragon Glyph. Unlocks Pestilence.")
         case $("DGT", RedRiderReq.text) => requirement("Control a Gate in an Area marked with the Thorn Glyph. Unlocks War.")
         case $("DGT", BlackRiderReq.text) => requirement("Control a Gate in an Area marked with the Chevron Glyph. Unlocks Famine.")
-        case $("DGT", PaleRiderReq.text) => requirement("A player performs a Ritual of Annihilation. Unlocks Death.")
+        case $("DGT", PaleRiderReq.text) => requirement("Any player performs a Ritual of Annihilation. Unlocks Death.")
         case $("DGT", MartyrsCryReq.text) => requirement("As an Action, distribute a total amount of Power equal to the number of players to any enemy Factions of your choice.")
         case $("DGT", CosmicChaosReq.text) => requirement("As an Action, distribute a total amount of Doom equal to the number of players to any enemy Factions of your choice.")
 

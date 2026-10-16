@@ -112,7 +112,7 @@ case object Dominion extends FactionSpellbook(DGT, "Dominion")
 case object WhiteRiderReq  extends Requirement("Control a Gate in an Area marked with the Dragon Glyph.")
 case object RedRiderReq    extends Requirement("Control a Gate in an Area marked with the Thorn Glyph.")
 case object BlackRiderReq  extends Requirement("Control a Gate in an Area marked with the Chevron Glyph.")
-case object PaleRiderReq   extends Requirement("A player performs a Ritual of Annihilation.")
+case object PaleRiderReq   extends Requirement("Any player performs a Ritual of Annihilation.")
 case object MartyrsCryReq  extends Requirement("As an Action, distribute a total amount of Power equal to the number of players to any enemy Factions of your choice")
 case object CosmicChaosReq extends Requirement("As an Action, distribute a total amount of Doom equal to the number of players to any enemy Factions of your choice")
 

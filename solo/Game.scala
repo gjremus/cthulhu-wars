@@ -5954,7 +5954,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     destinations = (destinations ++ dgtAreas.but(from)).distinct
             }
 
-            // DGT White Rider: Pestilence's Area has no adjacent Areas for enemy units
+            // DGT White Rider: enemy Units in Pestilence's Area cannot Move out
             if (setup.has(DGT) && self != DGT && DGT.has(WhiteRider)) {
                 val pestilenceArea = DGT.units.%(_.uclass == Pestilence)./(_.region).headOption
                 pestilenceArea.foreach { pestiArea =>
