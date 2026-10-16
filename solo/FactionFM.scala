@@ -377,7 +377,10 @@ object FMExpansion extends Expansion {
             game.gates :+= r
             val wall = self.pool.%(_.uclass == ScreamingWall).head
             self.place(ScreamingWall, r)
-            self.log("created a gate with", ScreamingWall.styled(FM), "in", r)
+            // Place the cultist that paid for the action on the gate
+            val cultist = self.at(r).%(_.canControlGate).head
+            cultist.onGate = true
+            self.log("created a gate with", ScreamingWall.styled(FM), "in", r, "(placed", cultist.uclass.styled(FM), "on gate)")
             Then(MainAction(self))
 
         case MannedBattlementsMainAction(self) =>
