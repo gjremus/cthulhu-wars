@@ -1202,13 +1202,6 @@ object CthulhuWarsSolo {
                     case CatFromUranus => DrawRect("bb-cat-from-uranus",|(tint), x - 71, y - 175, 142, 175)
                     case Bastet        => DrawRect("bb-bastet",         |(tint), x - 64, y - 210, 128, 210)
 
-                    // Tribulation (DGT): Four Horsemen units
-                    case Conquest      => DrawRect("dgt-conquest",      None, x - 17, y - 54, 39, 60)
-                    case Pestilence    => DrawRect("dgt-pestilence",    None, x - 35, y - 75, 70, 85)
-                    case War           => DrawRect("dgt-war",           None, x - 35, y - 75, 70, 85)
-                    case Famine        => DrawRect("dgt-famine",        None, x - 35, y - 75, 70, 85)
-                    case Death         => DrawRect("dgt-death",         None, x - 35, y - 75, 70, 85)
-
                     case DesecrationToken => DrawRect("ys-desecration", None, x - 20, y - 20, 41, 40)
                     case WebToken         => DrawRect("web-token", |(neutralTint), x - 31, y - 30, 62, 60)
                     case IceAgeToken      => DrawRect("ww-ice-age", None, x - 44, y - 67, 91, 75)
