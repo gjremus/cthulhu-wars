@@ -5428,7 +5428,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         }
 
                     if (reasons.any)
-                        + DevolvePromptAction(f.sure[GC], PreMainAction(e)).as("Acolytes".styled(f), "to", "Deep Ones".styled(f))(Devolve, reasons./("<br/>(" + _ + ")").mkString(""))
+                        + DevolvePromptAction(f.sure[GC], PreActionPromptsAction(e, l.but(f))).as("Acolytes".styled(f), "to", "Deep Ones".styled(f))(Devolve, reasons./("<br/>(" + _ + ")").mkString(""))
                 }
 
                 if (f.can(DragonAscending) && f.enemies.exists(_.power > f.power))
