@@ -82,12 +82,14 @@ case object SW extends Faction { f =>
     // one step further since here even the COST is per-target, not just the sacrifice.
     override def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = None
 
-    // Hybrid Mummy / Pharoah Kephren roll dice (combat = printed combat value, like any
-    // ordinary Monster). Queen Nitokris and Black Sphinx roll NO dice — they add automatic
-    // Pains in Battle.scala's BattleRollAction (same idiom as Hagarg Ryonis), so they
-    // contribute 0 here (consistent with Hagarg Ryonis's "* 0" line in neutralStrength).
+    // Hybrid Mummy / Pharoah Kephren roll dice (combat read from SWValues, same combatOf
+    // idiom as FMExpansion.combatOf — combat is NOT always equal to cost, so it must be read
+    // separately rather than reusing .uclass.cost). Queen Nitokris and Black Sphinx roll NO
+    // dice — they add automatic Pains in Battle.scala's BattleRollAction (same idiom as
+    // Hagarg Ryonis), so they contribute 0 here (consistent with Hagarg Ryonis's "* 0" line
+    // in neutralStrength).
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
-        units.%(u => u.uclass == HybridMummy || u.uclass == PharoahKephren).not(Zeroed)./(_.uclass.cost).sum +
+        units.%(u => u.uclass == HybridMummy || u.uclass == PharoahKephren).not(Zeroed)./(u => SWExpansion.combatOf(u.uclass)).sum +
         neutralStrength(units, opponent)
     }
 }
@@ -182,16 +184,33 @@ object SWExpansion extends Expansion {
     // gate is checked everywhere Hunger would change due to Ceaseless Hunger (awaken, pained,
     // killed/eliminated, start of Action Phase) — the automatic-Pains part is gated the same
     // way directly in Battle.scala's BattleRollAction.
+    // Combat dice per unit type, read from SWValues (faction-values/sw.json) so combat can be
+    // changed separately from cost — same idiom as FMExpansion.combatOf.
+    def combatOf(uc : UnitClass) : Int = uc match {
+        case HybridMummy    => SWValues.HybridMummy_combat
+        case PharoahKephren => SWValues.PharoahKephren_combat
+        case other          => other.cost
+    }
+
     def ceaselessHungerActive(implicit game : Game) : Boolean =
         SW.onMap(BlackSphinx).not(Zeroed).headOption.map(bs => !ElderThingMindControl.suppresses(bs)).getOrElse(true)
 
-    def gainHunger(n : Int, why : String)(implicit game : Game) {
-        if (n != 0 && ceaselessHungerActive) {
+    // Plain Hunger change (Bottomless Pit, Starvation) — NOT gated by Elder Thing, since that
+    // only blocks "Ceaseless Hunger" (Black Sphinx's own Ongoing ability), not every Hunger
+    // change in the faction.
+    def changeHunger(n : Int, why : String)(implicit game : Game) {
+        if (n != 0) {
             game.swHunger = math.max(0, game.swHunger + n)
             SW.log("Hunger " + (n > 0).?("+").|("") + n + " (" + why + "), now " + game.swHunger)
             SW.satisfyIf(HungerReq2, HungerReq2.text, game.swHunger >= SWValues.HungerReq2_threshold)
             SW.satisfyIf(HungerReq4, HungerReq4.text, game.swHunger >= SWValues.HungerReq4_threshold)
         }
+    }
+
+    // "Ceaseless Hunger" Hunger gain (Black Sphinx awaken/pained/killed/start of Action Phase)
+    // — fully blocked by an enemy-controlled Elder Thing sharing Black Sphinx's region.
+    def gainHunger(n : Int, why : String)(implicit game : Game) {
+        if (ceaselessHungerActive) changeHunger(n, why)
     }
 
     // Regions where Bottomless Pit can be performed: Black Sphinx's own region, plus (once
@@ -275,7 +294,7 @@ object SWExpansion extends Expansion {
                 self.es ++= gain.times(ElderSign(0))
                 self.log(Starvation.styled(SW) + ": gained", gain.es)
             }
-            gainHunger(SWValues.Starvation_hungerGain, "Starvation used")
+            changeHunger(SWValues.Hunger_discountedRitualGain, "Starvation used")
             Force(DoomAction(self))
 
         case SWStarvationSkipAction(self) =>
@@ -383,7 +402,9 @@ object SWExpansion extends Expansion {
             self.log(BottomlessPit.styled(SW) + ": eliminated", u.uclass.styled(owner), "in", r, "for", gain.es)
             game.eliminate(u)
             self.es ++= gain.times(ElderSign(0))
-            game.swHunger = math.max(0, game.swHunger - gain)
+            // Hunger -1 (fixed, per the designer's explicit "build as fixed costs" note on the
+            // ae section) — NOT the dynamic ES amount just gained above.
+            changeHunger(-SWValues.Hunger_bottomlessPitSpend, "Bottomless Pit performed")
             if (self != SW) {
                 SW.power += SWValues.BottomlessPit_swBonusPower
                 SW.es ++= SWValues.BottomlessPit_swBonusES.times(ElderSign(0))

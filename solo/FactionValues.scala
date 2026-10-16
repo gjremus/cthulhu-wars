@@ -97,7 +97,6 @@ object FactionValuesMapping {
             "ae.rows.rdnrwvr2.qty" -> "Hunger_bottomlessPitSpend",
             "ae.rows.t9erkfnh.qty" -> "Hunger_painedGain",
             "ae.rows.xm6rstsh.qty" -> "Hunger_discountedRitualGain",
-            "sb.rows.5EwQF2ol.text (Advance the Hunger track by 1)" -> "Starvation_hungerGain",
             "sb.rows.5EwQF2ol.text (Divide the current value of Hunger Track by 3, rounded down)" -> "Starvation_esDivisor",
             "sb.rows.dVPTSOJ1.text (Action: Cost 1)" -> "BottomlessPit_cost",
             "sb.rows.dVPTSOJ1.text (Sphinx Worshippers gain 1 power and 1 Elder Sign when an opponent uses this ability)" -> "BottomlessPit_swBonusES",
@@ -296,7 +295,7 @@ object SWValues {
     def Hunger_painedGain           = LiveValues.get("SW", "Hunger_painedGain", 1)  // Hunger gained when Black Sphinx is Pained
     def Hunger_killedGain           = LiveValues.get("SW", "Hunger_killedGain", 3)  // Hunger gained when Black Sphinx is Killed or eliminated
     def Hunger_bottomlessPitSpend   = LiveValues.get("SW", "Hunger_bottomlessPitSpend", 1)  // Hunger spent (reduced) when Bottomless Pit is performed
-    def Hunger_discountedRitualGain = LiveValues.get("SW", "Hunger_discountedRitualGain", 1)  // Hunger gained when Hunger Discounted Ritual (Starvation) is performed
+    def Hunger_discountedRitualGain = LiveValues.get("SW", "Hunger_discountedRitualGain", 1)  // Hunger gained when Starvation's ritual discount is used (same event as the ae row and sb.rows.5EwQF2ol.text 'Advance the Hunger track by 1')
     def Kidnap_minMummies           = LiveValues.get("SW", "Kidnap_minMummies", 2)  // UFA: minimum Hybrid Mummies (with Nitokris) required to hold a Kidnapped monster
     def GhoulQueen_cost             = LiveValues.get("SW", "GhoulQueen_cost", 1)  // SB action cost (Power)
     def BottomlessPit_cost          = LiveValues.get("SW", "BottomlessPit_cost", 1)  // SB action cost (Power)
@@ -306,7 +305,6 @@ object SWValues {
     def MummiesCurse_pains          = LiveValues.get("SW", "MummiesCurse_pains", 3)  // SB (side A): Pains added to battle results
     def LifeFromDeath_cultists      = LiveValues.get("SW", "LifeFromDeath_cultists", 2)  // SB (side B): Cultists gained replacing the sacrificed Hybrid Mummy
     def Starvation_esDivisor        = LiveValues.get("SW", "Starvation_esDivisor", 3)  // SB: Hunger Track value is divided by this (rounded down) for Elder Signs gained
-    def Starvation_hungerGain       = LiveValues.get("SW", "Starvation_hungerGain", 1)  // SB: Hunger gained when Starvation's ritual discount is used
 }
 
 // Xyrious Storm (XSS) - from faction-values/xss.json

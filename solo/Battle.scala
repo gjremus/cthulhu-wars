@@ -2866,6 +2866,20 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // Sphinx Worshippers (SW) — Ceaseless Hunger: Black Sphinx advances the Hunger
+                // track by 3 if Killed, else by 1 if Pained this battle (both gated by
+                // SWExpansion.ceaselessHungerActive — an enemy-controlled Elder Thing sharing
+                // Black Sphinx's region fully blocks this, per the design's ability interaction).
+                if (factions.has(SW)) {
+                    val swSide = if (attacker == SW) attackers else defenders
+                    val bsKilled = (swSide.forces ++ eliminated.%(_.faction == SW)).%(u => u.uclass == BlackSphinx && u.health == Killed).any
+                    val bsPained = swSide.forces.%(u => u.uclass == BlackSphinx && u.health == Pained).any
+                    if (bsKilled)
+                        SWExpansion.gainHunger(SWValues.Hunger_killedGain, BlackSphinx.name + " killed")
+                    else if (bsPained)
+                        SWExpansion.gainHunger(SWValues.Hunger_painedGain, BlackSphinx.name + " pained")
+                }
+
                 // Sphinx Worshippers (SW) — Mummies Curse (Post-Battle, side A of the dual-power
                 // SB6). Offer if SW has the SB, has a currently-Pained Hybrid Mummy in this
                 // battle, and Life from Death was NOT used earlier in this same battle (the
