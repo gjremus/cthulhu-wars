@@ -6,7 +6,7 @@ import html._
 // ============================================================================
 // SPHINX WORSHIPPERS (SW) — Homebrew designer faction
 // Designer ID: lhhz3sjhivcz, owner: cavysupreme
-// Faction color #c399af, style "sw".
+// Faction color #b8abd5, style "sw".
 // Egyptian-themed faction centered on the Hunger track (alternate economy) and
 // Black Sphinx (Elder God), Queen Nitokris (Terror), kidnapped enemy monsters.
 // Every fixed number below comes from SWValues (solo/faction-values/sw.json).
