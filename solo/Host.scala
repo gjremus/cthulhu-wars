@@ -71,6 +71,7 @@ object Host {
                     case DC => BotDC.ask(actions, 0.03)(g)
                     case FBE => BotFBE.ask(actions, 0.03)(g)
                     case FM => BotFM.ask(actions, 0.03)(g)
+                    case SW => BotSW.ask(actions, 0.03)(g)
                     case XSS => BotXSS.ask(actions, 0.03)(g)
                     case DGT => BotDGT.ask(actions, 0.03)(g)
                     case TB => BotTB.ask(actions, 0.03)(g)
@@ -89,7 +90,7 @@ object Host {
         // Tombstalker (TS), Firstborn (FB), and Daemon Sultan (DS): included in the master faction list for headless simulation runs
         val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, DGT, FM, PRM, SW)
 
-        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT)
+        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT, SW)
 
         val numberOfPlayers = 4
 

@@ -1050,7 +1050,7 @@ object LibraryCelaeno33 extends Board {
         case SL => $(ChamberOfSngac); case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
         case PRM => regions.%(_.glyph == Ocean)
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case DGT => regions; case XSS => $(); case TB => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case SW => regions.%(_.glyph != Ocean); case DGT => regions; case XSS => $(); case TB => $()
         case CS => regions
         case _ => regions
     }
@@ -1133,7 +1133,7 @@ object LibraryCelaeno53 extends Board {
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
         case PRM => regions.%(_.glyph == Ocean)
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case DGT => regions; case XSS => $(); case TB => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case SW => regions.%(_.glyph != Ocean); case DGT => regions; case XSS => $(); case TB => $()
         case CS => regions
         case _ => regions
     }
@@ -1237,7 +1237,7 @@ object LibraryCelaeno35 extends Board {
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
         case PRM => regions.%(_.glyph == Ocean)
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case DGT => regions; case XSS => $(); case TB => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case SW => regions.%(_.glyph != Ocean); case DGT => regions; case XSS => $(); case TB => $()
         case CS => regions
         case _ => regions
     }

@@ -817,6 +817,8 @@ object CthulhuWarsSolo {
                                         case FBE => BotFBE  .ask(actions, 0.2)(game)
                                         // Fleshmason (FM): bot dispatch (Easy)
                                         case FM => BotFM   .ask(actions, 0.2)(game)
+                                        // Sphinx Worshippers (SW): bot dispatch (Easy)
+                                        case SW => BotSW   .ask(actions, 0.2)(game)
                                         // Permeation (PRM): bot dispatch (Easy)
                                         case PRM => BotPRM  .ask(actions, 0.2)(game)
                                         // Xyrious Storm (XSS): bot dispatch (Easy)
@@ -855,6 +857,8 @@ object CthulhuWarsSolo {
                                         case FBE => BotFBE  .ask(actions, 0.03)(game)
                                         // Fleshmason (FM): bot dispatch (Normal)
                                         case FM => BotFM   .ask(actions, 0.03)(game)
+                                        // Sphinx Worshippers (SW): bot dispatch (Normal)
+                                        case SW => BotSW   .ask(actions, 0.03)(game)
                                         // Permeation (PRM): bot dispatch (Normal)
                                         case PRM => BotPRM  .ask(actions, 0.03)(game)
                                         // Xyrious Storm (XSS): bot dispatch (Normal)
@@ -897,6 +901,8 @@ object CthulhuWarsSolo {
                                         case FBE => BotFBE  .ask(as, 0.03)(game)
                                         // Fleshmason (FM): bot dispatch (AllVsHuman)
                                         case FM => BotFM   .ask(as, 0.03)(game)
+                                        // Sphinx Worshippers (SW): bot dispatch (AllVsHuman)
+                                        case SW => BotSW   .ask(as, 0.03)(game)
                                         // Permeation (PRM): bot dispatch (AllVsHuman)
                                         case PRM => BotPRM  .ask(as, 0.03)(game)
                                         // Xyrious Storm (XSS): bot dispatch (AllVsHuman)
@@ -5998,7 +6004,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Faceless Blight (FBE): Homebrew faction appended to the alt picker (§3.13.1)
         // The Invasion (TI): appended to the alt picker per Implementation Guide §2.9/§3
         // Fleshmason (FM), Permeation (PRM), Tribulation (DGT): Designer factions appended
-        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT)
+        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT, SW)
         // [2026-07-23] §3.13.5: OW / SL / DS each get a SECOND ("alt") entry
         // immediately after their standard entry, matching the AN and BB alt
         // entries added earlier. Picking an alt entry auto-flips that
