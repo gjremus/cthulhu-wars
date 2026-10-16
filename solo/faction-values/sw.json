@@ -3,42 +3,241 @@
   "faction": "Sphinx Worshippers",
   "designerFid": "lhhz3sjhivcz",
   "values": {
-    "Acolyte.count":               {"value": 6, "min": 1, "max": 12, "what": "Acolytes in the faction", "designer": "units.rows.uobjhDTS.qty"},
-    "HybridMummy.cost":            {"value": 2, "max": 20, "what": "Hybrid Mummy summon cost (Power)", "designer": "units.rows.kf9FMV9m.cost"},
-    "HybridMummy.combat":          {"value": 2, "max": 20, "what": "Hybrid Mummy combat dice", "designer": "units.rows.kf9FMV9m.dice"},
-    "HybridMummy.count":           {"value": 4, "min": 1, "max": 12, "what": "Hybrid Mummies in the faction", "designer": "units.rows.kf9FMV9m.qty"},
-    "PharoahKephren.cost":         {"value": 3, "max": 20, "what": "Pharoah Kephren summon cost (Power)", "designer": "units.rows.pgBdiXoY.cost"},
-    "PharoahKephren.combat":       {"value": 3, "max": 20, "what": "Pharoah Kephren combat dice", "designer": "units.rows.pgBdiXoY.dice"},
-    "PharoahKephren.count":        {"value": 1, "min": 1, "max": 12, "what": "Pharoah Kephrens in the faction", "designer": "units.rows.pgBdiXoY.qty"},
-    "QueenNitokris.cost":          {"value": 4, "max": 20, "what": "Queen Nitokris summon cost (Power)", "designer": "units.rows.qn1EvCxR.cost"},
-    "QueenNitokris.combatBase":    {"value": 2, "max": 20, "what": "Queen Nitokris automatic Pains base (before adding current Hunger)", "designer": "units.rows.qn1EvCxR.resultsCalc (2+Current Hunger Track)"},
-    "QueenNitokris.count":         {"value": 1, "min": 1, "max": 12, "what": "Queen Nitokrises in the faction", "designer": "units.rows.qn1EvCxR.qty"},
-    "BlackSphinx.awakenBaseCost":  {"value": 8, "max": 20, "what": "Base Power to Awaken Black Sphinx (before subtracting sacrificed monster's cost)", "designer": "units.rows.bs8MvPnK.awakenPower"},
-    "BlackSphinx.kidnapDiscount":  {"value": 3, "max": 20, "what": "Extra discount to the awaken cost if the sacrificed monster was kidnapped", "designer": "units.rows.bs8MvPnK.awakenReq (Pay 3 less the monster is kidnapped)"},
-    "BlackSphinx.painsBase":       {"value": 1, "max": 20, "what": "Black Sphinx automatic Pains base (before adding current Hunger)", "designer": "units.rows.bs8MvPnK.resultsCalc (Adds pains = 1 + current Hunger Track)"},
-    "BlackSphinx.count":           {"value": 1, "min": 1, "max": 12, "what": "Black Sphinxes in the faction", "designer": "units.rows.bs8MvPnK.qty"},
-    "Setup.power":                 {"value": 8, "max": 20, "what": "Starting Power", "designer": "setup.power"},
-    "Setup.aeStart":               {"value": 0, "max": 20, "what": "Starting Hunger value", "designer": "setup.aeStart"},
-    "Setup.Acolyte":               {"value": 6, "min": 1, "max": 12, "what": "Acolytes placed in the start Area at setup", "designer": "setup.units.eYZ6L7qA.qty"},
-    "HungerReq2.threshold":        {"value": 2, "min": 1, "max": 20, "what": "SBR: Hunger Track value to reach", "designer": "sbr.rows.hPZlRNxH.num"},
-    "HungerReq4.threshold":        {"value": 4, "min": 1, "max": 20, "what": "SBR: Hunger Track value to reach", "designer": "sbr.rows.JUkyIx9V.num"},
-    "Hunger.awakenGain":           {"value": 1, "max": 10, "what": "Hunger gained when Black Sphinx is Awakened", "designer": "ae.rows.Y8NGqHCs.qty"},
-    "Hunger.actionPhaseGain":      {"value": 1, "max": 10, "what": "Hunger gained at start of Action Phase while Black Sphinx is on the map", "designer": "ae.rows.1y8bfa91.qty"},
-    "Hunger.painedGain":           {"value": 1, "max": 10, "what": "Hunger gained when Black Sphinx is Pained", "designer": "ae.rows.t9erkfnh.qty"},
-    "Hunger.killedGain":           {"value": 3, "max": 10, "what": "Hunger gained when Black Sphinx is Killed or eliminated", "designer": "ae.rows.mq5x48fu.qty"},
-    "Hunger.bottomlessPitSpend":   {"value": 1, "max": 10, "what": "Hunger spent (reduced) when Bottomless Pit is performed", "designer": "ae.rows.rdnrwvr2.qty"},
-    "Hunger.discountedRitualGain": {"value": 1, "max": 10, "what": "Hunger gained when Starvation's ritual discount is used (same event as the ae row and sb.rows.5EwQF2ol.text 'Advance the Hunger track by 1')", "designer": "ae.rows.xm6rstsh.qty"},
-    "Kidnap.minMummies":           {"value": 2, "min": 1, "max": 6, "what": "UFA: minimum Hybrid Mummies (with Nitokris) required to hold a Kidnapped monster", "designer": "ufa.effect"},
-    "GhoulQueen.cost":             {"value": 1, "max": 20, "what": "SB action cost (Power)", "designer": "sb.rows.xLzQzD_m.cost"},
-    "BottomlessPit.cost":          {"value": 1, "max": 20, "what": "SB action cost (Power)", "designer": "sb.rows.dVPTSOJ1.text (Action: Cost 1)"},
-    "BottomlessPit.costMinus":     {"value": 1, "max": 20, "what": "Elder Signs gained = sacrificed monster's printed cost minus this", "designer": "sb.rows.dVPTSOJ1.text (gain elder signs equal to its printed cost - 1)"},
-    "BottomlessPit.swBonusPower":  {"value": 1, "max": 10, "what": "Power SW gains when an opponent uses Bottomless Pit", "designer": "sb.rows.dVPTSOJ1.text (Sphinx Worshippers gain 1 power and 1 Elder Sign when an opponent uses this ability)"},
-    "BottomlessPit.swBonusES":     {"value": 1, "max": 10, "what": "Elder Signs SW gains when an opponent uses Bottomless Pit", "designer": "sb.rows.dVPTSOJ1.text (Sphinx Worshippers gain 1 power and 1 Elder Sign when an opponent uses this ability)"},
-    "MummiesCurse.pains":          {"value": 3, "max": 20, "what": "SB (side A): Pains added to battle results", "designer": "sb.rows.guDpNAbs.effect"},
-    "LifeFromDeath.cultists":      {"value": 2, "max": 20, "what": "SB (side B): Cultists gained replacing the sacrificed Hybrid Mummy", "designer": "sb.rows.guDpNAbs.effect2"},
-    "Starvation.esDivisor":        {"value": 3, "min": 1, "max": 20, "what": "SB: Hunger Track value is divided by this (rounded down) for Elder Signs gained", "designer": "sb.rows.5EwQF2ol.text (Divide the current value of Hunger Track by 3, rounded down)"},
-    "Acolyte.pains":               {"value": 0, "max": 30, "what": "Acolyte fixed Pain results", "designer": "units.rows.uobjhDTS.pains"},
-    "Acolyte.kills":               {"value": 0, "max": 30, "what": "Acolyte fixed Kill results", "designer": "units.rows.uobjhDTS.kills"}
+    "Acolyte.count": {
+      "value": 6,
+      "min": 1,
+      "max": 12,
+      "what": "Acolytes in the faction",
+      "designer": "units.rows.uobjhDTS.qty"
+    },
+    "HybridMummy.cost": {
+      "value": 2,
+      "max": 20,
+      "what": "Hybrid Mummy summon cost (Power)",
+      "designer": "units.rows.kf9FMV9m.cost"
+    },
+    "HybridMummy.combat": {
+      "value": 2,
+      "max": 20,
+      "what": "Hybrid Mummy combat dice",
+      "designer": "units.rows.kf9FMV9m.dice"
+    },
+    "HybridMummy.count": {
+      "value": 4,
+      "min": 1,
+      "max": 12,
+      "what": "Hybrid Mummies in the faction",
+      "designer": "units.rows.kf9FMV9m.qty"
+    },
+    "PharoahKephren.cost": {
+      "value": 3,
+      "max": 20,
+      "what": "Pharoah Kephren summon cost (Power)",
+      "designer": "units.rows.pgBdiXoY.cost"
+    },
+    "PharoahKephren.combat": {
+      "value": 3,
+      "max": 20,
+      "what": "Pharoah Kephren combat dice",
+      "designer": "units.rows.pgBdiXoY.dice"
+    },
+    "PharoahKephren.count": {
+      "value": 1,
+      "min": 1,
+      "max": 12,
+      "what": "Pharoah Kephrens in the faction",
+      "designer": "units.rows.pgBdiXoY.qty"
+    },
+    "QueenNitokris.cost": {
+      "value": 4,
+      "max": 20,
+      "what": "Queen Nitokris summon cost (Power)",
+      "designer": "units.rows.qn1EvCxR.cost"
+    },
+    "QueenNitokris.combatBase": {
+      "value": 2,
+      "max": 20,
+      "what": "Queen Nitokris automatic Pains base (before adding current Hunger)",
+      "designer": "units.rows.qn1EvCxR.resultsCalc (2+Current Hunger Track)"
+    },
+    "QueenNitokris.count": {
+      "value": 1,
+      "min": 1,
+      "max": 12,
+      "what": "Queen Nitokrises in the faction",
+      "designer": "units.rows.qn1EvCxR.qty"
+    },
+    "BlackSphinx.awakenBaseCost": {
+      "value": 8,
+      "max": 20,
+      "what": "Base Power to Awaken Black Sphinx (before subtracting sacrificed monster's cost)",
+      "designer": "units.rows.bs8MvPnK.awakenPower"
+    },
+    "BlackSphinx.kidnapDiscount": {
+      "value": 3,
+      "max": 20,
+      "what": "Extra discount to the awaken cost if the sacrificed monster was kidnapped",
+      "designer": "units.rows.bs8MvPnK.awakenReq (Pay 3 less the monster is kidnapped)"
+    },
+    "BlackSphinx.painsBase": {
+      "value": 1,
+      "max": 20,
+      "what": "Black Sphinx automatic Pains base (before adding current Hunger)",
+      "designer": "units.rows.bs8MvPnK.resultsCalc (Adds pains = 1 + current Hunger Track)"
+    },
+    "BlackSphinx.count": {
+      "value": 1,
+      "min": 1,
+      "max": 12,
+      "what": "Black Sphinxes in the faction",
+      "designer": "units.rows.bs8MvPnK.qty"
+    },
+    "Setup.power": {
+      "value": 8,
+      "max": 20,
+      "what": "Starting Power",
+      "designer": "setup.power"
+    },
+    "Setup.aeStart": {
+      "value": 0,
+      "max": 20,
+      "what": "Starting Hunger value",
+      "designer": "setup.aeStart"
+    },
+    "Setup.Acolyte": {
+      "value": 6,
+      "min": 1,
+      "max": 12,
+      "what": "Acolytes placed in the start Area at setup",
+      "designer": "setup.units.eYZ6L7qA.qty"
+    },
+    "HungerReq2.threshold": {
+      "value": 2,
+      "min": 1,
+      "max": 20,
+      "what": "SBR: Hunger Track value to reach",
+      "designer": "sbr.rows.hPZlRNxH.num"
+    },
+    "HungerReq4.threshold": {
+      "value": 4,
+      "min": 1,
+      "max": 20,
+      "what": "SBR: Hunger Track value to reach",
+      "designer": "sbr.rows.JUkyIx9V.num"
+    },
+    "Hunger.awakenGain": {
+      "value": 1,
+      "max": 10,
+      "what": "Hunger gained when Black Sphinx is Awakened",
+      "designer": "ae.rows.Y8NGqHCs.qty"
+    },
+    "Hunger.actionPhaseGain": {
+      "value": 1,
+      "max": 10,
+      "what": "Hunger gained at start of Action Phase while Black Sphinx is on the map",
+      "designer": "ae.rows.1y8bfa91.qty"
+    },
+    "Hunger.painedGain": {
+      "value": 1,
+      "max": 10,
+      "what": "Hunger gained when Black Sphinx is Pained",
+      "designer": "ae.rows.t9erkfnh.qty"
+    },
+    "Hunger.killedGain": {
+      "value": 3,
+      "max": 10,
+      "what": "Hunger gained when Black Sphinx is Killed or eliminated",
+      "designer": "ae.rows.mq5x48fu.qty"
+    },
+    "Hunger.bottomlessPitSpend": {
+      "value": 1,
+      "max": 10,
+      "what": "Hunger spent (reduced) when Bottomless Pit is performed",
+      "designer": "ae.rows.rdnrwvr2.qty"
+    },
+    "Hunger.discountedRitualGain": {
+      "value": 1,
+      "max": 10,
+      "what": "Hunger gained when Starvation's ritual discount is used (same event as the ae row and sb.rows.5EwQF2ol.text 'Advance the Hunger track by 1')",
+      "designer": "ae.rows.xm6rstsh.qty"
+    },
+    "Kidnap.minMummies": {
+      "value": 2,
+      "min": 1,
+      "max": 6,
+      "what": "UFA: minimum Hybrid Mummies (with Nitokris) required to hold a Kidnapped monster",
+      "designer": "ufa.effect"
+    },
+    "GhoulQueen.cost": {
+      "value": 1,
+      "max": 20,
+      "what": "SB action cost (Power)",
+      "designer": "sb.rows.xLzQzD_m.cost"
+    },
+    "BottomlessPit.cost": {
+      "value": 1,
+      "max": 20,
+      "what": "SB action cost (Power)",
+      "designer": "sb.rows.dVPTSOJ1.text (Action: Cost 1)"
+    },
+    "BottomlessPit.costMinus": {
+      "value": 1,
+      "max": 20,
+      "what": "Elder Signs gained = sacrificed monster's printed cost minus this",
+      "designer": "sb.rows.dVPTSOJ1.text (gain elder signs equal to its printed cost - 1)"
+    },
+    "BottomlessPit.swBonusPower": {
+      "value": 1,
+      "max": 10,
+      "what": "Power SW gains when an opponent uses Bottomless Pit",
+      "designer": "sb.rows.dVPTSOJ1.text (Sphinx Worshippers gain 1 power and 1 Elder Sign when an opponent uses this ability)"
+    },
+    "BottomlessPit.swBonusES": {
+      "value": 1,
+      "max": 10,
+      "what": "Elder Signs SW gains when an opponent uses Bottomless Pit",
+      "designer": "sb.rows.dVPTSOJ1.text (Sphinx Worshippers gain 1 power and 1 Elder Sign when an opponent uses this ability)"
+    },
+    "MummiesCurse.pains": {
+      "value": 3,
+      "max": 20,
+      "what": "SB (side A): Pains added to battle results",
+      "designer": "sb.rows.guDpNAbs.effect"
+    },
+    "LifeFromDeath.cultists": {
+      "value": 3,
+      "max": 20,
+      "what": "SB (side B): Cultists gained replacing the sacrificed Hybrid Mummy",
+      "designer": "sb.rows.guDpNAbs.effect2"
+    },
+    "Starvation.esDivisor": {
+      "value": 3,
+      "min": 1,
+      "max": 20,
+      "what": "SB: Hunger Track value is divided by this (rounded down) for Elder Signs gained",
+      "designer": "sb.rows.5EwQF2ol.text (Divide the current value of Hunger Track by 3, rounded down)"
+    },
+    "Acolyte.pains": {
+      "value": 0,
+      "max": 30,
+      "what": "Acolyte fixed Pain results",
+      "designer": "units.rows.uobjhDTS.pains"
+    },
+    "Acolyte.kills": {
+      "value": 0,
+      "max": 30,
+      "what": "Acolyte fixed Kill results",
+      "designer": "units.rows.uobjhDTS.kills"
+    }
   },
-  "images": ["sw-glyph.webp", "sw-card.webp", "sw-spellbooks.webp", "sw-acolyte.webp", "sw-hybrid-mummy.webp", "sw-pharoah-kephren.webp", "sw-queen-nitokris.webp", "sw-black-sphinx.webp"]
+  "images": [
+    "sw-glyph.webp",
+    "sw-card.webp",
+    "sw-spellbooks.webp",
+    "sw-acolyte.webp",
+    "sw-hybrid-mummy.webp",
+    "sw-pharoah-kephren.webp",
+    "sw-queen-nitokris.webp",
+    "sw-black-sphinx.webp"
+  ]
 }
