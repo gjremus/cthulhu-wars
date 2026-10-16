@@ -1369,6 +1369,11 @@ object Overlays {
         // ── PERMEATION (PRM) — Homebrew faction overlays ─────────────────────
         case s2 if s2.headOption.exists(_ == "PRM") => prmOverlay(s2)
 
+        // ── SPHINX WORSHIPPERS (SW) — Homebrew designer faction overlays ─────
+        // Delegated to swOverlay(...) to keep the giant `info` match under the
+        // JVM 64KB method-size limit (same idiom as CS/TI/FBE/PRM above).
+        case s2 if s2.headOption.exists(_ == "SW") => swOverlay(s2)
+
         // NOTE: Tribulation (DGT) overlays are handled earlier in the info() chain
         // by infoDGT (defined above, before infoMain is ever reached), which is the
         // live, current copy. A second, stale "DGT" dispatch (dgtOverlay/
@@ -2985,6 +2990,56 @@ object Overlays {
                 <div class=p>Mother's Aid ${cost("(Ongoing):")} On their turn, any opponent may pay you ${PRMValues.MothersAid_power} Power to control ${Ycgnagnnisssz.name} this turn. Moving her costs 0 Power for them.</div>
                 <div class=p>Fathomless Progenitor ${cost("(Ongoing):")} While controlled by another player, ${Ycgnagnnisssz.name} cannot be assigned Combat results or Eliminated. She can only be moved by the Move Action. If that player battles you in her Area, she does not take part: she adds no Combat and cannot receive results. This ability is not optional.</div>
                 <div class=p>Spellbook: ${prmRef(SpeakReality)}</div>""")
+        ), setup = true)
+    }
+
+    // Sphinx Worshippers (SW) — overlay dispatch helper (same idiom as prmOverlay above).
+    def swOverlay(s : $[Any]) : String = s match {
+        case $("SW") => swFactionOverlay()
+
+        case $("SW", "Setup") => requirement(s"After Ancients, place ${SWValues.Setup_Acolyte} Acolytes and a Controlled Gate, in a land Area.")
+
+        case $("SW", KidnapReq.text)        => requirement("Use Kidnap (your Unique Faction Ability).")
+        case $("SW", BottomlessPitReq.text) => requirement("Perform Bottomless Pit.")
+        case $("SW", HungerReq2.text)       => requirement(s"The Hunger Track reaches ${SWValues.HungerReq2_threshold}.")
+        case $("SW", HungerReq4.text)       => requirement(s"The Hunger Track reaches ${SWValues.HungerReq4_threshold}.")
+        case $("SW", NitokrisReq.text)      => requirement(s"${QueenNitokris.name} is Killed or Eliminated.")
+        case $("SW", AwakenSphinxReq.text)  => requirement(s"Awaken ${BlackSphinx.name}.")
+
+        case $("SW", FuneralProcession.name) => spellbook(FuneralProcession.name, "Ongoing", s"${HybridMummy.plural} move for free with ${QueenNitokris.name} (and any Kidnapped Unit moves for free with her too).")
+        case $("SW", BottomlessPit.name)     => spellbook(BottomlessPit.name, s"Action: Cost ${SWValues.BottomlessPit_cost}", s"Any Faction may use this ability so long as the Hunger Track is not at 0. In ${BlackSphinx.name}'s Area (or, with ${MonstrousForepaw.name}, an adjacent Area), Eliminate a Monster you don't own to gain Elder Signs equal to its printed Cost minus ${SWValues.BottomlessPit_costMinus}, and reduce the Hunger Track by ${SWValues.Hunger_bottomlessPitSpend}. ${SW.name} gains ${SWValues.BottomlessPit_swBonusPower} Power and ${SWValues.BottomlessPit_swBonusES} Elder Sign when an opponent uses this ability.")
+        case $("SW", GhoulQueen.name)        => spellbook(GhoulQueen.name, s"Action: Cost ${SWValues.GhoulQueen_cost}", s"${PharoahKephren.name} can Eliminate a ${HybridMummy.name} to re-summon ${QueenNitokris.name} into his region with a Controlled Gate, after she has been Killed or Eliminated.")
+        case $("SW", MonstrousForepaw.name)  => spellbook(MonstrousForepaw.name, "Ongoing", s"${BottomlessPit.name} may be performed in Areas adjacent to ${BlackSphinx.name}.")
+        case $("SW", Starvation.name)        => spellbook(Starvation.name, "Doom Phase", s"Rituals of Annihilation may be discounted by the current value of the Hunger Track. If you do: divide the current value of the Hunger Track by ${SWValues.Starvation_esDivisor} (rounded down) and take that many Elder Signs, then advance the Hunger Track by ${SWValues.Hunger_discountedRitualGain}.")
+        case $("SW", MummiesCurse.name)      => spellbook(MummiesCurse.name, "Post-Battle / Pre-Battle (dual power)",
+            s"""<div class=p><b>${MummiesCurse.name} (Post-Battle):</b> Eliminate a Pained ${HybridMummy.name} to add ${SWValues.MummiesCurse_pains} Pains to your Battle results.</div>
+                <div class=p><b>Life from Death (Pre-Battle):</b> Replace a ${HybridMummy.name} with ${SWValues.LifeFromDeath_cultists} ${Acolyte.plural}, and ${MummiesCurse.name} may not be used this Battle.</div>
+                <div class=p>This is one Spellbook with two powers — use one or the other in a given Battle, not both. A Moonbeast blocks both sides.</div>""")
+
+        case _ => ""
+    }
+
+    def swFactionOverlay() = {
+        def swRef(sb : Spellbook) = s"""<span class="ability-color pointer" onclick="onExternalClick('SW', '${sb.name}')">${sb.name}</span>"""
+        def combat = """<span class="combat-color">Combat</span>"""
+        def cost(s : String) = s"""<span class="cost-color">$s</span>"""
+        faction(SW, "info:sw-background", Kidnap, "Post-Battle",
+            s"The enemy chooses one of their Pained Monsters. While it shares a region with ${QueenNitokris.name} and ${SWValues.Kidnap_minMummies}+ ${HybridMummy.plural}, it lies sideways: it is exempt from Battle (including abilities), moves for free with ${QueenNitokris.name}, and cannot be moved by any other means.",
+            $(BottomlessPit, Starvation), $(
+            (Acolyte,       SWValues.Acolyte_count, "1", "0", ""),
+            (HybridMummy,   SWValues.HybridMummy_count, "" + SWValues.HybridMummy_cost, "" + SWValues.HybridMummy_combat, s"""<div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(MummiesCurse)}</div>"""),
+            (PharoahKephren, SWValues.PharoahKephren_count, "" + SWValues.PharoahKephren_cost, "" + SWValues.PharoahKephren_combat, s"""<div class=p>Spellbook: ${swRef(GhoulQueen)}</div>"""),
+            (QueenNitokris, SWValues.QueenNitokris_count, "" + SWValues.QueenNitokris_cost, calc(g => { implicit val gg : Game = g; SWValues.QueenNitokris_combatBase + g.swHunger }), s"""
+                <div class=p>${combat} Equal to ${SWValues.QueenNitokris_combatBase} plus the current Hunger Track value (no dice — adds Pains automatically).</div>
+                <div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(GhoulQueen)}</div>"""),
+            (BlackSphinx,   SWValues.BlackSphinx_count, "Awaken", calc(g => { implicit val gg : Game = g; SWValues.BlackSphinx_painsBase + g.swHunger }), s"""
+                <div class=p>${cost(s"How to Awaken ${BlackSphinx.name}:")}</div>
+                <div class=p>${cost("1)")} Sacrifice a Monster in an Area with your Controlled Gate.</div>
+                <div class=p>${cost("2)")} Pay ${SWValues.BlackSphinx_awakenBaseCost} Power minus the sacrificed Monster's summoning Cost. Pay ${SWValues.BlackSphinx_kidnapDiscount} less if that Monster was Kidnapped.</div>
+                <div class=p>${cost("3)")} ${BlackSphinx.name} appears in the Area with your Controlled Gate. ${BlackSphinx.name} cannot be moved by any means.</div>
+                <div class=p>${combat} Adds Pains equal to ${SWValues.BlackSphinx_painsBase} plus the current Hunger Track value (no dice).</div>
+                <div class=p><b>Ceaseless Hunger (Ongoing):</b> Whenever ${BlackSphinx.name} is Awakened, Pained, and at the start of each Action Phase (while on the map), advance the Hunger Track by ${SWValues.Hunger_awakenGain}. When he is Killed or Eliminated, advance it by ${SWValues.Hunger_killedGain} instead. Lose Doom and/or sacrifice Cultists equal to his Hunger in the Doom Phase. An enemy-controlled Elder Thing sharing his Area fully blocks this ability.</div>
+                <div class=p>Spellbook: ${swRef(MonstrousForepaw)}</div>""")
         ), setup = true)
     }
 
