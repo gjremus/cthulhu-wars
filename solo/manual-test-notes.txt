@@ -1,0 +1,39 @@
+Designer UI Manual Test Notes
+================================
+
+Automated testing blocked by authentication issue (401 on login).
+
+Alternative approach: Manual testing in browser + SSH verification
+
+Test Plan:
+1. Open https://cwo.freeddns.org/designer/ in browser
+2. Login with valid credentials
+3. Test Interactions section:
+   - Navigate to Interactions
+   - Verify 3-column waterfall dropdowns (Faction → Category → Ability)
+   - Verify Row 1: Sleeper/Spellbook/Ancient Sorcery
+   - Verify Row 2: Neutral Monster/Elder Thing/Mind Control
+   - Verify Row 3: Bubastis/Faction Region/Moon
+   - Test waterfall behavior (change faction, watch category update)
+   - Click ? help icon, verify overlay appears
+
+4. Test Simple Update outlines:
+   - Go to Simple Update screen
+   - Change a numeric field
+   - Verify GREEN or BLUE outline appears immediately
+   - Verify legend shows all 4 colors
+
+5. Test Top button:
+   - Navigate to Units section
+   - Scroll down 2+ viewports
+   - Verify Top button appears
+   - Click it, verify scroll to top
+
+6. Test Simple Update push:
+   - Change a value in Simple Update
+   - Click "Push design to build"
+   - SSH to cwo VM: cat /opt/cwo/designer/data/factions/tpunhkcjo2c/live-values.json
+   - Verify the change was written
+   - Check if /opt/cwo/hb/ reflects the change
+
+Running manual test now...

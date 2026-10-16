@@ -1121,8 +1121,8 @@ object CthulhuWarsSolo {
                     case TI => Processing(|("#94382b"), |("#333333"), None)
                     // The Burrowers Beneath (TB): earthy brown #8b6914
                     case TB => Processing(|("#8b6914"), |("#333333"), None)
-                    // Sphinx Worshippers (SW): dusty rose #c399af
-                    case SW => Processing(|("#c399af"), |("#333333"), None)
+                    // Sphinx Worshippers (SW): light lavender #b8abd5
+                    case SW => Processing(|("#b8abd5"), |("#333333"), None)
                     // Library map units: no tint (use original icon images)
                     case LibraryFaction => defaultProcessing
                     case _  => defaultProcessing
@@ -1150,7 +1150,7 @@ object CthulhuWarsSolo {
                     case TB => Processing(|("#8b6914"), |("#333333"), None)
                     case CS => Processing(None, None, None)
                     case TI => Processing(|("#94382b"), |("#333333"), None)
-                    case SW => Processing(|("#c399af"), |("#333333"), None)
+                    case SW => Processing(|("#b8abd5"), |("#333333"), None)
                     case _  => defaultProcessing
                 }
 
