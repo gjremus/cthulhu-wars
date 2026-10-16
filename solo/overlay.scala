@@ -3011,10 +3011,12 @@ object Overlays {
         case $("SW", GhoulQueen.name)        => spellbook(GhoulQueen.name, s"Action: Cost ${SWValues.GhoulQueen_cost}", s"${PharoahKephren.name} can Eliminate a ${HybridMummy.name} to re-summon ${QueenNitokris.name} into his region with a Controlled Gate, after she has been Killed or Eliminated.")
         case $("SW", MonstrousForepaw.name)  => spellbook(MonstrousForepaw.name, "Ongoing", s"${BottomlessPit.name} may be performed in Areas adjacent to ${BlackSphinx.name}.")
         case $("SW", Starvation.name)        => spellbook(Starvation.name, "Doom Phase", s"Rituals of Annihilation may be discounted by the current value of the Hunger Track. If you do: divide the current value of the Hunger Track by ${SWValues.Starvation_esDivisor} (rounded down) and take that many Elder Signs, then advance the Hunger Track by ${SWValues.Hunger_discountedRitualGain}.")
-        case $("SW", MummiesCurse.name)      => spellbook(MummiesCurse.name, "Post-Battle / Pre-Battle (dual power)",
-            s"""<div class=p><b>${MummiesCurse.name} (Post-Battle):</b> Eliminate a Pained ${HybridMummy.name} to add ${SWValues.MummiesCurse_pains} Pains to your Battle results.</div>
-                <div class=p><b>Life from Death (Pre-Battle):</b> Replace a ${HybridMummy.name} with ${SWValues.LifeFromDeath_cultists} ${Acolyte.plural}, and ${MummiesCurse.name} may not be used this Battle.</div>
-                <div class=p>This is one Spellbook with two powers — use one or the other in a given Battle, not both. A Moonbeast blocks both sides.</div>""")
+        case $("SW", MummiesCurse.name)      =>
+            spellbook("Life from Death", "Pre-Battle",
+                s"Replace a ${HybridMummy.name} with ${SWValues.LifeFromDeath_cultists} ${Acolyte.plural} from your pool, and ${MummiesCurse.name} may not be used this Battle.") +
+            spellbook(MummiesCurse.name, "Post-Battle",
+                s"""Eliminate a Pained ${HybridMummy.name} to add ${SWValues.MummiesCurse_pains} Pains to your Battle results.
+                    <div class=p>This is one Spellbook with two powers — use one or the other in a given Battle, not both. A Moonbeast blocks both sides.</div>""")
 
         case _ => ""
     }

@@ -305,7 +305,7 @@ object SWValues {
     def BottomlessPit_swBonusPower  = LiveValues.get("SW", "BottomlessPit_swBonusPower", 1)  // Power SW gains when an opponent uses Bottomless Pit
     def BottomlessPit_swBonusES     = LiveValues.get("SW", "BottomlessPit_swBonusES", 1)  // Elder Signs SW gains when an opponent uses Bottomless Pit
     def MummiesCurse_pains          = LiveValues.get("SW", "MummiesCurse_pains", 3)  // SB (side A): Pains added to battle results
-    def LifeFromDeath_cultists      = LiveValues.get("SW", "LifeFromDeath_cultists", 2)  // SB (side B): Cultists gained replacing the sacrificed Hybrid Mummy
+    def LifeFromDeath_cultists      = LiveValues.get("SW", "LifeFromDeath_cultists", 3)  // SB (side B): Cultists gained replacing the sacrificed Hybrid Mummy
     def Starvation_esDivisor        = LiveValues.get("SW", "Starvation_esDivisor", 3)  // SB: Hunger Track value is divided by this (rounded down) for Elder Signs gained
     def Acolyte_pains               = LiveValues.get("SW", "Acolyte_pains", 0)  // Acolyte fixed Pain results
     def Acolyte_kills               = LiveValues.get("SW", "Acolyte_kills", 0)  // Acolyte fixed Kill results
