@@ -2305,6 +2305,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Re-armed each Doom Phase (DoomPhaseAction) — guards the once-per-doom-phase forced
     // Hunger sacrifice, same idiom as tiSacramentDoneThisDoom.
     var swHungerSacrificeDoneThisDoom : Boolean = false
+    // Tracks whether Queen Nitokris has been killed or eliminated (SBR requirement).
+    var swNitokrisEliminated : Boolean = false
     // Mind Parasite: track original faction for each parasitized cultist
     var mindParasiteOriginalFaction : Map[UnitRef, Faction] = Map()
     var mindParasiteCaptureRejected : $[UnitRef] = $
@@ -2530,6 +2532,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val f = u.faction
 
         u.add(Eliminated)
+
+        if (u.uclass == QueenNitokris && u.faction == SW)
+            swNitokrisEliminated = true
 
         expansions.foreach(_.eliminate(u))
 

@@ -222,7 +222,7 @@ object SWExpansion extends Expansion {
 
     override def triggers()(implicit game : Game) {
         if (!game.setup.has(SW)) return
-        SW.satisfyIf(NitokrisReq, NitokrisReq.text, SW.pool.%(_.uclass == QueenNitokris).any)
+        SW.satisfyIf(NitokrisReq, NitokrisReq.text, game.swNitokrisEliminated)
     }
 
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) = action @@ {
