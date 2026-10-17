@@ -105,6 +105,7 @@ object FactionValuesMapping {
             "ae.rows.t9erkfnh.qty" -> "Hunger_painedGain",
             "ae.rows.xm6rstsh.qty" -> "Hunger_discountedRitualGain",
             "sb.rows.5EwQF2ol.text (Divide the current value of Hunger Track by 3, rounded down)" -> "Starvation_esDivisor",
+            "sb.rows.dVPTSOJ1.cost" -> "BottomlessPit_cost2",
             "sb.rows.dVPTSOJ1.text (Action: Cost 1)" -> "BottomlessPit_cost",
             "sb.rows.dVPTSOJ1.text (Sphinx Worshippers gain 1 power and 1 Elder Sign when an opponent uses this ability)" -> "BottomlessPit_swBonusES",
             "sb.rows.dVPTSOJ1.text (gain elder signs equal to its printed cost - 1)" -> "BottomlessPit_costMinus",
@@ -324,6 +325,7 @@ object SWValues {
     def Starvation_esDivisor        = LiveValues.get("SW", "Starvation_esDivisor", 3)  // SB: Hunger Track value is divided by this (rounded down) for Elder Signs gained
     def Acolyte_pains               = LiveValues.get("SW", "Acolyte_pains", 0)  // Acolyte fixed Pain results
     def Acolyte_kills               = LiveValues.get("SW", "Acolyte_kills", 0)  // Acolyte fixed Kill results
+    def BottomlessPit_cost2         = LiveValues.get("SW", "BottomlessPit_cost2", 1)  // Bottomless Pit action cost (Power)
 }
 
 // Xyrious Storm (XSS) - from faction-values/xss.json

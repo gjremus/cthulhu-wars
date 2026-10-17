@@ -39,7 +39,8 @@
     "LifeFromDeath.cultists":      {"value": 3, "max": 20, "what": "SB (side B): Cultists gained replacing the sacrificed Hybrid Mummy", "designer": "sb.rows.guDpNAbs.effect2"},
     "Starvation.esDivisor":        {"value": 3, "min": 1, "max": 20, "what": "SB: Hunger Track value is divided by this (rounded down) for Elder Signs gained", "designer": "sb.rows.5EwQF2ol.text (Divide the current value of Hunger Track by 3, rounded down)"},
     "Acolyte.pains":               {"value": 0, "max": 30, "what": "Acolyte fixed Pain results", "designer": "units.rows.uobjhDTS.pains"},
-    "Acolyte.kills":               {"value": 0, "max": 30, "what": "Acolyte fixed Kill results", "designer": "units.rows.uobjhDTS.kills"}
+    "Acolyte.kills":               {"value": 0, "max": 30, "what": "Acolyte fixed Kill results", "designer": "units.rows.uobjhDTS.kills"},
+    "BottomlessPit.cost2":         {"value": 1, "max": 20, "what": "Bottomless Pit action cost (Power)", "designer": "sb.rows.dVPTSOJ1.cost"}
   },
   "images": ["sw-glyph.webp", "sw-card.webp", "sw-spellbooks.webp", "sw-acolyte.webp", "sw-hybrid-mummy.webp", "sw-pharoah-kephren.webp", "sw-queen-nitokris.webp", "sw-black-sphinx.webp"]
 }
