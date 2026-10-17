@@ -220,10 +220,12 @@ object FMExpansion extends Expansion {
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) = action @@ {
 
         case StartingRegionAction(f : FM.type, r) =>
-            (1 to FMValues.ScreamingWall_setupCount).foreach { _ =>
-                if (f.pool.%(_.uclass == ScreamingWall).any) {
-                    f.place(ScreamingWall, r)
-                    f.log("placed", ScreamingWall.styled(FM), "in", r, "(setup)")
+            if (r.glyph == GlyphWW || r.glyph == GlyphOO) {
+                (1 to FMValues.ScreamingWall_setupCount).foreach { _ =>
+                    if (f.pool.%(_.uclass == ScreamingWall).any && !hasScreamingWall(r)) {
+                        f.place(ScreamingWall, r)
+                        f.log("placed", ScreamingWall.styled(FM), "in", r, "(setup)")
+                    }
                 }
             }
             UnknownContinue
@@ -358,7 +360,7 @@ object FMExpansion extends Expansion {
 
         case CreateScreamingWallMainAction(self) =>
             val wallAreas = game.board.regions.filter { r =>
-                self.at(r).cultists.any && self.pool.%(_.uclass == ScreamingWall).any
+                self.at(r).cultists.any && self.pool.%(_.uclass == ScreamingWall).any && !hasScreamingWall(r)
             }
             Ask(self).each(wallAreas)(r => CreateScreamingWallAction(self, r)).cancel
 
