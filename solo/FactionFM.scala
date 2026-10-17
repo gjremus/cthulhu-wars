@@ -325,7 +325,7 @@ object FMExpansion extends Expansion {
             game.independents(f)
 
             val wallAreas = game.board.regions.filter { r =>
-                f.at(r).cultists.any && f.pool.%(_.uclass == ScreamingWall).any
+                f.at(r).cultists.any && f.pool.%(_.uclass == ScreamingWall).any && !hasScreamingWall(r)
             }
             if (f.power >= FMValues.ScreamingWall_createCost && wallAreas.any)
                 + CreateScreamingWallMainAction(f)
