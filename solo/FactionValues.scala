@@ -62,6 +62,12 @@ object FactionValuesMapping {
         ),
         "FM" -> Map(
             "sb.rows.P5xvUlGE.cost" -> "MannedBattlements_cost",
+            "sbr.rows.4Eec7O6j.num" -> "SBR2Req_num",
+            "sbr.rows.BKlmq0eO.num" -> "SBR1Req_num",
+            "sbr.rows.eeSN2BEc.num" -> "SBR5Req_num",
+            "sbr.rows.nAcx996R.num" -> "SBR6Req_num",
+            "sbr.rows.q-KAJEVp.num" -> "SBR3Req_num",
+            "sbr.rows.xap0JS7H.num" -> "SBR4Req_num",
             "setup.units.a1b2c3d4.qty" -> "ScreamingWall_setupCount",
             "units.rows.NqnUIibv.cost" -> "BoneSculptor_cost",
             "units.rows.NqnUIibv.dice" -> "BoneSculptor_combat",
@@ -233,7 +239,7 @@ object FMValues {
     def BuildGate_cost               = LiveValues.get("FM", "BuildGate_cost", 3)  // Power FM pays for a normal Build Gate
     def CrumblingYawpReq_dice        = LiveValues.get("FM", "CrumblingYawpReq_dice", 9)  // SBR: dice rolled in a single Combat
     def HymnOfSufferingReq_combat    = LiveValues.get("FM", "HymnOfSufferingReq_combat", 12)  // SBR: total Combat of your Units in play
-    def TerrifyingShriekReq_glyphs   = LiveValues.get("FM", "TerrifyingShriekReq_glyphs", 2)  // SBR: different Glyph types with a Screaming Wall
+    def TerrifyingShriekReq_glyphs   = LiveValues.get("FM", "TerrifyingShriekReq_glyphs", 3)  // SBR: different Glyph types with a Screaming Wall
     def TendonFlayingReq_power       = LiveValues.get("FM", "TendonFlayingReq_power", 6)  // SBR: Power to pay (minus Screaming Walls in play)
     def BlueprintsInBloodReq_walls   = LiveValues.get("FM", "BlueprintsInBloodReq_walls", 3)  // SBR: Screaming Walls in play
     def MannedBattlementsReq_walls   = LiveValues.get("FM", "MannedBattlementsReq_walls", 6)  // SBR: Screaming Walls in play
@@ -245,6 +251,12 @@ object FMValues {
     def TendonFlaying_option2Power   = LiveValues.get("FM", "TendonFlaying_option2Power", 1)  // SB option 2: Power gained
     def TendonFlaying_option3Doom    = LiveValues.get("FM", "TendonFlaying_option3Doom", 1)  // SB option 3: Doom gained
     def MannedBattlements_cost       = LiveValues.get("FM", "MannedBattlements_cost", 1)  // SB action cost (Power)
+    def SBR1Req_num                  = LiveValues.get("FM", "SBR1Req_num", 1)  // SBR 1: number in "Roll 9 or more dice in a single Combat"
+    def SBR2Req_num                  = LiveValues.get("FM", "SBR2Req_num", 2)  // SBR 2: number in "Your Units in play have 12 or more Combat"
+    def SBR3Req_num                  = LiveValues.get("FM", "SBR3Req_num", 3)  // SBR 3: number in "The Screaming Wall is in Areas with 2 of the following Glyphs:"
+    def SBR4Req_num                  = LiveValues.get("FM", "SBR4Req_num", 4)  // SBR 4: number in "As an Action, Pay 6 Power, minus the number of Screaming Walls in play"
+    def SBR5Req_num                  = LiveValues.get("FM", "SBR5Req_num", 5)  // SBR 5: number in "Have 3 Screaming Walls in Play"
+    def SBR6Req_num                  = LiveValues.get("FM", "SBR6Req_num", 6)  // SBR 6: number in "Have 6 Screaming Walls in Play"
 }
 
 // Permeation (PRM) - from faction-values/prm.json

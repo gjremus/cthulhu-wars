@@ -32,7 +32,13 @@
     "TendonFlaying.option1Power":   {"value": 1, "max": 10, "what": "SB option 1: Power gained"},
     "TendonFlaying.option2Power":   {"value": 1, "max": 10, "what": "SB option 2: Power gained"},
     "TendonFlaying.option3Doom":    {"value": 1, "max": 10, "what": "SB option 3: Doom gained"},
-    "MannedBattlements.cost":       {"value": 1, "max": 20, "what": "SB action cost (Power)", "designer": "sb.rows.P5xvUlGE.cost"}
+    "MannedBattlements.cost":       {"value": 1, "max": 20, "what": "SB action cost (Power)", "designer": "sb.rows.P5xvUlGE.cost"},
+    "SBR1Req.num":                  {"value": 1, "max": 60, "what": "SBR 1: number in \"Roll 9 or more dice in a single Combat\"", "designer": "sbr.rows.BKlmq0eO.num"},
+    "SBR2Req.num":                  {"value": 2, "max": 60, "what": "SBR 2: number in \"Your Units in play have 12 or more Combat\"", "designer": "sbr.rows.4Eec7O6j.num"},
+    "SBR3Req.num":                  {"value": 3, "max": 60, "what": "SBR 3: number in \"The Screaming Wall is in Areas with 2 of the following Glyphs:\"", "designer": "sbr.rows.q-KAJEVp.num"},
+    "SBR4Req.num":                  {"value": 4, "max": 60, "what": "SBR 4: number in \"As an Action, Pay 6 Power, minus the number of Screaming Walls in play\"", "designer": "sbr.rows.xap0JS7H.num"},
+    "SBR5Req.num":                  {"value": 5, "max": 60, "what": "SBR 5: number in \"Have 3 Screaming Walls in Play\"", "designer": "sbr.rows.eeSN2BEc.num"},
+    "SBR6Req.num":                  {"value": 6, "max": 60, "what": "SBR 6: number in \"Have 6 Screaming Walls in Play\"", "designer": "sbr.rows.nAcx996R.num"}
   },
   "images": ["fm-glyph.webp", "fm-card.webp", "fm-spellbooks.webp", "fm-acolyte.webp", "fm-high-priest.webp", "fm-bone-sculptor.webp", "fm-muscle-stitcher.webp", "fm-body-architect.webp", "fm-screaming-wall.webp"]
 }
