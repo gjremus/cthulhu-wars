@@ -32,7 +32,7 @@ case object Kidnap extends FactionSpellbook(SW, "Kidnap")
 // ── SPELLBOOKS ──────────────────────────────────────────────────────────────
 case object FuneralProcession extends FactionSpellbook(SW, "Funeral Procession")
 case object BottomlessPit     extends FactionSpellbook(SW, "Bottomless Pit")
-case object GhoulQueen        extends FactionSpellbook(SW, "Ghoul Queen")
+case object AncientEmetic     extends FactionSpellbook(SW, "Ancient Emetic")
 case object MonstrousForepaw  extends FactionSpellbook(SW, "Monstrous Forepaw")
 case object Starvation        extends FactionSpellbook(SW, "Starvation")
 // SB6 is ONE dual-power spellbook: Mummies Curse (Post-Battle) / Life from Death (Pre-Battle).
@@ -62,7 +62,7 @@ case object SW extends Faction { f =>
     def style = "sw"
 
     override def abilities = $(Kidnap)
-    override def library   = $(FuneralProcession, BottomlessPit, GhoulQueen, MonstrousForepaw, Starvation, MummiesCurse)
+    override def library   = $(FuneralProcession, BottomlessPit, AncientEmetic, MonstrousForepaw, Starvation, MummiesCurse)
     override def requirements(options : $[GameOption]) =
         $(KidnapReq, BottomlessPitReq, HungerReq2, HungerReq4, NitokrisReq, AwakenSphinxReq)
 
@@ -121,9 +121,15 @@ case class SWBottomlessPitRegionPickAction(self : Faction, r : Region) extends F
 case class SWBottomlessPitAction(self : Faction, r : Region, victim : UnitRef)
     extends BaseFactionAction(implicit g => BottomlessPit.styled(SW) + ": eliminate " + g.unit(victim).uclass.styled(g.unit(victim).faction), r) with PowerNeutral
 
-// Ghoul Queen (Action, cost 1).
-case class SWGhoulQueenMainAction(self : Faction, l : $[(Region, UnitRef)]) extends OptionFactionAction(GhoulQueen.styled(SW)) with MainQuestion with Soft
-case class SWGhoulQueenAction(self : Faction, r : Region, mummy : UnitRef) extends BaseFactionAction(GhoulQueen.styled(SW), r)
+// Ancient Emetic — pick a Monster/Terror from the pool (affordable at a 1-power discount),
+// then a region with an SW-controlled gate to summon it into; advances Hunger by 1.
+case class SWAncientEmeticMainAction(self : Faction, choices : $[UnitClass]) extends OptionFactionAction(AncientEmetic.styled(SW)) with MainQuestion with Soft
+case class SWAncientEmeticUnitAction(self : Faction, uc : UnitClass) extends BaseFactionAction(implicit g => AncientEmetic.styled(SW) + ": summon", uc.styled(SW))
+case class SWAncientEmeticRegionAction(self : Faction, uc : UnitClass, r : Region)
+    extends BaseFactionAction(implicit g => {
+        val cost = math.max(0, uc.cost - SWValues.AncientEmetic_costDiscount)
+        AncientEmetic.styled(SW) + ": summon " + uc.styled(SW) + g.forNPowerWithTax(r, self, cost) + " in"
+    }, implicit g => r + self.iced(r))
 
 // Starvation (Doom Phase ritual discount — simplified standalone action, see FactionSW notes
 // in SWExpansion.perform near the Doom Phase section).
@@ -336,11 +342,13 @@ object SWExpansion extends Expansion {
             if (game.swHunger > 0 && f.power >= SWValues.BottomlessPit_cost && pitRegions.any)
                 + SWBottomlessPitMainAction(f, pitRegions)
 
-            if (f.can(GhoulQueen) && f.power >= SWValues.GhoulQueen_cost && f.pool.%(_.uclass == QueenNitokris).any) {
-                val sources = game.board.regions.%(r => f.gates.has(r) && f.at(r).%(_.uclass == PharoahKephren).not(Zeroed).any &&
-                    f.at(r).%(_.uclass == HybridMummy).not(Zeroed).any)./(r => (r, f.at(r).%(_.uclass == HybridMummy).not(Zeroed).head.ref))
-                if (sources.any)
-                    + SWGhoulQueenMainAction(f, sources)
+            // Button gating: Ancient Emetic's summon cost is dynamic (uc.cost - 1 discount, min
+            // 0), so only pre-filter by whether SW has a controlled gate at all and whether at
+            // least one pool Monster/Terror is affordable at that discount.
+            if (f.can(AncientEmetic) && f.gates.any) {
+                val choices = f.pool.monsterly./(_.uclass).distinct.%(uc => f.canSpend(math.max(0, uc.cost - SWValues.AncientEmetic_costDiscount)))
+                if (choices.any)
+                    + SWAncientEmeticMainAction(f, choices)
             }
 
             game.neutralSpellbooks(f)
@@ -427,17 +435,29 @@ object SWExpansion extends Expansion {
             Then(MainAction(self))
 
         // ────────────────────────────────────────────────────────────────
-        // GHOUL QUEEN
+        // ANCIENT EMETIC — pick a pool Monster/Terror (affordable at a 1-power discount), then
+        // a controlled-gate region to summon it into. Hunger +1 either way (ae row fb1hul33).
         // ────────────────────────────────────────────────────────────────
-        case SWGhoulQueenMainAction(self, sources) =>
-            Ask(self).each(sources)((r, m) => SWGhoulQueenAction(self, r, m)).cancel
+        case SWAncientEmeticMainAction(self, choices) =>
+            if (choices.isEmpty)
+                EndAction(self)
+            else
+                Ask(self).each(choices)(uc => SWAncientEmeticUnitAction(self, uc)).cancel
 
-        case SWGhoulQueenAction(self, r, mummy) =>
-            val u = game.unit(mummy)
-            self.power -= SWValues.GhoulQueen_cost
-            self.log(GhoulQueen.styled(SW) + ": eliminated", HybridMummy.styled(SW), "in", r, "to re-summon", QueenNitokris.name.styled(SW))
-            game.eliminate(u)
-            self.place(QueenNitokris, r)
+        case SWAncientEmeticUnitAction(self, uc) =>
+            val regions = self.gates
+            if (regions.isEmpty)
+                EndAction(self)
+            else
+                Ask(self).each(regions)(r => SWAncientEmeticRegionAction(self, uc, r)).cancel
+
+        case SWAncientEmeticRegionAction(self, uc, r) =>
+            val cost = math.max(0, uc.cost - SWValues.AncientEmetic_costDiscount)
+            self.payPower(cost, "on " + AncientEmetic.name)
+            self.payTax(r)
+            self.place(uc, r)
+            self.log(AncientEmetic.styled(SW) + ": summoned", uc.styled(SW), "in", r, "for", cost.power)
+            changeHunger(SWValues.Hunger_ancientEmeticGain, AncientEmetic.name + " used")
             Then(MainAction(self))
 
         // ────────────────────────────────────────────────────────────────

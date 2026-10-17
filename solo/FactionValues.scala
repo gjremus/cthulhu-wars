@@ -99,6 +99,7 @@ object FactionValuesMapping {
         "SW" -> Map(
             "ae.rows.1y8bfa91.qty" -> "Hunger_actionPhaseGain",
             "ae.rows.Y8NGqHCs.qty" -> "Hunger_awakenGain",
+            "ae.rows.fb1hul33.qty" -> "Hunger_ancientEmeticGain",
             "ae.rows.mq5x48fu.qty" -> "Hunger_killedGain",
             "ae.rows.rdnrwvr2.qty" -> "Hunger_bottomlessPitSpend",
             "ae.rows.t9erkfnh.qty" -> "Hunger_painedGain",
@@ -109,7 +110,7 @@ object FactionValuesMapping {
             "sb.rows.dVPTSOJ1.text (gain elder signs equal to its printed cost - 1)" -> "BottomlessPit_costMinus",
             "sb.rows.guDpNAbs.effect" -> "MummiesCurse_pains",
             "sb.rows.guDpNAbs.effect2" -> "LifeFromDeath_cultists",
-            "sb.rows.xLzQzD_m.cost" -> "GhoulQueen_cost",
+            "sb.rows.xLzQzD_m.cost" -> "AncientEmetic_costDiscount",
             "sbr.rows.JUkyIx9V.num" -> "HungerReq4_threshold",
             "sbr.rows.hPZlRNxH.num" -> "HungerReq2_threshold",
             "setup.aeStart" -> "Setup_aeStart",
@@ -239,7 +240,7 @@ object FMValues {
     def BuildGate_cost               = LiveValues.get("FM", "BuildGate_cost", 3)  // Power FM pays for a normal Build Gate
     def CrumblingYawpReq_dice        = LiveValues.get("FM", "CrumblingYawpReq_dice", 9)  // SBR: dice rolled in a single Combat
     def HymnOfSufferingReq_combat    = LiveValues.get("FM", "HymnOfSufferingReq_combat", 12)  // SBR: total Combat of your Units in play
-    def TerrifyingShriekReq_glyphs   = LiveValues.get("FM", "TerrifyingShriekReq_glyphs", 3)  // SBR: different Glyph types with a Screaming Wall
+    def TerrifyingShriekReq_glyphs   = LiveValues.get("FM", "TerrifyingShriekReq_glyphs", 2)  // SBR: different Glyph types with a Screaming Wall
     def TendonFlayingReq_power       = LiveValues.get("FM", "TendonFlayingReq_power", 6)  // SBR: Power to pay (minus Screaming Walls in play)
     def BlueprintsInBloodReq_walls   = LiveValues.get("FM", "BlueprintsInBloodReq_walls", 3)  // SBR: Screaming Walls in play
     def MannedBattlementsReq_walls   = LiveValues.get("FM", "MannedBattlementsReq_walls", 6)  // SBR: Screaming Walls in play
@@ -310,8 +311,9 @@ object SWValues {
     def Hunger_killedGain           = LiveValues.get("SW", "Hunger_killedGain", 3)  // Hunger gained when Black Sphinx is Killed or eliminated
     def Hunger_bottomlessPitSpend   = LiveValues.get("SW", "Hunger_bottomlessPitSpend", 1)  // Hunger spent (reduced) when Bottomless Pit is performed
     def Hunger_discountedRitualGain = LiveValues.get("SW", "Hunger_discountedRitualGain", 1)  // Hunger gained when Starvation's ritual discount is used (same event as the ae row and sb.rows.5EwQF2ol.text 'Advance the Hunger track by 1')
+    def Hunger_ancientEmeticGain    = LiveValues.get("SW", "Hunger_ancientEmeticGain", 1)  // Hunger gained when Ancient Emetic is used to summon a monster or terror
     def Kidnap_minMummies           = LiveValues.get("SW", "Kidnap_minMummies", 2)  // UFA: minimum Hybrid Mummies (with Nitokris) required to hold a Kidnapped monster
-    def GhoulQueen_cost             = LiveValues.get("SW", "GhoulQueen_cost", 1)  // SB action cost (Power)
+    def AncientEmetic_costDiscount  = LiveValues.get("SW", "AncientEmetic_costDiscount", 1)  // Power discount off a monster/terror's printed cost when summoned via Ancient Emetic
     def BottomlessPit_cost          = LiveValues.get("SW", "BottomlessPit_cost", 1)  // SB action cost (Power)
     def BottomlessPit_costMinus     = LiveValues.get("SW", "BottomlessPit_costMinus", 1)  // Elder Signs gained = sacrificed monster's printed cost minus this
     def BottomlessPit_swBonusPower  = LiveValues.get("SW", "BottomlessPit_swBonusPower", 1)  // Power SW gains when an opponent uses Bottomless Pit

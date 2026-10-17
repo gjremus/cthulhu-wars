@@ -59,8 +59,8 @@ class GameEvaluationSW(implicit game : Game) extends GameEvaluation(SW)(game) {
 
                 case SWBottomlessPitMainAction(f, _) =>
                     f == self                                   |=> 300  -> "use bottomless pit"
-                case SWGhoulQueenMainAction(f, _) =>
-                    f == self                                   |=> 500  -> "re-summon nitokris"
+                case SWAncientEmeticMainAction(f, _) =>
+                    f == self                                   |=> 500  -> "use ancient emetic"
 
                 case SWStarvationUseAction(f) =>
                     true                                        |=> 300  -> "use starvation discount"

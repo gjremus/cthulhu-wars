@@ -3008,7 +3008,7 @@ object Overlays {
 
         case $("SW", FuneralProcession.name) => spellbook(FuneralProcession.name, "Ongoing", s"${HybridMummy.plural} move for free with ${QueenNitokris.name} (and any Kidnapped Unit moves for free with her too).")
         case $("SW", BottomlessPit.name)     => spellbook(BottomlessPit.name, s"Action: Cost ${SWValues.BottomlessPit_cost}", s"Any Faction may use this ability so long as the Hunger Track is not at 0. In ${BlackSphinx.name}'s Area (or, with ${MonstrousForepaw.name}, an adjacent Area), Eliminate a Monster you don't own to gain Elder Signs equal to its printed Cost minus ${SWValues.BottomlessPit_costMinus}, and reduce the Hunger Track by ${SWValues.Hunger_bottomlessPitSpend}. ${SW.name} gains ${SWValues.BottomlessPit_swBonusPower} Power and ${SWValues.BottomlessPit_swBonusES} Elder Sign when an opponent uses this ability.")
-        case $("SW", GhoulQueen.name)        => spellbook(GhoulQueen.name, s"Action: Cost ${SWValues.GhoulQueen_cost}", s"${PharoahKephren.name} can Eliminate a ${HybridMummy.name} to re-summon ${QueenNitokris.name} into his region with a Controlled Gate, after she has been Killed or Eliminated.")
+        case $("SW", AncientEmetic.name)     => spellbook(AncientEmetic.name, "Action", s"Advance the Hunger Track by ${SWValues.Hunger_ancientEmeticGain}. Summon a Monster or Terror from your pool, into an Area with your Controlled Gate, for ${SWValues.AncientEmetic_costDiscount} Power less than its printed Cost (minimum 0).")
         case $("SW", MonstrousForepaw.name)  => spellbook(MonstrousForepaw.name, "Ongoing", s"${BottomlessPit.name} may be performed in Areas adjacent to ${BlackSphinx.name}.")
         case $("SW", Starvation.name)        => spellbook(Starvation.name, "Doom Phase", s"Rituals of Annihilation may be discounted by the current value of the Hunger Track. If you do: divide the current value of the Hunger Track by ${SWValues.Starvation_esDivisor} (rounded down) and take that many Elder Signs, then advance the Hunger Track by ${SWValues.Hunger_discountedRitualGain}.")
         case $("SW", MummiesCurse.name)      =>
@@ -3027,13 +3027,13 @@ object Overlays {
         def cost(s : String) = s"""<span class="cost-color">$s</span>"""
         faction(SW, "info:sw-background", Kidnap, "Post-Battle",
             s"The enemy chooses one of their Pained Monsters. While it shares a region with ${QueenNitokris.name} and ${SWValues.Kidnap_minMummies}+ ${HybridMummy.plural}, it lies sideways: it is exempt from Battle (including abilities), moves for free with ${QueenNitokris.name}, and cannot be moved by any other means.",
-            $(BottomlessPit, Starvation), $(
+            $(BottomlessPit, AncientEmetic, Starvation), $(
             (Acolyte,       SWValues.Acolyte_count, "1", "0", ""),
             (HybridMummy,   SWValues.HybridMummy_count, "" + SWValues.HybridMummy_cost, "" + SWValues.HybridMummy_combat, s"""<div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(MummiesCurse)}</div>"""),
-            (PharoahKephren, SWValues.PharoahKephren_count, "" + SWValues.PharoahKephren_cost, "" + SWValues.PharoahKephren_combat, s"""<div class=p>Spellbook: ${swRef(GhoulQueen)}</div>"""),
+            (PharoahKephren, SWValues.PharoahKephren_count, "" + SWValues.PharoahKephren_cost, "" + SWValues.PharoahKephren_combat, ""),
             (QueenNitokris, SWValues.QueenNitokris_count, "" + SWValues.QueenNitokris_cost, calc(g => { implicit val gg : Game = g; SWValues.QueenNitokris_combatBase + g.swHunger }), s"""
                 <div class=p>${combat} Equal to ${SWValues.QueenNitokris_combatBase} plus the current Hunger Track value (no dice — adds Pains automatically).</div>
-                <div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(GhoulQueen)}</div>"""),
+                <div class=p>Spellbook: ${swRef(FuneralProcession)}</div>"""),
             (BlackSphinx,   SWValues.BlackSphinx_count, "Awaken", calc(g => { implicit val gg : Game = g; SWValues.BlackSphinx_painsBase + g.swHunger }), s"""
                 <div class=p>${cost(s"How to Awaken ${BlackSphinx.name}:")}</div>
                 <div class=p>${cost("1)")} Sacrifice a Monster in an Area with your Controlled Gate.</div>
