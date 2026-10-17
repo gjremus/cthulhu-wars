@@ -369,7 +369,7 @@ object FMExpansion extends Expansion {
             val wall = self.pool.%(_.uclass == ScreamingWall).head
             self.place(ScreamingWall, r)
             self.log("created", ScreamingWall.styled(FM), "in", r)
-            Then(MainAction(self))
+            EndAction(self)
 
         case CreateGateWithWallMainAction(self, locations) =>
             Ask(self).each(locations)(r => CreateGateWithWallAction(self, r)).cancel
@@ -383,7 +383,7 @@ object FMExpansion extends Expansion {
             val cultist = self.at(r).%(_.canControlGate).head
             cultist.onGate = true
             self.log("created a gate with", ScreamingWall.styled(FM), "in", r, "(placed", cultist.uclass.styled(FM), "on gate)")
-            Then(MainAction(self))
+            EndAction(self)
 
         case MannedBattlementsMainAction(self) =>
             val sourceAreas = game.board.regions.filter(r => hasScreamingWall(r) && self.at(r).any)
