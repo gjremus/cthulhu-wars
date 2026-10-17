@@ -18,8 +18,11 @@ import html._
 //  • Mother's Aid allows opponents to pay PRM 1 Power to control Ycgn'àgnnisssz
 //    for their turn. The control state is tracked on Game.scala as
 //    game.prmYcgnaTemporaryController : |[Faction] (set at turn start, cleared at turn end).
-//  • Make as One (unique ability) allows enemies to use PRM's spellbooks. When
-//    this causes a flip, PRM gains 1 Doom. Tracked via prmMakeAsOneFlips.
+//  • Make as One (unique ability) allows enemies to use PRM's spellbooks. PRM
+//    gains PRMValues.MakeAsOne_powerPerAction Power whenever the activated
+//    Spellbook is an Action (all of PRM's library except Zealous Spark, which
+//    is an Unlimited Action). When this also causes a flip, PRM gains 1 Doom.
+//    Tracked via prmMakeAsOneFlips.
 //  • Face-down spellbooks are temporarily flipped down until Doom Phase, then
 //    automatically restored. Tracked in game.prmFlippedDownSpellbooks : $[Spellbook].
 // ============================================================================
@@ -652,8 +655,7 @@ object PRMExpansion extends Expansion {
                 Ask(enemy, actions)
 
             case MakeAsOneActivateAction(self, enemy, sb) =>
-                // Enemy activates PRM spellbook
-                // Cost is the spellbook's power cost (varies by SB)
+                // Enemy activates PRM spellbook, paying its own Power cost as normal.
                 val powerCost = sb match {
                     case AtomicUnity => PRMValues.AtomicUnity_cost
                     case Protogenesis => PRMValues.Protogenesis_cost
@@ -668,8 +670,15 @@ object PRMExpansion extends Expansion {
                     Force(MakeAsOneSkipAction(self, enemy))
                 } else {
                     enemy.power -= powerCost
-                    PRM.power += powerCost  // PRM receives the power
                     game.prmMakeAsOneFlips += 1
+
+                    // Make as One (updated wording): Permeation gains a flat
+                    // MakeAsOne_powerPerAction Power if the activated ability is an
+                    // Action (i.e. not Zealous Spark, which is an Unlimited Action).
+                    if (sb != ZealousSpark) {
+                        PRM.power += PRMValues.MakeAsOne_powerPerAction
+                        PRM.log("Gained", PRMValues.MakeAsOne_powerPerAction.power, "from", sb.styled(PRM), "being activated")
+                    }
 
                     // Check if this causes flip
                     val shouldFlip = sb match {

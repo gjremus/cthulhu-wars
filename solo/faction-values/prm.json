@@ -22,6 +22,7 @@
     "Pay2DoomFlipSpellbookReq.doom":     {"value": 2, "max": 20, "what": "SBR: Doom paid to flip a Spellbook"},
     "EnemyHas3SpellbooksReq.spellbooks": {"value": 3, "min": 1, "max": 6, "what": "SBR: Spellbooks another Faction must have"},
     "MakeAsOne.doomPerFlip":             {"value": 1, "max": 5, "what": "Make as One: Doom gained when an enemy activation flips a Spellbook"},
+    "MakeAsOne.powerPerAction":          {"value": 1, "max": 5, "what": "Make as One: Power Permeation gains when an enemy activates an Action-type Spellbook (not Unlimited Action) - from ufa.text wording"},
     "MothersAid.power":                  {"value": 1, "max": 20, "what": "Mother's Aid: Power an enemy pays to control Ycgn'agnnisssz"}
   },
   "images": ["prm-glyph.webp", "prm-card.webp", "prm-spellbooks.webp", "prm-acolyte.webp", "prm-high-priest.webp", "prm-astral-egg.webp", "prm-celestial-fledgling.webp", "prm-ycgnagnnisssz.webp"]

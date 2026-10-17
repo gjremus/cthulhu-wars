@@ -281,6 +281,7 @@ object PRMValues {
     def Pay2DoomFlipSpellbookReq_doom     = LiveValues.get("PRM", "Pay2DoomFlipSpellbookReq_doom", 2)  // SBR: Doom paid to flip a Spellbook
     def EnemyHas3SpellbooksReq_spellbooks = LiveValues.get("PRM", "EnemyHas3SpellbooksReq_spellbooks", 3)  // SBR: Spellbooks another Faction must have
     def MakeAsOne_doomPerFlip             = LiveValues.get("PRM", "MakeAsOne_doomPerFlip", 1)  // Make as One: Doom gained when an enemy activation flips a Spellbook
+    def MakeAsOne_powerPerAction          = LiveValues.get("PRM", "MakeAsOne_powerPerAction", 1)  // Make as One: Power Permeation gains when an enemy activates an Action-type Spellbook (not Unlimited Action) - from ufa.text wording
     def MothersAid_power                  = LiveValues.get("PRM", "MothersAid_power", 1)  // Mother's Aid: Power an enemy pays to control Ycgn'agnnisssz
 }
 
