@@ -358,11 +358,19 @@ object SWExpansion extends Expansion {
                 Ask(self).each(regions)(r => SWAwakenSphinxRegionAction(self, r)).cancel
 
         case SWAwakenSphinxRegionAction(self, r) =>
+            // Button gating: only show sacrifice options where the faction can afford the awakening cost.
+            // Cost = 8 - sacrificedMonster.cost - (3 if kidnapped), minimum 0. If no affordable options,
+            // the action ends without offering a menu.
             val victims = self.at(r).%(_.uclass.utype == Monster).not(Zeroed)
-            if (victims.isEmpty)
+            val affordableVictims = victims.%(v => {
+                val kidnapDiscount = game.swKidnapped.has(v.ref).??(SWValues.BlackSphinx_kidnapDiscount)
+                val cost = math.max(0, SWValues.BlackSphinx_awakenBaseCost - v.uclass.cost - kidnapDiscount)
+                self.canSpend(cost)
+            })
+            if (affordableVictims.isEmpty)
                 EndAction(self)
             else
-                Ask(self).each(victims)(v => SWAwakenSphinxSacrificeAction(self, r, v.ref)).cancel
+                Ask(self).each(affordableVictims)(v => SWAwakenSphinxSacrificeAction(self, r, v.ref)).cancel
 
         case SWAwakenSphinxSacrificeAction(self, r, victim) =>
             val u = game.unit(victim)
