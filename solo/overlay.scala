@@ -690,7 +690,7 @@ object Overlays {
         case $("DGT", MartyrsCryReq.text) => requirement("As an Action, distribute a total amount of Power equal to the number of players to any enemy Factions of your choice.")
         case $("DGT", CosmicChaosReq.text) => requirement("As an Action, distribute a total amount of Doom equal to the number of players to any enemy Factions of your choice.")
 
-        case $("DGT", WhiteRider.name) => spellbook(WhiteRider.name, "Ongoing", "Enemy Units in Pestilence's Area cannot move out and cannot retreat from that Area.")
+        case $("DGT", WhiteRider.name) => spellbook(WhiteRider.name, "Ongoing", "Enemy Units in Pestilence's Area cannot Move out and cannot Retreat from that Area.")
         case $("DGT", "Mayhem") => spellbook("Mayhem", "Once Only", s"During Post-Battle, if Pestilence is present and ${DGTValues.Mayhem_pains} or more Pains are assigned to enemy Units, Gain ${DGTValues.RiderFlip_elderSigns} Elder Sign and flip this Spellbook.")
         case $("DGT", GodsPlague.name) => spellbook(GodsPlague.name, s"Action: Cost ${DGTValues.GodsPlague_cost}", "All enemy Factions with one or more Units in Pestilence's Area choose one of their Units to be Pained away. You choose the Area into which each Unit is Pained.")
 

@@ -521,26 +521,36 @@ object DGTExpansion extends Expansion {
             }
             UnknownContinue
 
-        // ── RITUAL OF ANNIHILATION (Pale Rider SBR trigger) ──────────────────
-        // TODO: Intercept when any player performs a Ritual
-        // For now, this requirement must be manually satisfied when the condition is met
+        // ── RITUAL OF ANNIHILATION (Pale Rider SBR trigger) ───────────────────
+        // NOTE (resolved, 2026-10-17 designer request r_Z1ALDfnq): "Any player
+        // performs a Ritual of Annihilation" is NOT a no-op here — it's already
+        // wired via Game.notifyRoAReactors(performer), which is called by every
+        // standard and non-standard Ritual of Annihilation path (RitualAction,
+        // Hecatomb, Bastet's Requires Attention, etc.) regardless of which
+        // faction performed it, and satisfies PaleRiderReq unconditionally
+        // (no performer == DGT check), exactly like DC's Pilgrimage.
 
-        // ── DOMINION: Intercept Move action destination calculation ──────────
-        // TODO: Need to properly intercept move destination selection
-        // For now, simplified implementation through regular adjacency
+        // ── DOMINION: Move-action adjacency ───────────────────────────────────
+        // Implemented in Game.scala's move-destination calc ("DGT Dominion:
+        // areas with DGT units are adjacent for Move actions").
+
+        // ── WHITE RIDER: block enemy Move-out and Retreat from Pestilence's Area ──
+        // Implemented in Game.scala (move-destination calc, "DGT White Rider:
+        // enemy Units in Pestilence's Area cannot Move out") and Battle.scala
+        // (dgtRetreatBlocked in the retreat-destination calc). Matches the
+        // 2026-10-17 designer wording update (r_yP-j0mUF): "Enemy Units in
+        // Pestilence's Area cannot Move out and cannot Retreat from that Area."
 
         // ── PALE RIDER: Add 1 Kill in battles with Death present ─────────────
-        // TODO: Need proper battle integration to add kills
-        // Simplified: just log when Death is present, actual kill addition needs deeper integration
+        // Implemented in Battle.scala ("Tribulation (DGT) Pale Rider: +1 Kill
+        // if Death is present").
 
-        // ── DUAL-SIDED SPELLBOOK FLIP TRIGGERS ───────────────────────────────
-        // TODO: Implement flip triggers properly
-        // These need special Requirements that check the flip conditions and award the back-side spellbook + ES
-        // For now, simplified:
-        // - Mayhem (White Rider → God's Plague): Pestilence present + 2+ Pains to enemies in battle
-        // - Ruin (Red Rider → God's Sword): War present + 10+ combat dice rolled
-        // - Rampage (Black Rider → God's Scale): Sacrifice 1 enemy cultist during Gather Power
-        // - Despair (Pale Rider → God's Hand): Death present + Kill assigned to 3+ cost enemy unit
+        // ── DUAL-SIDED SPELLBOOK FLIP TRIGGERS ────────────────────────────────
+        // All four are implemented via DGTExpansion.flipSpellbook(), called from:
+        // - Mayhem (White Rider → God's Plague): Battle.scala, Pestilence present + Mayhem_pains+ Pains to enemies in battle
+        // - Ruin (Red Rider → God's Sword): Battle.scala, War present + Ruin_dice+ combat dice rolled
+        // - Rampage (Black Rider → God's Scale): RampageSacrificeAction below, during Gather Power
+        // - Despair (Pale Rider → God's Hand): Battle.scala, Death present + Kill assigned to a Despair_minCost+ enemy Unit
 
         case _ => UnknownContinue
     }
