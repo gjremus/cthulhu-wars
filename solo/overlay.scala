@@ -852,7 +852,7 @@ object Overlays {
 
         // Opener Buff option overlays
         case $("OpenerCheapMutants") => spellbook("Cheap Mutants + Harder SBR", "Variant", "Mutants cost 1 power. Units at 2 enemy gates requires 3.")
-        case $("OpenerYogCurseDie") => spellbook("Yog Curse Die + DC GOO ES", "Variant", "Yog Sothoth contributes 1 die to Dread Curse of Azazoth when in play. If an enemy Great Old One is pained or killed by Dread Curse, Opener recives an Elder Sign.")
+        case $("OpenerYogCurseDie") => spellbook("Yog Curse Die + DC GOO ES", "Variant", "Yog Sothoth contributes 1 die to Dread Curse of Azazoth when in play. If an enemy Great Old One is killed by Dread Curse, Opener recives an Elder Sign.")
 
         // Sleeper buff option overlays
         case $("SleeperEasierSBR") => spellbook("Easier Spellbook Requirements", "Variant", "The 3 power related Spellbook Requirements are changed from their current 'Pay 3 power, enemies gain/ lose power' to 'Pay your last power; Pay your last 2 power, and Pay your last 3 power.'")
