@@ -390,12 +390,12 @@ object OWExpansion extends Expansion {
                 Ask(f).each(uu)(u => DreadCurseAssignAction(self, r, e, k, p, f, rs.first, u))
             }
             else {
-                // Opener Buff: Yog Curse Die — ES for each enemy GOO pained or killed
+                // Opener Buff: Yog Curse Die — ES for each enemy GOO killed (not pained)
                 if (game.options.has(OpenerYogCurseDie)) {
-                    val goosHit = e./~(f => AN.unitsAt(f, r).%(u => u.goo && (u.health == Killed || u.health == Pained)))
+                    val goosHit = e./~(f => AN.unitsAt(f, r).%(u => u.goo && u.health == Killed /* || u.health == Pained */))
                     if (goosHit.any) {
                         self.takeES(goosHit.num)
-                        self.log("gained", goosHit.num.es, "from", DreadCurse, "(GOO pained/killed)")
+                        self.log("gained", goosHit.num.es, "from", DreadCurse, "(GOO killed)")
                     }
                 }
 
