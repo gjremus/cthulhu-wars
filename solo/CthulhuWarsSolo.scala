@@ -6066,6 +6066,18 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             "DC" -> "stable"   // Defilers Court
         )
 
+        // [2026-10-19] Bot-functionality tag, independent of (but derived from)
+        // stability: only stable factions have a working bot. Among the stable
+        // factions, TT (Tcho-Tcho), BB (Bubastis, standard and alt), and DC
+        // (Defilers Court) still have no working bot. Exposed as a plain
+        // Set + helper (not nested inside altFactionPicker) so it can be reused
+        // by Quick Game's bot-opponent filter, and the same tag is mirrored in
+        // the Main build (which only ships stable factions, so the stability
+        // half of the check is a no-op there).
+        val nonFunctionalBotFactions : Set[String] = Set("TT", "BB", "DC")
+        def hasWorkingBot(short : String) : Boolean =
+            builtInStability.getOrElse(short, "stable") == "stable" && !nonFunctionalBotFactions.contains(short)
+
         // [2026-05-23] MNU alt faction picker. Replaces the combinations dropdown
         // for users who want to: (a) lock specific factions onto specific player
         // slots and/or limit which factions are eligible per slot before
@@ -6098,6 +6110,10 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // [2026-10-12] Category filter state: Official, Variants, Homebrews.
             // By default all three are enabled.
             var enabledCategory = scala.collection.mutable.Set[String]("official", "variants", "homebrews")
+
+            // [2026-10-19] Bot-status filter state: Has working bot / Non functional bot.
+            // By default both are enabled.
+            var enabledBotStatus = scala.collection.mutable.Set[String]("working", "nonworking")
 
             // [2026-10-12] Merged stability map: built-in + designer endpoint.
             // Start with the built-in map; will be merged with designer API on fetch.
@@ -6396,11 +6412,21 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 }
             }
 
+            // [2026-10-19] Tag a picker entry by bot functionality: "working" or
+            // "nonworking". Uses live getStability (merges the designer endpoint)
+            // rather than only the static nonFunctionalBotFactions check, so a
+            // faction promoted/demoted via the designer stability endpoint picks
+            // up the right bot tag too.
+            def getBotStatus(e : PickerEntry) : String =
+                if (getStability(e) == "stable" && !nonFunctionalBotFactions.contains(e.faction.short)) "working" else "nonworking"
+
             // [2026-10-12] Filter picker entries by enabled stability levels and categories.
+            // [2026-10-19] Also filter by enabled bot-status.
             def visibleEntries() : $[PickerEntry] =
                 altPickerEntries.filter(e =>
                     enabledStability.contains(getStability(e)) &&
-                    enabledCategory.contains(getCategory(e))
+                    enabledCategory.contains(getCategory(e)) &&
+                    enabledBotStatus.contains(getBotStatus(e))
                 )
 
             // [2026-10-12] Shared helper for filter toggle: remove hidden entries,
@@ -6504,6 +6530,43 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 makeCategoryCb("variants", "Official Variants")
                 makeCategoryCb("homebrews", "Homebrews")
                 root.appendChild(categoryRow)
+
+                // [2026-10-19] Bot-status filter checkboxes: Has working bot / Non functional bot.
+                // By default both are checked. Unchecking one hides those factions.
+                val botStatusRow = dom.document.createElement("div").asInstanceOf[html.Div]
+                botStatusRow.style.cssText = "display:flex;gap:16px;align-items:center;margin-bottom:12px;padding:6px 8px;background:#161b22;border:1px solid #30363d;border-radius:6px;"
+                val botStatusLabel = dom.document.createElement("span").asInstanceOf[html.Span]
+                botStatusLabel.style.cssText = "font-size:10.5pt;color:#8c95a0;font-weight:600;"
+                botStatusLabel.innerHTML = "Bot:"
+                botStatusRow.appendChild(botStatusLabel)
+
+                def makeBotStatusCb(status : String, label : String) {
+                    val lbl = dom.document.createElement("label").asInstanceOf[html.Label]
+                    lbl.style.cssText = "display:inline-flex;align-items:center;gap:4px;font-size:10pt;color:#e6edf3;cursor:pointer;"
+                    val cb = dom.document.createElement("input").asInstanceOf[html.Input]
+                    cb.`type` = "checkbox"
+                    cb.checked = enabledBotStatus.contains(status)
+                    cb.style.cssText = "margin:0;cursor:pointer;"
+                    lbl.onclick = (e : dom.MouseEvent) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        // [2026-10-19] Compute from state, not DOM (clicking the box itself
+                        // toggles cb.checked before the bubbled label onclick runs).
+                        val newChecked = !enabledBotStatus.contains(status)
+                        cb.checked = newChecked
+                        if (newChecked) enabledBotStatus += status else enabledBotStatus -= status
+                        updateEnabledEntries(newChecked)
+                        render()
+                    }
+                    val text = dom.document.createElement("span").asInstanceOf[html.Span]
+                    text.innerHTML = label
+                    lbl.appendChild(cb)
+                    lbl.appendChild(text)
+                    botStatusRow.appendChild(lbl)
+                }
+                makeBotStatusCb("working", "Has working bot")
+                makeBotStatusCb("nonworking", "Non functional bot")
+                root.appendChild(botStatusRow)
 
                 val help = dom.document.createElement("div").asInstanceOf[html.Div]
                 help.style.cssText = "font-size:9.5pt;color:#8c95a0;margin-bottom:16px;"
@@ -7186,8 +7249,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 topMenu()
                         })
                     case 0 =>
-                        val faction = allFactions.shuffle.first
-                        val combinations = allFactions.but(faction).combinations(3).$
+                        // [2026-10-19] Quick Game: human may only be a stable faction;
+                        // bot opponents may only be factions tagged with a working bot.
+                        val stableFactions = allFactions.filter(f => builtInStability.getOrElse(f.short, "stable") == "stable")
+                        val botFactions = allFactions.filter(f => hasWorkingBot(f.short))
+                        val faction = stableFactions.shuffle.first
+                        val combinations = botFactions.but(faction).combinations(3).$
                         val opponents = combinations.shuffle.first
                         val setup = new Setup(randomSeating(faction +: opponents), Normal)
                         setup.difficulty += faction -> Human
@@ -7316,8 +7383,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             topMenu()
 
             if (quick) {
-                val faction = allFactions.shuffle.first
-                val combinations = allFactions.but(faction).combinations(3).$
+                // [2026-10-19] Quick Game: human may only be a stable faction;
+                // bot opponents may only be factions tagged with a working bot.
+                val stableFactions = allFactions.filter(f => builtInStability.getOrElse(f.short, "stable") == "stable")
+                val botFactions = allFactions.filter(f => hasWorkingBot(f.short))
+                val faction = stableFactions.shuffle.first
+                val combinations = botFactions.but(faction).combinations(3).$
                 val opponents = combinations.shuffle.first
                 val setup = new Setup(randomSeating(faction +: opponents), Normal)
                 setup.difficulty += faction -> Human
