@@ -5093,6 +5093,16 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Order: GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB
         val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB)
 
+        // [2026-10-19] Bot-functionality tag, mirrored from the Homebrew build (which
+        // also has designer/beta/alpha factions without a working bot). Main only
+        // ships stable factions, so every faction here is already eligible for Quick
+        // Game's human slot; this set only narrows which factions are eligible as
+        // Quick Game BOT opponents — TT (Tcho-Tcho) and BB (Bubastis, standard and
+        // alt) don't have a working bot. DC isn't in Main's faction list; kept in the
+        // set anyway so both builds share one definition.
+        val nonFunctionalBotFactions : Set[String] = Set("TT", "BB", "DC")
+        def hasWorkingBot(short : String) : Boolean = !nonFunctionalBotFactions.contains(short)
+
         // Alt picker display order (may differ from allFactions).
         // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB.
         //
@@ -5932,8 +5942,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 topMenu()
                         })
                     case 0 =>
+                        // [2026-10-19] Quick Game: human may be any faction (allFactions is
+                        // already stable-only in Main); bot opponents may only be factions
+                        // tagged with a working bot.
                         val faction = allFactions.shuffle.first
-                        val combinations = allFactions.but(faction).combinations(3).$
+                        val botFactions = allFactions.filter(f => hasWorkingBot(f.short))
+                        val combinations = botFactions.but(faction).combinations(3).$
                         val opponents = combinations.shuffle.first
                         val setup = new Setup(randomSeating(faction +: opponents), Normal)
                         setup.difficulty += faction -> Human
@@ -6062,8 +6076,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             topMenu()
 
             if (quick) {
+                // [2026-10-19] Quick Game: human may be any faction (allFactions is
+                // already stable-only in Main); bot opponents may only be factions
+                // tagged with a working bot.
                 val faction = allFactions.shuffle.first
-                val combinations = allFactions.but(faction).combinations(3).$
+                val botFactions = allFactions.filter(f => hasWorkingBot(f.short))
+                val combinations = botFactions.but(faction).combinations(3).$
                 val opponents = combinations.shuffle.first
                 val setup = new Setup(randomSeating(faction +: opponents), Normal)
                 setup.difficulty += faction -> Human
