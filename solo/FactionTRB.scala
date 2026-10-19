@@ -157,14 +157,23 @@ case class TRBDistributePowerFactionAction(self : Faction, remaining : Int, dist
         "Distribute Power".styled(TRB) + ": choose enemy Faction to receive Power (" + remaining + " Power remaining)"
 }
 
+// Step 1 (per enemy): clicking an enemy's name opens the amount picker below.
+// Must be a BaseFactionAction with a real .option (the enemy's name) - a bare
+// ForcedAction here has no displayable option and renders as "N/A" in the Ask
+// menu (caught in the visual audit; fixed before this build shipped). Same
+// idiom as MapExpansion.scala's LibrarianAssignToFactionAction.
 case class TRBDistributePowerAmountAction(self : Faction, target : Faction, remaining : Int, distributed : $[(Faction, Int)])
-    extends ForcedAction with PowerNeutral with Soft {
-    override def question(implicit game : Game) =
-        "Distribute Power".styled(TRB) + ": choose amount of Power to give " + target.name
-}
+    extends BaseFactionAction(
+        implicit g => "Distribute Power".styled(TRB) + ": choose amount of Power to give " + target.name + " (" + remaining + " remaining)",
+        implicit g => target.name
+    ) with PowerNeutral
 
+// Step 2 (per amount): the clickable amount buttons (1..remaining Power).
 case class TRBDistributePowerGiveAction(self : Faction, target : Faction, amount : Int, remaining : Int, distributed : $[(Faction, Int)])
-    extends BaseFactionAction("Give " + amount + " Power to", implicit g => target.name) with PowerNeutral
+    extends BaseFactionAction(
+        implicit g => "Distribute Power".styled(TRB) + ": give " + target.name + " how much Power? (" + remaining + " remaining)",
+        implicit g => s"$amount Power"
+    ) with PowerNeutral
 
 case class TRBDistributePowerCancelAction(self : Faction)
     extends OptionFactionAction("Cancel Power distribution".styled(TRB)) with MainQuestion with Soft
@@ -180,14 +189,18 @@ case class TRBDistributeDoomFactionAction(self : Faction, remaining : Int, distr
         "Distribute Doom".styled(TRB) + ": choose enemy Faction to receive Doom (" + remaining + " Doom remaining)"
 }
 
+// Same two-step fix as Distribute Power above (see that block's comment).
 case class TRBDistributeDoomAmountAction(self : Faction, target : Faction, remaining : Int, distributed : $[(Faction, Int)])
-    extends ForcedAction with PowerNeutral with Soft {
-    override def question(implicit game : Game) =
-        "Distribute Doom".styled(TRB) + ": choose amount of Doom to give " + target.name
-}
+    extends BaseFactionAction(
+        implicit g => "Distribute Doom".styled(TRB) + ": choose amount of Doom to give " + target.name + " (" + remaining + " remaining)",
+        implicit g => target.name
+    ) with PowerNeutral
 
 case class TRBDistributeDoomGiveAction(self : Faction, target : Faction, amount : Int, remaining : Int, distributed : $[(Faction, Int)])
-    extends BaseFactionAction("Give " + amount + " Doom to", implicit g => target.name) with PowerNeutral
+    extends BaseFactionAction(
+        implicit g => "Distribute Doom".styled(TRB) + ": give " + target.name + " how much Doom? (" + remaining + " remaining)",
+        implicit g => s"$amount Doom"
+    ) with PowerNeutral
 
 case class TRBDistributeDoomCancelAction(self : Faction)
     extends OptionFactionAction("Cancel Doom distribution".styled(TRB)) with MainQuestion with Soft

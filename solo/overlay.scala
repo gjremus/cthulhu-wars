@@ -3110,7 +3110,7 @@ object Overlays {
         case $("TRB", TRBMartyrsCry.name) =>
             spellbook(TRBMartyrsCry.name, "Gather Power Phase",
                 s"Gain ${TRBValues.MartyrsCry_powerPerFaction} Power for each Faction that Sacrifices one or more Cultists." +
-                """<div class=p>Implementation note: counts Tribulation's own sacrifice (via The Black Rider) only — this build has no single cross-faction "sacrificed a Cultist" signal to read for every other Faction's own sacrifice-like abilities.</div>""")
+                """<div class=p>Currently counts Tribulation's own Cultist sacrifice (via The Black Rider) only.</div>""")
 
         case $("TRB", TRBCosmicChaos.name) =>
             spellbook(TRBCosmicChaos.name, "Ongoing", "Move any number of Conquests for free when you perform a Move Action during which you spend 1 or more Power.")
