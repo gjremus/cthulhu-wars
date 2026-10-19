@@ -426,7 +426,11 @@ trait Faction { f =>
         val hasGOO = f.at(r, GOO, ElderGod).any
         // DGT: Death counts as a GOO for iGOO awakening
         val hasDeath = game.setup.has(DGT) && f == DGT && f.at(r, Death).any
-        hasGate && (hasGOO || hasDeath)
+        // Tribulation v16 (TRB) — unrelated designer faction, own Death unit (TRBDeath):
+        // "Death count has a Great Old One to Awaken Independent Great Old Ones" (unit ability,
+        // always on, not Spellbook-gated).
+        val hasTrbDeath = game.setup.has(TRB) && f == TRB && f.at(r, TRBDeath).any
+        hasGate && (hasGOO || hasDeath || hasTrbDeath)
     }
     // Regions eligible for iGOO awakening. `areas` = board.regions, which EXCLUDES
     // the Moon (MoonGlyph.onMap=false). The Moon is a BB-Controlled Gate "for all
@@ -1767,6 +1771,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             case DGT => $(DGTExpansion)
             // Sphinx Worshippers (SW): Homebrew designer faction
             case SW => $(SWExpansion)
+            // Tribulation v16 (TRB): Homebrew designer faction (distinct from DGT above)
+            case TRB => $(TRBExpansion)
         } ++
         options.has(NeutralSpellbooks).$(NeutralSpellbooksExpansion) ++
         (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any || options.of[WhateleyClanOption].any).$(NeutralMonstersExpansion) ++
@@ -2229,6 +2235,19 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var dgtRampageOfferedThisGather : Boolean = false
     // DGT Martyr's Cry guard: AfterPowerGatherAction re-runs after Rampage, so pay out once per Gather Power
     var dgtMartyrsCryDoneThisGather : Boolean = false
+
+    // Tribulation v16 (TRB) — unrelated designer faction, also Four-Horsemen themed, but a
+    // DIFFERENT design (designer Daganisoraan, fid lklqd2fbdudf) from DGT above. Kept fully
+    // separate: its own flip-state set (no "God's X" back-side spellbooks — TRB's two-sided
+    // Riders keep the same name on both sides, so a flip is tracked here instead of swapping
+    // held Spellbook objects) and its own once-per-gather guards.
+    var trbFlipped : Set[Spellbook] = Set()
+    // TRB Black Rider sacrifice-to-flip offer guard (mirrors dgtRampageOfferedThisGather)
+    var trbBlackRiderOfferedThisGather : Boolean = false
+    // TRB Black Rider: running count of enemy Cultists sacrificed, compared against
+    // TRBValues.BlackRider_sacrificeToFlip (Simple Update value) before flipping — not
+    // reset per-gather, since the flip is once-only for the whole game anyway.
+    var trbBlackRiderSacrificedCount : Int = 0
     // Round 9 bug fix: some action handlers (e.g. AN GiveWorstMonster /
     // GiveBestMonster SBRs) place units into other factions' pools/regions
     // as a game-level effect, not as a region-targeting action by the
@@ -4336,6 +4355,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 }
             }
 
+            // Tribulation v16 (TRB) Black Rider: BEFORE releasing captured cultists, TRB may
+            // sacrifice one enemy Cultist to flip The Black Rider (once only) and gain 1 Elder
+            // Sign. Same shape as DGT's Rampage above, but a separate, unrelated faction/design —
+            // own guard flag, own flip tracking (trbFlipped), own action case class.
+            if (setup.has(TRB) && TRB.has(TRBBlackRider) && !trbFlipped.contains(TRBBlackRider) && !trbBlackRiderOfferedThisGather) {
+                val trbCapturedCultists = factions./~(_.at(TRB.prison)).%(_.cultist)
+                if (trbCapturedCultists.any) {
+                    trbBlackRiderOfferedThisGather = true
+                    return Force(TRBBlackRiderSacrificeCheckAction(TRB, last))
+                }
+            }
+
             factions.foreach { f =>
                 val captured = factions./~(_.at(f.prison))
 
@@ -4429,6 +4460,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case AfterPowerGatherAction =>
             TSExpansion.shepherdDoneThisGather = false
             dgtRampageOfferedThisGather = false  // Reset for next Gather Power
+            trbBlackRiderOfferedThisGather = false  // Reset for next Gather Power (TRB)
 
             factions.foreach { f =>
                 if (f.want(MaoCeremony)) {
@@ -6003,6 +6035,24 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 pestilenceArea.foreach { pestiArea =>
                     val unitFig = unit(u)
                     // If the unit is IN Pestilence's area, it cannot move out
+                    if (from == pestiArea) {
+                        destinations = $  // No destinations available
+                    }
+                }
+            }
+
+            // Tribulation v16 (TRB) Dominion: Areas with TRB Units are adjacent for Move actions.
+            // Distinct faction from DGT above (different designer); same shape of effect, own code.
+            if (self == TRB && setup.has(TRB)) {
+                val trbAreas = TRB.units.onMap./(_.region).distinct
+                if (trbAreas.has(from))
+                    destinations = (destinations ++ trbAreas.but(from)).distinct
+            }
+
+            // TRB White Rider: enemy Units in Pestilence's Area cannot Move out
+            if (setup.has(TRB) && self != TRB && TRB.has(TRBWhiteRider)) {
+                val trbPestilenceArea = TRB.units.%(_.uclass == TRBPestilence)./(_.region).headOption
+                trbPestilenceArea.foreach { pestiArea =>
                     if (from == pestiArea) {
                         destinations = $  // No destinations available
                     }

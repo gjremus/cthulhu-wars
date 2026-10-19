@@ -269,7 +269,7 @@ object CthulhuWarsSolo {
     val DoubleLine = "======================================================================================================================="
 
     def setupUI() {
-        // Load live value overrides for designer factions (CS, DGT, FBE, FM, PRM, XSS)
+        // Load live value overrides for designer factions (CS, DGT, FBE, FM, PRM, XSS, TRB)
         // This allows Simple Updates to work WITHOUT requiring rebuild/redeploy
         LiveValues.loadAll()
 
@@ -831,6 +831,7 @@ object CthulhuWarsSolo {
                                         case CS => BotCS    .ask(actions, 0.2)(game)
                                         // The Invasion (TI): bot dispatch (Easy)
                                         case TI => BotTI    .ask(actions, 0.2)(game)
+                                        case TRB => BotTRB  .ask(actions, 0.2)(game)
                                     })
                                 case Normal =>
                                     UIPerform(game, faction match {
@@ -871,6 +872,7 @@ object CthulhuWarsSolo {
                                         case CS => BotCS    .ask(actions, 0.03)(game)
                                         // The Invasion (TI): bot dispatch (Normal)
                                         case TI => BotTI    .ask(actions, 0.03)(game)
+                                        case TRB => BotTRB  .ask(actions, 0.03)(game)
                                     })
                                 case AllVsHuman =>
                                     val aa = Explode.explode(game, actions)
@@ -915,6 +917,7 @@ object CthulhuWarsSolo {
                                         case CS => BotCS    .ask(as, 0.03)(game)
                                         // The Invasion (TI): bot dispatch (AllVsHuman)
                                         case TI => BotTI    .ask(as, 0.03)(game)
+                                        case TRB => BotTRB  .ask(as, 0.03)(game)
                                     })
 
 
@@ -1147,6 +1150,7 @@ object CthulhuWarsSolo {
                     case PRM => Processing(None, None, None, |("#9d1b0c"))
                     case XSS => Processing(|("#4a6b7a"), None, None)
                     case DGT => Processing(|("#808080"), |("#333333"), None)
+                    case TRB => Processing(|("#5b4a6b"), |("#333333"), None)
                     case TB => Processing(|("#8b6914"), |("#333333"), None)
                     case CS => Processing(None, None, None)
                     case TI => Processing(|("#94382b"), |("#333333"), None)
@@ -1189,6 +1193,8 @@ object CthulhuWarsSolo {
                         case XSS => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
                         // Tribulation (DGT): acolyte sprite
                         case DGT => DrawRect("dgt-acolyte", None, x - 17, y - 54, 39, 60)
+                        // Tribulation v16 (TRB): acolyte sprite (unrelated designer faction from DGT above)
+                        case TRB => DrawRect("trb-acolyte", None, x - 17, y - 54, 39, 60)
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
                         // Colour Out of Space (CS): acolyte unit sprite
                         case CS => DrawRect("cs-acolyte", None, x - 17, y - 54, 34, 60)
@@ -1267,6 +1273,8 @@ object CthulhuWarsSolo {
                         case PRM => DrawRect("prm-glyph", None, x - 50, y - 50, 100, 100)
                         case XSS => DrawRect("xss-glyph", None, x - 50, y - 50, 100, 100)
                         case DGT => DrawRect("dgt-glyph", None, x - 50, y - 50, 100, 100)
+                        // Tribulation v16 (TRB): faction glyph sprite (unrelated designer faction from DGT above)
+                        case TRB => DrawRect("trb-glyph", None, x - 50, y - 50, 100, 100)
                         case TB => DrawRect("tb-glyph", None, x - 50, y - 50, 100, 100)
                         // Colour Out of Space (CS): faction glyph sprite
                         case CS => DrawRect("cs-glyph", None, x - 50, y - 50, 100, 100)
@@ -1604,6 +1612,14 @@ object CthulhuWarsSolo {
                     case War         => DrawRect("dgt-war", None, x - 35, y - 75, 70, 85)
                     case Famine      => DrawRect("dgt-famine", None, x - 35, y - 75, 70, 85)
                     case Death       => DrawRect("dgt-death", None, x - 35, y - 75, 70, 85)
+
+                    // Tribulation v16 (TRB): Four Horsemen units — unrelated designer faction from
+                    // DGT above (different designer/fid); own unit classes (TRBConquest etc.), own art.
+                    case TRBConquest    => DrawRect("trb-conquest", None, x - 17, y - 54, 39, 60)
+                    case TRBPestilence  => DrawRect("trb-pestilence", None, x - 35, y - 75, 70, 85)
+                    case TRBWar         => DrawRect("trb-war", None, x - 35, y - 75, 70, 85)
+                    case TRBFamine      => DrawRect("trb-famine", None, x - 35, y - 75, 70, 85)
+                    case TRBDeath       => DrawRect("trb-death", None, x - 35, y - 75, 70, 85)
 
                     // Sphinx Worshippers (SW): real art for Pharoah Kephren, Queen Nitokris and
                     // Black Sphinx (downloaded from the designer); Hybrid Mummy reuses the shared
@@ -5089,6 +5105,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         case CS => BotCS
                                         // The Invasion (TI): debug action-sort dispatch, mirrors CS/TB.
                                         case TI => BotTI
+                                        case TRB => BotTRB
                                     })
                                     bot.eval(g, aa).sortWith(bot.compare)
                                 }
@@ -5981,7 +5998,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Faceless Blight (FBE): Homebrew faction appended (§3.13.1)
         // Xyrious Storm (XSS): Homebrew faction appended
         // Fleshmason (FM), Permeation (PRM), Tribulation (DGT): Designer factions appended
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT, SW)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT, SW, TRB)
 
         // Alt picker display order (may differ from allFactions).
         // Full canonical order: GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, BB-alt, TS, FB, DC.
@@ -6006,7 +6023,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // Faceless Blight (FBE): Homebrew faction appended to the alt picker (§3.13.1)
         // The Invasion (TI): appended to the alt picker per Implementation Guide §2.9/§3
         // Fleshmason (FM), Permeation (PRM), Tribulation (DGT): Designer factions appended
-        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT, SW)
+        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT, SW, TRB)
         // [2026-07-23] §3.13.5: OW / SL / DS each get a SECOND ("alt") entry
         // immediately after their standard entry, matching the AN and BB alt
         // entries added earlier. Picking an alt entry auto-flips that
@@ -6042,6 +6059,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             "FM" -> "alpha",   // Fleshmason
             "PRM" -> "alpha",  // Permeation
             "DGT" -> "alpha",  // Tribulation
+            "TRB" -> "alpha",  // Tribulation v16 (unrelated designer faction)
             "XSS" -> "alpha",  // Xothic Starspawn
             "SW" -> "alpha",   // Sphinx Worshippers
             // Homebrew-only factions (beta pending owner confirmation)
@@ -6089,7 +6107,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // Separate from stabilityMap so getCategory can distinguish designer factions
             // from built-in official ones.
             val designerAcronyms = scala.collection.mutable.Set[String]()
-            val fallbackDesignerAcronyms = Set("FM", "PRM", "DGT", "XSS", "SW")
+            val fallbackDesignerAcronyms = Set("FM", "PRM", "DGT", "XSS", "SW", "TRB")
 
             // [2026-10-12] Rerender callback: set once render() exists, called after XHR loads.
             var rerender : () => Unit = () => ()
@@ -6367,7 +6385,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // Official factions (per owner) are all of the rest (includes TI).
             def getCategory(e : PickerEntry) : String = {
                 val baseFactions = Set("GC", "CC", "BG", "YS")
-                val homebrewOnlyFactions = Set("TS", "FB", "DC", "CS", "FBE", "TB", "FM", "PRM", "DGT", "SW")
+                val homebrewOnlyFactions = Set("TS", "FB", "DC", "CS", "FBE", "TB", "FM", "PRM", "DGT", "SW", "TRB")
                 val designerBuilt = (designerAcronyms.toSet ++ fallbackDesignerAcronyms) -- baseFactions
                 val allHomebrews = homebrewOnlyFactions ++ designerBuilt
                 val isHomebrew = allHomebrews.contains(e.faction.short)

@@ -1379,6 +1379,13 @@ object Overlays {
         // JVM 64KB method-size limit (same idiom as CS/TI/FBE/PRM above).
         case s2 if s2.headOption.exists(_ == "SW") => swOverlay(s2)
 
+        // ── TRIBULATION v16 (TRB) — Homebrew designer faction overlays ───────
+        // Delegated to trbOverlay(...) to keep the giant `info` match under the
+        // JVM 64KB method-size limit (same idiom as CS/TI/FBE/PRM/SW above).
+        // NOT the same faction as DGT (handled earlier in the info() chain by
+        // infoDGT) — see FactionTRB.scala header note for the full disambiguation.
+        case s2 if s2.headOption.exists(_ == "TRB") => trbOverlay(s2)
+
         // NOTE: Tribulation (DGT) overlays are handled earlier in the info() chain
         // by infoDGT (defined above, before infoMain is ever reached), which is the
         // live, current copy. A second, stale "DGT" dispatch (dgtOverlay/
@@ -3048,6 +3055,88 @@ object Overlays {
                 <div class=p><b>Ceaseless Hunger (Ongoing):</b> Whenever ${BlackSphinx.name} is Awakened, Pained, and at the start of each Action Phase (while on the map), advance the Hunger Track by ${SWValues.Hunger_awakenGain}. When he is Killed or Eliminated, advance it by ${SWValues.Hunger_killedGain} instead. Lose Doom and/or sacrifice Cultists equal to his Hunger in the Doom Phase. An enemy-controlled Elder Thing sharing his Area fully blocks this ability.</div>
                 <div class=p>Spellbook: ${swRef(MonstrousForepaw)}</div>""")
         ), setup = true)
+    }
+
+    // Tribulation v16 (TRB) — overlay dispatch helper (same idiom as swOverlay/prmOverlay
+    // above). NOT the DGT faction — see FactionTRB.scala header note.
+    //
+    // Flip state (White/Red/Black/Pale Rider all read the same, single named card slot
+    // before and after their trigger fires — the design never gave the flipped side a
+    // different name) is read live from Overlays.currentGame, same idiom as dsAvatarCombat.
+    def trbRiderFlipped(sb : Spellbook) : Boolean = Overlays.currentGame match {
+        case Some(g) if g.factions.has(TRB) => g.trbFlipped.contains(sb)
+        case _ => false
+    }
+
+    def trbOverlay(s : $[Any]) : String = s match {
+        case $("TRB") => trbFactionOverlay()
+
+        case $("TRB", "Setup") => requirement("Before The Ancients; 8 Power, " + TRBValues.Acolyte_count + " Acolytes, and a controlled Gate in any empty Area without map Glyph.")
+
+        case $("TRB", TRBWhiteRiderReq.text)  => requirement(TRBWhiteRiderReq.text)
+        case $("TRB", TRBRedRiderReq.text)    => requirement(TRBRedRiderReq.text)
+        case $("TRB", TRBBlackRiderReq.text)  => requirement(TRBBlackRiderReq.text)
+        case $("TRB", TRBPaleRiderReq.text)   => requirement(TRBPaleRiderReq.text)
+        case $("TRB", TRBMartyrsCryReq.text)  => requirement(TRBMartyrsCryReq.text)
+        case $("TRB", TRBCosmicChaosReq.text) => requirement(TRBCosmicChaosReq.text)
+
+        // Each two-sided Rider: before its trigger fires, show the full text (ongoing effect
+        // + the trigger-and-flip clause); after it flips, show just the ongoing effect (the
+        // design's own "textB" wording — the trigger clause no longer applies, it already fired).
+        case $("TRB", TRBWhiteRider.name) =>
+            if (trbRiderFlipped(TRBWhiteRider))
+                spellbook(TRBWhiteRider.name, "Ongoing", "Enemy Units in Pestilence's Area cannot Move out and cannot Retreat from that Area.")
+            else
+                spellbook(TRBWhiteRider.name, "Ongoing", s"Enemy Units in Pestilence's Area cannot Move out and cannot Retreat from that Area.<br/><br/>During Post-Battle, if Pestilence is present and ${TRBValues.WhiteRider_painsToFlip} or more Pains are assigned to enemy Units, Gain ${TRBValues.RiderFlip_elderSigns} Elder Sign and flip this Spellbook.")
+
+        case $("TRB", TRBRedRider.name) =>
+            if (trbRiderFlipped(TRBRedRider))
+                spellbook(TRBRedRider.name, "Ongoing", s"War now has ${TRBValues.War_combatRedRider} Combat.")
+            else
+                spellbook(TRBRedRider.name, "Ongoing", s"War now has ${TRBValues.War_combatRedRider} Combat.<br/><br/>During Battle, if War is present and you roll ${TRBValues.RedRider_diceToFlip} or more Combat dice, Gain ${TRBValues.RiderFlip_elderSigns} Elder Sign and flip this Spellbook.")
+
+        case $("TRB", TRBBlackRider.name) =>
+            if (trbRiderFlipped(TRBBlackRider))
+                spellbook(TRBBlackRider.name, "Ongoing", "Famine counts as a Great Old One for Capture purposes.")
+            else
+                spellbook(TRBBlackRider.name, "Ongoing", s"Famine counts as a Great Old One for Capture purposes.<br/><br/>During Gather Power Phase, if you Sacrifice one enemy Cultist, Gain ${TRBValues.RiderFlip_elderSigns} Elder Sign and flip this Spellbook.")
+
+        case $("TRB", TRBPaleRider.name) =>
+            if (trbRiderFlipped(TRBPaleRider))
+                spellbook(TRBPaleRider.name, "Post-Battle", s"If Death is present, add ${TRBValues.PaleRider_kills} Kill to your results.")
+            else
+                spellbook(TRBPaleRider.name, "Post-Battle", s"If Death is present, add ${TRBValues.PaleRider_kills} Kill to your results.<br/><br/>During Post-Battle, if Death is present and a Kill is assigned to a ${TRBValues.PaleRider_minCostToFlip}-cost or higher enemy Unit, Gain ${TRBValues.RiderFlip_elderSigns} Elder Sign and flip this Spellbook.")
+
+        case $("TRB", TRBMartyrsCry.name) =>
+            spellbook(TRBMartyrsCry.name, "Gather Power Phase",
+                s"Gain ${TRBValues.MartyrsCry_powerPerFaction} Power for each Faction that Sacrifices one or more Cultists." +
+                """<div class=p>Implementation note: counts Tribulation's own sacrifice (via The Black Rider) only — this build has no single cross-faction "sacrificed a Cultist" signal to read for every other Faction's own sacrifice-like abilities.</div>""")
+
+        case $("TRB", TRBCosmicChaos.name) =>
+            spellbook(TRBCosmicChaos.name, "Ongoing", "Move any number of Conquests for free when you perform a Move Action during which you spend 1 or more Power.")
+
+        case $("TRB", TRBDominion.name) =>
+            spellbook(TRBDominion.name, "Ongoing", "When Performing the Move Action, Areas with Units you control are adjacent to each other.")
+
+        case _ => ""
+    }
+
+    def trbFactionOverlay() = {
+        def trbRef(sb : Spellbook) = s"""<span class="ability-color pointer" onclick="onExternalClick('TRB', '${sb.name}')">${sb.name}</span>"""
+        faction(TRB, "info:trb-background", TRBDominion, "Action: Ongoing",
+            "When Performing the Move Action, Areas with Units you control are adjacent to each other.",
+            $(TRBWhiteRider, TRBRedRider, TRBBlackRider, TRBPaleRider, TRBMartyrsCry, TRBCosmicChaos), $(
+            (Acolyte,        TRBValues.Acolyte_count, "1", "0", ""),
+            (TRBConquest,    TRBValues.Conquest_count, "" + TRBValues.Conquest_cost, "" + TRBValues.Conquest_combat, s"""<div class=p>Spellbook: ${trbRef(TRBCosmicChaos)}</div>"""),
+            (TRBPestilence,  TRBValues.Pestilence_count, "" + TRBValues.Pestilence_cost, "" + TRBValues.Pestilence_combat, s"""<div class=p>Spellbook: ${trbRef(TRBWhiteRider)}</div>"""),
+            (TRBWar,         TRBValues.War_count, "" + TRBValues.War_cost, "" + TRBValues.War_combat + "/" + TRBValues.War_combatRedRider, s"""
+                <div class=p><span class=cost-color>Cost:</span> ${TRBValues.War_cost} Power</div>
+                <div class=p><span class=combat-color>Combat</span> ${TRBValues.War_combat} base, ${TRBValues.War_combatRedRider} with ${trbRef(TRBRedRider)}</div>
+                <div class=p>Spellbook: ${trbRef(TRBRedRider)}</div>"""
+            ),
+            (TRBFamine,      TRBValues.Famine_count, "" + TRBValues.Famine_cost, "" + TRBValues.Famine_combat, s"""<div class=p>Spellbook: ${trbRef(TRBBlackRider)}</div>"""),
+            (TRBDeath,       TRBValues.Death_count, "" + TRBValues.Death_cost, "" + TRBValues.Death_combat, s"""<div class=p>Death counts as a Great Old One to Awaken Independent Great Old Ones.</div><div class=p>Spellbook: ${trbRef(TRBPaleRider)}</div>"""),
+        ))
     }
 
 

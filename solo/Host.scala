@@ -76,6 +76,7 @@ object Host {
                     case DGT => BotDGT.ask(actions, 0.03)(g)
                     case TB => BotTB.ask(actions, 0.03)(g)
                     case CS => BotCS.ask(actions, 0.03)(g)
+                    case TRB => BotTRB.ask(actions, 0.03)(g)
                     // [2026-05-24] Neutral / Library factions (NeutralAbhoth,
                     // LibraryFaction, etc.) don't have a strategic bot — when
                     // asked, just pick the first action. This is a no-op for
@@ -88,9 +89,9 @@ object Host {
 
     def main(args : Array[String]) {
         // Tombstalker (TS), Firstborn (FB), and Daemon Sultan (DS): included in the master faction list for headless simulation runs
-        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, DGT, FM, PRM, SW)
+        val allFactions = $(GC, CC, BG, YS, SL, WW, OW, TT, AN, DS, TS, FB, BB, DC, FBE, XSS, TB, DGT, FM, PRM, SW, TRB)
 
-        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT, SW)
+        val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB, DC, FBE, XSS, TB, CS, TI, FM, PRM, DGT, SW, TRB)
 
         val numberOfPlayers = 4
 

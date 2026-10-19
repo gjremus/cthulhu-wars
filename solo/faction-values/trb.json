@@ -1,0 +1,32 @@
+{
+  "acronym": "TRB",
+  "faction": "Tribulation v16",
+  "designerFid": "lklqd2fbdudf",
+  "values": {
+    "Acolyte.count":              {"value": 6, "min": 1, "max": 12, "what": "Acolytes in the faction", "designer": "units.rows.KW-lDJ8F.qty"},
+    "Conquest.count":             {"value": 4, "min": 1, "max": 12, "what": "Conquests in the faction", "designer": "units.rows._9niG0Ko.qty"},
+    "Conquest.cost":              {"value": 1, "max": 30, "what": "Conquest summon cost (Power)", "designer": "units.rows._9niG0Ko.cost"},
+    "Conquest.combat":            {"value": 1, "max": 30, "what": "Conquest combat dice", "designer": "units.rows._9niG0Ko.dice"},
+    "Pestilence.count":           {"value": 1, "min": 1, "max": 12, "what": "Pestilences in the faction", "designer": "units.rows.k6CWk9_s.qty"},
+    "Pestilence.cost":            {"value": 3, "max": 30, "what": "Pestilence summon cost (Power)", "designer": "units.rows.k6CWk9_s.cost"},
+    "Pestilence.combat":          {"value": 3, "max": 30, "what": "Pestilence combat dice", "designer": "units.rows.k6CWk9_s.dice"},
+    "War.count":                  {"value": 1, "min": 1, "max": 12, "what": "Wars in the faction", "designer": "units.rows.k81zgr38.qty"},
+    "War.cost":                   {"value": 3, "max": 30, "what": "War summon cost (Power)", "designer": "units.rows.k81zgr38.cost"},
+    "War.combat":                 {"value": 3, "max": 30, "what": "War combat dice", "designer": "units.rows.k81zgr38.dice"},
+    "Famine.count":               {"value": 1, "min": 1, "max": 12, "what": "Famines in the faction", "designer": "units.rows.27cg6ok3.qty"},
+    "Famine.cost":                {"value": 3, "max": 30, "what": "Famine summon cost (Power)", "designer": "units.rows.27cg6ok3.cost"},
+    "Famine.combat":              {"value": 3, "max": 30, "what": "Famine combat dice", "designer": "units.rows.27cg6ok3.dice"},
+    "Death.count":                {"value": 1, "min": 1, "max": 12, "what": "Deaths in the faction", "designer": "units.rows.rdtbo8ps.qty"},
+    "Death.cost":                 {"value": 3, "max": 30, "what": "Death summon cost (Power)", "designer": "units.rows.rdtbo8ps.cost"},
+    "Death.combat":               {"value": 3, "max": 30, "what": "Death combat dice", "designer": "units.rows.rdtbo8ps.dice"},
+    "War.combatRedRider":         {"value": 9, "max": 30, "what": "War combat dice while The Red Rider is held (either side)", "designer": "sb.rows.cXJItFuk.text: 'War now has 9 Combat'"},
+    "WhiteRider.painsToFlip":     {"value": 2, "min": 1, "max": 20, "what": "Pains assigned to enemy Units (post-battle, Pestilence present) needed to flip The White Rider", "designer": "sb.rows.4dhRaF8R.text: '2 or more Pains'"},
+    "RedRider.diceToFlip":        {"value": 13, "min": 1, "max": 40, "what": "Combat dice rolled (War present) needed to flip The Red Rider", "designer": "sb.rows.cXJItFuk.text: '13 or more Combat dice'"},
+    "BlackRider.sacrificeToFlip": {"value": 1, "min": 1, "max": 10, "what": "Enemy Cultists sacrificed (Gather Power Phase) needed to flip The Black Rider", "designer": "sb.rows.m8nT9HIA.text: 'Sacrifice one enemy Cultist'"},
+    "PaleRider.minCostToFlip":    {"value": 3, "min": 0, "max": 20, "what": "Lowest-cost enemy Unit a Kill must be assigned to (Death present) to flip The Pale Rider", "designer": "sb.rows.tE84TCJo.text: '3-cost or higher enemy Unit'"},
+    "PaleRider.kills":            {"value": 1, "max": 10, "what": "Kills added to results when Death is present", "designer": "sb.rows.tE84TCJo.text: 'add 1 Kill to your results'"},
+    "RiderFlip.elderSigns":       {"value": 1, "max": 5, "what": "Elder Signs gained when a Rider (White/Red/Black/Pale) flips", "designer": "sb.rows text: 'Gain 1 Elder Sign and flip this Spellbook'"},
+    "MartyrsCry.powerPerFaction": {"value": 1, "max": 10, "what": "Power gained per Faction that sacrifices one or more Cultists (Gather Power Phase)", "designer": "sb.rows.QhdMVZ5h.text: 'Gain 1 Power for each Faction that Sacrifice one or more Cultists'"}
+  },
+  "images": ["trb-glyph.webp", "trb-background.webp", "trb-acolyte.webp", "trb-conquest.webp", "trb-pestilence.webp", "trb-war.webp", "trb-famine.webp", "trb-death.webp"]
+}

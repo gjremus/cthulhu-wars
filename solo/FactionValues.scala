@@ -135,6 +135,32 @@ object FactionValuesMapping {
             "units.rows.uobjhDTS.pains" -> "Acolyte_pains",
             "units.rows.uobjhDTS.qty" -> "Acolyte_count",
         ),
+        "TRB" -> Map(
+            "sb.rows text: 'Gain 1 Elder Sign and flip this Spellbook'" -> "RiderFlip_elderSigns",
+            "sb.rows.4dhRaF8R.text: '2 or more Pains'" -> "WhiteRider_painsToFlip",
+            "sb.rows.QhdMVZ5h.text: 'Gain 1 Power for each Faction that Sacrifice one or more Cultists'" -> "MartyrsCry_powerPerFaction",
+            "sb.rows.cXJItFuk.text: '13 or more Combat dice'" -> "RedRider_diceToFlip",
+            "sb.rows.cXJItFuk.text: 'War now has 9 Combat'" -> "War_combatRedRider",
+            "sb.rows.m8nT9HIA.text: 'Sacrifice one enemy Cultist'" -> "BlackRider_sacrificeToFlip",
+            "sb.rows.tE84TCJo.text: '3-cost or higher enemy Unit'" -> "PaleRider_minCostToFlip",
+            "sb.rows.tE84TCJo.text: 'add 1 Kill to your results'" -> "PaleRider_kills",
+            "units.rows.27cg6ok3.cost" -> "Famine_cost",
+            "units.rows.27cg6ok3.dice" -> "Famine_combat",
+            "units.rows.27cg6ok3.qty" -> "Famine_count",
+            "units.rows.KW-lDJ8F.qty" -> "Acolyte_count",
+            "units.rows._9niG0Ko.cost" -> "Conquest_cost",
+            "units.rows._9niG0Ko.dice" -> "Conquest_combat",
+            "units.rows._9niG0Ko.qty" -> "Conquest_count",
+            "units.rows.k6CWk9_s.cost" -> "Pestilence_cost",
+            "units.rows.k6CWk9_s.dice" -> "Pestilence_combat",
+            "units.rows.k6CWk9_s.qty" -> "Pestilence_count",
+            "units.rows.k81zgr38.cost" -> "War_cost",
+            "units.rows.k81zgr38.dice" -> "War_combat",
+            "units.rows.k81zgr38.qty" -> "War_count",
+            "units.rows.rdtbo8ps.cost" -> "Death_cost",
+            "units.rows.rdtbo8ps.dice" -> "Death_combat",
+            "units.rows.rdtbo8ps.qty" -> "Death_count",
+        ),
         "XSS" -> Map(
             "sb.rows.xsb00004.cost" -> "Tsunami_cost",
             "setup.power" -> "Setup_power",
@@ -326,6 +352,34 @@ object SWValues {
     def Acolyte_pains               = LiveValues.get("SW", "Acolyte_pains", 0)  // Acolyte fixed Pain results
     def Acolyte_kills               = LiveValues.get("SW", "Acolyte_kills", 0)  // Acolyte fixed Kill results
     def BottomlessPit_cost2         = LiveValues.get("SW", "BottomlessPit_cost2", 1)  // Bottomless Pit action cost (Power)
+}
+
+// Tribulation v16 (TRB) - from faction-values/trb.json
+object TRBValues {
+    def Acolyte_count              = LiveValues.get("TRB", "Acolyte_count", 6)  // Acolytes in the faction
+    def Conquest_count             = LiveValues.get("TRB", "Conquest_count", 4)  // Conquests in the faction
+    def Conquest_cost              = LiveValues.get("TRB", "Conquest_cost", 1)  // Conquest summon cost (Power)
+    def Conquest_combat            = LiveValues.get("TRB", "Conquest_combat", 1)  // Conquest combat dice
+    def Pestilence_count           = LiveValues.get("TRB", "Pestilence_count", 1)  // Pestilences in the faction
+    def Pestilence_cost            = LiveValues.get("TRB", "Pestilence_cost", 3)  // Pestilence summon cost (Power)
+    def Pestilence_combat          = LiveValues.get("TRB", "Pestilence_combat", 3)  // Pestilence combat dice
+    def War_count                  = LiveValues.get("TRB", "War_count", 1)  // Wars in the faction
+    def War_cost                   = LiveValues.get("TRB", "War_cost", 3)  // War summon cost (Power)
+    def War_combat                 = LiveValues.get("TRB", "War_combat", 3)  // War combat dice
+    def Famine_count               = LiveValues.get("TRB", "Famine_count", 1)  // Famines in the faction
+    def Famine_cost                = LiveValues.get("TRB", "Famine_cost", 3)  // Famine summon cost (Power)
+    def Famine_combat              = LiveValues.get("TRB", "Famine_combat", 3)  // Famine combat dice
+    def Death_count                = LiveValues.get("TRB", "Death_count", 1)  // Deaths in the faction
+    def Death_cost                 = LiveValues.get("TRB", "Death_cost", 3)  // Death summon cost (Power)
+    def Death_combat               = LiveValues.get("TRB", "Death_combat", 3)  // Death combat dice
+    def War_combatRedRider         = LiveValues.get("TRB", "War_combatRedRider", 9)  // War combat dice while The Red Rider is held (either side)
+    def WhiteRider_painsToFlip     = LiveValues.get("TRB", "WhiteRider_painsToFlip", 2)  // Pains assigned to enemy Units (post-battle, Pestilence present) needed to flip The White Rider
+    def RedRider_diceToFlip        = LiveValues.get("TRB", "RedRider_diceToFlip", 13)  // Combat dice rolled (War present) needed to flip The Red Rider
+    def BlackRider_sacrificeToFlip = LiveValues.get("TRB", "BlackRider_sacrificeToFlip", 1)  // Enemy Cultists sacrificed (Gather Power Phase) needed to flip The Black Rider
+    def PaleRider_minCostToFlip    = LiveValues.get("TRB", "PaleRider_minCostToFlip", 3)  // Lowest-cost enemy Unit a Kill must be assigned to (Death present) to flip The Pale Rider
+    def PaleRider_kills            = LiveValues.get("TRB", "PaleRider_kills", 1)  // Kills added to results when Death is present
+    def RiderFlip_elderSigns       = LiveValues.get("TRB", "RiderFlip_elderSigns", 1)  // Elder Signs gained when a Rider (White/Red/Black/Pale) flips
+    def MartyrsCry_powerPerFaction = LiveValues.get("TRB", "MartyrsCry_powerPerFaction", 1)  // Power gained per Faction that sacrifices one or more Cultists (Gather Power Phase)
 }
 
 // Xyrious Storm (XSS) - from faction-values/xss.json

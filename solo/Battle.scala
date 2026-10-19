@@ -1225,7 +1225,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val pestilenceArea = DGT.units.%(_.uclass == Pestilence)./(_.region).headOption
             pestilenceArea.exists(_ == arena)  // Block retreat only if battle is IN Pestilence's area
         } else false
-        val finalDestinations : $[Region] = if (dgtRetreatBlocked) $ else destinations
+
+        // Tribulation v16 (TRB) White Rider: same shape of effect as DGT's above, unrelated
+        // faction/design — own guard, own unit class (TRBPestilence).
+        val trbRetreatBlocked = if (game.setup.has(TRB) && s != TRB && TRB.has(TRBWhiteRider)) {
+            val trbPestilenceArea = TRB.units.%(_.uclass == TRBPestilence)./(_.region).headOption
+            trbPestilenceArea.exists(_ == arena)
+        } else false
+
+        val finalDestinations : $[Region] = if (dgtRetreatBlocked || trbRetreatBlocked) $ else destinations
 
         val chooser : Faction = retreater(s)
 
@@ -1852,6 +1860,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Kill count from DGTValues.PaleRider_kills (faction-values/dgt.json)
             (1 to DGTValues.PaleRider_kills).foreach { _ => dgtSide.rolls :+= Kill }
             log(PaleRider.styled(DGT) + ":", DGT.full, "gains " + DGTValues.PaleRider_kills, "Kill".styled("kill"))
+        }
+    }
+
+    // Tribulation v16 (TRB) Pale Rider: +1 Kill if Death is present. Same shape as DGT's
+    // above, unrelated faction/design — own value key, own unit class (TRBDeath).
+    sides.%(f => f == TRB).foreach { trbSide =>
+        if (game.setup.has(TRB) && TRB.has(TRBPaleRider) && trbSide.forces.%(_.uclass == TRBDeath).not(Zeroed).any) {
+            (1 to TRBValues.PaleRider_kills).foreach { _ => trbSide.rolls :+= Kill }
+            log(TRBPaleRider.styled(TRB) + ":", TRB.full, "gains " + TRBValues.PaleRider_kills, "Kill".styled("kill"))
         }
     }
 
@@ -3028,6 +3045,20 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // Tribulation v16 (TRB) White Rider flip: During Post-Battle, if Pestilence is
+                // present and 2+ Pains are assigned to enemy Units in total, flip and gain 1 ES.
+                // Same shape as DGT's Mayhem above, unrelated faction/design — own flip tracking
+                // (game.trbFlipped, see FactionTRB.scala header note).
+                if (game.setup.has(TRB) && sides.has(TRB) && TRB.has(TRBWhiteRider) && !game.trbFlipped.contains(TRBWhiteRider)) {
+                    val trbPestilencePresent = TRB.forces.exists(_.uclass == TRBPestilence)
+                    if (trbPestilencePresent) {
+                        val trbEnemyPains = sides.but(TRB)./~(_.forces).count(_.health == Pained)
+                        if (trbEnemyPains >= TRBValues.WhiteRider_painsToFlip) {
+                            TRBExpansion.flipRider(TRBWhiteRider, "Post-Battle")
+                        }
+                    }
+                }
+
                 jump(BattleEnd)
 
             case BattleEnd =>
@@ -3578,6 +3609,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 }
             }
 
+            // Tribulation v16 (TRB) Red Rider flip: During Battle, if War is present and TRB
+            // rolls 13 or more combat dice total, flip and gain 1 ES. Same shape as DGT's Ruin
+            // above, unrelated faction/design — own value key, own unit class (TRBWar).
+            if (game.setup.has(TRB) && f == TRB && TRB.has(TRBRedRider) && !game.trbFlipped.contains(TRBRedRider)) {
+                val trbWarPresent = f.forces.exists(_.uclass == TRBWar)
+                if (trbWarPresent && f.rolls.num >= TRBValues.RedRider_diceToFlip) {
+                    TRBExpansion.flipRider(TRBRedRider, "Battle")
+                }
+            }
+
             jump(next)
 
         // ASSIGN
@@ -3593,6 +3634,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 val is3PlusCost = enemyUnit.uclass.cost >= DGTValues.Despair_minCost
                 if (deathPresent && isEnemy && is3PlusCost && enemyUnit.health == Killed) {
                     DGTExpansion.flipSpellbook(DGT, PaleRider, GodsHand, "Despair")
+                }
+            }
+
+            // Tribulation v16 (TRB) Pale Rider flip: During Post-Battle, if Death is present
+            // and a Kill is assigned to a 3-cost or higher enemy Unit, flip and gain 1 ES. Same
+            // shape as DGT's Despair above, unrelated faction/design — own unit class (TRBDeath).
+            if (game.setup.has(TRB) && sides.has(TRB) && TRB.has(TRBPaleRider) && !game.trbFlipped.contains(TRBPaleRider)) {
+                val trbDeathPresent = TRB.forces.exists(_.uclass == TRBDeath)
+                val trbEnemyUnit = game.unit(u)
+                val trbIsEnemy = trbEnemyUnit.faction != TRB
+                val trbIs3PlusCost = trbEnemyUnit.uclass.cost >= TRBValues.PaleRider_minCostToFlip
+                if (trbDeathPresent && trbIsEnemy && trbIs3PlusCost && trbEnemyUnit.health == Killed) {
+                    TRBExpansion.flipRider(TRBPaleRider, "Post-Battle")
                 }
             }
 
