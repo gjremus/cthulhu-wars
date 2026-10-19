@@ -1272,6 +1272,8 @@ object CthulhuWarsSolo {
                         case CS => DrawRect("cs-glyph", None, x - 50, y - 50, 100, 100)
                         // The Invasion (TI): faction glyph sprite
                         case TI => DrawRect("ti-glyph", |(tint), x - 50, y - 50, 100, 100)
+                        // Sphinx Worshippers (SW): faction glyph sprite
+                        case SW => DrawRect("sw-glyph", None, x - 50, y - 50, 100, 100)
                         // FCG #1 / §3.18.1: non-null fallback so unknown factions still render a safe placeholder
                         // instead of crashing the canvas pipeline. GC glyph is the conventional default.
                         case _ => DrawRect("gc-glyph", |(tint), x - 50, y - 50, 100, 100)
