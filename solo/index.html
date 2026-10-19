@@ -786,9 +786,26 @@
             }
 
             .img {
+                /* [2026-10-18] Faction-card / neutral-unit-card silhouettes: was
+                   `width: 6ex` with no height constraint. Since these images are
+                   plain <img> tags, a fixed WIDTH makes the browser scale each
+                   image's RENDERED HEIGHT by that image's own native aspect ratio
+                   (SVG width/height or viewBox) to preserve it. Homebrew/designer
+                   silhouette assets have wildly inconsistent native aspect ratios
+                   unit-to-unit (some borrowed from unrelated neutral-monster/GOO
+                   art, e.g. XSS's Petrichor reuses gc-cthulhu.svg) - so one unit's
+                   silhouette rendered tall and another rendered short on the same
+                   faction card, and tall ones risked touching the .separator
+                   divider line below. Constraining by HEIGHT instead (width:auto)
+                   makes every silhouette render at the same height regardless of
+                   its native aspect ratio, which is what actually needs to be
+                   consistent row-to-row. max-width keeps unusually wide source
+                   images from spilling into the neighboring Unit-name column.  */
                 vertical-align: middle;
                 display: inline;
-                width: 6ex;
+                height: 6ex;
+                width: auto;
+                max-width: 100%;
             }
 
             sup {
