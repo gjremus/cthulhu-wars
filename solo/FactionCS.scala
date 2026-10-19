@@ -498,18 +498,23 @@ object CSExpansion extends Expansion {
         // SB3 Cosmic Landfall detection (Task 3.10.3) — when ANY GOO (not just CS's) is awakened
         // for CSValues.CosmicLandfall_awakenThreshold or more Power, CS may place a free Meteorite.
         // Check all GOO awakenings (even non-CS, even in non-CS turns) and arm the pending flag.
-        // The generic case matches before Tulzscha's specific case, so it sees Tulzscha too.
-        case AwakenedAction(_, uc, _, cost) if uc.utype == GOO && cost >= CSValues.CosmicLandfall_awakenThreshold =>
-            if (CS.can(CosmicLandfall))
+        // Merged with Tulzscha's own terminal handling below in ONE case: Tulzscha's awaken cost
+        // (5) is always >= the landfall threshold (4), so a separate later case matching only
+        // Tulzscha's own AwakenedAction was unreachable — match picks the first case whose guard
+        // passes and never falls through to a later case, so Tulzscha's awaken always hit this
+        // case, returned UnknownContinue, and nobody else was left to consume the action, crashing
+        // the dispatcher. This single case now does both jobs for every GOO's awaken.
+        case AwakenedAction(self, uc, _, cost) =>
+            if (uc.utype == GOO && cost >= CSValues.CosmicLandfall_awakenThreshold && CS.can(CosmicLandfall))
                 game.csCosmicLandfallPending = true
-            UnknownContinue
-
-        // Terminal consumer for the AwakenedAction above — every custom-effect GOO awaken
-        // needs one of these or the dispatcher crashes with "unknown continue" (this one was
-        // missing, which is what crashed the game). Tulzscha has no further bonus effect here;
-        // CSAwakenTulzscha was already satisfied above, so just end the turn.
-        case AwakenedAction(self : CS.type, CSTulzscha, _, _) =>
-            EndAction(self)
+            self match {
+                // Terminal consumer for CS's own Tulzscha awaken — every custom-effect GOO awaken
+                // needs one of these or the dispatcher crashes with "unknown continue". Tulzscha has
+                // no further bonus effect here; CSAwakenTulzscha was already satisfied above, so
+                // just end the turn.
+                case s : CS.type if uc == CSTulzscha => EndAction(s)
+                case _ => UnknownContinue
+            }
 
         // SB2 Vermiculite Hypertrophy summon-without-gate (Task 3.10.2).
         case CSVermiculiteMainAction(l) =>
