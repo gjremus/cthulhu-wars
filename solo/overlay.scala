@@ -2046,7 +2046,7 @@ object Overlays {
         ), setup = true, uniqueLink = true)
         case $("TB", "Setup") => requirement("Setup first. 8 Power. 8 Tentacles, in any 8 different Map Areas. (The Mantle, your Start Area, starts not in play but in your pool.)")
         case $("TB", ThousandWrithingMaws.name) => spellbook(ThousandWrithingMaws.name, "Ongoing, not optional", "Tentacles cannot Build nor Control Gates, nor be Captured. Gain no Power from the Cadavolytes during Gather Power, but gain 1 Power per Area containing a Tentacle. 2 Power Action: may Recruit/Summon two up to 2-Cost Units of the same type.")
-        case $("TB", Behemoth.name) => spellbook(Behemoth.name, "Ongoing", "Whenever TB Power reaches 0 (after Shudde M'ell has been Awakened and the Mantle is in play), place a Segment from Pool on the Mantle. Parts may be moved to the Mantle as a 0-Cost Unlimited Action.")
+        case $("TB", Behemoth.name) => spellbook(Behemoth.name, "Ongoing, after Shudde M'ell Head initially Awakened", "The Head and Segments are Parts of Shudde M'ell, but are Moved/Pained/Killed as separate Units.<br/>Whenever your Power reaches 0, place a Segment from your pool, on to the Mantle.<br/>0 Cost Unlimited Action: any Shudde M'ell Part may Move from anywhere to the Mantle.")
         case $("TB", OverlayMantleReq.text) => requirement("Control Gates in 2 adjacent Areas, then overlay the Mantle.")
         case $("TB", TenTentaclesReq.text) => requirement("There are 10 Tentacles in play.")
         case $("TB", RemoveGatePlaceChthonianReq.text) => requirement("Anytime, Gain 2 Power, then remove a Gate you Control, and place a Chthonian in an Area your Units occupy.")
