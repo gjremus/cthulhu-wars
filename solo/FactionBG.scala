@@ -245,7 +245,10 @@ object BGExpansion extends Expansion {
 
         // BLOOD SACRIFICE
         case BloodSacrificeDoomAction(self) =>
-            Ask(self).each(self.cultists.sortP ++ MindParasite.heldFrom(self))(u => BloodSacrificeAction(self, u.region, u).as(u.ref.full, "in", u.region)(BloodSacrifice)).cancel
+            Ask(self).each(self.cultists.sortP ++ MindParasite.heldFrom(self))(u => {
+                val onGateStr = if (u.onGate) " (on gate)" else ""
+                BloodSacrificeAction(self, u.region, u).as(u.uclass.styled(u.faction) + onGateStr, "in", u.region)(BloodSacrifice)
+            }).cancel
 
         case BloodSacrificeAction(self, r, ur) =>
             // Mind Parasite: BG may sacrifice its own parasitized Acolytes (see MindParasite.heldFrom)
@@ -485,7 +488,10 @@ object BGExpansion extends Expansion {
             //     } else base
             // }
 
-            Ask(e).each(cultists)(u => GhrothTargetAction(e, u, f, l.dropStarting).as(u.ref.full, "in", u.region)("Eliminate", (n > 1).?(n.styled("hightlight")).|("a"), "Cultist".s(n)))
+            Ask(e).each(cultists)(u => {
+                val onGateStr = if (u.onGate) " (on gate)" else ""
+                GhrothTargetAction(e, u, f, l.dropStarting).as(u.uclass.styled(u.faction) + onGateStr, "in", u.region)("Eliminate", (n > 1).?(n.styled("hightlight")).|("a"), "Cultist".s(n))
+            })
 
         case GhrothTargetAction(self, u, f, l) =>
             log(u, "was eliminated in", u.region)

@@ -428,7 +428,10 @@ object NeutralMonstersExpansion extends Expansion {
                 else
                     self.at(o).not(Moved).cultists.sortA
             Ask(self)
-                .each(carryCandidates)(u => ShantakCarryCultistAction(self, o, u, r).as(u.ref.full, "from", o)(Shantak, "carries", "Cultist".styled(self), "to", r))
+                .each(carryCandidates)(u => {
+                    val onGateStr = if (u.onGate) " (on gate)" else ""
+                    ShantakCarryCultistAction(self, o, u, r).as(u.uclass.styled(u.faction) + onGateStr, "from", o)(Shantak, "carries", "Cultist".styled(self), "to", r)
+                })
                 .skip(MoveContinueAction(self, true))
 
         case ShantakCarryCultistAction(self, o, u, r) =>

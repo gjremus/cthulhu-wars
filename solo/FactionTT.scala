@@ -185,7 +185,10 @@ case class TTSurpriseTargetFactionAction(self : Faction, target : Faction) exten
 )
 case class TTSurpriseEliminateAcolyteAction(self : Faction, target : Faction) extends ForcedAction
 case class TTSurpriseAcolyteChoiceAction(self : Faction, target : Faction, u : UnitRef) extends BaseFactionAction(
-    TT.full + " " + SurpriseSB.styled(TT) + ": Choose an " + Acolyte.styled(target) + " to be eliminated", implicit g => g.unit(u).full + " in " + g.unit(u).region
+    TT.full + " " + SurpriseSB.styled(TT) + ": Choose an " + Acolyte.styled(target) + " to be eliminated", implicit g => {
+        val uf = g.unit(u)
+        uf.uclass.styled(target) + (if (uf.onGate) " (on gate)" else "") + " in " + uf.region
+    }
 )
 
 // IDOLATRY (Tsang exclusive: cost 1, select Faction Glyph area, move TT units from adjacent areas)
