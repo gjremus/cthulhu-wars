@@ -369,8 +369,10 @@ case class DCLurePickRegionAction(self : Faction, area : Region, from : Region, 
 case class DCLurePickCultistAction(self : Faction, area : Region, cultist : UnitRef, remaining : $[Faction])
     extends BaseFactionAction(Lure.styled(DC) + ": " + self.short.styled(self) + " moves", implicit g => {
         val r = g.unit(cultist).region
+        val u = g.unit(cultist)
         val fromStr = if (r.glyph.inPlay && r.glyph.onMap) " from " + r.toString else ""
-        cultist.uclass.styled(self) + fromStr + " to " + area.toString
+        val onGateStr = if (u.onGate) " (on gate)" else ""
+        cultist.uclass.styled(self) + onGateStr + fromStr + " to " + area.toString
     })
     with PowerNeutral
 

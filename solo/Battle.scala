@@ -2659,14 +2659,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         // Mind Parasite: OW may still promote its own parasitized Acolytes in the arena
                         // (they fought on the insect side, so they are not in s.forces).
                         val heldAcolytes = MindParasite.heldFrom(s).%(u => u.region == arena && MindParasite.originalUClass(u) == Acolyte)
-                        val options = (s.forces.sortA ++ heldAcolytes)./~(u => u.uclass match {
-                            case MindParasiteCultist if MindParasite.originalFaction(u).has(s) && s.pool(Mutant).any => |(MillionFavoredOnesXAction(s, u.region, u, $(Mutant)).as(u.styledName, "in", u.region, "to", Mutant)(MillionFavoredOnes))
-                            case Acolyte if s.pool(Mutant).any      => |(MillionFavoredOnesXAction(s, u.region, u, $(Mutant)).as(u.ref.full, "in", u.region, "to", Mutant)(MillionFavoredOnes))
+                        val options = (s.forces.sortA ++ heldAcolytes)./~(u => {
+                            val onGateStr = if (u.onGate) " (on gate)" else ""
+                            u.uclass match {
+                            case MindParasiteCultist if MindParasite.originalFaction(u).has(s) && s.pool(Mutant).any => |(MillionFavoredOnesXAction(s, u.region, u, $(Mutant)).as(u.uclass.styled(u.faction) + onGateStr, "in", u.region, "to", Mutant)(MillionFavoredOnes))
+                            case Acolyte if s.pool(Mutant).any      => |(MillionFavoredOnesXAction(s, u.region, u, $(Mutant)).as(u.uclass.styled(u.faction) + onGateStr, "in", u.region, "to", Mutant)(MillionFavoredOnes))
                             case Mutant if s.pool(Abomination).any  => |(MillionFavoredOnesXAction(s, u.region, u, $(Abomination)).as(u.ref.full, "in", u.region, "to", Abomination)(MillionFavoredOnes))
                             case Abomination if s.pool(SpawnOW).any => |(MillionFavoredOnesXAction(s, u.region, u, $(SpawnOW)).as(u.ref.full, "in", u.region, "to", SpawnOW)(MillionFavoredOnes))
                             case SpawnOW if s.pool(Mutant).any      => |(MillionFavoredOnesXAction(s, u.region, u, s.pool(Mutant).num.times(Mutant)).as(u.ref.full, "in", u.region, "to", "Mutant".s(s.pool(Mutant).num).styled(OW))(MillionFavoredOnes))
                             case _ => None
-                        })
+                        }})
 
                         return Ask(s).list(options).done(BattleDoneAction(s))
                     }

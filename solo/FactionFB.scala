@@ -251,7 +251,10 @@ case class FBTheEyeOpensFactionAction(self : Faction, r : Region, f : Faction, p
     override def question(implicit game : Game) = TheEyeOpens.styled(FB) + ": Choose target faction"
 }
 case class FBTheEyeOpensChooseCultistAction(self : Faction, f : Faction, r : Region, u : UnitRef, pending : $[FBEyeOpensTarget]) extends BaseFactionAction(
-    TheEyeOpens.styled(FB) + ": eliminate", implicit g => g.unit(u).full
+    TheEyeOpens.styled(FB) + ": eliminate", implicit g => {
+        val uf = g.unit(u)
+        uf.uclass.styled(f) + (if (uf.onGate) " (on gate)" else "") + " in " + uf.region
+    }
 )
 case class FBTheEyeOpensLoopAction(self : Faction, pending : $[FBEyeOpensTarget]) extends ForcedAction
 case class FBTheEyeOpensCancelAction(self : Faction) extends ForcedAction
