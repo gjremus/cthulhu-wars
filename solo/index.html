@@ -812,11 +812,21 @@
                    makes every silhouette render at the same height regardless of
                    its native aspect ratio, which is what actually needs to be
                    consistent row-to-row. max-width keeps unusually wide source
-                   images from spilling into the neighboring Unit-name column.  */
+                   images from spilling into the neighboring Unit-name column.
+                   [2026-10-20] That fixed-height rule still broke very WIDE,
+                   short images (e.g. TB's Segment, a 993x418 horizontal strip):
+                   once max-width clipped the auto-computed width, the pinned
+                   height stayed at 6ex, non-uniformly squashing the art. Using
+                   max-height/max-width with both height and width auto lets the
+                   browser shrink-to-fit while always preserving the image's own
+                   aspect ratio -- ordinary near-square silhouettes still land at
+                   6ex tall exactly as before, but an unusually wide one now scales
+                   down to the available width instead of being stretched/squashed. */
                 vertical-align: middle;
                 display: inline;
-                height: 6ex;
+                height: auto;
                 width: auto;
+                max-height: 6ex;
                 max-width: 100%;
             }
 
