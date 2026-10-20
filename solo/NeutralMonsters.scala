@@ -458,7 +458,7 @@ object NeutralMonstersExpansion extends Expansion {
         // ── DUNWICH LAVINIA "MOTHER OF MONSTERS" ──
         case MotherOfMonstersMainAction(self) =>
             val cards = self.hired.not.??(game.motherOfMonstersCards(self))
-            val whateleys = game.whateleyCardsAvailable(self).%(c => !c.unit.stolenThisDoomPhase && self.power >= game.laviniaCost(self, c.cost, true)).sortBy(_.unit.name)
+            val whateleys = game.whateleyCardsAvailable(self).%(c => self.power >= game.laviniaCost(self, c.cost, true)).sortBy(_.unit.name)
 
             var ask = Ask(self).group("Mother of Monsters".styled("nt") + " — half cost")
             val monsters = cards.of[NeutralMonsterLoyaltyCard]
@@ -499,7 +499,7 @@ object NeutralMonstersExpansion extends Expansion {
         // ── DUNWICH WHATELEY CLAN RECRUIT ──
         case WhateleyRecruitMainAction(self) =>
             val avail = game.whateleyCardsAvailable(self)
-                .%(c => !c.unit.stolenThisDoomPhase && self.power >= game.laviniaCost(self, c.cost, true))
+                .%(c => self.power >= game.laviniaCost(self, c.cost, true))
                 .sortBy(_.unit.name)
             Ask(self).group("Recruit " + "Whateley Clan".styled("nt"))
                 .list(avail./(c => WhateleyRecruitAction(self, c)))
@@ -531,15 +531,11 @@ object NeutralMonstersExpansion extends Expansion {
                 case Some(u) =>
                     val r = u.region
                     u.faction.units :-= u
-                    val newUnit = new UnitFigure(self, card.unit, self.units.%(_.uclass == card.unit).num + 1, r)
-                    newUnit.stolenThisDoomPhase = true
-                    self.units :+= newUnit
+                    self.units :+= new UnitFigure(self, card.unit, self.units.%(_.uclass == card.unit).num + 1, r)
                     self.log(card.unit.styled(self), "changed control in", r)
                     CheckSpellbooksAction(DoomAction(self))
                 case None =>
-                    val newUnit = new UnitFigure(self, card.unit, self.units.%(_.uclass == card.unit).num + 1, self.reserve)
-                    newUnit.stolenThisDoomPhase = (prior.isDefined)
-                    self.units :+= newUnit
+                    self.units :+= new UnitFigure(self, card.unit, self.units.%(_.uclass == card.unit).num + 1, self.reserve)
                     Ask(self).group("Place " + card.unit.styled(self))
                         .each(areas ++ game.factions.has(BB).??($(BB.moon)))(r => WhateleyPlaceAction(self, card, r))
             }

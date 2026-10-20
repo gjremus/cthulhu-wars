@@ -298,7 +298,7 @@ case object MovedForExtra extends UnitState("moved-for-extra")
 case object Eliminated extends UnitState("eliminated")
 case object Mummified extends UnitState("mummified")
 
-class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int, initialRegion : Region, var onGate : Boolean = false, var state : $[UnitState] = $, var health : UnitHealth = Alive, var stolenThisDoomPhase : Boolean = false) {
+class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int, initialRegion : Region, var onGate : Boolean = false, var state : $[UnitState] = $, var health : UnitHealth = Alive) {
     // Round 9 bug fix (user-reported): every region change for an enemy unit
     // landing in an FB Cyclopean Gaze region must fire CG, regardless of
     // which action path caused it (MoveAction, SummonAction, self.place,
@@ -1014,8 +1014,7 @@ class Player(private val f : Faction)(implicit game : Game) {
     var loyaltyCards : $[LoyaltyCard] = $
     var hired : Boolean = false
     // Dunwich Horror — guards Junior Whateley "Growth" so his controller banks exactly one
-    // token per Doom Phase (reset in DoomDoneAction alongside `hired`). Per-unit theft tracking
-    // is on UnitFigure.stolenThisDoomPhase (reset for all units at doom phase end).
+    // token per Doom Phase (reset in DoomDoneAction alongside `hired`).
     var juniorGrowthDone : Boolean = false
 
     var battled : $[Region] = $
@@ -3415,7 +3414,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def whateleyCardsAvailable(f : Faction) : $[WhateleyLoyaltyCard] = {
         val pool = loyaltyCards.of[WhateleyLoyaltyCard]
         val others = factions.but(f)./~(_.loyaltyCards.of[WhateleyLoyaltyCard])
-        val availableFromOthers = if (whateleyCardsTheftThisDoom.isEmpty) others else $(  )  // If any theft occurred this phase, no more theft
+        // Each card can be stolen once per Doom Phase. Exclude cards already stolen this phase.
+        val availableFromOthers = others.%(c => !whateleyCardsTheftThisDoom.has(c))
         (pool ++ availableFromOthers).distinct
     }
 
@@ -3896,7 +3896,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // units in the same faction can be recruited in the same phase. Offered only when at least
     // one available Whateley is affordable at its current (possibly Lavinia-halved) Power cost.
     def recruitsWhateley(f : Faction)(implicit w : AskWrapper) {
-        val availableWhateleys = whateleyCardsAvailable(f).%(c => !c.unit.stolenThisDoomPhase && f.power >= laviniaCost(f, c.cost, true))
+        val availableWhateleys = whateleyCardsAvailable(f).%(c => f.power >= laviniaCost(f, c.cost, true))
         if (availableWhateleys.any && controlsLavinia(f).not)
             + WhateleyRecruitMainAction(f)
     }
@@ -3904,7 +3904,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Dunwich: Lavinia "Mother of Monsters" — for her controller this single Doom menu item
     // replaces the regular hire + Whateley recruit items (see MotherOfMonstersMainAction).
     def motherOfMonsters(f : Faction)(implicit w : AskWrapper) {
-        val availableWhateleys = whateleyCardsAvailable(f).%(c => !c.unit.stolenThisDoomPhase && f.power >= laviniaCost(f, c.cost, true))
+        val availableWhateleys = whateleyCardsAvailable(f).%(c => f.power >= laviniaCost(f, c.cost, true))
         if (controlsLavinia(f) && (motherOfMonstersCards(f).any && f.hired.not ||
             availableWhateleys.any))
             + MotherOfMonstersMainAction(f)
@@ -5016,7 +5016,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             f.acted = false
             f.hired = false
             f.juniorGrowthDone = false
-            f.units.foreach(_.stolenThisDoomPhase = false)
 
             val order = if (doomOrder.any) doomOrder else factions
             val doomIdx = order.indexOf(f)
