@@ -297,7 +297,6 @@ case object MovedForFree extends UnitState("moved-for-free")
 case object MovedForExtra extends UnitState("moved-for-extra")
 case object Eliminated extends UnitState("eliminated")
 case object Mummified extends UnitState("mummified")
-case object WhateleyLoyaltyTakenThisDoom extends UnitState("whateley-loyalty-taken-this-doom")
 
 class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int, initialRegion : Region, var onGate : Boolean = false, var state : $[UnitState] = $, var health : UnitHealth = Alive) {
     // Round 9 bug fix (user-reported): every region change for an enemy unit
@@ -1994,6 +1993,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Dunwich: Junior Whateley "Growth" banks a token each Doom Phase while he is in play;
     // "Transmogrification" spends the banked tokens on a d6 to trade Junior for any Great Old One.
     var juniorTokens : Int = 0
+    // Dunwich: Whateley Clan theft limiting — tracks which cards were stolen this Doom Phase
+    var whateleyCardsTheftThisDoom : Set[WhateleyLoyaltyCard] = Set()
 
     // Player names per faction (absent = default, not shown). See PlayerNames.
     var playerNames : Map[Faction, String] = Map()
@@ -3416,8 +3417,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def whateleyCardsAvailable(f : Faction) : $[WhateleyLoyaltyCard] = {
         val pool = loyaltyCards.of[WhateleyLoyaltyCard]
         val others = factions.but(f)./~(_.loyaltyCards.of[WhateleyLoyaltyCard])
-        val thatAlreadyStolen = others.filter(_.state.has(WhateleyLoyaltyTakenThisDoom))
-        val availableFromOthers = if (thatAlreadyStolen.isEmpty) others else $  // If any theft occurred this phase, no more theft
+        val availableFromOthers = if (whateleyCardsTheftThisDoom.isEmpty) others else $  // If any theft occurred this phase, no more theft
         (pool ++ availableFromOthers).distinct
     }
 
@@ -4653,13 +4653,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 }
             }
 
-            // Whateley Loyalty Card theft limiting: clear the "taken this Doom Phase" flag
-            // at start of Action Phase so theft can happen again next Doom Phase
-            factions.foreach { f =>
-                f.loyaltyCards.foreach { u =>
-                    u.state = u.state.but(WhateleyLoyaltyTakenThisDoom)
-                }
-            }
+            // Whateley Clan theft limiting: clear theft tracking at start of Action Phase
+            // so theft can happen again in the next Doom Phase
+            whateleyCardsTheftThisDoom = Set()
 
             log(CthulhuWarsSolo.DoubleLine)
             log("Turn", turn)
