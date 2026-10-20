@@ -2031,8 +2031,8 @@ object Overlays {
         case $("TB") =>
             faction(TB, "info:tb-background", ThousandWrithingMaws, "Ongoing",
             "2 Power Action: may Recruit/Summon two upto 2 Cost Units of same type.<br/><br/>" +
-            "<span class=ability-color>Behemoth</span> <span class=cost-color>(Ongoing):</span> Whenever TB Power reaches 0 (after Shudde M'ell has been Awakened and the Mantle is in play), place a Segment from Pool on the Mantle. Parts may be moved to the Mantle as a 0-Cost Unlimited Action.",
-            $(), $(
+            s"""${reference(TB, Behemoth)} <span class=cost-color>(Ongoing):</span> Whenever TB Power reaches 0 (after Shudde M'ell has been Awakened and the Mantle is in play), place a Segment from Pool on the Mantle. Parts may be moved to the Mantle as a 0-Cost Unlimited Action.""",
+            $(Stalk, Autotomy, Subterrane, Grasp, Ensnare, PsychicShriek), $(
             (Cadavolyte,        6, "2", "0", s"""<div class=p>Acolyte, but Gathers 0 Power</div>"""),
             (Tentacle,         10, "2", "0", s"""<div class=p>Cultist. CANNOT Build/Control Gates nor be Captured; Gathers 1 Power per Area containing Tentacle.</div>"""),
             (Chthonian,         5, "2", "1", s"""<div class=p>Monster</div>"""),
@@ -2042,7 +2042,10 @@ object Overlays {
                 <div class=p>${cost("2)")} Pay ${power(8)}. Shudde M'ell (Head) appears on the Mantle.</div>
                 <div class=p>${combat} 3 per Part in play (Head + Segments). Up to 4 Parts = up to 12 Combat.</div>"""),
             (ShuddeMellSegment, 3, "0", "0", s"""<div class=p>GOO Part. Placed via Behemoth or Autotomy.</div>""")
-        ))
+        ), setup = true, uniqueLink = true)
+        case $("TB", "Setup") => requirement("Setup first. 8 Power. 8 Tentacles, in any 8 different Map Areas. (The Mantle, your Start Area, starts not in play but in your pool.)")
+        case $("TB", ThousandWrithingMaws.name) => spellbook(ThousandWrithingMaws.name, "Ongoing, not optional", "Tentacles cannot Build nor Control Gates, nor be Captured. Gain no Power from the Cadavolytes during Gather Power, but gain 1 Power per Area containing a Tentacle. 2 Power Action: may Recruit/Summon two up to 2-Cost Units of the same type.")
+        case $("TB", Behemoth.name) => spellbook(Behemoth.name, "Ongoing", "Whenever TB Power reaches 0 (after Shudde M'ell has been Awakened and the Mantle is in play), place a Segment from Pool on the Mantle. Parts may be moved to the Mantle as a 0-Cost Unlimited Action.")
         case $("TB", OverlayMantleReq.text) => requirement("Control Gates in 2 adjacent Areas, then overlay the Mantle.")
         case $("TB", TenTentaclesReq.text) => requirement("There are 10 Tentacles in play.")
         case $("TB", RemoveGatePlaceChthonianReq.text) => requirement("Anytime, Gain 2 Power, then remove a Gate you Control, and place a Chthonian in an Area your Units occupy.")
@@ -3171,7 +3174,7 @@ object Overlays {
     def factionPlayerName(f : Faction) : String = currentGame./~(_.playerNames.get(f))./(n =>
         s"""<span style="color:white; font-size:55%; font-variant:normal; margin-left:0.6em; white-space:nowrap;">${n}</span>""").|("")
 
-    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "", setup : Boolean = false, sbLine : String = "") = {
+    def faction(f : Faction, background : String, unique : Spellbook, uniquePhase : String, uniqueText : String, miscSpellbooks : $[Spellbook], units : $[(UnitClass, Int, String, String, String)], footer : String = "", setup : Boolean = false, sbLine : String = "", uniqueLink : Boolean = false) = {
         val backgroundUrl = if (background.startsWith("data:")) background else imageSource(background)
         s"""
         <table class="faction-table" style="background-image:url(${backgroundUrl})">
@@ -3198,7 +3201,10 @@ object Overlays {
                             <div class="h1 abaddon">${f.name}${factionPlayerName(f)}</div>
                             <div class="border-outer">
                                 <div class="border-inner">
-                                    <span class=ability-color>${unique.name}</span>
+                                    ${
+                                        if (uniqueLink) reference(f, unique)
+                                        else s"""<span class=ability-color>${unique.name}</span>"""
+                                    }
                                     <span class=cost-color>(${uniquePhase}):</span>
                                     <span>${uniqueText}</span>
                                 </div>
