@@ -458,7 +458,7 @@ object NeutralMonstersExpansion extends Expansion {
         // ── DUNWICH LAVINIA "MOTHER OF MONSTERS" ──
         case MotherOfMonstersMainAction(self) =>
             val cards = self.hired.not.??(game.motherOfMonstersCards(self))
-            val whateleys = self.whateleyRecruited.not.??(game.whateleyCardsAvailable(self).%(c => self.power >= game.laviniaCost(self, c.cost, true)).sortBy(_.unit.name))
+            val whateleys = game.whateleyCardsAvailable(self).%(c => !c.unit.stolenThisDoomPhase && self.power >= game.laviniaCost(self, c.cost, true)).sortBy(_.unit.name)
 
             var ask = Ask(self).group("Mother of Monsters".styled("nt") + " — half cost")
             val monsters = cards.of[NeutralMonsterLoyaltyCard]
@@ -499,7 +499,7 @@ object NeutralMonstersExpansion extends Expansion {
         // ── DUNWICH WHATELEY CLAN RECRUIT ──
         case WhateleyRecruitMainAction(self) =>
             val avail = game.whateleyCardsAvailable(self)
-                .%(c => self.power >= game.laviniaCost(self, c.cost, true))
+                .%(c => !c.unit.stolenThisDoomPhase && self.power >= game.laviniaCost(self, c.cost, true))
                 .sortBy(_.unit.name)
             Ask(self).group("Recruit " + "Whateley Clan".styled("nt"))
                 .list(avail./(c => WhateleyRecruitAction(self, c)))
@@ -513,7 +513,6 @@ object NeutralMonstersExpansion extends Expansion {
             factions.foreach(o => o.loyaltyCards :-= card)   // take from any prior owner
             game.loyaltyCards :-= card                        // or from the unclaimed pool
             self.loyaltyCards :+= card                        // card (+ banked tokens/gates) moves
-            self.whateleyRecruited = true
 
             // Track card as stolen this Doom Phase if taken from another faction (not from pool)
             if (prior.isDefined) {
@@ -532,11 +531,15 @@ object NeutralMonstersExpansion extends Expansion {
                 case Some(u) =>
                     val r = u.region
                     u.faction.units :-= u
-                    self.units :+= new UnitFigure(self, card.unit, self.units.%(_.uclass == card.unit).num + 1, r)
+                    val newUnit = new UnitFigure(self, card.unit, self.units.%(_.uclass == card.unit).num + 1, r)
+                    newUnit.stolenThisDoomPhase = true
+                    self.units :+= newUnit
                     self.log(card.unit.styled(self), "changed control in", r)
                     CheckSpellbooksAction(DoomAction(self))
                 case None =>
-                    self.units :+= new UnitFigure(self, card.unit, self.units.%(_.uclass == card.unit).num + 1, self.reserve)
+                    val newUnit = new UnitFigure(self, card.unit, self.units.%(_.uclass == card.unit).num + 1, self.reserve)
+                    newUnit.stolenThisDoomPhase = (prior.isDefined)
+                    self.units :+= newUnit
                     Ask(self).group("Place " + card.unit.styled(self))
                         .each(areas ++ game.factions.has(BB).??($(BB.moon)))(r => WhateleyPlaceAction(self, card, r))
             }

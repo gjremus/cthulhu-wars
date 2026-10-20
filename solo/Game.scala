@@ -298,7 +298,7 @@ case object MovedForExtra extends UnitState("moved-for-extra")
 case object Eliminated extends UnitState("eliminated")
 case object Mummified extends UnitState("mummified")
 
-class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int, initialRegion : Region, var onGate : Boolean = false, var state : $[UnitState] = $, var health : UnitHealth = Alive) {
+class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int, initialRegion : Region, var onGate : Boolean = false, var state : $[UnitState] = $, var health : UnitHealth = Alive, var stolenThisDoomPhase : Boolean = false) {
     // Round 9 bug fix (user-reported): every region change for an enemy unit
     // landing in an FB Cyclopean Gaze region must fire CG, regardless of
     // which action path caused it (MoveAction, SummonAction, self.place,
@@ -1013,11 +1013,9 @@ class Player(private val f : Faction)(implicit game : Game) {
     var revealed : $[ElderSign] = $
     var loyaltyCards : $[LoyaltyCard] = $
     var hired : Boolean = false
-    // Dunwich Horror — one Whateley Clan recruit per faction per Doom Phase (reset in
-    // DoomDoneAction alongside `hired`).
-    var whateleyRecruited : Boolean = false
     // Dunwich Horror — guards Junior Whateley "Growth" so his controller banks exactly one
-    // token per Doom Phase (reset in DoomDoneAction alongside `hired`).
+    // token per Doom Phase (reset in DoomDoneAction alongside `hired`). Per-unit theft tracking
+    // is on UnitFigure.stolenThisDoomPhase (reset for all units at doom phase end).
     var juniorGrowthDone : Boolean = false
 
     var battled : $[Region] = $
@@ -3892,20 +3890,23 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             + LoyaltyCardDoomAction(f)
     }
 
-    // Dunwich Horror — Whateley Clan recruit (Doom Phase, once per faction per phase). A
+    // Dunwich Horror — Whateley Clan recruit (Doom Phase, once per unit per phase). A
     // separate group from the neutral-card hire because a Whateley can be taken from
-    // another owner. Offered only when at least one available Whateley is affordable at
-    // its current (possibly Lavinia-halved) Power cost.
+    // another owner. Each unit can only be stolen/recruited once per Doom Phase, but different
+    // units in the same faction can be recruited in the same phase. Offered only when at least
+    // one available Whateley is affordable at its current (possibly Lavinia-halved) Power cost.
     def recruitsWhateley(f : Faction)(implicit w : AskWrapper) {
-        if (f.whateleyRecruited.not && controlsLavinia(f).not && whateleyCardsAvailable(f).exists(c => f.power >= laviniaCost(f, c.cost, true)))
+        val availableWhateleys = whateleyCardsAvailable(f).%(c => !c.unit.stolenThisDoomPhase && f.power >= laviniaCost(f, c.cost, true))
+        if (availableWhateleys.any && controlsLavinia(f).not)
             + WhateleyRecruitMainAction(f)
     }
 
     // Dunwich: Lavinia "Mother of Monsters" — for her controller this single Doom menu item
     // replaces the regular hire + Whateley recruit items (see MotherOfMonstersMainAction).
     def motherOfMonsters(f : Faction)(implicit w : AskWrapper) {
+        val availableWhateleys = whateleyCardsAvailable(f).%(c => !c.unit.stolenThisDoomPhase && f.power >= laviniaCost(f, c.cost, true))
         if (controlsLavinia(f) && (motherOfMonstersCards(f).any && f.hired.not ||
-            f.whateleyRecruited.not && whateleyCardsAvailable(f).exists(c => f.power >= laviniaCost(f, c.cost, true))))
+            availableWhateleys.any))
             + MotherOfMonstersMainAction(f)
     }
 
@@ -5014,8 +5015,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             f.acted = false
             f.hired = false
-            f.whateleyRecruited = false
             f.juniorGrowthDone = false
+            f.units.foreach(_.stolenThisDoomPhase = false)
 
             val order = if (doomOrder.any) doomOrder else factions
             val doomIdx = order.indexOf(f)
