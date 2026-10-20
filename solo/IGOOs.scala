@@ -323,11 +323,30 @@ case class AwakenDireYogViaSpawnAction(self : Faction, cost : Int) extends BaseF
 case class AwakenDireYogViaSpawnAtAction(self : Faction, r : Region, cost : Int) extends BaseFactionAction(
     implicit g => "Replace " + SpawnOW.styled(self) + " with " + DireYogSothoth.styled(self),
     implicit g => SpawnOW.styled(self) + " in " + r + " — " + cost + " " + "Power".styled("power") + " — Opener of the Way")
+// Wrapper with overlay link for Dire Yog awakening menu
+case class AwakenDireYogViaSpawnAtMainAction(self : Faction, r : Region, cost : Int) extends OptionFactionAction(g => {
+    val qm = Overlays.imageSource("question-mark")
+    val p = s""""Dire Yog-Sothoth", false""".replace('"'.toString, "&quot;")
+    "<div class=sbdiv>" +
+        "Awaken " + "Dire Yog-Sothoth".styled("nt") + " (via " + SpawnOW.styled(self) + " in " + r + ")" +
+    s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" />""" +
+    "</div>"
+}) with MainQuestion with Soft
 // Route 2 — All other factions: replace your most expensive Monster or Terror; cost = 10
 // minus that unit's cost (may be negative → gain Power, like Cthugha).
 case class AwakenDireYogGenericAction(self : Faction, r : Region, victim : UnitClass, cost : Int) extends BaseFactionAction(
     implicit g => "Replace with " + DireYogSothoth.styled(self),
     implicit g => victim.styled(self) + " in " + r + " — " + (if (cost >= 0) cost + " " + "Power".styled("power") else "Gain " + (-cost) + " " + "Power".styled("power")))
+// Wrapper with overlay link for Dire Yog generic awakening menu
+case class AwakenDireYogGenericMainAction(self : Faction, r : Region, victim : UnitClass, cost : Int) extends OptionFactionAction(g => {
+    val qm = Overlays.imageSource("question-mark")
+    val p = s""""Dire Yog-Sothoth", false""".replace('"'.toString, "&quot;")
+    val costText = if (cost >= 0) cost + " " + "Power".styled("power") else "Gain " + (-cost) + " " + "Power".styled("power")
+    "<div class=sbdiv>" +
+        "Awaken " + "Dire Yog-Sothoth".styled("nt") + " (via " + victim.styled(self) + " in " + r + " — " + costText + ")" +
+    s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" />""" +
+    "</div>"
+}) with MainQuestion with Soft
 
 // To Rule Them All (Action: Cost 4) — Dire Yog-Sothoth captures an enemy Great Old One,
 // reusing the Capture Cultist prison economy (held on the captor's card, returned in
@@ -920,6 +939,9 @@ object IGOOsExpansion extends Expansion {
                 EndAction(self)
             }
 
+        case AwakenDireYogViaSpawnAtMainAction(self, r, cost) =>
+            Force(AwakenDireYogViaSpawnAtAction(self, r, cost))
+
         case AwakenDireYogViaSpawnAtAction(self, r, cost) =>
             val spawns = self.at(r).%(_.uclass == SpawnOW)
             if (spawns.none || !game.loyaltyCards.has(DireYogSothothCard) || self.affords(cost)(r).not) {
@@ -948,6 +970,9 @@ object IGOOsExpansion extends Expansion {
 
         // Route 2 — All other factions: replace your most expensive Monster or Terror,
         // cost = 10 - that unit's cost (may be negative → gain Power, like Cthugha).
+        case AwakenDireYogGenericMainAction(self, r, victimClass, cost) =>
+            Force(AwakenDireYogGenericAction(self, r, victimClass, cost))
+
         case AwakenDireYogGenericAction(self, r, victimClass, cost) =>
             val victims = self.at(r).%(_.uclass == victimClass)
             if (victims.none) {
@@ -1085,11 +1110,11 @@ object IGOOsExpansion extends Expansion {
             val direYogAvailable = game.loyaltyCards.has(DireYogSothothCard) && !game.dcTenebrosumGuard
             // Route 1 — Opener of the Way: same requirements as awakening Yog-Sothoth.
             val direYogSpawnEntry : $[IGOOEntry] =
-                direYogAvailable.??(game.direYogOpenerRegions(self)./(r => IGOOEntry("Dire Yog-Sothoth", AwakenDireYogViaSpawnAtAction(self, r, 6))))
+                direYogAvailable.??(game.direYogOpenerRegions(self)./(r => IGOOEntry("Dire Yog-Sothoth", AwakenDireYogViaSpawnAtMainAction(self, r, 6))))
             // Route 2 — All other factions: a GOO in play + your most expensive Monster
             // or Terror in play, in any Area holding one; cost = 10 - that unit's cost.
             val direYogGenericEntry : $[IGOOEntry] =
-                direYogAvailable.??(game.direYogGenericOptions(self)./ { case (r, uc, cost) => IGOOEntry("Dire Yog-Sothoth", AwakenDireYogGenericAction(self, r, uc, cost)) })
+                direYogAvailable.??(game.direYogGenericOptions(self)./ { case (r, uc, cost) => IGOOEntry("Dire Yog-Sothoth", AwakenDireYogGenericMainAction(self, r, uc, cost)) })
 
             val sorted = (standardEntries ++ cthughaEntry ++ azathothEntry ++ bokrugEntry ++ direYogSpawnEntry ++ direYogGenericEntry).sortBy(_.name)
 
