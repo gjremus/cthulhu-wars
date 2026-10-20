@@ -1418,7 +1418,14 @@ case class SummonFromPoolAction(self : Faction, uc : UnitClass, r : Region) exte
 case class SummonFromVelvetFanAction(self : Faction, uc : UnitClass, r : Region) extends BaseFactionAction(implicit g => "Summon " + uc.styled(self) + " from Velvet Fan" + g.forNPowerWithTax(r, self, self.summonCost(uc, r)) + " in", implicit g => r + self.iced(r))
 case class SummonedAction(self : Faction, uc : UnitClass, r : Region, l : $[Region]) extends ForcedAction
 
-case class AwakenMainAction(self : Faction, uc : UnitClass, l : $[Region]) extends OptionFactionAction("Awaken " + uc.styled(self)) with MainQuestion with Soft
+case class AwakenMainAction(self : Faction, uc : UnitClass, l : $[Region]) extends OptionFactionAction(g => {
+    val qm = Overlays.imageSource("question-mark")
+    val p = s""""${uc.name.replace('\\'.toString, '\\'.toString + '\\'.toString)}", false""".replace('"'.toString, "&quot;")
+    "<div class=sbdiv>" +
+        "Awaken " + uc.styled(self) +
+    s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" />""" +
+    "</div>"
+}) with MainQuestion with Soft
 case class AwakenAction(self : Faction, uc : UnitClass, r : Region, cost : Int) extends BaseFactionAction(g => "Awaken " + uc.styled(self) + g.forNPowerWithTax(r, self, cost, false) + " in", implicit g => r + self.iced(r))
 case class AwakenedAction(self : Faction, uc : UnitClass, r : Region, cost : Int) extends ForcedAction
 
