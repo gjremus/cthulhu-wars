@@ -3417,7 +3417,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def whateleyCardsAvailable(f : Faction) : $[WhateleyLoyaltyCard] = {
         val pool = loyaltyCards.of[WhateleyLoyaltyCard]
         val others = factions.but(f)./~(_.loyaltyCards.of[WhateleyLoyaltyCard])
-        val availableFromOthers = if (whateleyCardsTheftThisDoom.isEmpty) others else $  // If any theft occurred this phase, no more theft
+        val availableFromOthers = if (whateleyCardsTheftThisDoom.isEmpty) others else $(  )  // If any theft occurred this phase, no more theft
         (pool ++ availableFromOthers).distinct
     }
 
