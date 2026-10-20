@@ -3415,7 +3415,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val pool = loyaltyCards.of[WhateleyLoyaltyCard]
         val others = factions.but(f)./~(_.loyaltyCards.of[WhateleyLoyaltyCard])
         // Each card can be stolen once per Doom Phase. Exclude cards already stolen this phase.
-        val availableFromOthers = others.%(c => !whateleyCardsTheftThisDoom.has(c))
+        val availableFromOthers = others.%(c => !whateleyCardsTheftThisDoom.contains(c))
         (pool ++ availableFromOthers).distinct
     }
 
