@@ -614,6 +614,7 @@ object Overlays {
         // Shared common text — back of all four Whateley cards. Each Whateley card
         // links here via onExternalClick('How to Recruit Whateley Clan').
         case $("How to Recruit Whateley Clan") => whateleyClanCommonText
+        case $("WhateleyTheftLimiting") => "<span class='nt'>Limit Whateley Clan members to one loyalty card claim (either purchase or theft) per Doom Phase.</span>"
 
         case _ => ""
     }).but("")

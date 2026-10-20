@@ -297,6 +297,7 @@ case object MovedForFree extends UnitState("moved-for-free")
 case object MovedForExtra extends UnitState("moved-for-extra")
 case object Eliminated extends UnitState("eliminated")
 case object Mummified extends UnitState("mummified")
+case object WhateleyLoyaltyTakenThisDoom extends UnitState("whateley-loyalty-taken-this-doom")
 
 class UnitFigure(val faction : Faction, val uclass : UnitClass, val index : Int, initialRegion : Region, var onGate : Boolean = false, var state : $[UnitState] = $, var health : UnitHealth = Alive) {
     // Round 9 bug fix (user-reported): every region change for an enemy unit
@@ -3409,13 +3410,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Dunwich Horror — the Whateley Clan cards f can recruit right now: the four cards
     // NOT currently held by f, whether still unclaimed (game pool) or held by another
     // faction (which can be taken away, the miniature staying put).
+    // Theft limiting: once a Whateley card is stolen in the current Doom Phase, no other
+    // Whateley cards can be stolen that same phase. First-time theft during initial acquisition
+    // is always allowed.
     def whateleyCardsAvailable(f : Faction) : $[WhateleyLoyaltyCard] = {
         val pool = loyaltyCards.of[WhateleyLoyaltyCard]
         val others = factions.but(f)./~(_.loyaltyCards.of[WhateleyLoyaltyCard])
-        // Something About Cats task — "theft" (taking a Whateley card from a rival) is only offered
-        // when explicitly enabled in setup; it is disabled by default (WhateleyTheftAllowed absent),
-        // in which case only still-unclaimed pool cards may be recruited.
-        (if (options.has(WhateleyTheftAllowed)) pool ++ others else pool).distinct
+        val thatAlreadyStolen = others.filter(_.state.has(WhateleyLoyaltyTakenThisDoom))
+        val availableFromOthers = if (thatAlreadyStolen.isEmpty) others else $  // If any theft occurred this phase, no more theft
+        (pool ++ availableFromOthers).distinct
     }
 
     // Dunwich Horror — dynamic recruit-menu label: "Lavinia Whateley for 2 Power", or
@@ -4647,6 +4650,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             factions.foreach { f =>
                 if (f.oncePerGame.has(NuclearChaos) && f.upgrades.has(NuclearChaos)) {
                     f.oncePerGame = f.oncePerGame.but(NuclearChaos)
+                }
+            }
+
+            // Whateley Loyalty Card theft limiting: clear the "taken this Doom Phase" flag
+            // at start of Action Phase so theft can happen again next Doom Phase
+            factions.foreach { f =>
+                f.loyaltyCards.foreach { u =>
+                    u.state = u.state.but(WhateleyLoyaltyTakenThisDoom)
                 }
             }
 

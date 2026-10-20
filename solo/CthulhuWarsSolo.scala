@@ -5338,7 +5338,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, WilburWhateleyCard, UseWilburWhateley, setup.options.has(WhateleyClan)) ++
                     useWith(setup, WizardWhateleyCard, UseWizardWhateley, setup.options.has(WhateleyClan)) ++
                     (setup.options.of[LoyaltyCardGameOption].exists(_.lc.is[WhateleyLoyaltyCard]))
-                        .$("Variants" -> ("Whateley Clan Unit Theft - Disable (" + setup.get(WhateleyTheftAllowed).?("no").|("yes").hl + ")")) ++
+                        .$("Variants" -> ("Whateley Clan theft limiting (1 theft per Doom Phase) <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"WhateleyTheftLimiting\")'>?</span>")) ++
                     (factions.has(SL) && factions.has(WW))
                         .$("Variants" -> ("" + IceAge + " affects " + Lethargy + " (" + setup.get(IceAgeAffectsLethargy).?("yes").|("no").hl + ")")) ++
                     (factions.has(OW) && factions.num == 4)
@@ -5490,9 +5490,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1; if (n == 0) { setup.toggle(UseLaviniaWhateley); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseWilburWhateley); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseWizardWhateley); setupQuestions() }
-                        }
-                        if (setup.options.of[LoyaltyCardGameOption].exists(_.lc.is[WhateleyLoyaltyCard])) {
-                            n -= 1; if (n == 0) { setup.toggle(WhateleyTheftAllowed); setupQuestions() }
                         }
                         if (factions.has(SL) && factions.has(WW)) {
                             n -= 1
@@ -5723,7 +5720,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     useWith(setup, WilburWhateleyCard, UseWilburWhateley, setup.options.has(WhateleyClan)) ++
                     useWith(setup, WizardWhateleyCard, UseWizardWhateley, setup.options.has(WhateleyClan)) ++
                     (setup.options.of[LoyaltyCardGameOption].exists(_.lc.is[WhateleyLoyaltyCard]))
-                        .$("Variants" -> ("Whateley Clan Unit Theft - Disable (" + setup.get(WhateleyTheftAllowed).?("no").|("yes").hl + ")")) ++
+                        .$("Variants" -> ("Whateley Clan theft limiting (1 theft per Doom Phase) <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"WhateleyTheftLimiting\")'>?</span>")) ++
                     (factions.has(SL) && factions.has(WW))
                         .$("Variants" -> ("" + IceAge + " affects " + Lethargy + " (" + setup.get(IceAgeAffectsLethargy).?("yes").|("no").hl + ")")) ++
                     (factions.has(OW) && factions.num == 4)
@@ -5878,9 +5875,6 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1; if (n == 0) { setup.toggle(UseLaviniaWhateley); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseWilburWhateley); setupQuestions() }
                             n -= 1; if (n == 0) { setup.toggle(UseWizardWhateley); setupQuestions() }
-                        }
-                        if (setup.options.of[LoyaltyCardGameOption].exists(_.lc.is[WhateleyLoyaltyCard])) {
-                            n -= 1; if (n == 0) { setup.toggle(WhateleyTheftAllowed); setupQuestions() }
                         }
                         if (factions.has(SL) && factions.has(WW)) {
                             n -= 1

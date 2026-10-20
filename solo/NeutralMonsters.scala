@@ -515,6 +515,11 @@ object NeutralMonstersExpansion extends Expansion {
             self.loyaltyCards :+= card                        // card (+ banked tokens/gates) moves
             self.whateleyRecruited = true
 
+            // Mark card as taken this Doom Phase if stolen from another faction (not from pool)
+            if (prior.isDefined) {
+                prior.get.loyaltyCards.find(_.uclass == card.unit).foreach(u => u.state :+= WhateleyLoyaltyTakenThisDoom)
+            }
+
             prior match {
                 case Some(o) => self.log("recruited", card.short, "for", cost.power, "(taken from", o.full + ")")
                 case None    => self.log("recruited", card.short, "for", cost.power)
