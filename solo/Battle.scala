@@ -2879,6 +2879,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     val mummiesHere = swSide.forces.%(_.uclass == HybridMummy).num
                     val nitokrisHere = swSide.forces.%(_.uclass == QueenNitokris).any
                     val candidates = enemySide.forces.%(u => u.uclass.utype == Monster && u.health == Pained)./(_.ref)
+                    log(f"[SW KIDNAP DEBUG] nitokrisHere=$nitokrisHere mummiesHere=$mummiesHere minMummies=${SWValues.Kidnap_minMummies} painedMonsters=${candidates.num}")
                     if (nitokrisHere && mummiesHere >= SWValues.Kidnap_minMummies && candidates.any) {
                         SW.oncePerAction :+= Kidnap
                         return Ask(SW).each(candidates)(v => SWKidnapAction(SW, enemy, v)).add(SWKidnapSkipAction(SW, enemy))
