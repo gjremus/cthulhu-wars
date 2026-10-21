@@ -323,30 +323,13 @@ case class AwakenDireYogViaSpawnAction(self : Faction, cost : Int) extends BaseF
 case class AwakenDireYogViaSpawnAtAction(self : Faction, r : Region, cost : Int) extends BaseFactionAction(
     implicit g => "Replace " + SpawnOW.styled(self) + " with " + DireYogSothoth.styled(self),
     implicit g => SpawnOW.styled(self) + " in " + r + " — " + cost + " " + "Power".styled("power") + " — Opener of the Way")
-// Wrapper with overlay link for Dire Yog awakening menu
-case class AwakenDireYogViaSpawnAtMainAction(self : Faction, r : Region, cost : Int) extends OptionFactionAction(g => {
-    val qm = Overlays.imageSource("question-mark")
-    val p = s""""Dire Yog-Sothoth", false""".replace('"'.toString, "&quot;")
-    "<div class=sbdiv>" +
-        "Awaken " + "Dire Yog-Sothoth".styled("nt") + " (via " + SpawnOW.styled(self) + " in " + r + ")" +
-    s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" />""" +
-    "</div>"
-}) with MainQuestion with Soft
+case class AwakenDireYogViaSpawnAtMainAction(self : Faction, r : Region, cost : Int) extends OptionFactionAction("Awaken " + "Dire Yog-Sothoth".styled("nt") + " (via Spawn)") with MainQuestion with Soft
 // Route 2 — All other factions: replace your most expensive Monster or Terror; cost = 10
 // minus that unit's cost (may be negative → gain Power, like Cthugha).
 case class AwakenDireYogGenericAction(self : Faction, r : Region, victim : UnitClass, cost : Int) extends BaseFactionAction(
     implicit g => "Replace with " + DireYogSothoth.styled(self),
     implicit g => victim.styled(self) + " in " + r + " — " + (if (cost >= 0) cost + " " + "Power".styled("power") else "Gain " + (-cost) + " " + "Power".styled("power")))
-// Wrapper with overlay link for Dire Yog generic awakening menu
-case class AwakenDireYogGenericMainAction(self : Faction, r : Region, victim : UnitClass, cost : Int) extends OptionFactionAction(g => {
-    val qm = Overlays.imageSource("question-mark")
-    val p = s""""Dire Yog-Sothoth", false""".replace('"'.toString, "&quot;")
-    val costText = if (cost >= 0) cost + " " + "Power".styled("power") else "Gain " + (-cost) + " " + "Power".styled("power")
-    "<div class=sbdiv>" +
-        "Awaken " + "Dire Yog-Sothoth".styled("nt") + " (via " + victim.styled(self) + " in " + r + " — " + costText + ")" +
-    s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" />""" +
-    "</div>"
-}) with MainQuestion with Soft
+case class AwakenDireYogGenericMainAction(self : Faction, r : Region, victim : UnitClass, cost : Int) extends OptionFactionAction(implicit g => "Awaken " + "Dire Yog-Sothoth".styled("nt") + " (via " + victim.styled(self) + ")") with MainQuestion with Soft
 
 // To Rule Them All (Action: Cost 4) — Dire Yog-Sothoth captures an enemy Great Old One,
 // reusing the Capture Cultist prison economy (held on the captor's card, returned in
