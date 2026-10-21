@@ -331,11 +331,18 @@ object SWExpansion extends Expansion {
             val sphinxRegions = game.board.regions.%(r => f.gates.has(r) && f.pool.%(_.uclass == BlackSphinx).any &&
                 f.at(r).%(_.uclass.utype == Monster).not(Zeroed).any)
             // Button gating: Awaken Black Sphinx cost is dynamic (8 - victim.cost - kidnapDiscount),
-            // minimum 0. Only offer button if there's a region with a gate, Black Sphinx in pool,
-            // and at least one monster available. The specific affordability check happens when the
-            // player selects which monster to sacrifice (SWAwakenSphinxRegionAction). This staged
-            // gating is acceptable because the cost is too dynamic to pre-calculate efficiently.
-            if (sphinxRegions.any)
+            // minimum 0. Only offer button if:
+            // 1) There's a region with a gate and Black Sphinx in pool
+            // 2) At least one monster exists in such a region
+            // 3) SW has the power to afford awakening with at least one of those monsters
+            val canAwakenSphinx = sphinxRegions.exists(r => {
+                f.at(r).%(_.uclass.utype == Monster).not(Zeroed).exists(v => {
+                    val kidnapDiscount = game.swKidnapped.has(v.ref).??(SWValues.BlackSphinx_kidnapDiscount)
+                    val cost = math.max(0, SWValues.BlackSphinx_awakenBaseCost - v.uclass.cost - kidnapDiscount)
+                    f.canSpend(cost)
+                })
+            })
+            if (canAwakenSphinx)
                 + SWAwakenSphinxMainAction(f)
 
             val pitRegions = bottomlessPitRegions.%(r => game.factions.but(f).exists(e => e.at(r).%(_.uclass.utype == Monster).not(Zeroed).any))
