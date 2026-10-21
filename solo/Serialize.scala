@@ -12,6 +12,9 @@ class Serialize(val game : Game) {
     import Serialize._
 
     def write(o : Any) : String = o match {
+        // null only comes from legacy saved moves whose field was the bare "UnitFigure" token
+        // (parsed back to null below); write the same token so they round-trip unchanged.
+        case null => "UnitFigure"
         case b : Boolean => b.toString
         case n : Int => n.toString
         case s : String if s.contains("\"") => "\"\"\"" + s + "\"\"\""
@@ -160,6 +163,7 @@ class Serialize(val game : Game) {
                 .orElse(parseRegion(s).map(_.asInstanceOf[Any]))
                 .orElse(parseLoyaltyCard(s))
                 .orElse(parseSymbol(s))
+                .orElse(parseRequirement(s))
                 .getOrElse(throw new IllegalArgumentException(s"Unknown symbol: $s"))
 
         case EInt(n) => n
@@ -256,6 +260,13 @@ class Serialize(val game : Game) {
     }
 
     def parseRegion(s : String) : |[Region] = (game.board.regions :+ SL.slumber :+ GC.deep :+ TB.mantle :+ BB.moon).find(_.id == s)
+
+    // Requirement is not a Record, so reflection can't load it (Asteroid Cat "Abandoned to Lusts"
+    // saves one, e.g. Spread4 -> "Unknown symbol: Spread4"). Match the written class name against
+    // the requirements of the factions in this game.
+    def parseRequirement(s : String) : |[Any] =
+        (game.setup./~(f => f.requirements(game.providedOptions)) ++ game.setup./~(f => f.requirements($)))
+            .find(r => r.getClass.getSimpleName.stripSuffix("$") == s)
 }
 
 object Serialize {

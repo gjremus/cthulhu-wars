@@ -333,7 +333,9 @@ case class AsteroidCatAbandonedMainAction(self : Faction) extends OptionFactionA
 case class AsteroidCatChooseFactionAction(self : Faction, target : Faction) extends BaseFactionAction(implicit g => "Abandoned to Lusts".styled("nt") + " — " + target.full, target.full) {
     override def question(implicit game : Game) = self.full + " — " + "Abandoned to Lusts".styled("nt") + " — Place cat on " + target.full + "'s spellbook slot"
 }
-case class AsteroidCatChooseRequirementAction(self : Faction, target : Faction, req : Requirement, cat : UnitFigure) extends BaseFactionAction(implicit g => "Place cat on " + target.short + "'s spellbook slot", implicit g => req.text.styled(target)) {
+// cat is a UnitRef (NOT UnitFigure): UnitFigure has no serializer, so it was saved as the bare
+// word "UnitFigure" and replayed as null -> crash. Old saved moves still carry null; see handler.
+case class AsteroidCatChooseRequirementAction(self : Faction, target : Faction, req : Requirement, cat : UnitRef) extends BaseFactionAction(implicit g => "Place cat on " + target.short + "'s spellbook slot", implicit g => "<span class='" + target.style + "'>" + req.text + "</span>") {
     override def question(implicit game : Game) = self.full + " — " + "Abandoned to Lusts".styled("nt") + " — " + target.full
 }
 // Asteroid Cat: return flow when enemy fulfills the blocked requirement
@@ -345,6 +347,13 @@ case class AsteroidCatReturnPlaceAction(self : Faction, catRef : UnitRef, r : Re
 case class AsteroidCatOwnerPicksSpellbookAction(self : Faction, target : Faction, req : Requirement, chosen : Spellbook, next : ForcedAction) extends BaseFactionAction(implicit g => "Abandoned to Lusts".styled("nt") + " — choose " + target.short + "'s Spellbook", implicit g => chosen.styled(target))
 
 object NeutralMonstersExpansion extends Expansion {
+    // Asteroid Cat (Abandoned to Lusts): the on-map cat used against `target` — one that shares an
+    // Area with a target Unit (per the card), falling back to any free on-map cat.
+    def asteroidCatFor(self : Faction, target : Faction)(implicit game : Game) : Option[UnitFigure] = {
+        val free = self.all(AsteroidCat).%(c => !game.asteroidCatOnSpellbook.contains(c.ref))
+        free.%(c => target.at(c.region).any).headOption.orElse(free.headOption)
+    }
+
     // Shared post-payment placement for a hired Monster/Terror Loyalty Card — used by the normal
     // hire (NeutralMonstersAction) and Lavinia's halved-cost hire (MotherOfMonstersCardAction).
     def placeHiredCard(self : Faction, lc : LoyaltyCard)(implicit game : Game) : Continue = {
@@ -870,21 +879,27 @@ object NeutralMonstersExpansion extends Expansion {
         case AsteroidCatChooseFactionAction(self, target) =>
             val blockedReqs = game.asteroidCatOnSpellbook.values.%(t => t._1 == target)./(t => t._2).toList
             val unblocked = target.unfulfilled.diff(blockedReqs)
-            // Pick the first cat ON THE MAP (not in pool, not already on a slot)
-            val availableCats = self.all(AsteroidCat).%(cat => !game.asteroidCatOnSpellbook.contains(cat.ref))
-            if (availableCats.any && unblocked.any) {
-                val cat = availableCats.head
-                Ask(self).each(unblocked)(req => AsteroidCatChooseRequirementAction(self, target, req, cat)).cancel
+            val cat = NeutralMonstersExpansion.asteroidCatFor(self, target)
+            if (cat.any && unblocked.any) {
+                Ask(self).each(unblocked)(req => AsteroidCatChooseRequirementAction(self, target, req, cat.get.ref)).cancel
             } else {
                 self.log("no available", AsteroidCat.styled(self), "or unblocked slots")
                 EndAction(self)
             }
 
-        case AsteroidCatChooseRequirementAction(self, target, req, cat) =>
-            cat.region = self.reserve
-            game.asteroidCatOnSpellbook = game.asteroidCatOnSpellbook + (cat.ref -> (target, req))
-            self.log("Abandoned to Lusts".styled("nt") + ":", AsteroidCat.styled(self), "placed on", target.full + "'s", req.text.styled(target), "slot")
-            Then(EndAction(self))
+        case AsteroidCatChooseRequirementAction(self, target, req, catRefOrNull) =>
+            // Legacy saved moves (pre-fix) replay with cat = null; re-derive the same cat.
+            val catOpt = Option(catRefOrNull).map(game.unit).orElse(NeutralMonstersExpansion.asteroidCatFor(self, target))
+            if (catOpt.isEmpty) {
+                self.log("no available", AsteroidCat.styled(self))
+                Then(EndAction(self))
+            } else {
+                val cat = catOpt.get
+                cat.region = self.reserve
+                game.asteroidCatOnSpellbook = game.asteroidCatOnSpellbook + (cat.ref -> (target, req))
+                self.log("Abandoned to Lusts".styled("nt") + ":", AsteroidCat.styled(self), "placed on", target.full + "'s", "<span class='" + target.style + "'>" + req.text + "</span>", "slot")
+                Then(EndAction(self))
+            }
 
         case AsteroidCatReturnChooseRegionAction(self, catRef, target, req, next) =>
             val controlledGates = self.gates.onMap
