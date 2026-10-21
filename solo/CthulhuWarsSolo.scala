@@ -1198,8 +1198,8 @@ object CthulhuWarsSolo {
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
                         // Colour Out of Space (CS): acolyte unit sprite
                         case CS => DrawRect("cs-acolyte", None, x - 17, y - 54, 34, 60)
-                        // Sphinx Worshippers (SW): placeholder acolyte sprite (reuse dc-acolyte tinted)
-                        case SW => DrawRect("dc-acolyte", |(tint), x - 17, y - 54, 39, 60)
+                        // Sphinx Worshippers (SW): acolyte sprite
+                        case SW => DrawRect("sw-acolyte", None, x - 17, y - 54, 39, 60)
                         case _ => null
                     }
 
@@ -1622,11 +1622,9 @@ object CthulhuWarsSolo {
                     case TRBDeath       => DrawRect("trb-death", None, x - 35, y - 75, 70, 85)
 
                     // Sphinx Worshippers (SW): real art for Pharoah Kephren, Queen Nitokris and
-                    // Black Sphinx (downloaded from the designer); Hybrid Mummy reuses the shared
-                    // n-dimensional-shambler sprite. Art is pre-rendered (not faction-tinted), so
-                    // tint is None, matching the TI/DGT real-art idiom above.
-                    case HybridMummy    => if (region != null) DrawRect("n-dimensional-shambler", |(tint), x - 35, y - 75, 70, 85)
-                                           else DrawRect("n-dimensional-shambler", |(tint), x - 29, y - 60, 58, 70)
+                    // All SW units use designer-provided art (pre-rendered, not faction-tinted).
+                    case HybridMummy    => if (region != null) DrawRect("sw-hybrid-mummy", None, x - 35, y - 75, 70, 85)
+                                           else DrawRect("sw-hybrid-mummy", None, x - 29, y - 60, 58, 70)
                     case PharoahKephren => DrawRect("sw-pharoah-kephren", None, x - 33, y - 80, 66, 80)
                     case QueenNitokris  => DrawRect("sw-queen-nitokris",  None, x - 38, y - 76, 76, 76)
                     case BlackSphinx    => DrawRect("sw-black-sphinx",    None, x - 45, y - 90, 90, 90)
