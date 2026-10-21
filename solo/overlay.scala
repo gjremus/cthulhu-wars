@@ -84,11 +84,21 @@ class InfoOverlay(overlay : html.Element) {
         }
     }
 
+    // Burrowers Beneath's bottom-left Mantle HUD icon sits on a z-index above the map and
+    // can cover any popup's text (faction card, hyperlink text popups). Hide it for the
+    // duration any popup is showing, the same way the game title is hidden above.
+    private def mantleIconElem = dom.document.getElementById("tb-mantle-hud-btn").as[html.Element]
+
+    private def syncMantleIcon() {
+        mantleIconElem.foreach(_.style.visibility = showing.any.?("hidden").|(""))
+    }
+
     def hide() {
         showing = None
 
         titleCheckedFor = None
         titleElem.foreach(_.style.visibility = "")
+        mantleIconElem.foreach(_.style.visibility = "")
 
         overlay.parentElement.parentElement.style.display = "none"
 
@@ -151,6 +161,8 @@ class InfoOverlay(overlay : html.Element) {
 
         if (soonShow <= 1)
             syncTitle()
+
+        syncMantleIcon()
 
         dom.window.requestAnimationFrame { _ =>
             readjust()
