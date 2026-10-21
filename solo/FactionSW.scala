@@ -103,11 +103,21 @@ case class SWAwakenSphinxRegionAction(self : Faction, r : Region) extends BaseFa
 case class SWAwakenSphinxSacrificeAction(self : Faction, r : Region, victim : UnitRef)
     extends BaseFactionAction(implicit g => "Sacrifice " + g.unit(victim).uclass.styled(SW) + " to awaken " + BlackSphinx.name.styled(SW), r)
 
-// Kidnap (UFA, Post-Battle — the Ask(...) is built directly in Battle.scala's post-battle block).
+// Kidnap (UFA, Post-Battle — two menus: first SW decides whether to kidnap,
+// then if yes, enemy chooses which pained monster gets kidnapped).
+// MENU 1: Ask SW whether to kidnap
+case class SWKidnapOfferAction(self : Faction, enemy : Faction) extends OptionFactionAction("Kidnap a pained enemy monster?") with PowerNeutral {
+    def question(implicit game : Game) = Kidnap.styled(SW)
+}
+case class SWKidnapDeclineAction(self : Faction, enemy : Faction) extends OptionFactionAction("No") with PowerNeutral {
+    def question(implicit game : Game) = Kidnap.styled(SW)
+}
+// MENU 2: Ask ENEMY which monster to kidnap (only appears if SW said yes)
 case class SWKidnapAction(self : Faction, enemy : Faction, victim : UnitRef)
     extends OptionFactionAction(implicit g => "Kidnap " + g.unit(victim).uclass.styled(g.unit(victim).faction)) with PowerNeutral {
     def question(implicit game : Game) = Kidnap.styled(SW)
 }
+// Deprecated — keep for compatibility but unused in new flow
 case class SWKidnapSkipAction(self : Faction, enemy : Faction) extends OptionFactionAction("Skip") with PowerNeutral {
     def question(implicit game : Game) = Kidnap.styled(SW)
 }
@@ -468,8 +478,22 @@ object SWExpansion extends Expansion {
             Then(MainAction(self))
 
         // ────────────────────────────────────────────────────────────────
-        // KIDNAP (UFA, Post-Battle — the Ask(...) itself is built in Battle.scala)
+        // KIDNAP (UFA, Post-Battle — two-menu flow)
+        // Menu 1: SW decides whether to kidnap (asks SW)
+        // Menu 2: Enemy chooses which monster (asks enemy, only if SW said yes)
         // ────────────────────────────────────────────────────────────────
+        case SWKidnapOfferAction(self, enemy) =>
+            // SW agreed to kidnap. Now ask ENEMY which pained monster to kidnap.
+            val swSide = if (game.battle.get.attacker == SW) game.battle.get.attackers else game.battle.get.defenders
+            val enemySide = if (game.battle.get.attacker == SW) game.battle.get.defenders else game.battle.get.attackers
+            val candidates = enemySide.forces.%(u => u.uclass.utype == Monster && u.health == Pained)./(_.ref)
+            self.log(Kidnap.styled(SW) + ": offered to kidnap; enemy now chooses which pained monster")
+            Ask(enemy).each(candidates)(v => SWKidnapAction(SW, enemy, v))
+
+        case SWKidnapDeclineAction(self, enemy) =>
+            self.log(Kidnap.styled(SW) + ": declined to kidnap")
+            UnknownContinue
+
         case SWKidnapAction(self, enemy, victim) =>
             game.swKidnapped :+= victim
             self.log(Kidnap.styled(SW) + ": kidnapped", game.unit(victim).uclass.styled(enemy), "from", enemy.full)

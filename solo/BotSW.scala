@@ -96,6 +96,11 @@ class GameEvaluationSW(implicit game : Game) extends GameEvaluation(SW)(game) {
                     u.is(HybridMummy)      |=> 400   -> "retreat hybrid mummy"
                     u.is(PharoahKephren)   |=> 300   -> "retreat pharoah kephren"
 
+                case SWKidnapOfferAction(f, _) =>
+                    true                   |=> 700   -> "accept kidnap offer"
+                case SWKidnapDeclineAction(f, _) =>
+                    true                   |=> 0     -> "decline kidnap offer"
+
                 case SWKidnapAction(f, _, _) =>
                     true                   |=> 600   -> "kidnap enemy monster"
                 case SWKidnapSkipAction(f, _) =>

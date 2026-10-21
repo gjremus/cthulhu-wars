@@ -2865,9 +2865,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                // Sphinx Worshippers (SW) — Kidnap (UFA, Post-Battle): if SW's side in this
-                // battle has Queen Nitokris plus at least SWValues.Kidnap_minMummies Hybrid
-                // Mummies present, offer to Kidnap one of the enemy's PAINED Monsters here.
+                // Sphinx Worshippers (SW) — Kidnap (UFA, Post-Battle): Two-menu flow:
+                // MENU 1: Ask SW whether to kidnap (if they have Nitokris + minMummies on board
+                //         and enemy has pained Monsters to kidnap)
+                // MENU 2: If SW said yes, ask ENEMY which pained Monster to kidnap
                 // Once kidnapped, the unit is exempt from battle and movement (see the
                 // swKidnapped checks folded into UnitClass.canMove/canBeMoved/canBattle in
                 // Game.scala) until it moves for free with Nitokris (Funeral Procession) or is
@@ -2880,9 +2881,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     val nitokrisHere = swSide.forces.%(_.uclass == QueenNitokris).any
                     val candidates = enemySide.forces.%(u => u.uclass.utype == Monster && u.health == Pained)./(_.ref)
                     if (nitokrisHere && mummiesHere >= SWValues.Kidnap_minMummies && candidates.any) {
-                        SW.log("[SW KIDNAP] Offering: " + candidates.num + " pained monsters to kidnap (enemy chooses), Nitokris present, " + mummiesHere + " mummies")
+                        SW.log("[SW KIDNAP] Offering kidnap decision: Nitokris present, " + mummiesHere + " mummies, " + candidates.num + " pained enemy monsters available")
                         SW.oncePerAction :+= Kidnap
-                        return Ask(enemy).each(candidates)(v => SWKidnapAction(SW, enemy, v)).add(SWKidnapSkipAction(SW, enemy))
+                        // MENU 1: Ask SW whether to kidnap. SWKidnapOfferAction will then trigger MENU 2
+                        return Ask(SW).add(SWKidnapOfferAction(SW, enemy)).add(SWKidnapDeclineAction(SW, enemy))
                     } else if (mummiesHere > 0 || nitokrisHere) {
                         SW.log("[SW KIDNAP] NOT offered: nitokrisHere=" + nitokrisHere + " mummies=" + mummiesHere + " painedMonsters=" + candidates.num)
                     }
