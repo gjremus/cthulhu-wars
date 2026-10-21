@@ -2880,9 +2880,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     val nitokrisHere = swSide.forces.%(_.uclass == QueenNitokris).any
                     val candidates = enemySide.forces.%(u => u.uclass.utype == Monster && u.health == Pained)./(_.ref)
                     if (nitokrisHere && mummiesHere >= SWValues.Kidnap_minMummies && candidates.any) {
-                        SW.log("[SW KIDNAP] Offering: " + candidates.num + " pained monsters, Nitokris present, " + mummiesHere + " mummies")
+                        SW.log("[SW KIDNAP] Offering: " + candidates.num + " pained monsters to kidnap (enemy chooses), Nitokris present, " + mummiesHere + " mummies")
                         SW.oncePerAction :+= Kidnap
-                        return Ask(SW).each(candidates)(v => SWKidnapAction(SW, enemy, v)).add(SWKidnapSkipAction(SW, enemy))
+                        return Ask(enemy).each(candidates)(v => SWKidnapAction(SW, enemy, v)).add(SWKidnapSkipAction(SW, enemy))
                     } else if (mummiesHere > 0 || nitokrisHere) {
                         SW.log("[SW KIDNAP] NOT offered: nitokrisHere=" + nitokrisHere + " mummies=" + mummiesHere + " painedMonsters=" + candidates.num)
                     }
