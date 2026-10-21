@@ -3041,6 +3041,7 @@ object Overlays {
         def swRef(sb : Spellbook) = s"""<span class="ability-color pointer" onclick="onExternalClick('SW', '${sb.name}')">${sb.name}</span>"""
         def combat = """<span class="combat-color">Combat</span>"""
         def cost(s : String) = s"""<span class="cost-color">$s</span>"""
+        val hungerFooter = s"""<b>Hunger Track:</b> <span class="cost-color">${calc(g => g.swHunger)}</span>"""
         faction(SW, "info:sw-background", Kidnap, "Post-Battle",
             s"The enemy chooses one of their Pained Monsters. While it shares a region with ${QueenNitokris.name} and ${SWValues.Kidnap_minMummies}+ ${HybridMummy.plural}, it lies sideways: it is exempt from Battle (including abilities), moves for free with ${QueenNitokris.name}, and cannot be moved by any other means.",
             $(BottomlessPit, AncientEmetic, Starvation), $(
@@ -3058,7 +3059,7 @@ object Overlays {
                 <div class=p>${combat} Adds Pains equal to ${SWValues.BlackSphinx_painsBase} plus the current Hunger Track value (no dice).</div>
                 <div class=p><b>Ceaseless Hunger (Ongoing):</b> Whenever ${BlackSphinx.name} is Awakened, Pained, and at the start of each Action Phase (while on the map), advance the Hunger Track by ${SWValues.Hunger_awakenGain}. When he is Killed or Eliminated, advance it by ${SWValues.Hunger_killedGain} instead. Lose Doom and/or sacrifice Cultists equal to his Hunger in the Doom Phase. An enemy-controlled Elder Thing sharing his Area fully blocks this ability.</div>
                 <div class=p>Spellbook: ${swRef(MonstrousForepaw)}</div>""")
-        ), setup = true)
+        ), footer = hungerFooter, setup = true)
     }
 
     // Tribulation v16 (TRB) — overlay dispatch helper (same idiom as swOverlay/prmOverlay
