@@ -2778,7 +2778,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 val catOwner = sides.find(s =>
                     !theFinalRitualResolvedThisBattle.has(s) &&
                     s.loyaltyCards.has(CatFromNeptuneCard) &&
-                    eliminated.%(u => u.faction == s && u.uclass == CatFromNeptune && u.health == Killed).any &&
+                    // eliminatedByDice, not u.health == Killed: game.eliminate() resets health
+                    // to Alive when the figure returns to the pool, so that test never matched.
+                    eliminatedByDice.%(u => u.faction == s && u.uclass == CatFromNeptune).any &&
                     s.power >= game.ritualCost)
                 if (catOwner.any) {
                     val s = catOwner.get
