@@ -321,7 +321,18 @@ case class AwakenDireYogViaSpawnAction(self : Faction, cost : Int) extends BaseF
 // [owner 2026-10-05] Region-specific Opener route, offered for every Area with a Spawn.
 // The region-less AwakenDireYogViaSpawnAction above stays only so saved games replay.
 // Dire Yog-Sothoth: single menu entry that leads to submenu of awakening options
-case class AwakenDireYogMainAction(self : Faction) extends OptionFactionAction("Dire Yog-Sothoth") with MainQuestion with Soft
+// Same "?" overlay button as Cthugha/IndependentGOOMainAction. The label is built lazily
+// (g => ...) at render time. This action is Soft and its handler ASKS (sub-menu), so the
+// real awaken action chosen there is the one recorded — never Force-wrap a recorded action
+// behind a Soft wrapper (that is what lost the awakening in c95c8375).
+case class AwakenDireYogMainAction(self : Faction) extends OptionFactionAction(g => {
+    val qm = Overlays.imageSource("question-mark")
+    val p = s""""Dire Yog-Sothoth", false""".replace('"'.toString, "&quot;")
+    "<div class=sbdiv>" +
+        "Awaken " + "Dire Yog-Sothoth".styled("nt") +
+    s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" />""" +
+    "</div>"
+}) with MainQuestion with Soft
 // Route 1 — Opener of the Way: replace a Spawn; cost = 6 Power
 case class AwakenDireYogViaSpawnAtAction(self : Faction, r : Region, cost : Int) extends BaseFactionAction(
     implicit g => "Replace " + SpawnOW.styled(self) + " with " + DireYogSothoth.styled(self),

@@ -4425,6 +4425,36 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             var savedUIAction : |[(Faction, $[Action])] = None
             var savedContinue : |[Continue] = None
 
+            // LOG-GAP OFFSET (2026-10-22, game "Existence through Decay"). The server stores
+            // each action under an explicit row index and /read/ returns VALUES ONLY (index >= from).
+            // If the stored log has a hole (that game is missing row 131), every client counts one
+            // row fewer than the real top index, so read/(actions.num+3) re-serves the last action and
+            // write/(actions.num+3) collides with an occupied row → Conflict → the client re-applied
+            // the stale row and redrew the previous menu: "every click has to be made twice".
+            // logGapOffset = number of missing rows below our frontier; all read/write positions add it.
+            // It is only increased after the server's real row count proves no new row exists.
+            var logGapOffset : Int = 0
+
+            def isPureReserve(fwd : $[String]) : Boolean =
+                fwd.any && fwd.num <= actions.num &&
+                fwd.indexed./((line, i) => line.replace("&gt;", ">") == serializer.write(actions(fwd.num - 1 - i)).replace("&gt;", ">")).but(true).none
+
+            // Confirm a suspected gap: the full log's row COUNT equals what we have applied, so the
+            // re-served rows cannot be new actions. Then shift our positions past them.
+            def confirmLogGap(fwd : $[String])(onConfirmed : () => Unit)(onNot : () => Unit) {
+                val expected = actions.num
+                getF(server + "read/" + hash + "/0") { all =>
+                    val count = all.splt("\n").but("").num
+                    if (actions.num == expected && count == expected + 3 && isPureReserve(fwd)) {
+                        logGapOffset += fwd.num
+                        dom.console.log("[log-gap] server log has " + fwd.num + " missing row(s); write/read offset now " + logGapOffset)
+                        onConfirmed()
+                    }
+                    else
+                        onNot()
+                }
+            }
+
             class BackgroundCheckToken(random : Double)
 
             var backgroundCheckThread : |[BackgroundCheckToken] = None
@@ -4441,7 +4471,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 if (backgroundCheckThread.has(token)) {
                     setTimeout(500) {
                         if (backgroundCheckThread.has(token)) {
-                            getF(server + "read/" + hash + "/" + (actions.num + 3)) { ll =>
+                            getF(server + "read/" + hash + "/" + (actions.num + 3 + logGapOffset)) { ll =>
                                 if (backgroundCheckThread.has(token)) {
                                     val fwd = ll.splt("\n").but("")
                                     // STALE RE-SERVE GUARD (game 454 "Existence and Colour" Directed-Energy
@@ -4454,8 +4484,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     // pure re-serve (every returned line duplicates our applied tail, in
                                     // order) and keep waiting instead of acting on it, so the human's prompt
                                     // stays live and only their real choice gets recorded.
-                                    val staleReserve = fwd.any && fwd.num <= actions.num &&
-                                        fwd.indexed./((line, i) => line.replace("&gt;", ">") == serializer.write(actions(fwd.num - 1 - i)).replace("&gt;", ">")).but(true).none
+                                    val staleReserve = isPureReserve(fwd)
                                     if (fwd.any && !staleReserve) {
                                         backgroundCheckThread = None
 
@@ -4467,7 +4496,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     else if (staleReserve) {
                                         // Nothing genuinely new — poll again later without disturbing the
                                         // pending prompt already on screen (the human can still answer it).
-                                        executeBackgroundCheck(token)
+                                        // If the re-serve is caused by a hole in the server log, learn the
+                                        // offset now so the human's next click writes to the right row.
+                                        confirmLogGap(fwd) { () =>
+                                            executeBackgroundCheck(token)
+                                        } { () =>
+                                            executeBackgroundCheck(token)
+                                        }
                                     }
                                     else if (actions.num > 0) {
                                         // Rollback detection (2026-08-02): the forward read is empty on a
@@ -4476,7 +4511,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                         // stale prompt forever. Discriminate by reading the client's OWN last
                                         // action position: if even that no longer exists on the server, the
                                         // log was rolled back below us — reload to resync to the true state.
-                                        getF(server + "read/" + hash + "/" + (actions.num + 2)) { own =>
+                                        getF(server + "read/" + hash + "/" + (actions.num + 2 + logGapOffset)) { own =>
                                             if (backgroundCheckThread.has(token)) {
                                                 if (own.splt("\n").but("").none) {
                                                     dom.console.log("[rollback-resync] server log is shorter than local (actions.num=" + actions.num + ") — reloading")
@@ -4729,7 +4764,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
 
                                 def post() {
                                     if (position == actions.num) {
-                                        hrf.web.postF(server + "write/" + hash + "/" + (position + 3), serializer.write(a.unwrap)) { _ =>
+                                        hrf.web.postF(server + "write/" + hash + "/" + (position + 3 + logGapOffset), serializer.write(a.unwrap)) { _ =>
                                             stopBackgroundCheck()
 
                                             queue :+= UIRead(g)
@@ -4737,14 +4772,24 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                             startUI()
                                         } {
                                             if (position == actions.num) {
-                                                hrf.web.getF(server + "read/" + hash + "/" + (position + 3)) { ll =>
-                                                    if (ll.splt("\n").but("").any) {
+                                                hrf.web.getF(server + "read/" + hash + "/" + (position + 3 + logGapOffset)) { ll =>
+                                                    val fwd = ll.splt("\n").but("")
+                                                    def resync() {
                                                         stopBackgroundCheck()
 
                                                         queue :+= UIRead(g)
 
                                                         startUI()
                                                     }
+                                                    // Conflict only because the server log has a hole (the "row" we
+                                                    // tried is an already-applied action re-served): shift past the
+                                                    // hole and write the SAME click again, instead of re-applying the
+                                                    // stale row and dropping the click (the "click twice" bug).
+                                                    if (isPureReserve(fwd))
+                                                        confirmLogGap(fwd) { () => post() } { () => resync() }
+                                                    else
+                                                    if (fwd.any)
+                                                        resync()
                                                     else
                                                         retry()
                                                 } {
@@ -4760,7 +4805,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 None
                             }
                             case UIRead(g) => {
-                                getF(server + "read/" + hash + "/" + (actions.num + 3)) { ll =>
+                                getF(server + "read/" + hash + "/" + (actions.num + 3 + logGapOffset)) { ll =>
                                     queue :+= UIProcess(g, ll.splt("\n").but("")./(serializer.parseAction))
 
                                     startUI()
