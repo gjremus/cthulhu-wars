@@ -1158,6 +1158,10 @@ object CthulhuWarsSolo {
                     case _  => defaultProcessing
                 }
 
+                // Sphinx Worshippers (SW) own units: same single "color" pass the designer
+                // preview uses (sections.js unitArt), so in-game colours match the preview.
+                val swTint = Processing(|("#b8abd5"), None, None)
+
                 def proto : DrawRect = unit match {
                     case Gate => DrawRect("gate", None, x - 38, y - 38, 76, 76)
 
@@ -1198,8 +1202,10 @@ object CthulhuWarsSolo {
                         case TB => DrawRect("tb-cadavolyte", None, x - 17, y - 54, 39, 60)
                         // Colour Out of Space (CS): acolyte unit sprite
                         case CS => DrawRect("cs-acolyte", None, x - 17, y - 54, 34, 60)
-                        // Sphinx Worshippers (SW): acolyte sprite
-                        case SW => DrawRect("sw-acolyte", None, x - 17, y - 54, 39, 60)
+                        // Sphinx Worshippers (SW): exactly what the designer preview shows for a
+                        // Cultist with no uploaded map image: gc-acolyte tinted with the faction
+                        // colour (swTint). sw-acolyte.webp is a pre-coloured PINK sprite; do NOT use it.
+                        case SW => DrawRect("gc-acolyte", |(swTint), x - 17, y - 54, 40, 59)
                         case _ => null
                     }
 
@@ -1621,13 +1627,19 @@ object CthulhuWarsSolo {
                     case TRBFamine      => DrawRect("trb-famine", None, x - 35, y - 75, 70, 85)
                     case TRBDeath       => DrawRect("trb-death", None, x - 35, y - 75, 70, 85)
 
-                    // Sphinx Worshippers (SW): real art for Pharoah Kephren, Queen Nitokris and
-                    // All SW units use designer-provided art (pre-rendered, not faction-tinted).
-                    case HybridMummy    => if (region != null) DrawRect("sw-hybrid-mummy", None, x - 35, y - 75, 70, 85)
-                                           else DrawRect("sw-hybrid-mummy", None, x - 29, y - 60, 58, 70)
-                    case PharoahKephren => DrawRect("sw-pharoah-kephren", None, x - 33, y - 80, 66, 80)
-                    case QueenNitokris  => DrawRect("sw-queen-nitokris",  None, x - 38, y - 76, 76, 76)
-                    case BlackSphinx    => DrawRect("sw-black-sphinx",    None, x - 45, y - 90, 90, 90)
+                    // Sphinx Worshippers (SW): match the designer "Map image" preview EXACTLY.
+                    // Preview = art tinted with ONE "color" pass of #b8abd5 (swTint, no screen),
+                    // fitted into (type box x mapScale), centred, standing on the box bottom.
+                    //  - Hybrid Mummy: design mapImage is null -> preview uses the Monster default
+                    //    art n-dimensional-shambler (scale 1.0). There is NO sw-hybrid-mummy asset.
+                    //  - Kephren  Monster box [-35,-75,70,85]    x1.6386, art 453x550
+                    //  - Nitokris Terror  box [-48,-109,95,116]  x1.5216, art 800x800
+                    //  - Sphinx   ElderGod box [-64,-210,128,210] x1.3449, art 800x800
+                    case HybridMummy    => if (region != null) DrawRect("n-dimensional-shambler", |(swTint), x - 35, y - 75, 70, 85)
+                                           else DrawRect("n-dimensional-shambler", |(swTint), x - 29, y - 60, 58, 70)
+                    case PharoahKephren => DrawRect("sw-pharoah-kephren", |(swTint), x - 57, y - 123, 115, 139)
+                    case QueenNitokris  => DrawRect("sw-queen-nitokris",  |(swTint), x - 73, y - 134, 145, 145)
+                    case BlackSphinx    => DrawRect("sw-black-sphinx",    |(swTint), x - 86, y - 172, 172, 172)
 
                     case _ => null
                 }
