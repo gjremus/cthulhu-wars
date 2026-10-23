@@ -499,7 +499,7 @@ trait Faction { f =>
         // Azathoth IGOO: = glyph position
         units(AzathothIGOO).not(Zeroed).num * game.azathothGlyphPosition +
         // Dunwich — Dire Yog-Sothoth: = number of enemy-controlled faction Great Old Ones in play
-        units(DireYogSothoth).not(Zeroed).num * game.factions.but(f)./(_.factionGOOs.num).sum +
+        units(DireYogSothoth).not(Zeroed).num * game.factions.but(f)./(fac => if (fac == TB) fac.factionGOOs.any.??(1) else fac.factionGOOs.num).sum +
         // Colour Out of Space (CS) Effervescent Excrescence: its combat must count for WHICHEVER
         // faction holds it in a battle — excrescences fully transfer ownership via Prismatic Wells,
         // so the combat lives here in the shared strength, not only in CS.strength. Otherwise an

@@ -2047,9 +2047,9 @@ object Overlays {
             s"""${reference(TB, Behemoth)} <span class=cost-color>(Ongoing):</span> Whenever TB Power reaches 0 (after Shudde M'ell has been Awakened and the Mantle is in play), place a Segment from Pool on the Mantle. Parts may be moved to the Mantle as a 0-Cost Unlimited Action.""",
             $(Stalk, Autotomy, Subterrane, Grasp, Ensnare, PsychicShriek), $(
             (Cadavolyte,        6, "2", "0", s"""<div class=p>Acolyte, but Gathers 0 Power</div>"""),
-            (Tentacle,         10, "2", "0", s"""<div class=p>Cultist. CANNOT Build/Control Gates nor be Captured; Gathers 1 Power per Area containing Tentacle.</div>"""),
+            (Tentacle,         10, "2", "0", s"""<div class=p>Cultist. CANNOT Build/Control Gates nor be Captured; Gathers 1 Power per Area containing Tentacle${tbTentacleAreaNote}.</div>"""),
             (Chthonian,         5, "2", "1", s"""<div class=p>Monster</div>"""),
-            (ShuddeMellHead,    1, "8", "?", s"""
+            (ShuddeMellHead,    1, "8", calc(g => { implicit val gg : Game = g; 3 * (TB.all(ShuddeMellHead).not(Zeroed).num + TB.all(ShuddeMellSegment).not(Zeroed).num) }), s"""
                 <div class=p>${cost("How to Awaken Shudde M'ell:")}</div>
                 <div class=p>${cost("1)")} The Mantle must be in play.</div>
                 <div class=p>${cost("2)")} Pay ${power(8)}. Shudde M'ell (Head) appears on the Mantle.</div>
@@ -2086,6 +2086,13 @@ object Overlays {
     def calc(f : Game => Int) : String = Overlays.currentGame match {
         case Some(g) => f(g).toString
         case None    => "?"
+    }
+
+    // Burrowers Beneath Tentacle Notes: live count of Areas currently containing a
+    // Tentacle, shown in brackets after the Notes text; blank when no game is active.
+    def tbTentacleAreaNote : String = Overlays.currentGame match {
+        case Some(g) => { implicit val gg : Game = g; ", (Now " + TB.onMap(Tentacle)./(_.region).distinct.num + ")" }
+        case None    => ""
     }
 
     def power(n : Int) = cost(s"${n} Power")
@@ -3174,7 +3181,7 @@ object Overlays {
             (Mutant,      mutantQty, mutantCost, "1", s"""<div class=p>Spellbook: ${owRef(MillionFavoredOnes)}</div>"""),
             (Abomination, 3, "3", "2", s"""<div class=p>Spellbooks: ${owRef(MillionFavoredOnes)}, ${owRef(DreadCurse)}</div>"""),
             (SpawnOW,     2, "4", "3", s"""<div class=p>Spellbooks: ${owRef(MillionFavoredOnes)}, ${owRef(DreadCurse)}</div>"""),
-            (YogSothoth,  1, "6", calc(g => { implicit val gg : Game = g; 2 * g.factions.but(OW)./(_.factionGOOs.num).sum }), s"""
+            (YogSothoth,  1, "6", calc(g => { implicit val gg : Game = g; 2 * g.factions.but(OW)./(fac => if (fac == TB) fac.factionGOOs.any.??(1) else fac.factionGOOs.num).sum }), s"""
                 <div class=p>${cost(s"How to Awaken ${YogSothoth.name}:")}</div>
                 <div class=p>${cost("1)")} You must have a Spawn of Yog-Sothoth on the Map.</div>
                 <div class=p>${cost("2)")} Pay ${power(6)}. Replace the Spawn with Yog-Sothoth.</div>
