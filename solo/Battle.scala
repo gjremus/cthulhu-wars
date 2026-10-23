@@ -843,7 +843,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Cthugha combat bonus is a pre-battle choice not included in neutralStrength
         // Use side.forces (battle-local) not s.forces (global) — Shapestealing et al modify side.forces only
         val str = s.strength(side.forces, s.opponent) + side.cthughaCombatBonus + side.savageryBonus
-        println("SAVAGERY-TRACE preroll: faction=" + s.name + " baseStrength=" + s.strength(side.forces, s.opponent) + " cthugha=" + side.cthughaCombatBonus + " savageryBonus=" + side.savageryBonus + " computedStr=" + str + " currentSStr=" + s.str)
 
         if (str != s.str) {
             log(s, "strength", (str > s.str).?("increased").|("decreased"), "to", str.str)
@@ -1711,7 +1710,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(RollAttackers)
 
             case RollAttackers =>
-                println("SAVAGERY-TRACE rollattackers: attacker=" + attacker.name + " strAtRoll=" + attacker.str)
                 RollBattle(attacker, "attack", attacker.str, x => BattleRollAction(attacker, x, RollDefenders))
 
             case RollDefenders =>
@@ -4376,7 +4374,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             (self : Side).str += bonus
             (self : Side).savageryBonus += bonus
             self.log(Savagery.styled(BB) + ": paid", 1.power, "for +" + bonus.str, "strength (" + saturnCount + " Cat".s(saturnCount) + " from Saturn)")
-            println("SAVAGERY-TRACE use: bonus=" + bonus + " sideStrAfter=" + (self : Side).str + " savageryBonusAfter=" + (self : Side).savageryBonus)
             proceed()
 
         case SavagerySkipAction(self) =>
