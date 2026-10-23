@@ -172,12 +172,12 @@ case class BattleDoneAction(self : Faction) extends ForcedAction
 
 // Cat from Neptune — The Final Ritual (Post-Battle): perform ritual if killed
 case class TheFinalRitualPostBattleAction(self : Faction, cost : Int) extends BaseFactionAction(
-    implicit g => "The Final Ritual".styled("nt") + " — perform Ritual of Annihilation",
-    implicit g => "Pay " + cost.power) {
+    implicit g => "Cat From Neptune: The Final Ritual".styled("nt") + " — Perform an immediate ritual of annihilation.",
+    implicit g => "Final Ritual: Pay " + cost.power) {
     override def question(implicit game : Game) = (game.battle./(_.attacker).has(self)).?("Attacker").|("Defender") + " post-battle"
 }
 case class TheFinalRitualSkipAction(self : Faction) extends BaseFactionAction(
-    "The Final Ritual".styled("nt") + " — perform Ritual of Annihilation", "Skip") {
+    "Cat From Neptune: The Final Ritual".styled("nt") + " — Perform an immediate ritual of annihilation.", "Skip") {
     override def question(implicit game : Game) = (game.battle./(_.attacker).has(self)).?("Attacker").|("Defender") + " post-battle"
 }
 // Cat from Neptune special ritual variants (mid-battle)
