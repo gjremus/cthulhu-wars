@@ -416,7 +416,7 @@ object SWExpansion extends Expansion {
                 self.place(BlackSphinx, r)
                 self.satisfy(AwakenSphinxReq, AwakenSphinxReq.text)
                 gainHunger(SWValues.Hunger_awakenGain, "Black Sphinx awakened")
-                Then(MainAction(self))
+                AwakenedAction(SW, BlackSphinx, r, cost)
             }
 
         // ────────────────────────────────────────────────────────────────
