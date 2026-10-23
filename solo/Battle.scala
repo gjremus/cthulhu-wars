@@ -3034,7 +3034,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     CS.at(arena).%(_.uclass == LuminousGlobule).not(Zeroed).any && eliminated.any) {
                     CS.oncePerAction :+= SpectralCollapse
                     val queue = $(CS) ++ $(attacker, defender).%(_ != CS)
-                    println("[CS-SPECTRAL-TRACE] arena=" + arena + " attacker=" + attacker + " defender=" + defender + " queue=" + queue.mkString(",") + " queueHead=" + queue.some.map(_.head))
                     if (queue.any)
                         return Ask(queue.head)
                             .add(CSSpectralCollapseUseAction(queue.head, arena, queue.tail))
