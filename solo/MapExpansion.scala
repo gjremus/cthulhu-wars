@@ -1254,9 +1254,10 @@ object YuggothExpansion extends Expansion {
                     // Remove Cultist
                     game.eliminate(u)
 
-                    // Create Brain Cylinder at same location
-                    val bc = new UnitFigure(self, BrainCylinderCultist, self.units.%(_.uclass == BrainCylinderCultist).num, region, onGate)
-                    game.neutrals(self).units ::= bc
+                    // Create Brain Cylinder at same location (belongs to the faction, not neutrals)
+                    val bcIndex = self.units.%(_.uclass == BrainCylinderCultist).num
+                    val bc = new UnitFigure(self, BrainCylinderCultist, bcIndex, region, onGate)
+                    self.units ::= bc
 
                     self.log("converted", uRef.short, "to", "Brain Cylinder".styled(self), "in", region)
                 }
