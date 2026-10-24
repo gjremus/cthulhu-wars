@@ -941,6 +941,87 @@ case class WatcherBattleChooseAction(controller : Faction, dest : Region, target
 }
 case class WatcherBattleStartAction(controller : Faction, dest : Region, target : Faction, then : Action) extends ForcedAction
 
+// ══════════════════════════════════════════════════════════════════════════════
+// YUGGOTH MAP — Phase 3: SLIME MOLDS
+// Controlled neutral Monsters. Allegiance determined by who Controls the Slime
+// Sea Overlook gate. When gate control changes, ALL Slime Molds switch to the
+// new controller. When the gate is Abandoned, they become neutral (no controller).
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Slime Molds are actual Monster units (Combat 2), not MapUnit tokens. They
+// can Move, Battle, be Captured, etc. Unlike normal faction units, they have
+// a dynamic controller (whoever holds the Slime Sea Overlook gate). State is
+// tracked via SlimeMoldRef tuples on game.slimeMolds (see Game.scala).
+case object SlimeMoldMonster extends UnitClass("Slime Mold", Monster, 1) {
+    // Slime Molds can Move, but NOT to Slime Sea Overlook (restriction).
+    override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = true
+    override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = true
+    override def canBattle(u : UnitFigure)(implicit game : Game) : Boolean = true
+    override def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = true
+    override def canBeCaptured(u : UnitFigure)(implicit game : Game) : Boolean = true
+    override def canControlGate(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBeRecruited(f : Faction)(implicit game : Game) : Boolean = false
+    override def canBeSummoned(f : Faction)(implicit game : Game) : Boolean = false
+}
+
+// Neutral faction for Slime Molds. Similar to TheWatcherFaction, but Slime Molds
+// are Monsters (Combat 2) and can be controlled by player factions.
+case object SlimeMoldFaction extends NeutralFaction {
+    def name = "Slime Molds"
+    def short = "SM"
+    def style = "nt"
+
+    override def abilities = $
+    override def library = $
+    override def requirements(options : $[GameOption]) = $
+
+    val allUnits = $(SlimeMoldMonster)
+
+    def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int =
+        neutralStrength(units, opponent) + units(SlimeMoldMonster).not(Zeroed).num * 2
+}
+
+// ── PHASE 3 ACTIONS ──
+case class CallSlimeMoldMainAction(self : Faction) extends OptionFactionAction(implicit g => {
+    val cost = if (g.slimeMolds.isEmpty) 0 else 1
+    "Call Slime Mold (" + cost + " Power)"
+}) with MainQuestion with Soft
+
+case class CallSlimeMoldChooseAction(self : Faction, r : Region) extends BaseFactionAction(implicit g => "Place Slime Mold in", r)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// YUGGOTH MAP — Phase 4: SURGERY & BRAIN CYLINDERS
+// Brain Cylinders are a Cultist subtype (Combat 0, cannot Move independently,
+// can Control/Abandon Gates, generate Power). Created via Surgery action at the
+// Laboratory. Can be carried by any moving unit, captured, and converted.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Brain Cylinders are Cultists (NOT Acolytes). They can Control Gates and
+// generate Power, but cannot Move independently (must be carried). Immune to
+// Pain in Battle (Kills only). Do NOT block enemy units being Pained into their area.
+case object BrainCylinderCultist extends UnitClass("Brain Cylinder", Cultist, 0) {
+    override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = true
+    override def canBattle(u : UnitFigure)(implicit game : Game) : Boolean = true
+    override def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = true
+    override def canBeCaptured(u : UnitFigure)(implicit game : Game) : Boolean = true
+    override def canControlGate(u : UnitFigure)(implicit game : Game) : Boolean = true
+    override def canBeRecruited(f : Faction)(implicit game : Game) : Boolean = false
+    override def canBeSummoned(f : Faction)(implicit game : Game) : Boolean = false
+}
+
+// ── PHASE 4 ACTIONS ──
+case class SurgeryMainAction(self : Faction) extends OptionFactionAction("Surgery (1 Power)") with MainQuestion with Soft
+case class SurgeryChooseCultistsAction(self : Faction, selected : $[UnitRef]) extends ForcedAction with Soft
+case class SurgeryToggleUnitAction(self : Faction, uRef : UnitRef, selected : $[UnitRef]) extends BaseFactionAction(implicit g => "Surgery — select Cultists to convert", implicit g => {
+    val u = g.unit(uRef)
+    val mark = if (selected.has(uRef)) " [X]" else " [ ]"
+    u.full + mark
+}) with Soft
+case class SurgeryDoneAction(self : Faction, selected : $[UnitRef]) extends BaseFactionAction(implicit g => "Surgery — select Cultists to convert", "Done (convert " + selected.num + " Cultist" + (if (selected.num == 1) "" else "s") + ")")
+case class SurgeryCancelAction(self : Faction) extends BaseFactionAction(implicit g => "Surgery — select Cultists to convert", "Cancel") with Soft
+case class SurgeryPerformAction(self : Faction, cultists : $[UnitRef]) extends ForcedAction
+
 object YuggothExpansion extends Expansion {
 
     // Green Pyramid Areas (incl. The Watcher's Postern) on the current board that
@@ -1086,7 +1167,123 @@ object YuggothExpansion extends Expansion {
                 Force(ProceedBattlesAction)
             }
 
+        // ══════════════════════════════════════════════════════════════════════════════
+        // PHASE 3: SLIME MOLDS
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        case CallSlimeMoldMainAction(self) =>
+            val slimeSeaAreas = game.board.regions.%(r => r.name.endsWith("Slime Sea"))
+            Ask(self).each(slimeSeaAreas)(r => CallSlimeMoldChooseAction(self, r)).cancel
+
+        case CallSlimeMoldChooseAction(self, r) =>
+            val cost = if (game.slimeMolds.isEmpty) 0 else 1
+            self.payPower(cost, "to Call Slime Mold")
+
+            // Find controller: whoever holds Slime Sea Overlook gate, or Yog if present
+            val overlook = game.board.regions.find(_.name == "Slime Sea Overlook")
+            val controller = overlook.flatMap(ov => {
+                factions.find(_.gates.contains(ov)).orElse(
+                    if (factions.exists(f => f.at(ov).exists(_.uclass == YogSothoth))) |(self) else None
+                )
+            })
+
+            // Create new Slime Mold
+            val nextId = if (game.slimeMolds.isEmpty) 1 else game.slimeMolds./(_.id).max + 1
+            game.slimeMolds = game.slimeMolds :+ SlimeMoldRef(nextId, r, controller)
+
+            self.log("called", "Slime Mold".styled("nt"), "in", r)
+            EndAction(self)
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        // PHASE 4: SURGERY & BRAIN CYLINDERS
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        case SurgeryMainAction(self) =>
+            // Find all Cultists owned by self (on map, Submerged, or on Cursed Slumbering Gate)
+            val cultists = self.units.%(u =>
+                u.uclass.utype == Cultist &&
+                u.uclass != BrainCylinderCultist &&
+                (u.region.onMap || u.region == self.reserve || game.board.regions.has(u.region))
+            )./(_.ref)
+
+            if (cultists.isEmpty)
+                EndAction(self)
+            else
+                Force(SurgeryChooseCultistsAction(self, $))
+
+        case SurgeryChooseCultistsAction(self, selected) =>
+            val cultists = self.units.%(u =>
+                u.uclass.utype == Cultist &&
+                u.uclass != BrainCylinderCultist &&
+                (u.region.onMap || u.region == self.reserve || game.board.regions.has(u.region))
+            )./(_.ref)
+
+            // Count existing Brain Cylinders
+            val existingBCs = self.units.%(_.uclass == BrainCylinderCultist).num
+            val maxNew = 4 - existingBCs
+
+            if (cultists.isEmpty)
+                Force(SurgeryPerformAction(self, selected))
+            else
+                Ask(self)
+                    .each(cultists.take(maxNew))(uRef => SurgeryToggleUnitAction(self, uRef, selected))
+                    .add(SurgeryDoneAction(self, selected))
+                    .add(SurgeryCancelAction(self))
+
+        case SurgeryToggleUnitAction(self, uRef, selected) =>
+            val newSelected = if (selected.has(uRef)) selected.but(uRef) else selected :+ uRef
+            Force(SurgeryChooseCultistsAction(self, newSelected))
+
+        case SurgeryDoneAction(self, selected) =>
+            Force(SurgeryPerformAction(self, selected))
+
+        case SurgeryCancelAction(self) =>
+            EndAction(self)
+
+        case SurgeryPerformAction(self, cultists) =>
+            if (cultists.isEmpty) {
+                EndAction(self)
+            } else {
+                self.payPower(1, "for Surgery")
+
+                cultists.foreach { uRef =>
+                    val u = game.unit(uRef)
+                    val region = u.region
+                    val onGate = u.onGate
+
+                    // Remove Cultist
+                    game.eliminate(u)
+
+                    // Create Brain Cylinder at same location
+                    val bc = new UnitFigure(self, BrainCylinderCultist, self.units.%(_.uclass == BrainCylinderCultist).num, region, onGate)
+                    game.neutrals(self).units ::= bc
+
+                    // Re-take Gate control if Cultist was on a gate
+                    if (onGate && game.gates.contains(region))
+                        Force(ControlGateAction(self, region, bc.ref, NoAction))
+
+                    self.log("converted", uRef.short, "to", "Brain Cylinder".styled(self), "in", region)
+                }
+
+                EndAction(self)
+            }
+
         case _ => UnknownContinue
+    }
+
+    // ── AFTER ACTION HOOK: Slime Mold ownership switches when Slime Sea Overlook gate
+    // control changes. Check after every action. ──
+    override def afterAction()(implicit game : Game) {
+        if (!game.board.isYuggothMap) return
+
+        val overlook = game.board.regions.find(_.name == "Slime Sea Overlook")
+        overlook.foreach { ov =>
+            // Find current gate controller (if any)
+            val gateController = factions.find(_.gates.contains(ov))
+
+            // Switch ALL Slime Molds to new controller (or None if abandoned)
+            game.slimeMolds = game.slimeMolds.map(sm => sm.copy(controller = gateController))
+        }
     }
 
     // When the Watcher's Token is reduced to 0 (Battle.scala sets its UnitFigure's

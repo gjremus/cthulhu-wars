@@ -375,6 +375,11 @@ case class UnitRef(faction : Faction, uclass : UnitClass, index : Int) {
 case class UnitRefShort(r : UnitRef)
 case class UnitRefFull(r : UnitRef)
 
+// Yuggoth Phase 3 — Slime Mold reference. Each Slime Mold is NOT a normal UnitFigure
+// (they're map-neutral tokens controlled by whoever holds the Slime Sea Overlook gate),
+// so they need their own ID/region/controller tuple separate from the UnitFigure pool.
+case class SlimeMoldRef(id : Int, region : Region, controller : |[Faction])
+
 sealed abstract class Spellbook(val name : String) extends Record {
     def elem : String
     override def toString = elem
@@ -1836,6 +1841,19 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // something other than the declaring side's own turn" escape hatch already used by
     // csCorruptedRendingActor below. Cleared by Battle.scala the moment it's consumed.
     var watcherForcedBattleThen : |[ForcedAction] = None
+
+    // Yuggoth Phase 3 — Slime Molds (controlled neutral Monsters). Controlled by whoever
+    // holds the Slime Sea Overlook gate. When gate control changes, ALL Slime Molds switch
+    // to the new controller. When the gate is Abandoned, they become neutral (controller = None).
+    // Each SlimeMoldRef = (id, region, controllerFaction) tuple. State lives on Game so
+    // `new Game()` resets it and replay rebuilds it (same undo pattern as Watcher above).
+    var slimeMolds : $[SlimeMoldRef] = $
+
+    // Yuggoth Phase 4 — Brain Cylinders (Cultist subtype). Created via Surgery action
+    // (convert Cultist → Brain Cylinder). Each BC is a normal UnitFigure with a special
+    // .uclass (BrainCylinderCultist), so its position is tracked via .region like any
+    // other unit — no extra Game state is needed beyond the figures themselves. This
+    // comment is here solely to document that Phase 4's state IS the UnitFigure pool.
 
     var starting = Map[Faction, Region]()
     var turn = 1
@@ -3813,7 +3831,41 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         }
     }
 
+    def yuggothActions(f : Faction)(implicit w : AskWrapper) {
+        if (!board.isYuggothMap) return
+
+        // Phase 3: Call Slime Mold — available if controlling Slime Sea Overlook gate,
+        // or if Yog-Sothoth is in Slime Sea Overlook (Opener only)
+        val overlook = board.regions.find(_.name == "Slime Sea Overlook")
+        val canCallSlimeMold = overlook.exists { ov =>
+            f.gates.contains(ov) ||
+            (f == OW && f.at(ov).exists(_.uclass == YogSothoth))
+        }
+        val slimeMoldCost = if (slimeMolds.isEmpty) 0 else 1
+        if (canCallSlimeMold && f.power >= slimeMoldCost)
+            + CallSlimeMoldMainAction(f)
+
+        // Phase 4: Surgery — available if controlling Laboratory gate,
+        // or if Yog-Sothoth is in Laboratory (Opener only)
+        val lab = board.regions.find(_.name == "Laboratory")
+        val canPerformSurgery = lab.exists { l =>
+            f.gates.contains(l) ||
+            (f == OW && f.at(l).exists(_.uclass == YogSothoth))
+        }
+        val hasCultistsToConvert = f.units.exists(u =>
+            u.uclass.utype == Cultist &&
+            u.uclass != BrainCylinderCultist &&
+            (u.region.onMap || u.region == f.reserve || board.regions.has(u.region))
+        )
+        val bcCount = f.units.%(_.uclass == BrainCylinderCultist).num
+        if (canPerformSurgery && f.power >= 1 && hasCultistsToConvert && bcCount < 4)
+            + SurgeryMainAction(f)
+    }
+
     def libraryActions(f : Faction)(implicit w : AskWrapper) {
+        // Also call Yuggoth actions if on Yuggoth map (map-specific actions are grouped here)
+        yuggothActions(f)
+
         if (board.isLibraryMap && silenceTokens.getOrElse(f, 0) > 0) {
             + SpendOnCustodianAction(f)
             val librarianAvailable = factions.but(f).exists(ff =>
@@ -4262,7 +4314,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Shadows are in TI.gates and already counted in ownGates. Guarded → 0.
                 val tiShadowPower = tiShadowAdditionalGates(f) * 2
 
-                f.power = hibernate + ownGates * 2 + csWellGates + csUnitGateWell + tiShadowPower + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship + fbHPBonus + tbTentacleAreas + bbCats + bbHP
+                // Yuggoth Phase 5 — Pyramid Power: Controlled Gates in Green Pyramid Areas
+                // yield +1 Power (3 total = 2 base + 1 Pyramid bonus). Yog-Sothoth acting
+                // as a gate in a Green Pyramid Area also gets +1. Suppressed under Disaster Looms.
+                val pyramidGateCount = if (disasterLooms || !board.isYuggothMap) 0 else f.gates.%(r => board.greenPyramidRegions.has(r)).num
+                val pyramidYogBonus = (!disasterLooms && board.isYuggothMap && !yogGateSuppressed &&
+                    f.unitGate.exists(u => board.greenPyramidRegions.has(u.region))).??(1)
+                val pyramidPower = pyramidGateCount + pyramidYogBonus
+
+                f.power = hibernate + ownGates * 2 + csWellGates + csUnitGateWell + tiShadowPower + pyramidPower + abandoned + cultists + captured + oceanGates + darkYoungs + feast + worship + fbHPBonus + tbTentacleAreas + bbCats + bbHP
                 f.hibernating = false
 
                 val fromHibernate = (hibernate > 0).?(hibernate.styled("region") + (wasHibernating.?(" hibernate").|(" carried over")))
@@ -4286,8 +4346,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val fromWells = (csWellGates > 0).?(csWellGateCount.styled("region") + " Prismatic Well".s(csWellGateCount) + " (+" + (CSValues.PrismaticWell_gatherPower - 2) + " each → " + CSValues.PrismaticWell_gatherPower + " Power)")
                 // Colour Out of Space (CS): log the +1 when a GOO unit-Gate (Yog-Sothoth) sits on a Prismatic Well
                 val fromUnitGateWell = (csUnitGateWell > 0).?(1.styled("region") + " Prismatic Well gate (+" + csUnitGateWell + " → " + CSValues.PrismaticWell_gatherPower + " Power)")
+                // Yuggoth Phase 5 — Pyramid Power: log +1 Power per Green Pyramid gate
+                val fromPyramid = (pyramidPower > 0).?(pyramidPower.styled("region") + " Green Pyramid gate".s(pyramidPower) + " (+1 each → 3 Power)")
 
-                f.log(if (f == BB) "gained" else "got", f.power.power, "(" + $(fromHibernate, fromGates, fromWells, fromUnitGateWell, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP, fromTBTentacles, fromBBCats, fromBBHP).flatten.mkString(" + ") + ")")
+                f.log(if (f == BB) "gained" else "got", f.power.power, "(" + $(fromHibernate, fromGates, fromWells, fromUnitGateWell, fromPyramid, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP, fromTBTentacles, fromBBCats, fromBBHP).flatten.mkString(" + ") + ")")
 
                 if (greenDecayCultists > 0) {
                     f.log("Green Decay".styled("nt") + ":", greenDecayCultists, "captured " + "cultist".s(greenDecayCultists), "→", greenDecayCultists.es, "(not power)")
