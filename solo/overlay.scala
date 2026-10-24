@@ -3285,7 +3285,16 @@ object Overlays {
                     units./{ case (uc, n, c, b, t) => s"""
                         <tr>
                             <td>
-                                <img class="img" src=${imageSource("info:" + f.short.toLowerCase + "-" + uc.name.toLowerCase.replace(" ", "-").replace("'", "").replace("(", "").replace(")", ""))}>
+                                <img class="img"${
+                                    // Owner request (2026-10-23): on DC's faction card, Y'Golonac's
+                                    // silhouette reads too small next to its three non-GOO units, and
+                                    // those three in turn read too large — rebalance both directions
+                                    // off the shared 6ex baseline (.img's max-height) rather than
+                                    // changing that baseline for every other faction.
+                                    if (f == DC && uc == YgolonacDC) " style=\"max-height:7.5ex;\""
+                                    else if (f == DC && (uc == MindlessHusk || uc == FallenProphet || uc == Acolyte)) " style=\"max-height:4.5ex;\""
+                                    else ""
+                                } src=${imageSource("info:" + f.short.toLowerCase + "-" + uc.name.toLowerCase.replace(" ", "-").replace("'", "").replace("(", "").replace(")", ""))}>
                             </td>
                             <td style="overflow-wrap:anywhere;">
                                 <div class="unit-desc">
