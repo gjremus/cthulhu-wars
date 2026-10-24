@@ -733,6 +733,12 @@ object CthulhuWarsSolo {
                         val a = asks.sortBy(ask =>
                             if (self.has(ask.faction))
                                 0
+                            // Neutral map factions (The Watcher, etc.) aren't in setup.seating, so
+                            // setup.difficulty has no entry for them — guard before the lookup below
+                            // rather than crashing (see the Ask(faction, actions) neutral case further
+                            // down for the full explanation).
+                            else if (ask.faction.is[NeutralFaction])
+                                50 + random(10)
                             else
                                 setup.difficulty(ask.faction) match {
                                     case Debug => 100 + random(10)
@@ -747,6 +753,26 @@ object CthulhuWarsSolo {
                             case q : UIQuestion => q.copy(waiting = asks./(_.faction))
                             case ui => ui
                         }
+
+                    // Neutral map factions (The Watcher, Library's Custodian/Librarian,
+                    // NeutralAbhoth, etc.) have no human seat and no strategic bot — Host.scala's
+                    // headless sim driver already encodes this convention ("when asked, just pick
+                    // the first action"). setup.difficulty is keyed only by setup.seating (the real
+                    // player factions chosen at setup), so it has no entry for any NeutralFaction.
+                    // Before Yuggoth Phase 2, no neutral faction ever became a live Battle
+                    // participant that could itself be the subject of an Ask (Library's Custodian/
+                    // Librarian and NeutralAbhoth are never actually asked anything), so this gap
+                    // was latent. The Watcher is a real Battle attacker/defender (see MapExpansion's
+                    // WatcherBattleStartAction), so once a Battle involving it reaches a point where
+                    // IT must decide something (casualty assignment, retreat, etc.), the engine
+                    // produces Ask(TheWatcherFaction, ...) and the generic case below used to call
+                    // setup.difficulty(faction) unconditionally, throwing NoSuchElementException.
+                    // Match this case first and reuse the same "pick the first action" convention —
+                    // this is not a skip: the Battle still fully proceeds and resolves normally: the
+                    // Watcher only ever holds its own single unit, so every one of its own decision
+                    // points is trivial/single-option in practice, exactly like a mindless construct.
+                    case Ask(faction, actions) if faction.is[NeutralFaction] =>
+                        UIPerform(game, actions.head)
 
                     case Ask(faction, actions) =>
                         if (actions(0).isInstanceOf[PlayDirectionAction] || actions(0).isInstanceOf[StartingRegionAction]) {
@@ -4966,6 +4992,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 }
 
                                 val t = c match {
+                                    // Neutral map factions (The Watcher, etc.) aren't in setup.seating,
+                                    // so setup.difficulty has no entry for them — guard before the
+                                    // lookup below rather than crashing (see askFaction's matching
+                                    // Ask(faction, actions) if faction.is[NeutralFaction] case for the
+                                    // full explanation). Auto-resolved immediately, same as Then(_).
+                                    case Ask(f, _) if f.is[NeutralFaction] => 0
                                     case Ask(f, _) if setup.difficulty(f) == Human => 2
                                     case Ask(_, actions) if actions.distinct.num <= 2 => 4
                                     case DelayedContinue(n, _) => n
