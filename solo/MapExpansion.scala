@@ -824,3 +824,281 @@ object LibraryExpansion extends Expansion {
         if (u.uclass == TheLibrarian) game.librarianRegion = None
     }
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// YUGGOTH MAP — Phase 2: THE WATCHER
+// A neutral Great Old One tied to the shared Doom Track, not owned by any Faction.
+// Rules sourced from the Yuggoth Map Creation Guide §1.7-1.9 as CORRECTED by its
+// own §1.12 issues list (I1-I6), which the guide's author flags as authoritative
+// over the guide's own earlier (wrong) §1.9/§2.0/§2.4 text and over the older
+// "Phases 2-5 Architecture Spec.md" draft:
+//   I1/I4 — immune to ALL Pain (a Pain landing on it is simply wasted — it is NOT
+//           converted to a Kill, unlike the old guide/spec text). Only an actual
+//           Kill result moves its Token down 1 on the (shared) Doom Track.
+//   I2    — the Watcher Token sits on the real Doom Track at position 12. Combat
+//           = current Token position. It Awakens on EITHER of two triggers,
+//           checked at Doom Phase start (deferred if the threshold trigger fires
+//           mid-Action-Phase, per the verbatim §1.7 text): (a) a 1d6 roll matches
+//           the printed number of a Green-Pyramid-family Area (incl. The
+//           Watcher's Postern) that currently has a Controlled Gate or
+//           Yog-Sothoth present, or (b) any Faction's Doom total reaches/passes
+//           12. Either way it is placed at The Watcher's Postern.
+//   I3    — while Awake it Attacks once per player each Action Phase (First
+//           Player first, then turn order) before anyone's Main Phase. Each
+//           Attack: the controller MUST move it (never stays put) to an
+//           adjacent Area with any player's Units, or teleports to any Area
+//           with Units if none are adjacent, then it Battles each Faction
+//           present there SEPARATELY (controller's choice of order) — all of
+//           those sub-battles count as one Attack. It never attacks Slime
+//           Molds (out of scope this phase — no Slime Molds exist yet). Any
+//           Faction may ALSO voluntarily start a normal Battle against it later
+//           in the Action Phase (free: it is simply a legal `factionlike`
+//           Battle target wherever it stands — no extra menu code needed).
+//   I4    — costs 0 Power/Doom for Tsathoggua/Ithaqua/Nyarlathotep math. Counts
+//           as a Great Old One for all purposes, so Nyarlathotep's existing
+//           Harbinger ("2 Elder Signs for a Kill on an enemy GOO") mechanic
+//           fires on it automatically (TheWatcherUnit.utype = GOO) — no bespoke
+//           Nyarlathotep code is needed; Harbinger's own non-stacking `Harbinged`
+//           tag already matches "do not stack even with multiple Kills."
+//   I5    — when the Token reaches 0 it is removed and resets Asleep at 12. It
+//           never re-rolls the Awaken check on the same Doom Phase it died, nor
+//           decays further the Phase it Awakens (both naturally true here since
+//           there is no separate per-Doom-Phase decay roll at all — I1 replaced
+//           that old-guide/spec mechanic with pure Kill-driven reduction).
+//   I6    — the board's Pyramid "+1" glyph is a +1 POWER symbol (Gather Power
+//           bonus), NOT a die modifier — and that passive bonus is explicitly
+//           its own later phase (Phase 5 "Pyramid Power" per the architecture
+//           spec's phase tracker), so it is NOT built here to avoid scope creep.
+//
+// RULING ON A GENUINE AMBIGUITY (flagged per task instructions, not blocking):
+// the "controller" of each forced Attack only directs its Move target and the
+// order of its sub-battles — the Watcher itself is still the actual Battle
+// participant (attacker = TheWatcherFaction) so results against it follow the
+// corrected Pain/Kill rule regardless of who is "controlling" it that turn.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── MAP UNIT — a true Great Old One (utype GOO), not MapUnitClass (which is
+// non-combat by construction — Custodian/Librarian never fight). Combat is NOT
+// a fixed field; every combat-value read goes through TheWatcherFaction.strength
+// below, which looks up the live game.watcherPosition at Battle time. ──
+case object TheWatcherUnit extends UnitClass("The Watcher", GOO, 0) {
+    // Its own forced Move (WatcherMoveAction, below) mutates .region directly,
+    // bypassing this gate entirely — same idiom LibraryExpansion uses for the
+    // Custodian/Librarian. canMove/canBeMoved being false here only blocks OTHER
+    // factions' generic Move menus and forced-relocation effects from touching it
+    // (I3: "Windwalker's Howl cannot send the Watcher out of the Battle Area").
+    override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBattle(u : UnitFigure)(implicit game : Game) : Boolean = true
+    override def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBeCaptured(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canControlGate(u : UnitFigure)(implicit game : Game) : Boolean = false
+    override def canBeRecruited(f : Faction)(implicit game : Game) : Boolean = false
+    override def canBeSummoned(f : Faction)(implicit game : Game) : Boolean = false
+}
+
+// ── NEUTRAL MAP FACTION — pure bookkeeping owner for the single Watcher figure,
+// same idiom as LibraryFaction/NeutralAbhoth. Registered permanently into
+// game.neutrals at Game construction (see Game.scala) whenever the board is a
+// Yuggoth map, so `factionlike` (and therefore every generic Battle/Capture
+// target scan already in the codebase) sees it automatically — this is exactly
+// how I3's "any player may also voluntarily Battle it" falls out for free. ──
+case object TheWatcherFaction extends NeutralFaction {
+    def name = "The Watcher"
+    def short = "WT"
+    def style = "nt"
+
+    override def abilities = $
+    override def library = $
+    override def requirements(options : $[GameOption]) = $
+
+    val allUnits = $(TheWatcherUnit)
+
+    // neutralStrength covers every OTHER neutral/monster unit class (all zero
+    // here, since TheWatcherFaction only ever holds TheWatcherUnit) — included
+    // only for consistency with every other Faction.strength implementation.
+    // The Watcher's actual Combat is its live Doom-Track position.
+    def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int =
+        neutralStrength(units, opponent) + units(TheWatcherUnit).not(Zeroed).num * game.watcherPosition
+}
+
+// ── ACTIONS ──
+
+// Doom Phase hook (Hard chain; see Game.scala's DoomPhaseStartAction).
+case class WatcherDoomPhaseCheckAction(then : Action) extends ForcedAction
+case class WatcherAwakenRollAction(roll : Int, then : Action) extends ForcedAction
+case class WatcherAwakenAction(then : Action) extends ForcedAction
+
+// Action Phase forced-attack-sequence hook (see Game.scala's ActionPhaseAction).
+case class WatcherAttackPhaseStartAction(then : Action) extends ForcedAction
+case class WatcherAttackTurnAction(then : Action) extends ForcedAction
+case class WatcherMoveAction(controller : Faction, dest : Region, then : Action) extends BaseFactionAction(implicit g => "Move " + "The Watcher".styled("nt") + " to", dest) {
+    def self = controller
+}
+case class WatcherBattleOrderAction(controller : Faction, dest : Region, then : Action) extends ForcedAction
+case class WatcherBattleChooseAction(controller : Faction, dest : Region, target : Faction, then : Action) extends BaseFactionAction(implicit g => "The Watcher".styled("nt") + " attacks in " + dest, target) {
+    def self = controller
+}
+case class WatcherBattleStartAction(controller : Faction, dest : Region, target : Faction, then : Action) extends ForcedAction
+
+object YuggothExpansion extends Expansion {
+
+    // Green Pyramid Areas (incl. The Watcher's Postern) on the current board that
+    // right now have a Controlled Gate OR Yog-Sothoth present, mapped to the set
+    // of die faces that would Awaken the Watcher — union of all qualifying Areas'
+    // printed numbers (board.watcherAwakenNumbers; see Map.scala per variant).
+    def eligibleAwakenNumbers(implicit game : Game) : Set[Int] =
+        game.board.greenPyramidRegions
+            .%(r => factions.exists(_.gates.contains(r)) || factions.exists(_.at(r).exists(_.uclass == YogSothoth)))
+            ./~(r => game.board.watcherAwakenNumbers.getOrElse(r, Set()).toList)
+            .toSet
+
+    def watcherUnit(implicit game : Game) : UnitFigure = TheWatcherFaction.units.head
+
+    // "Any player's Units" for the forced-attack Move/target checks must mean real
+    // combatants (unit.uclass.canBattle), not e.g. a still-Building Cathedral (The
+    // Ancients, pre-Holy-Ground) sitting in the Area — otherwise a Cathedral-only Area
+    // becomes an infinite loop: the Watcher picks that Faction as present, starts a
+    // Battle, Battle.scala's own BattleStart phase exempts the Cathedral as a
+    // non-combatant (same rule normal Attacks already respect), the Battle ends with
+    // nothing resolved, and the Cathedral is STILL "present" on the next check — round
+    // and round forever. canBattle is the same generic combatant gate the rest of the
+    // engine already uses (also correctly excludes MapUnit tokens, mummified/kidnapped
+    // units, etc.), so this one check covers Cathedral and any other such exemption.
+    def combatPresent(f : Faction, r : Region)(implicit game : Game) : Boolean =
+        f.at(r).exists(u => u.uclass.canBattle(u))
+
+    def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
+
+        // ── DOOM PHASE: AWAKEN CHECK (only while Asleep; no more per-Doom-Phase
+        // decay roll exists — I1 replaced that old mechanic with pure Kill-driven
+        // Token reduction during Battle) ──
+        case WatcherDoomPhaseCheckAction(then) =>
+            if (!game.board.isYuggothMap || !game.watcherAsleep)
+                Force(then)
+            else if (factions.exists(_.doom >= 12)) {
+                log("The Watcher".styled("nt") + ": a Faction's Doom has reached 12 —")
+                Force(WatcherAwakenAction(then))
+            }
+            else {
+                val eligible = eligibleAwakenNumbers
+                if (eligible.none)
+                    Force(then)
+                else
+                    RollD6(_ => "The Watcher — Awaken check (needs " + eligible.toList.sorted.mkString(" or ") + ")", roll => WatcherAwakenRollAction(roll, then))
+            }
+
+        case WatcherAwakenRollAction(roll, then) =>
+            log("The Watcher".styled("nt") + ": Awaken roll —", roll.toString.styled("power"))
+            if (eligibleAwakenNumbers.contains(roll))
+                Force(WatcherAwakenAction(then))
+            else {
+                log("The Watcher".styled("nt") + ": remains Asleep")
+                Force(then)
+            }
+
+        case WatcherAwakenAction(then) =>
+            game.watcherAsleep = false
+            game.watcherPosition = 12
+            val postern = game.board.watcherPostern.|!("Yuggoth board missing watcherPostern")
+            // Suppress Firstborn's Cyclopean Gaze "unit arrived in a gaze region" trigger —
+            // the Watcher belongs to no Faction, so this placement must not be treated as
+            // some Faction's own Action landing in the region (same idiom LibraryExpansion
+            // uses for its own forced Custodian/Librarian moves).
+            game.fbSuppressCGForPlacement = true
+            watcherUnit.region = postern
+            game.fbSuppressCGForPlacement = false
+            watcherUnit.onGate = false
+            log("The Watcher".styled("nt") + " Awakens! Placed at", postern, "— Combat", 12)
+            Force(then)
+
+        // ── ACTION PHASE: FORCED ATTACK SEQUENCE (before anyone's Main Phase) ──
+        case WatcherAttackPhaseStartAction(then) =>
+            if (!game.board.isYuggothMap || game.watcherAsleep)
+                Force(then)
+            else {
+                // `factions` is already reordered to turn order starting at the
+                // First Player by the time ActionPhaseAction reaches this hook.
+                game.watcherAttackQueue = game.factions
+                Force(WatcherAttackTurnAction(then))
+            }
+
+        case WatcherAttackTurnAction(then) =>
+            if (game.watcherAsleep || game.watcherAttackQueue.none) {
+                game.watcherAttackQueue = $
+                Force(then)
+            }
+            else {
+                val controller = game.watcherAttackQueue.head
+                game.watcherAttackQueue = game.watcherAttackQueue.tail
+
+                val current = watcherUnit.region
+                val adjacent = game.board.connected(current).%(r => game.factions.exists(f => combatPresent(f, r)))
+                val options = if (adjacent.any) adjacent else game.board.regions.but(current).%(r => game.factions.exists(f => combatPresent(f, r)))
+
+                if (options.none) {
+                    controller.log("has no Area to Move", "The Watcher".styled("nt"), "to — its forced Attack is skipped")
+                    Force(WatcherAttackTurnAction(then))
+                }
+                else
+                    Ask(controller).each(options)(r => WatcherMoveAction(controller, r, then))
+            }
+
+        case WatcherMoveAction(controller, dest, then) =>
+            // Suppress Cyclopean Gaze's arrival trigger here too — see WatcherAwakenAction.
+            // Also critical for correctness, not just flavor: without this, Firstborn's Gaze
+            // can grab the Watcher's own figure (as "actor" = the Watcher itself, since the
+            // move was not a real Faction's Action) and relocate it out from under this
+            // forced-Attack chain, desyncing arena vs. the figure's actual region — an
+            // infinite-Battle loop risk (see git history for the reproduction).
+            game.fbSuppressCGForPlacement = true
+            watcherUnit.region = dest
+            game.fbSuppressCGForPlacement = false
+            watcherUnit.onGate = false
+            controller.log("moved", "The Watcher".styled("nt"), "to", dest)
+            Force(WatcherBattleOrderAction(controller, dest, then))
+
+        case WatcherBattleOrderAction(controller, dest, then) =>
+            if (game.watcherAsleep) {
+                game.watcherAttackQueue = $
+                Force(then)
+            }
+            else {
+                val targets = game.factions.%(f => combatPresent(f, dest))
+                if (targets.none)
+                    Force(WatcherAttackTurnAction(then))
+                else if (targets.num == 1)
+                    Force(WatcherBattleStartAction(controller, dest, targets.head, then))
+                else
+                    Ask(controller).each(targets)(f => WatcherBattleChooseAction(controller, dest, f, then))
+            }
+
+        case WatcherBattleChooseAction(controller, dest, target, then) =>
+            Force(WatcherBattleStartAction(controller, dest, target, then))
+
+        case WatcherBattleStartAction(controller, dest, target, then) =>
+            if (!combatPresent(target, dest))
+                Force(WatcherBattleOrderAction(controller, dest, then))
+            else {
+                log("The Watcher".styled("nt") + " (Combat " + game.watcherPosition + ") attacks", target, "in", dest)
+                game.watcherForcedBattleThen = |(WatcherBattleOrderAction(controller, dest, then))
+                game.queue = $(new Battle(dest, TheWatcherFaction, target, None)) ++ game.queue
+                Force(ProceedBattlesAction)
+            }
+
+        case _ => UnknownContinue
+    }
+
+    // When the Watcher's Token is reduced to 0 (Battle.scala sets its UnitFigure's
+    // health = Killed), the generic EliminatePhase sweep calls game.eliminate(u),
+    // which runs this hook BEFORE returning the figure to TheWatcherFaction.reserve
+    // (the generic base eliminate() body already does that region reset — this
+    // hook only resets the Watcher-specific Doom-Track bookkeeping, per I5).
+    override def eliminate(u : UnitFigure)(implicit game : Game) {
+        if (u.uclass == TheWatcherUnit) {
+            game.watcherAsleep = true
+            game.watcherPosition = 12
+            log("The Watcher".styled("nt") + " is destroyed — returns to slumber at 12")
+        }
+    }
+}

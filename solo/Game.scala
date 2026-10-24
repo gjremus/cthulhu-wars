@@ -147,6 +147,14 @@ trait Board {
     val east : $[Region]
     val isLibraryMap : Boolean = false
     val isYuggothMap : Boolean = false
+    // Yuggoth Phase 2 (The Watcher): Green Pyramid Areas (incl. The Watcher's Postern)
+    // for this board variant, and the die-roll number printed on each that matches the
+    // Watcher-Awaken check (Section 1.7/I6 of the Yuggoth Map Creation Guide — a plain
+    // 1d6, matched against the printed number of any such Area that currently has a
+    // Controlled Gate or Yog-Sothoth present). Defaults empty/none for non-Yuggoth boards.
+    val greenPyramidRegions : $[Region] = $()
+    val watcherAwakenNumbers : Map[Region, Set[Int]] = Map()
+    val watcherPostern : |[Region] = None
     def gateXYOHorizontal(r : Region) : (Int, Int) = gateXYO(r)
     def silenceTokenMax(f : Faction) : Int = 0
     val unitScale : Double = 1.0
@@ -1784,6 +1792,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         (options.of[NeutralMonsterOption].any || options.of[NeutralTerrorOption].any || options.of[WhateleyClanOption].any).$(NeutralMonstersExpansion) ++
         options.of[IGOOOption].any.$(IGOOsExpansion) ++
         board.isLibraryMap.$(LibraryExpansion) ++
+        board.isYuggothMap.$(YuggothExpansion) ++
         $(this)
 
     val players = setup./(f => f -> new Player(f)).toMap
@@ -1796,6 +1805,37 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     var neutrals : Map[NeutralFaction, Player] = Map()
     def factionlike = setup ++ neutrals.keys
+
+    // Yuggoth Phase 2 — The Watcher (neutral Great Old One). Registered permanently
+    // (not lazily) the moment a Yuggoth board is in play, same idiom as NeutralAbhoth's
+    // lazy registration elsewhere — here it's unconditional at construction since the
+    // Watcher's (empty) unit list must be queryable (game.neutrals(f) throws on a
+    // missing key) from turn 1, even while Asleep and off-board.
+    if (board.isYuggothMap)
+        neutrals += TheWatcherFaction -> new Player(TheWatcherFaction)
+
+    // Yuggoth Phase 2 — The Watcher's persistent state. ALL of it lives here on Game
+    // (never on a MapExpansion singleton) so undo/redo/replay stay correct per the
+    // project's hard architectural rule. The Watcher's actual board position is tracked
+    // via its own UnitFigure.region (reserve = Asleep/off-board; a real Region = Awake);
+    // these two fields are the only EXTRA bookkeeping that figure's region can't capture.
+    //   watcherAsleep    — true until Awoken; Awake means the figure is on the board.
+    //   watcherPosition  — 0-12 Doom-Track position; also the Watcher's current Combat.
+    //                       Reset to 12 on every (re)Awaken. Decremented by 1 per actual
+    //                       Kill landed on it in Battle (Pains are ignored — I1).
+    //   watcherAttackQueue — Factions still owed one forced Attack this Action Phase's
+    //                       Watcher sequence (First Player first, then turn order),
+    //                       consumed one at a time; cleared when the sequence ends or
+    //                       the Watcher is destroyed mid-sequence.
+    var watcherAsleep : Boolean = true
+    var watcherPosition : Int = 12
+    var watcherAttackQueue : $[Faction] = $
+    // BattleEnd routing hook (Battle.scala): when set, a just-finished Battle that the
+    // Watcher's forced attack sequence started returns control to THIS action instead of
+    // the normal AfterAction(attacker) terminus — exactly the same "battle was forced by
+    // something other than the declaring side's own turn" escape hatch already used by
+    // csCorruptedRendingActor below. Cleared by Battle.scala the moment it's consumed.
+    var watcherForcedBattleThen : |[ForcedAction] = None
 
     var starting = Map[Faction, Region]()
     var turn = 1
@@ -4682,7 +4722,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             round = 0
 
-            CheckSpellbooksAction(PreMainAction(game.first))
+            Force(WatcherAttackPhaseStartAction(CheckSpellbooksAction(PreMainAction(game.first))))
 
         case GameOverPhaseAction =>
             factions.%(_.needs(AnytimeGainElderSigns)).foreach { f =>
@@ -4820,10 +4860,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // moonbeasts placed during this same Doom phase are added afterward and so wait for next Doom.
             if (!nextReplayActionHint.any && moonbeastOnSpellbook.any) {
                 val refs = moonbeastOnSpellbook.keys.toList
-                return Force(MoonbeastReturnLoopAction(refs, CheckSpellbooksAction(DoomPhaseAction)))
+                return Force(MoonbeastReturnLoopAction(refs, WatcherDoomPhaseCheckAction(CheckSpellbooksAction(DoomPhaseAction))))
             }
 
-            CheckSpellbooksAction(DoomPhaseAction) // Then(...)
+            Force(WatcherDoomPhaseCheckAction(CheckSpellbooksAction(DoomPhaseAction)))
 
         // SPELLBOOK
         case CheckSpellbooksAction(next) =>

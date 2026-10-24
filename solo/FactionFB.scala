@@ -1733,7 +1733,7 @@ object FBExpansion extends Expansion {
             game.fbCyclopeanGazeSnapshot = (for {
                 r <- gazeRegions
                 ef <- game.factions.but(FB)
-            } yield (ef, r) -> ef.at(r).%(_.uclass.utype != Building).num).toMap
+            } yield (ef, r) -> ef.at(r).%(u => u.uclass.utype != Building && u.uclass != TheWatcherUnit).num).toMap
             UnknownContinue
 
         // ── CYCLOPEAN GAZE EDGE CASES: ICE AGE, LETHARGY, DREAD CURSE ──
@@ -1810,7 +1810,7 @@ object FBExpansion extends Expansion {
                 var anyArrived = false
                 game.factions.but(FB).foreach { ef =>
                     if (game.fbCyclopeanGazeSnapshot.contains((ef, r))) {
-                        val current = ef.at(r).%(_.uclass.utype != Building).num
+                        val current = ef.at(r).%(u => u.uclass.utype != Building && u.uclass != TheWatcherUnit).num
                         val before = game.fbCyclopeanGazeSnapshot((ef, r))
                         // Round 8 fix: update snapshot to current count so re-entry via
                         // Then(AfterAction) won't re-fire for the same arrivals
@@ -1830,7 +1830,7 @@ object FBExpansion extends Expansion {
             // one move. Fix: compute the union of trigger regions (dedup), then emit
             // sources once per unique region.
             val triggerRegions : $[Region] = (moveTriggeredRegions ++
-                edgeCaseRegions.%(r => gazeRegions.has(r) && actor.at(r).%(_.uclass.utype != Building).any)).distinct
+                edgeCaseRegions.%(r => gazeRegions.has(r) && actor.at(r).%(u => u.uclass.utype != Building && u.uclass != TheWatcherUnit).any)).distinct
 
             val sources : $[FBCyclopeanGazeSource] = triggerRegions./~ { r =>
                 val sourceUnits : $[UnitClass] =
@@ -1854,7 +1854,7 @@ object FBExpansion extends Expansion {
             if (sourcesPending.any) {
                 val FBCyclopeanGazeSource(r, srcUnit) = sourcesPending.head
                 val rest = sourcesPending.tail
-                val units = actor.at(r).%(u => u.uclass.utype != Building)
+                val units = actor.at(r).%(u => u.uclass.utype != Building && u.uclass != TheWatcherUnit)
                 if (units.any) {
                     val replayExpectsCGChoice = game.nextReplayActionHint.exists(h => h.startsWith("FBCyclopeanGazeUse") || h.startsWith("FBCyclopeanGazeSkip"))
                     if (game.nextReplayActionHint.any && !replayExpectsCGChoice)
@@ -1906,7 +1906,7 @@ object FBExpansion extends Expansion {
                 // gets pained. Ask(actor) → menu border in actor's color. Action's self = actor
                 // → menu title styled in actor's color. The painted faction's name appears in
                 // the title.
-                val units = actor.at(r).%(u => u.uclass.utype != Building)
+                val units = actor.at(r).%(u => u.uclass.utype != Building && u.uclass != TheWatcherUnit)
                 if (units.any)
                     Ask(actor).each(units)(u => FBCyclopeanGazePainUnitAction(actor, actor, u.ref, r, srcUnit, rest, fromBattle, appliedPending))
                 else
@@ -1944,7 +1944,7 @@ object FBExpansion extends Expansion {
                     // No legal destinations — the painted faction must lose a unit. If they
                     // have multiple non-Building units in the region, let them choose which.
                     val painedFaction = u.faction
-                    val killCandidates = painedFaction.at(r).%(_.uclass.utype != Building)
+                    val killCandidates = painedFaction.at(r).%(u => u.uclass.utype != Building && u.uclass != TheWatcherUnit)
                     if (killCandidates.num <= 1) {
                         // Only the FB-selected unit (or no other choices) — eliminate it directly
                         val from = u.region
@@ -1995,7 +1995,7 @@ object FBExpansion extends Expansion {
             if (sourcesPending.any) {
                 val FBCyclopeanGazeSource(r, srcUnit) = sourcesPending.head
                 val rest = sourcesPending.tail
-                val units = actor.at(r).%(u => u.uclass.utype != Building)
+                val units = actor.at(r).%(u => u.uclass.utype != Building && u.uclass != TheWatcherUnit)
                 if (units.any) {
                     val replayExpectsCGChoice = game.nextReplayActionHint.exists(h => h.startsWith("FBCyclopeanGazeUse") || h.startsWith("FBCyclopeanGazeSkip"))
                     if (game.nextReplayActionHint.any && !replayExpectsCGChoice)
@@ -2024,7 +2024,7 @@ object FBExpansion extends Expansion {
             Force(FBCyclopeanGazePhaseActionLegacy4(self, actor, sourcesPending, fromBattle))
 
         case FBCyclopeanGazeAssignPainActionLegacy6(self, actor, r, sourceUnit, sourcesPending, fromBattle) =>
-            val units = actor.at(r).%(u => u.uclass.utype != Building)
+            val units = actor.at(r).%(u => u.uclass.utype != Building && u.uclass != TheWatcherUnit)
             if (units.any)
                 Ask(actor).each(units)(u => FBCyclopeanGazePainUnitActionLegacy7(actor, actor, u.ref, r, sourceUnit, sourcesPending, fromBattle))
             else
@@ -2037,7 +2037,7 @@ object FBExpansion extends Expansion {
                 Ask(FB).each(destinations)(dest => FBCyclopeanGazeDestinationActionLegacy7(FB, uRef, dest, sourceUnit, sourcesPending, actor, fromBattle))
             else {
                 val painedFaction = u.faction
-                val killCandidates = painedFaction.at(r).%(_.uclass.utype != Building)
+                val killCandidates = painedFaction.at(r).%(u => u.uclass.utype != Building && u.uclass != TheWatcherUnit)
                 if (killCandidates.num <= 1) {
                     val from = u.region
                     game.eliminate(u)

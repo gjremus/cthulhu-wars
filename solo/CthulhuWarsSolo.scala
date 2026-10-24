@@ -1132,6 +1132,10 @@ object CthulhuWarsSolo {
                     case SW => Processing(|("#b8abd5"), |("#333333"), None)
                     // Library map units: no tint (use original icon images)
                     case LibraryFaction => defaultProcessing
+                    // Yuggoth Phase 2: The Watcher — grey tint (no bespoke art yet; see
+                    // the on-map draw site comment). Matches the guide's own description
+                    // of its physical token as a grey piece with a white outline.
+                    case TheWatcherFaction => Processing(|("#888888"), |("#333333"), None)
                     case _  => defaultProcessing
                 }
 
@@ -1159,6 +1163,7 @@ object CthulhuWarsSolo {
                     case CS => Processing(None, None, None)
                     case TI => Processing(|("#94382b"), |("#333333"), None)
                     case SW => Processing(|("#b8abd5"), |("#333333"), None)
+                    case TheWatcherFaction => Processing(|("#888888"), |("#333333"), None)
                     case _  => defaultProcessing
                 }
 
@@ -1575,6 +1580,14 @@ object CthulhuWarsSolo {
                     // Library map units — larger than monsters, smaller than GOOs
                     case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 52, y - 104, 104, 104)
                     case TheLibrarian => DrawRect("librarian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 47, y - 146, 94, 146)
+
+                    // Yuggoth Phase 2: The Watcher — GOO-scale placeholder sprite (no bespoke
+                    // art yet; reuses gc-cthulhu's image, grey-tinted via TheWatcherFaction's
+                    // own `tint` case above, same "reuse another faction's art as a stand-in"
+                    // idiom already used for XSS/TT elsewhere in this file). Replace with real
+                    // Watcher Token art (Section A.5 of the guide) once it exists as a clean
+                    // asset rather than only an icon inside the Section A.6 rulebook scan.
+                    case TheWatcherUnit => DrawRect("gc-cthulhu", |(tint), x - 65, y - 158, 131, 175)
 
                     // Faceless Blight (FBE): Fungal Thrall and Byagoona use their real sculpt art,
                     // stored light/desaturated so the SAME FBE-green #3d5f1c multiply tint produces
@@ -2262,6 +2275,17 @@ object CthulhuWarsSolo {
                         if (game.librarianRegion.has(r))
                             all +:= DrawItem(r, LibraryFaction, TheLibrarian, Alive, $, 0, 0)
                     }
+
+                    // Yuggoth Phase 2: The Watcher, on-map, only while Awake (its UnitFigure
+                    // sits in TheWatcherFaction.reserve — off-map — while Asleep, so this
+                    // naturally only draws it in whichever single Area it currently occupies).
+                    // No bespoke art yet (Section A.5 of the guide still only has it as a
+                    // rulebook-scan icon) — reuses the gc-cthulhu GOO-scale sprite, grey-tinted
+                    // via TheWatcherFaction's own tint/neutralTint case below, as a real but
+                    // rough placeholder per the project's existing "placeholder sprite" idiom
+                    // (e.g. XSS/TT reusing other factions' art until bespoke art exists).
+                    if (board.isYuggothMap && !game.watcherAsleep && TheWatcherFaction.at(r).any)
+                        all +:= DrawItem(r, TheWatcherFaction, TheWatcherUnit, Alive, $, 0, 0)
 
                     if (game.desecrated.has(r))
                         all +:= DrawItem(r, null, DesecrationToken, Alive, $, 0, 0)

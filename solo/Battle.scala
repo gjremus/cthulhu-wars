@@ -509,6 +509,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
     var eliminated : $[UnitFigure] = $
     var eliminatedByDice : $[UnitFigure] = $
+    // Yuggoth Phase 2 (The Watcher): kills already landed on it THIS Battle instance —
+    // battle-scoped only (never serialized), reset fresh by `new Battle(...)` every time,
+    // same idiom as cthughaCombatBonus/savageryBonus on Side above. Used purely so the
+    // generic assignKills loop (canAssignKills/assignedKills below) terminates correctly;
+    // the actual persistent Doom-Track position (game.watcherPosition, the real state
+    // that must survive undo/replay) is decremented live in assignKill, once per Kill.
+    var watcherKillsThisBattle : Int = 0
     // TT Fulmination: total combat kills (both sides) captured at EliminatePhase, before the
     // eliminate loop clears killed units from forces. Read at PostBattlePhase (too late to
     // recount there — forces are already empty, which awarded 0 ES for a 7-kill battle).
@@ -531,7 +538,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     def assignedKills(unit : UnitFigure) : Int =
-        if (unit.uclass == AzathothIGOO && azathothReceivedKill && unit.health != Killed) 1
+        // Yuggoth (The Watcher): tracked via a dedicated battle-scoped counter, not
+        // via its UnitHealth (it absorbs many Kills across its 0-12 Token range, not
+        // just one/two like a normal unit's Alive/DoubleHP states can express).
+        if (unit.uclass == TheWatcherUnit) watcherKillsThisBattle
+        else if (unit.uclass == AzathothIGOO && azathothReceivedKill && unit.health != Killed) 1
         else unit.health match {
             case Killed => 1
             case DoubleHP(Killed, Killed) => 2
@@ -541,8 +552,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
     def canAssignKills(unit : UnitFigure) : Int =
+        // Yuggoth (The Watcher): remaining capacity = its CURRENT live Doom-Track
+        // position (game.watcherPosition is decremented immediately, once per actual
+        // Kill, inside assignKill below — so this already reflects any Kills already
+        // landed earlier in this same Battle). Once it hits 0 the unit is marked
+        // Killed (below) and reports 0 capacity from then on.
+        if (unit.uclass == TheWatcherUnit) (if (unit.health == Killed) 0 else game.watcherPosition)
         // Hound of Tindalos: Angles of Time — cannot be assigned a Kill
-        if (unit.uclass == HoundOfTindalos) 0
+        else if (unit.uclass == HoundOfTindalos) 0
         else if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
         // Tribulation (DGT) God's Hand: DGT units in Death's Area ignore Kills
         else if (game.setup.has(DGT) && unit.faction == DGT && DGT.has(GodsHand) &&
@@ -559,6 +576,19 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
     def assignKill(unit : UnitFigure) {
+        // Yuggoth (The Watcher) — I1/I2: each actual Kill moves its Token down 1 on
+        // the Doom Track (live, persistent — survives past this Battle). Once the
+        // Token reaches 0 mark it Killed so the generic EliminatePhase sweep removes
+        // it via the normal eliminate() path (YuggothExpansion.eliminate resets it
+        // back to Asleep/12 there, per I5).
+        if (unit.uclass == TheWatcherUnit) {
+            watcherKillsThisBattle += 1
+            game.watcherPosition = max(0, game.watcherPosition - 1)
+            log("The Watcher".styled("nt") + ": Kill lands — Token now at", game.watcherPosition)
+            if (game.watcherPosition <= 0)
+                unit.health = Killed
+            return
+        }
         // Hound of Tindalos: should never reach here — canAssignKills returns 0
         // If somehow reached, log error (Angles of Time prevents Kill assignment entirely)
         if (unit.uclass == HoundOfTindalos) {
@@ -614,9 +644,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
 
     def canAssignPains(unit : UnitFigure) : Int =
+        // Yuggoth (The Watcher) — I1: immune to ALL Pain. A Pain landing on it is
+        // simply wasted (never converted to a Kill, unlike the old guide/spec text).
+        if (unit.uclass == TheWatcherUnit) 0
         // Azathoth: if it already received a kill this battle (Daemon Sultan absorbed it),
         // it cannot also be assigned a pain in the same battle.
-        if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
+        else if (unit.uclass == AzathothIGOO && azathothReceivedKill) 0
         // Cathedrals cannot be assigned a Pain
         else if (unit.uclass == Cathedral) 0
         // PRM Mother's Aid: Ycgn'àgnnisssz cannot be assigned combat results while controlled by an enemy
@@ -3202,6 +3235,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                         val cs = game.csCorruptedRendingActor.get
                         game.csCorruptedRendingActor = None
                         AfterAction(cs)
+                    }
+                    else if (game.watcherForcedBattleThen.any) {
+                        // Yuggoth (The Watcher): this battle was FORCED by its own Attack sequence,
+                        // not by `attacker`'s (TheWatcherFaction's) own turn — same escape hatch as
+                        // Corrupted Rending above. Post-battle control returns to the forced-sequence
+                        // continuation (re-checks remaining Factions present, or the next Attack).
+                        val then = game.watcherForcedBattleThen.get
+                        game.watcherForcedBattleThen = None
+                        then
                     }
                     else if (game.queue.starting.?(_.effect.has(FromBelow)))
                         ProceedBattlesAction

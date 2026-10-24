@@ -1346,7 +1346,9 @@ object Yuggoth3 extends Board {
 
     // Special region sets for Yuggoth mechanics
     val seaAreas = $(WestSlimeSea, EastSlimeSea, OxygenSea, PolarSea, MethaneSea, AmmoniaSea, NitrogenSea)
-    val greenPyramidRegions = $(GreenPyramidSlopes, TheWatchersPostern)
+    override val greenPyramidRegions = $(GreenPyramidSlopes, TheWatchersPostern)
+    override val watcherAwakenNumbers : Map[Region, Set[Int]] = Map(GreenPyramidSlopes -> Set(1, 2), TheWatchersPostern -> Set(3, 4))
+    override val watcherPostern : |[Region] = |(TheWatchersPostern)
     val openerRestrictedRegions = $(SlimeSeaOverlook, Laboratory, GreenPyramidSlopes, TheWatchersPostern)
 }
 
@@ -1458,7 +1460,9 @@ object Yuggoth4a extends Board {
 
     // Special region sets for Yuggoth mechanics
     val seaAreas = $(WestSlimeSea, EastSlimeSea, OxygenSea, PolarSea, MethaneSea, AmmoniaSea, NitrogenSea)
-    val greenPyramidRegions = $(PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
+    override val greenPyramidRegions = $(PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
+    override val watcherAwakenNumbers : Map[Region, Set[Int]] = Map(TheWatchersPostern -> Set(1), PyramidEmeraldSlope -> Set(2), PyramidMalachiteSlope -> Set(3), PyramidPainiteSlope -> Set(4))
+    override val watcherPostern : |[Region] = |(TheWatchersPostern)
     val openerRestrictedRegions = $(SlimeSeaOverlook, Laboratory, PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
 }
 
@@ -1567,7 +1571,9 @@ object Yuggoth4b extends Board {
 
     // Special region sets for Yuggoth mechanics
     val seaAreas = $(WestSlimeSea, NorthSlimeSea, SouthSlimeSea, OxygenSea, PolarSea, MethaneSea, AmmoniaSea, NitrogenSea)
-    val greenPyramidRegions = $(GreenPyramidSlopes, TheWatchersPostern)
+    override val greenPyramidRegions = $(GreenPyramidSlopes, TheWatchersPostern)
+    override val watcherAwakenNumbers : Map[Region, Set[Int]] = Map(GreenPyramidSlopes -> Set(1, 2), TheWatchersPostern -> Set(3, 4))
+    override val watcherPostern : |[Region] = |(TheWatchersPostern)
     val openerRestrictedRegions = $(SlimeSeaOverlook, Laboratory, GreenPyramidSlopes, TheWatchersPostern)
 }
 
@@ -1688,7 +1694,9 @@ object Yuggoth5 extends Board {
 
     // Special region sets for Yuggoth mechanics
     val seaAreas = $(WestSlimeSea, NorthSlimeSea, SouthSlimeSea, OxygenSea, PolarSea, MethaneSea, AmmoniaSea, NitrogenSea)
-    val greenPyramidRegions = $(PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
+    override val greenPyramidRegions = $(PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
+    override val watcherAwakenNumbers : Map[Region, Set[Int]] = Map(TheWatchersPostern -> Set(1), PyramidEmeraldSlope -> Set(2), PyramidMalachiteSlope -> Set(3), PyramidPainiteSlope -> Set(4))
+    override val watcherPostern : |[Region] = |(TheWatchersPostern)
     val openerRestrictedRegions = $(SlimeSeaOverlook, Laboratory, PyramidEmeraldSlope, PyramidMalachiteSlope, PyramidPainiteSlope, TheWatchersPostern)
 }
 
