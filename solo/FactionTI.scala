@@ -431,8 +431,14 @@ object TIExpansion extends Expansion {
         // ================================================================
         // (1) TI self-placement — like Xyrious Storm, TI is not a printed-map faction,
         // so it intercepts SetupFactionsAction to place itself. TIExpansion is dispatched
-        // before Game's own handler, so this always wins while TI is unplaced.
-        case SetupFactionsAction if game.setup.has(TI) && !game.starting.contains(TI) =>
+        // before Game's own handler, so this always wins once eligible.
+        // Creator ruling (2026-10-24): TI must seat only after every other faction in
+        // the game (except Opener of the Way, which always seats last) has already
+        // placed its starting region — same wait condition already used below for the
+        // opponent Portent-placement micro-phase.
+        case SetupFactionsAction
+            if game.setup.has(TI) && !game.starting.contains(TI)
+            && game.setup.but(TI).but(OW).forall(game.starting.contains) =>
             val eligible = game.board.regions.%(r =>
                 game.factions.forall(e => e.at(r).none) &&
                 game.starting.values.$.has(r).not)

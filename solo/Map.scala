@@ -106,7 +106,7 @@ object EarthMap3 extends Board {
         // Tribulation (DGT): regular multi-area setup
         case DGT => regions; case TRB => { val ng = regions.%(_.glyph == NoGlyph); if (ng.any) ng else regions }
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
-        case TB => $()
+        case TB => $(); case TI => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -235,7 +235,7 @@ object EarthMap4v35 extends Board {
         // Tribulation (DGT): regular multi-area setup
         case DGT => regions; case TRB => { val ng = regions.%(_.glyph == NoGlyph); if (ng.any) ng else regions }
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
-        case TB => $()
+        case TB => $(); case TI => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -368,7 +368,7 @@ object EarthMap4v53 extends Board {
         // Tribulation (DGT): regular multi-area setup
         case DGT => regions; case TRB => { val ng = regions.%(_.glyph == NoGlyph); if (ng.any) ng else regions }
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
-        case TB => $()
+        case TB => $(); case TI => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -509,7 +509,7 @@ object EarthMap5 extends Board {
         // Tribulation (DGT): regular multi-area setup
         case DGT => regions; case TRB => { val ng = regions.%(_.glyph == NoGlyph); if (ng.any) ng else regions }
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
-        case TB => $()
+        case TB => $(); case TI => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -660,7 +660,7 @@ object EarthMap6 extends Board {
         // Tribulation (DGT): regular multi-area setup
         case DGT => regions; case TRB => { val ng = regions.%(_.glyph == NoGlyph); if (ng.any) ng else regions }
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
-        case TB => $()
+        case TB => $(); case TI => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -937,7 +937,7 @@ object LibraryCelaeno55 extends Board {
         // Tribulation (DGT): regular multi-area setup
         case DGT => regions; case TRB => { val ng = regions.%(_.glyph == NoGlyph); if (ng.any) ng else regions }
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
-        case TB => $()
+        case TB => $(); case TI => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -1050,7 +1050,7 @@ object LibraryCelaeno33 extends Board {
         case SL => $(ChamberOfSngac); case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
         case PRM => regions.%(_.glyph == Ocean)
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case SW => regions.%(_.glyph != Ocean); case DGT => regions; case TRB => { val ng = regions.%(_.glyph == NoGlyph); if (ng.any) ng else regions }; case XSS => $(); case TB => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case SW => regions.%(_.glyph != Ocean); case DGT => regions; case TRB => { val ng = regions.%(_.glyph == NoGlyph); if (ng.any) ng else regions }; case XSS => $(); case TB => $(); case TI => $()
         case CS => regions
         case _ => regions
     }
@@ -1133,7 +1133,7 @@ object LibraryCelaeno53 extends Board {
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
         case PRM => regions.%(_.glyph == Ocean)
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case SW => regions.%(_.glyph != Ocean); case DGT => regions; case TRB => { val ng = regions.%(_.glyph == NoGlyph); if (ng.any) ng else regions }; case XSS => $(); case TB => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case SW => regions.%(_.glyph != Ocean); case DGT => regions; case TRB => { val ng = regions.%(_.glyph == NoGlyph); if (ng.any) ng else regions }; case XSS => $(); case TB => $(); case TI => $()
         case CS => regions
         case _ => regions
     }
@@ -1237,7 +1237,7 @@ object LibraryCelaeno35 extends Board {
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
         case PRM => regions.%(_.glyph == Ocean)
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case SW => regions.%(_.glyph != Ocean); case DGT => regions; case TRB => { val ng = regions.%(_.glyph == NoGlyph); if (ng.any) ng else regions }; case XSS => $(); case TB => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case FM => regions; case SW => regions.%(_.glyph != Ocean); case DGT => regions; case TRB => { val ng = regions.%(_.glyph == NoGlyph); if (ng.any) ng else regions }; case XSS => $(); case TB => $(); case TI => $()
         case CS => regions
         case _ => regions
     }
