@@ -419,6 +419,11 @@ object SWExpansion extends Expansion {
                 AwakenedAction(SW, BlackSphinx, r, cost)
             }
 
+        // Terminal consumer for the Black Sphinx awaken (c0fddb64 emitted AwakenedAction
+        // with no SW handler -> MatchError "REPLAY CRASH" in every SW game that awakened).
+        case AwakenedAction(self : SW.type, BlackSphinx, _, _) =>
+            EndAction(self)
+
         // ────────────────────────────────────────────────────────────────
         // BOTTOMLESS PIT (own use AND cross-faction use — see Game.neutralSpellbooks)
         // ────────────────────────────────────────────────────────────────

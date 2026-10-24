@@ -4784,7 +4784,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             round = 0
 
-            Force(WatcherAttackPhaseStartAction(CheckSpellbooksAction(PreMainAction(game.first))))
+            // Watcher hook ONLY on Yuggoth maps: YuggothExpansion (its handler) is only
+            // registered when board.isYuggothMap, so any other map hit a MatchError here.
+            val afterWatcher = CheckSpellbooksAction(PreMainAction(game.first))
+            Force(if (board.isYuggothMap) WatcherAttackPhaseStartAction(afterWatcher) else afterWatcher)
 
         case GameOverPhaseAction =>
             factions.%(_.needs(AnytimeGainElderSigns)).foreach { f =>
@@ -4920,12 +4923,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // existing game keeps its recorded end-of-doom return so old game logs stay valid.
             // moonbeastPlacedThisDoom was just cleared above, so every blocked spellbook qualifies;
             // moonbeasts placed during this same Doom phase are added afterward and so wait for next Doom.
+            // Watcher hook ONLY on Yuggoth maps (see ActionPhaseAction above).
+            val afterDoomStart : Action = if (board.isYuggothMap) WatcherDoomPhaseCheckAction(CheckSpellbooksAction(DoomPhaseAction)) else CheckSpellbooksAction(DoomPhaseAction)
             if (!nextReplayActionHint.any && moonbeastOnSpellbook.any) {
                 val refs = moonbeastOnSpellbook.keys.toList
-                return Force(MoonbeastReturnLoopAction(refs, WatcherDoomPhaseCheckAction(CheckSpellbooksAction(DoomPhaseAction))))
+                return Force(MoonbeastReturnLoopAction(refs, afterDoomStart))
             }
 
-            Force(WatcherDoomPhaseCheckAction(CheckSpellbooksAction(DoomPhaseAction)))
+            Force(afterDoomStart)
 
         // SPELLBOOK
         case CheckSpellbooksAction(next) =>
