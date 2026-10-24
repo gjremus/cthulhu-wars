@@ -1258,10 +1258,6 @@ object YuggothExpansion extends Expansion {
                     val bc = new UnitFigure(self, BrainCylinderCultist, self.units.%(_.uclass == BrainCylinderCultist).num, region, onGate)
                     game.neutrals(self).units ::= bc
 
-                    // Re-take Gate control if Cultist was on a gate
-                    if (onGate && game.gates.contains(region))
-                        Force(ControlGateAction(self, region, bc.ref, NoAction))
-
                     self.log("converted", uRef.short, "to", "Brain Cylinder".styled(self), "in", region)
                 }
 
