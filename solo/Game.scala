@@ -2724,19 +2724,25 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         else self.affords(1)(r)
 
     // The Invasion (TI) — Eternal Servitude (§1.5/§3.6): while TI has 0 Power, Baphomet
-    // is in play, and at least one other faction is still active (still holds Power), TI
-    // must keep taking its turns "as if holding 2 Power." Modeled as: (a) this predicate
-    // keeps TI's action-phase active flag set at 0 Power, so TI still gets its turn, and
-    // (b) TIEternalServitudeGrantAction (folded into TI's main menu) hands TI a REAL 2
-    // Power for that one turn, reclaimed to 0 the instant the turn ends (tiReclaimEternal
-    // -Servitude). Because the 2 Power never survives the turn, it cannot leak into Gather
-    // Power or the Doom Phase — where a Ritual of Annihilation is gated on real Power and
-    // therefore stays unaffordable, satisfying "cannot perform Rituals of Annihilation."
-    // Guarded → only ever true for TI.
+    // is in play, and at least one other faction is still active (still holds Power AND
+    // is not Hibernating — a Hibernating faction, e.g. Windwalker, is not "Active" per
+    // §1.5 even while it still holds Power), TI must keep taking its turns "as if holding
+    // 2 Power." Modeled as: (a) this predicate keeps TI's action-phase active flag set at
+    // 0 Power, so TI still gets its turn, and (b) TIEternalServitudeGrantAction (folded
+    // into TI's main menu) hands TI a REAL 2 Power for that one turn, reclaimed to 0 the
+    // instant the turn ends (tiReclaimEternalServitude). Because the 2 Power never
+    // survives the turn, it cannot leak into Gather Power or the Doom Phase — where a
+    // Ritual of Annihilation is gated on real Power and therefore stays unaffordable,
+    // satisfying "cannot perform Rituals of Annihilation."
+    // Guarded → only ever true for TI. Checks power>0 && hibernating.not directly (the
+    // same formula that defines every non-TI faction's own .active flag) rather than
+    // reading .active itself, since all factions' .active flags are recomputed in one
+    // foreach pass each round and TI's slot in that pass is not guaranteed to run after
+    // every other faction's.
     def tiEternalServitudeApplies(self : Faction) : Boolean =
         factions.has(TI) && self == TI && self.power == 0 && self.hibernating.not &&
         TI.allInPlay.%(_.uclass == Baphomet).not(Zeroed).any &&
-        factions.but(TI).exists(_.power > 0)
+        factions.but(TI).exists(e => e.power > 0 && e.hibernating.not)
 
     // Drop any leftover Eternal-Servitude Power the instant TI's turn ends (§1.5). The
     // grant is a per-turn floor, never real income, so nothing carries forward.
