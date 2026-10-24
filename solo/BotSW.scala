@@ -18,6 +18,8 @@ class GameEvaluationSW(implicit game : Game) extends GameEvaluation(SW)(game) {
             def |=> (e : (Int, String)) { if (bool) result +:= Evaluation(e._1, e._2) }
         }
 
+        result ++= fbPromptedEvals(a)
+
         if (game.battle.none) {
             a match {
 

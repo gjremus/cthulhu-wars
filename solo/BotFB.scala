@@ -283,6 +283,8 @@ class GameEvaluationFB(implicit game : Game) extends GameEvaluation(FB)(game) {
             def |=> (e : (Int, String)) { if (bool) result +:= Evaluation(e._1, e._2) }
         }
 
+        result ++= fbPromptedEvals(a)
+
         val unwrapped = a.unwrap
 
         // Cheap per-eval state vals (snapshot at eval-call time).

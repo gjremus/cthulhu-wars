@@ -705,6 +705,54 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
                 if (amount > 0 && aheadOfTI)            add(200 - amount * 40, "pay a little to avoid entropy siphon's doom penalty")
                 if (amount > 0 && !aheadOfTI)           add(-500, "no need to pay - not at risk of the doom penalty")
 
+            // ────────────────────────────────────────────────────────────
+            // The Burrowers Beneath (TB): score the cross-faction prompts asked
+            // of TB's ENEMIES (self = the enemy being asked, never TB itself —
+            // the engine rebinds "self" to the affected enemy partway through
+            // these actions' chains, so BotTB.scala never sees them). Mirrors
+            // the FB Cyclopean Gaze precedent above — a faction's own ability
+            // reaching into another faction's bot. Without these cases every
+            // enemy bot fell through to the generic "-1000 unknown" fallback,
+            // which ties across every candidate and picks almost at random.
+            //
+            //   1. TBPsychicShriekRetreatUnitAction — which of OUR units
+            //      retreats next (only offered among units that currently
+            //      have a legal destination; order can starve a later unit
+            //      of its own destination). Protect valuable units, retreat
+            //      cheap/off-gate ones first.
+            //   2. TBPsychicShriekRetreatDestAction — where that unit goes.
+            //      Prefer our own gate, then any free gate, avoid landing on
+            //      enemies.
+            //   3. TBEnsnareRelocatePickAction — which of OUR units gets
+            //      pulled into TB's Head area (only matters when the roll
+            //      can't move everyone). Protect valuable units the same way.
+            // ────────────────────────────────────────────────────────────
+            case TBPsychicShriekRetreatUnitAction(_, _, uRef, _, _, _, _) =>
+                val u = game.unit(uRef)
+                if (u.goo)                              add(-5000, "don't retreat own GOO first under TB Psychic Shriek")
+                if (u.uclass == HighPriest)              add(-3000, "don't retreat own HP first under TB Psychic Shriek")
+                if (u.gateKeeper)                        add(-2000, "don't retreat own gate keeper first under TB Psychic Shriek")
+                if (u.monster)                           add(-1000, "avoid retreating own monster first under TB Psychic Shriek")
+                if (u.is(Acolyte) && !u.region.ownGate)  add( 1000, "retreat off-gate acolyte first under TB Psychic Shriek")
+                if (u.cultist && !u.region.ownGate)      add(  500, "retreat off-gate cultist first under TB Psychic Shriek")
+                add(0, "default TB psychic shriek retreat-unit choice")
+
+            case TBPsychicShriekRetreatDestAction(_, _, _, dest, _, _, _, _) =>
+                if (dest.ownGate)  add(1000, "TB psychic shriek retreat to own gate")
+                if (dest.freeGate) add(800, "TB psychic shriek retreat to free gate")
+                if (dest.foes.any) add(-800, "avoid retreating into enemy-occupied area under TB psychic shriek")
+                add(0, "default TB psychic shriek retreat-dest choice")
+
+            case TBEnsnareRelocatePickAction(_, _, uRef, _, _, _, _, _) =>
+                val u = game.unit(uRef)
+                if (u.goo)                              add(-5000, "don't send own GOO to TB's Ensnare head area")
+                if (u.uclass == HighPriest)              add(-3000, "don't send own HP to TB's Ensnare head area")
+                if (u.gateKeeper)                        add(-2000, "don't send own gate keeper to TB's Ensnare head area")
+                if (u.monster)                           add(-1000, "avoid sending own monster to TB's Ensnare head area")
+                if (u.is(Acolyte) && !u.region.ownGate)  add( 1000, "send off-gate acolyte to TB's Ensnare head area")
+                if (u.cultist && !u.region.ownGate)      add(  500, "send off-gate cultist to TB's Ensnare head area")
+                add(0, "default TB ensnare relocate-pick choice")
+
             case _ =>
         }
 

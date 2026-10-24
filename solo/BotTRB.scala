@@ -21,6 +21,8 @@ class GameEvaluationTRB(implicit game : Game) extends GameEvaluation(TRB)(game) 
             def |=> (e : (Int, String)) { if (bool) result +:= Evaluation(e._1, e._2) }
         }
 
+        result ++= fbPromptedEvals(a)
+
         a.unwrap match {
             // Mild nudge toward summoning the Horsemen (Terrors) once affordable —
             // they are TRB's main combat strength (3 dice each vs Conquest's 1).
