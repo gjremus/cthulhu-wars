@@ -1323,6 +1323,7 @@ object Yuggoth3 extends Board {
         case FBE => regions
         case XSS => $()
         case TB => $()
+        case TI => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -1433,6 +1434,7 @@ object Yuggoth4a extends Board {
         case FBE => regions
         case XSS => $()
         case TB => $()
+        case TI => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -1545,6 +1547,7 @@ object Yuggoth4b extends Board {
         case FBE => regions
         case XSS => $()
         case TB => $()
+        case TI => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -1664,6 +1667,7 @@ object Yuggoth5 extends Board {
         case FBE => regions
         case XSS => $()
         case TB => $()
+        case TI => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
