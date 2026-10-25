@@ -614,7 +614,56 @@ object Overlays {
     // single-method bytecode limit once the Dunwich cases were added, so the
     // Dunwich (Whateley Clan + Dire Yog-Sothoth) overlays live in their own
     // method and info() delegates to it first.
-    def info(s : $[Any]) : |[String] = { val d = infoDunwich(s); if (d.any) d else { val c = infoCats(s); if (c.any) c else { val fm = infoFM(s); if (fm.any) fm else { val g = infoDGT(s); if (g.any) g else infoMain(s) } } } }
+    def info(s : $[Any]) : |[String] = { val d = infoDunwich(s); if (d.any) d else { val c = infoCats(s); if (c.any) c else { val fm = infoFM(s); if (fm.any) fm else { val g = infoDGT(s); if (g.any) g else { val y = infoYuggoth(s); if (y.any) y else infoMain(s) } } } } }
+
+    // Yuggoth map rules icons live in their own method (kept out of infoMain's giant
+    // match — adding them inline pushed that generated method past the JVM's 64KB
+    // bytecode-per-method limit: "Method too large: Overlays$.infoMain$1").
+    def infoYuggoth(s : $[Any]) : |[String] = (s @@ {
+        // ── Yuggoth: Laboratory icon (Laboratory + Surgery sections, combined) ──
+        case $("YuggothLaboratory", _ : Boolean) => yuggothIconOverlay("The Laboratory", "yuggoth-laboratory",
+            "<div class='p nt black-border'>A player that Controls a Gate in the Laboratory Area may perform the Surgery Action.</div>" +
+            "<div class='p nt black-border'>If the Opener of the Way faction is in play, and Yog-Sothoth is in the Laboratory Area while another Faction Controls a normal Gate there, both Factions may perform Surgery.</div>" +
+            "<div class='p black-border'><span class='ability-color'>Surgery</span> <span class='cost-color'>(Action: Cost 1)</span><span class='nt'>: If you Control the Laboratory Gate, Eliminate up to 4 of your Cultists in play and replace them with an equal number of Brain Cylinder tokens in your Faction's Color. You must place these Brain Cylinders in the same Area(s) as the Cultists they replace—they can replace your Cultists on Gates, immediately retaking Control of those Gates. You can also swap out Cultists that are not on the Map, but still in play (such as some of Cthulhu's Cultists which are Submerged, or Sleeper's Acolyte that is on a Cursed Slumbering Gate. (Those guys are just having really bad dreams).</span></div>" +
+            "<div class='p nt black-border'>If the Yellow Sign faction is in play, Eliminating a Cultist in this way does not trigger their Passion Spellbook.</div>" +
+            "<div class='p nt black-border'>If the Bubastis faction is in play, their Earth Cats may be turned into Brain Cylinders.</div>")
+
+        // ── Yuggoth: Brain Cylinder icon (Brain Cylinders section, full text) ──
+        case $("YuggothBrainCylinder", _ : Boolean) => yuggothIconOverlay("Brain Cylinders", "yuggoth-brain-cylinder",
+            "<div class='p nt black-border'>Brain Cylinders are Cultist Units that are treated as Cultists in every way but three. They may be targeted by any Spellbooks or Abilities that target or reference Cultists without specifying Acolytes.</div>" +
+            "<div class='p nt black-border'>Brain Cylinders cannot be Recruited normally or placed on the Map due to any ability other than Surgery.</div>" +
+            "<div class='p nt black-border'>Brain Cylinders cannot use the Move action on their own. To Move a Brain Cylinder, one of your other Units in the Area must Move or use a movement-like ability that allows movement of unspecified Units, and then they may bring any number of Brain Cylinders present along with them for no additional Cost. In addition, Brain Cylinders cannot be assigned Pain results or be affected by Pain-like retreats, but they also do not prevent Units which battled their Faction from being Pained into their Area.</div>" +
+            "<div class='p nt black-border'>When a Brain Cylinder is Captured, the capturing Faction may optionally choose to Convert the captured Cylinder by replacing it with one of their own available Cylinders, instead of taking possession of the Unit for sacrifice. This still counts as a Capture for purposes of Spellbooks and Abilities.</div>")
+
+        // ── Yuggoth: Slime Mold icon (Slime Molds section, full text) ──
+        case $("YuggothSlimeMold", _ : Boolean) => yuggothIconOverlay("Slime Molds", "yuggoth-slime-mold-silhouette",
+            "<div class='p nt black-border'>A player that Controls a Gate in a No Slime Mold Area may take the Slime Mold Loyalty Card. They control all Slime Molds on the map. If another Faction takes Control of this Gate, all Slime Molds in play change allegiance to the new Faction. If the Gate is Abandoned, all Slime Molds become uncontrolled. This also means that they would no longer count as part of any Faction for purposes of being Pained.</div>" +
+            "<div class='p nt black-border'>If the Opener of the Way faction is in play, and Yog-Sothoth is in the Slime Sea Overlook while another Faction Controls a normal Gate there, only the other Faction may take the Loyalty Card.</div>" +
+            "<div class='p nt black-border'>The Slime Molds are Neutral Monster Units which are considered to have 1 Cost. When uncontrolled, they are also considered to have no Spellbooks, Doom, Power, or any other normal features of a Faction for any purposes. They may be targeted by any Spellbooks or Abilities that target or reference Monsters without requiring a faction be named.</div>" +
+            "<div class='p nt black-border'>If the Black Goat faction is in play, Avatar may be used on Slime Molds despite the Spellbook requiring an enemy faction be named.</div>" +
+            "<div class='p nt black-border'>Slime Molds cannot be Summoned normally or placed on the Map due to any ability other than Call Slime Mold. When Called, Slime Molds are placed into a Slime Mold Area.</div>" +
+            "<div class='p nt black-border'>If the Black Goat faction is in play, Fertility Cult may be used to Call Slime Molds alongside Summoning other Monsters, but these Slime Molds must still appear in a Slime Mold Area.</div>" +
+            "<div class='p nt black-border'>Slime Molds cannot use a Move Action to go to the No Slime Mold Area, but may be Pained there or transferred there by a movement-like ability.</div>" +
+            "<div class='p nt black-border'>If the Windwalker faction is in play, Windwalker chooses where the Slimes retreat when using Howl against them.</div>")
+
+        // ── Yuggoth: Green Pyramid icon (Green Pyramid section, full text) ──
+        case $("YuggothGreenPyramid", _ : Boolean) => yuggothIconOverlay("The Green Pyramid", "yuggoth-green-pyramid",
+            "<div class='p nt black-border'>The Green Pyramid consists of 2–4 Areas marked with Gate Glyphs. If a faction controls a Gate on an Area with the Gate Glyph, that Gate earns 3 Power instead of 2 during the Gather Power Phase.</div>")
+
+        // ── Yuggoth: Watcher icon (Watcher section, start up to but not including the
+        // Dice Glyph paragraph — the Awaken-by-die-roll mechanic is the Dice Glyph icon below) ──
+        case $("YuggothWatcher", _ : Boolean) => yuggothIconOverlay("The Watcher", "yuggoth-watcher-silhouette",
+            "<div class='p nt black-border'>The Watcher is a non-player Great Old One Unit which is considered to have 0 Cost, no Special Abilities, and no Spellbooks, Doom, Power, or any other normal features of a Faction for any purposes. It may not be targeted by any Spellbooks or Abilities. It is only considered an enemy Great Old One while Awake.</div>" +
+            "<div class='p nt black-border'>At the beginning of each Doom Phase, if the Watcher is already Awake, it Decays. Roll a die and lower the Watcher Token's position on the Doom Track by that many spaces. If it Decays to 0, it is Killed and removed from the Map. Flip the Watcher token to its dark side. Do not Decay the Watcher if it Awakened in this Doom Phase.</div>")
+
+        // ── Yuggoth: Dice Glyph icon (the text directly beneath the Dice Glyph image —
+        // the Awaken-by-die-roll mechanic, distinct from the Watcher text above) ──
+        case $("YuggothDiceGlyph", _ : Boolean) => yuggothIconOverlay("Dice Glyph — Awakening the Watcher", "yuggoth-dice-glyph",
+            "<div class='p nt black-border'>The Green Pyramid Areas are marked with a Dice Glyph labeled \"1\", \"2\", \"3\", and \"4\". At the end of each Doom Phase (after everyone has had a chance to perform a Ritual of Annihilation), roll a six-sided die if there is a Controlled Gate in an Area with a Dice Glyph. If the die result matches the label of a Green Pyramid Area with a Controlled Gate, the Watcher Awakens. Flip the Watcher Token to its light (Awakened) side. Alternatively, should any player's Doom Marker pass over the Watcher Token while it is set to its dark side, flip it to its light side. Either way, if the Watcher Token is set to its light side in the Doom Phase, the Watcher Awakens. Place the Watcher on the Watcher Postern. Do not Awaken the Watcher if it Decayed to 0 in this Doom Phase.</div>" +
+            "<div class='p nt black-border'>If the Opener of the Way faction is in play, Yog-Sothoth counts as a Controlled Gate for the purpose of Awakening the Watcher.</div>")
+
+        case _ => ""
+    }).but("")
 
     def infoDunwich(s : $[Any]) : |[String] = (s @@ {
         // ── DUNWICH HORROR — Whateley Clan + Dire Yog-Sothoth ──
@@ -1163,6 +1212,10 @@ object Overlays {
             "<div class='p nt black-border'>No player may perform the Control Gate Action in the Librarian's Area. " +
             "However, if a Gate is already Controlled when the Librarian is Moved into its Area, that Gate may remain Controlled.</div>",
             "Agony Die faces: 1, 2, 2, 3, 3, 4")
+
+        // Yuggoth map icon overlays (Laboratory, Brain Cylinder, Slime Mold, Green
+        // Pyramid, Watcher, Dice Glyph) live in infoYuggoth(), not here — infoMain's
+        // generated match method is already at the JVM's 64KB bytecode-per-method limit.
 
         // Library Tomes
         case $("Barrier of Naach-Tith", faceUp : Boolean) => tomeOverlay("Barrier of Naach-Tith", "Always Active",
@@ -2427,6 +2480,33 @@ object Overlays {
             </tbody>
         </table>"""
 
+    // Yuggoth map: image + rules-text popup, same spellbook-table shell as tomeOverlay/
+    // mapUnitOverlay but with the reference image (wiki art) shown above the text.
+    def yuggothIconOverlay(name : String, imgKey : String, text : String) = s"""
+        <table class="spellbook-table" style="">
+            <thead>
+                <tr>
+                    <th style=width:15%></th>
+                    <th style=width:70%></th>
+                    <th style=width:15%></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td></td>
+                    <td>
+                        <div class="h1 black-border"><span class="lb inline-block">${name}</span></div>
+                        <div style="text-align:center;"><img class="img" src="${imageSource(imgKey)}" style="max-height:20vh;max-height:20dvh;width:auto;"></div>
+                        <div class="white-border">
+                            <div class="nt black-border">${text}</div>
+                        </div>
+                    </td>
+                    <td></td>
+                </tr>
+                <tr><td></td><td></td><td></td></tr>
+            </tbody>
+        </table>"""
+
     def tomeOverlay(name : String, phase : String, text : String, faceUp : Boolean = true) = s"""
         <table class="spellbook-table" style="">
             <thead>
@@ -2828,6 +2908,12 @@ object Overlays {
         // Setup (guide §1.6). LAYER 1 note: the Lord's Shadow is stood in by an
         // ordinary Controlled Gate and the opponent Portent-placement step is deferred.
         case $("TI", "Setup") => requirement("After Windwalker, start with 8 Power and place a Lord's Shadow, a Fiend and 6 Demon Larvae in any unoccupied Area (following any Map restrictions that would apply to Opener of the Way). You can only Awaken Independent Great Old Ones if doing so would not have you Control more total Great Old Ones than Lord's Shadows.")
+
+        // Portents reference card (§1.6 area) — verbatim text, owner-supplied image.
+        case $("TI", "Portents") => requirement("At the end of your setup (after you've chosen your Start location and before Opener of the Way has set up), in turn order, each non-Invasion Player (including Opener of the Way) places one Portent in any Area not containing a Gate or Portent, and also not adjacent to The Invasion's Start Area (max 5 Portents may be placed in this way).")
+
+        // Lord's Shadows reference card — verbatim text, owner-supplied image.
+        case $("TI", "Lord's Shadows") => requirement("Lord's Shadows are identical to Gates for all purposes except the following:<br>1) Lord's Shadows cannot be moved.<br>2) Gates may be built in Areas with Lord's Shadows (however, they still may not be moved there by abilities like <i>The Beyond One</i>, as that ability specifies that the Gate moved can't be moved to another Area with a Gate).<br>3) Lord's Shadows are Controlled by The Invasion player by default (without a Controlling Unit) unless there is a Controlled Gate in the same Area, in which case that player Controls the Shadow as an additional Gate. Yog-Sothoth counts as a Gate for this purpose if he's the only non-Shadow Gate in the Area.<br><br>If an Invasion-Controlled Lord's Shadow is destroyed (e.g. Ithaqua, the Dhole, etc.), Invasion gain 2 Elder Signs instead of any other reward or effect. If an Area with Portents is destroyed (e.g. Shaggai), Invasion gains 1 Elder Sign.")
 
         // Spellbook requirements (guide §1.9) — the six brown boxes.
         case $("TI", TIAwakenBaphomet.text)      => requirement("Awaken Baphomet.")
@@ -3245,6 +3331,12 @@ object Overlays {
                     val setupLink =
                         if (setup) s"""<span class="ability-color pointer" onclick="onExternalClick('${f.short}', 'Setup')">Setup</span>&nbsp;&nbsp;&nbsp;"""
                         else ""
+                    // The Invasion (TI): two owner-requested reference-card links, Portents
+                    // and Lord's Shadows (verbatim rules text pasted from the faction's own
+                    // reference cards), placed between Setup and the Spellbooks line.
+                    val tiExtraLinks =
+                        if (f == TI) s"""<span class="ability-color pointer" onclick="onExternalClick('TI', 'Portents')">Portents</span>&nbsp;&nbsp;&nbsp;<span class="ability-color pointer" onclick="onExternalClick('TI', 'Lord\'s Shadows')">Lord's Shadows</span>&nbsp;&nbsp;&nbsp;"""
+                        else ""
                     val sbPart =
                         if (sbLine.nonEmpty) sbLine
                         else if (miscSpellbooks.any)
@@ -3254,7 +3346,7 @@ object Overlays {
                         <tr>
                             <td colspan=6>
                                 <div style="padding-left: 3ex; padding-right: 3ex; padding-bottom: 1ex;">
-                                    ${setupLink}${sbPart}
+                                    ${setupLink}${tiExtraLinks}${sbPart}
                                 </div>
                             </td>
                         </tr>"""
