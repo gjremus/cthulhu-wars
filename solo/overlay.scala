@@ -971,6 +971,9 @@ object Overlays {
         case $("OpenerCheapMutants") => spellbook("Cheap Mutants + Harder SBR", "Variant", "Mutants cost 1 power. Units at 2 enemy gates requires 3.")
         case $("OpenerYogCurseDie") => spellbook("Yog Curse Die + DC GOO ES", "Variant", "Yog Sothoth contributes 1 die to Dread Curse of Azazoth when in play. If an enemy Great Old One is killed by Dread Curse, Opener recives an Elder Sign.")
 
+        // The Invasion buff option overlay
+        case $("TINoFiendWithoutHighPriests") => spellbook("No Fiend at Setup without High Priests", "Variant", "The Invasion does not start with a Fiend in its Start Area, unless the High Priests option is also enabled for this game (semi-official rebalance).")
+
         // Sleeper buff option overlays
         case $("SleeperEasierSBR") => spellbook("Easier Spellbook Requirements", "Variant", "The 3 power related Spellbook Requirements are changed from their current 'Pay 3 power, enemies gain/ lose power' to 'Pay your last power; Pay your last 2 power, and Pay your last 3 power.'")
         case $("SleeperEnergyNexusPreBattle") => spellbook("Energy Nexus - Pre Battle", "Variant", "Energy Nexus is changed from an interrupt that occurs before Pre-battle, to a standard Pre-battle power (for example, Cthulhu's Devour will trigger before Energy Nexus).")

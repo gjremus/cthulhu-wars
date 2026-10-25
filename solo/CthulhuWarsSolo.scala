@@ -5483,6 +5483,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         .$("Variants" -> ("" + BB + " Alternate Spellbooks (" + setup.get(BBAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"BBAlternateSpellbooks\")'>?</span>")) ++
                     (factions.has(AN))
                         .$("Variants" -> ("" + AN + " Alternate Spellbooks (" + setup.get(ANAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"ANAlternateSpellbooks\")'>?</span>")) ++
+                    (factions.has(TI))
+                        .$("Variants" -> ("" + TI + " No Fiend at Setup without High Priests (" + setup.get(TINoFiendWithoutHighPriests).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"TINoFiendWithoutHighPriests\")'>?</span>")) ++
                     $("Map" -> ("Map Configuration (" + setup.options.of[MapOption].lastOption.?(_.toString.hl) + ")")) ++
                     $("Done" -> "Start game".styled("power")),
                     nn => {
@@ -5685,6 +5687,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                 setupQuestions()
                             }
                         }
+                        if (factions.has(TI)) {
+                            n -= 1
+                            if (n == 0) {
+                                setup.toggle(TINoFiendWithoutHighPriests)
+                                setupQuestions()
+                            }
+                        }
                         n -= 1
                         if (n == 0) {
                             val all = $(MapEarth33, MapEarth35, MapEarth53, MapEarth55, MapLibrary33, MapLibrary35, MapLibrary53, MapLibrary55, MapYuggoth3, MapYuggoth35, MapYuggoth53, MapYuggoth5)
@@ -5870,6 +5879,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         .$("Variants" -> ("" + BB + " Alternate Spellbooks (" + setup.get(BBAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"BBAlternateSpellbooks\")'>?</span>")) ++
                     (factions.has(AN))
                         .$("Variants" -> ("" + AN + " Alternate Spellbooks (" + setup.get(ANAlternateSpellbooks).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"ANAlternateSpellbooks\")'>?</span>")) ++
+                    (factions.has(TI))
+                        .$("Variants" -> ("" + TI + " No Fiend at Setup without High Priests (" + setup.get(TINoFiendWithoutHighPriests).?("yes").|("no").hl + ") <span class='pointer' onclick='event.stopPropagation(); onExternalClick(\"TINoFiendWithoutHighPriests\")'>?</span>")) ++
                     $("Map" -> ("Map Configuration (" + setup.options.of[MapOption].lastOption.?(_.toString.hl) + ")")) ++
                     $("Options" -> ("Dice rolls (" + setup.dice.?("auto").|("manual").hl + ")")) ++
                     $("Options" -> ("Elder Signs (" + setup.es.?("auto").|("manual").hl + ")")) ++
@@ -6072,6 +6083,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             n -= 1
                             if (n == 0) {
                                 setup.toggle(ANAlternateSpellbooks)
+                                setupQuestions()
+                            }
+                        }
+                        if (factions.has(TI)) {
+                            n -= 1
+                            if (n == 0) {
+                                setup.toggle(TINoFiendWithoutHighPriests)
                                 setupQuestions()
                             }
                         }

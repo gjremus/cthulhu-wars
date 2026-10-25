@@ -1335,6 +1335,9 @@ case object DSAlternateSpellbooks extends GameOption
 case object BBAlternateSpellbooks extends GameOption
 // ALT ANCIENTS: alt-variant spellbook option (HolyGround replaces UnholyGround, Sanguinessence replaces Consecration, Crusade replaces WorshipServices)
 case object ANAlternateSpellbooks extends GameOption
+// THE INVASION: semi-official rebalance. Skips placing TI's starting Fiend unless the
+// game also has the High Priests option enabled.
+case object TINoFiendWithoutHighPriests extends GameOption
 
 
 trait MapOption extends GameOption
@@ -1448,6 +1451,8 @@ object GameOptions {
         BBAlternateSpellbooks,
         // ALT ANCIENTS: alt-variant spellbook option
         ANAlternateSpellbooks,
+        // THE INVASION: semi-official rebalance, no starting Fiend without High Priests
+        TINoFiendWithoutHighPriests,
         MapEarth33,
         MapEarth35,
         MapEarth53,

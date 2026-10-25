@@ -456,10 +456,17 @@ object TIExpansion extends Expansion {
             // ever shares the Area. This Shadow does NOT count toward Requirement 5/6.
             game.tiLordsShadowRegions :+= r
             self.gates :+= r
-            self.place(Fiend, r)
+            // TINoFiendWithoutHighPriests (semi-official rebalance): skip the starting
+            // Fiend unless High Priests is also on; the Fiend simply stays in the pool.
+            val startsWithFiend = game.options.has(TINoFiendWithoutHighPriests).not || game.options.has(HighPriests)
+            if (startsWithFiend)
+                self.place(Fiend, r)
             1.to(6).foreach(_ => self.place(DemonLarvae, r))
             self.power = 8
-            self.log("starts in", r, "with a", "Lord's Shadow".styled(TI) + ",", "a", Fiend.styled(TI), "and 6", DemonLarvae.styled(TI), "and 8 Power")
+            if (startsWithFiend)
+                self.log("starts in", r, "with a", "Lord's Shadow".styled(TI) + ",", "a", Fiend.styled(TI), "and 6", DemonLarvae.styled(TI), "and 8 Power")
+            else
+                self.log("starts in", r, "with a", "Lord's Shadow".styled(TI) + ",", "no Fiend (No Fiend at Setup without High Priests)", "and 6", DemonLarvae.styled(TI), "and 8 Power")
             Force(SetupFactionsAction)
 
         // (2) Opponent Portent-placement micro-phase — fires once TI is placed and every
