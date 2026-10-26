@@ -84,12 +84,14 @@ case object SW extends Faction { f =>
 
     // Hybrid Mummy / Pharoah Kephren roll dice (combat read from SWValues, same combatOf
     // idiom as FMExpansion.combatOf — combat is NOT always equal to cost, so it must be read
-    // separately rather than reusing .uclass.cost). Queen Nitokris and Black Sphinx roll NO
-    // dice — they add automatic Pains in Battle.scala's BattleRollAction (same idiom as
-    // Hagarg Ryonis), so they contribute 0 here (consistent with Hagarg Ryonis's "* 0" line
-    // in neutralStrength).
+    // separately rather than reusing .uclass.cost). Queen Nitokris rolls (combatBase + current
+    // Hunger) dice (design change, 2026-10-26: previously rolled NO dice and added that many
+    // automatic Pains instead, same idiom as Hagarg Ryonis — see Battle.scala BattleRollAction,
+    // where her auto-Pain case was removed to match). Black Sphinx still rolls NO dice — he adds
+    // automatic Pains in Battle.scala's BattleRollAction (unchanged, same idiom as Hagarg Ryonis).
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
         units.%(u => u.uclass == HybridMummy || u.uclass == PharoahKephren).not(Zeroed)./(u => SWExpansion.combatOf(u.uclass)).sum +
+        units.%(_.uclass == QueenNitokris).not(Zeroed).num * (SWValues.QueenNitokris_combatBase + game.swHunger) +
         neutralStrength(units, opponent)
     }
 }

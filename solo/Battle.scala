@@ -3602,17 +3602,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 log(HagargRyonis.styled(f), "adds", pains.mkString(" "))
             }
 
-            // Sphinx Worshippers (SW) — Queen Nitokris: adds (2 + current Hunger) Pains
-            // automatically (rolls no dice). Same idiom as Hagarg Ryonis above.
+            // Sphinx Worshippers (SW) — Queen Nitokris now rolls (combatBase + current Hunger)
+            // real dice (design change, 2026-10-26; counted in SW.strength instead), so she no
+            // longer adds automatic Pains here.
             if (game.factions.has(SW)) {
-                val qn = f.forces(QueenNitokris).not(Zeroed)
-                if (qn.any) {
-                    val n = SWValues.QueenNitokris_combatBase + game.swHunger
-                    val pains = n.times(Pain)
-                    f.rolls ++= pains
-                    log(QueenNitokris.styled(f), "adds", pains.mkString(" "))
-                }
-
                 // Sphinx Worshippers (SW) — Black Sphinx: adds (1 + current Hunger) Pains
                 // automatically (rolls no dice). Elder Thing Mind Control can fully suppress
                 // this (Ceaseless Hunger is an Ongoing ability) — see ability interaction below.

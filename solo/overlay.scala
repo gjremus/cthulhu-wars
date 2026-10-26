@@ -3146,19 +3146,20 @@ object Overlays {
     }
 
     def swFactionOverlay() = {
-        def swRef(sb : Spellbook) = s"""<span class="ability-color pointer" onclick="onExternalClick('SW', '${sb.name}')">${sb.name}</span>"""
+        def swRefAs(sb : Spellbook, label : String) = s"""<span class="ability-color pointer" onclick="onExternalClick('SW', '${sb.name}')">$label</span>"""
+        def swRef(sb : Spellbook) = swRefAs(sb, sb.name)
         def combat = """<span class="combat-color">Combat</span>"""
         def cost(s : String) = s"""<span class="cost-color">$s</span>"""
         val hungerFooter = s"""<b>Hunger Track:</b> <span class="cost-color">${calc(g => g.swHunger)}</span>"""
         faction(SW, "info:sw-background", Kidnap, "Post-Battle",
             s"The enemy chooses one of their Pained Monsters. While it shares a region with ${QueenNitokris.name} and ${SWValues.Kidnap_minMummies}+ ${HybridMummy.plural}, it lies sideways: it is exempt from Battle (including abilities), moves for free with ${QueenNitokris.name}, and cannot be moved by any other means.",
             $(BottomlessPit, AncientEmetic, Starvation), $(
-            (Acolyte,       SWValues.Acolyte_count, "1", "0", ""),
+            (Acolyte,       SWValues.Acolyte_count, "1", "0", s"""<div class=p>Spellbook: ${swRefAs(MummiesCurse, "Life from Death")}</div>"""),
             (HybridMummy,   SWValues.HybridMummy_count, "" + SWValues.HybridMummy_cost, "" + SWValues.HybridMummy_combat, s"""<div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(MummiesCurse)}</div>"""),
             (PharoahKephren, SWValues.PharoahKephren_count, "" + SWValues.PharoahKephren_cost, "" + SWValues.PharoahKephren_combat, ""),
             (QueenNitokris, SWValues.QueenNitokris_count, "" + SWValues.QueenNitokris_cost, calc(g => { implicit val gg : Game = g; SWValues.QueenNitokris_combatBase + g.swHunger }), s"""
-                <div class=p>${combat} Equal to ${SWValues.QueenNitokris_combatBase} plus the current Hunger Track value (no dice — adds Pains automatically).</div>
-                <div class=p>Spellbook: ${swRef(FuneralProcession)}</div>"""),
+                <div class=p>${combat} Rolls dice equal to ${SWValues.QueenNitokris_combatBase} plus the current Hunger Track value.</div>
+                <div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(MonstrousForepaw)}, ${swRef(BottomlessPit)}</div>"""),
             (BlackSphinx,   SWValues.BlackSphinx_count, "Awaken", calc(g => { implicit val gg : Game = g; SWValues.BlackSphinx_painsBase + g.swHunger }), s"""
                 <div class=p>${cost(s"How to Awaken ${BlackSphinx.name}:")}</div>
                 <div class=p>${cost("1)")} Sacrifice a Monster in an Area with your Controlled Gate.</div>

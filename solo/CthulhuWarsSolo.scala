@@ -1686,14 +1686,16 @@ object CthulhuWarsSolo {
 
                     // Sphinx Worshippers (SW): match the designer "Map image" preview EXACTLY.
                     // Preview = art tinted with ONE "color" pass of #b8abd5 (swTint, no screen),
-                    // fitted into (type box x mapScale), centred, standing on the box bottom.
-                    //  - Hybrid Mummy: design mapImage is null -> preview uses the Monster default
-                    //    art n-dimensional-shambler (scale 1.0). There is NO sw-hybrid-mummy asset.
-                    //  - Kephren  Monster box [-35,-75,70,85]    x1.6386, art 453x550
-                    //  - Nitokris Terror  box [-48,-109,95,116]  x1.5216, art 800x800
-                    //  - Sphinx   ElderGod box [-64,-210,128,210] x1.3449, art 800x800
-                    case HybridMummy    => if (region != null) DrawRect("n-dimensional-shambler", |(swTint), x - 35, y - 75, 70, 85)
-                                           else DrawRect("n-dimensional-shambler", |(swTint), x - 29, y - 60, 58, 70)
+                    // scaled from its own real canvas size by mapScale, centred, standing on the
+                    // box bottom. Box dims below = canvas size x mapScale (box aspect must equal
+                    // the asset's own canvas aspect, since drawImage stretches to exact w/h).
+                    //  - Mummy    Monster box 123x123, mapScale 1.4845, art 537x537 (real art;
+                    //    previously had no sw-hybrid-mummy asset and used the Monster default
+                    //    n-dimensional-shambler sprite instead)
+                    //  - Kephren  Monster box 115x139, mapScale 1.6386, art 453x550
+                    //  - Nitokris Terror  box 145x145, mapScale 1.5216, art 800x800
+                    //  - Sphinx   ElderGod box 172x172, mapScale 1.3449, art 800x800
+                    case HybridMummy    => DrawRect("sw-hybrid-mummy", |(swTint), x - 61, y - 123, 123, 123)
                     case PharoahKephren => DrawRect("sw-pharoah-kephren", |(swTint), x - 57, y - 123, 115, 139)
                     case QueenNitokris  => DrawRect("sw-queen-nitokris",  |(swTint), x - 73, y - 134, 145, 145)
                     case BlackSphinx    => DrawRect("sw-black-sphinx",    |(swTint), x - 86, y - 172, 172, 172)
