@@ -1,2 +1,3 @@
 2026-10-15 14:27  CS  Meteorite.combat: 1 -> 0  (designer push rev 3)
 2026-10-16 15:12  SW  LifeFromDeath.cultists: 2 -> 3  (set)
+2026-10-26 15:54  SW  BlackSphinx.awakenBaseCost: 8 -> 9  (set)

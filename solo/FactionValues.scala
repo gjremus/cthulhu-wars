@@ -119,7 +119,7 @@ object FactionValuesMapping {
             "setup.units.eYZ6L7qA.qty" -> "Setup_Acolyte",
             "ufa.effect" -> "Kidnap_minMummies",
             "units.rows.bs8MvPnK.awakenPower" -> "BlackSphinx_awakenBaseCost",
-            "units.rows.bs8MvPnK.awakenReq (Pay 3 less the monster is kidnapped)" -> "BlackSphinx_kidnapDiscount",
+            "units.rows.bs8MvPnK.awakenReq (pre-2026-10-26 wording)" -> "BlackSphinx_kidnapDiscount",
             "units.rows.bs8MvPnK.qty" -> "BlackSphinx_count",
             "units.rows.bs8MvPnK.resultsCalc (Adds pains = 1 + current Hunger Track)" -> "BlackSphinx_painsBase",
             "units.rows.kf9FMV9m.cost" -> "HybridMummy_cost",
@@ -324,8 +324,8 @@ object SWValues {
     def QueenNitokris_cost          = LiveValues.get("SW", "QueenNitokris_cost", 4)  // Queen Nitokris summon cost (Power)
     def QueenNitokris_combatBase    = LiveValues.get("SW", "QueenNitokris_combatBase", 2)  // Queen Nitokris automatic Pains base (before adding current Hunger)
     def QueenNitokris_count         = LiveValues.get("SW", "QueenNitokris_count", 1)  // Queen Nitokrises in the faction
-    def BlackSphinx_awakenBaseCost  = LiveValues.get("SW", "BlackSphinx_awakenBaseCost", 8)  // Base Power to Awaken Black Sphinx (before subtracting sacrificed monster's cost)
-    def BlackSphinx_kidnapDiscount  = LiveValues.get("SW", "BlackSphinx_kidnapDiscount", 3)  // Extra discount to the awaken cost if the sacrificed monster was kidnapped
+    def BlackSphinx_awakenBaseCost  = LiveValues.get("SW", "BlackSphinx_awakenBaseCost", 9)  // Base Power to Awaken Black Sphinx (before subtracting the current Hunger Track value)
+    def BlackSphinx_kidnapDiscount  = LiveValues.get("SW", "BlackSphinx_kidnapDiscount", 3)  // Unused since the 2026-10-26 awaken redesign dropped the monster-sacrifice step entirely
     def BlackSphinx_painsBase       = LiveValues.get("SW", "BlackSphinx_painsBase", 1)  // Black Sphinx automatic Pains base (before adding current Hunger)
     def BlackSphinx_count           = LiveValues.get("SW", "BlackSphinx_count", 1)  // Black Sphinxes in the faction
     def Setup_power                 = LiveValues.get("SW", "Setup_power", 8)  // Starting Power

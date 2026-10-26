@@ -56,8 +56,6 @@ class GameEvaluationSW(implicit game : Game) extends GameEvaluation(SW)(game) {
                     true                                        |=> 700  -> "awaken black sphinx"
                 case SWAwakenSphinxRegionAction(f, r) =>
                     true                                        |=> 100  -> "pick awaken region"
-                case SWAwakenSphinxSacrificeAction(f, r, v) =>
-                    true                                        |=> 50   -> "sacrifice for black sphinx"
 
                 case SWBottomlessPitMainAction(f, _) =>
                     f == self                                   |=> 300  -> "use bottomless pit"

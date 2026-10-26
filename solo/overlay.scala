@@ -3162,9 +3162,8 @@ object Overlays {
                 <div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(MonstrousForepaw)}, ${swRef(BottomlessPit)}</div>"""),
             (BlackSphinx,   SWValues.BlackSphinx_count, "Awaken", calc(g => { implicit val gg : Game = g; SWValues.BlackSphinx_painsBase + g.swHunger }), s"""
                 <div class=p>${cost(s"How to Awaken ${BlackSphinx.name}:")}</div>
-                <div class=p>${cost("1)")} Sacrifice a Monster in an Area with your Controlled Gate.</div>
-                <div class=p>${cost("2)")} Pay ${SWValues.BlackSphinx_awakenBaseCost} Power minus the sacrificed Monster's summoning Cost. Pay ${SWValues.BlackSphinx_kidnapDiscount} less if that Monster was Kidnapped.</div>
-                <div class=p>${cost("3)")} ${BlackSphinx.name} appears in the Area with your Controlled Gate. ${BlackSphinx.name} cannot be moved by any means.</div>
+                <div class=p>${cost("1)")} Pay ${SWValues.BlackSphinx_awakenBaseCost} Power minus the current Hunger Track value.</div>
+                <div class=p>${cost("2)")} ${BlackSphinx.name} appears in the Area with your Controlled Gate. ${BlackSphinx.name} cannot be moved by any means.</div>
                 <div class=p>${combat} Adds Pains equal to ${SWValues.BlackSphinx_painsBase} plus the current Hunger Track value (no dice).</div>
                 <div class=p><b>Ceaseless Hunger (Ongoing):</b> Whenever ${BlackSphinx.name} is Awakened, Pained, and at the start of each Action Phase (while on the map), advance the Hunger Track by ${SWValues.Hunger_awakenGain}. When he is Killed or Eliminated, advance it by ${SWValues.Hunger_killedGain} instead. Lose Doom and/or sacrifice Cultists equal to his Hunger in the Doom Phase. An enemy-controlled Elder Thing sharing his Area fully blocks this ability.</div>
                 <div class=p>Spellbook: ${swRef(MonstrousForepaw)}</div>""")

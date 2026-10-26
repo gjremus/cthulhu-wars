@@ -73,13 +73,12 @@ case object SW extends Faction { f =>
         SWValues.QueenNitokris_count.times(QueenNitokris)   ++
         SWValues.BlackSphinx_count.times(BlackSphinx)
 
-    // Black Sphinx's awaken cost depends on WHICH monster is sacrificed (8 minus that
-    // monster's printed cost, minus 3 more if it was Kidnapped) — too dynamic for the plain
-    // awakenCost(uc, r) : |[Int] hook (one flat number per region). Returning None here keeps
-    // Black Sphinx OFF the generic Awaken menu; SWExpansion's own SWAwakenSphinxMainAction
-    // (offered from MainAction) drives the whole flow instead — same idiom as CS's Tulzscha
-    // comment ("the sacrifice... injected by CSExpansion's custom AwakenAction handler"), just
-    // one step further since here even the COST is per-target, not just the sacrifice.
+    // Black Sphinx's awaken cost (design change, 2026-10-26: 9 minus the current Hunger Track
+    // value, no longer a monster sacrifice) is a flat per-region number, but the generic
+    // Awaken menu's area list (Game.awakens' "elderAreas", any Area with no enemy gate) doesn't
+    // match this design's restriction to areas with SW's OWN controlled gate — so Black Sphinx
+    // still stays OFF the generic Awaken menu (None here) and keeps its own
+    // SWAwakenSphinxMainAction flow (offered from MainAction) to enforce that area filter.
     override def awakenCost(u : UnitClass, r : Region)(implicit game : Game) : |[Int] = None
 
     // Hybrid Mummy / Pharoah Kephren roll dice (combat read from SWValues, same combatOf
@@ -99,11 +98,10 @@ case object SW extends Faction { f =>
 
 // ── ACTION CASE CLASSES ─────────────────────────────────────────────────────
 
-// Awaken Black Sphinx (custom flow — see awakenCost override above).
+// Awaken Black Sphinx (custom flow — see awakenCost override above). RegionAction is now the
+// terminal step (no more sacrifice sub-step): picking the Area pays the cost and places him.
 case class SWAwakenSphinxMainAction(self : Faction) extends OptionFactionAction(("Awaken " + BlackSphinx.name).styled(SW)) with MainQuestion with Soft
 case class SWAwakenSphinxRegionAction(self : Faction, r : Region) extends BaseFactionAction(("Awaken " + BlackSphinx.name).styled(SW) + " in", implicit g => r + self.iced(r)) with Soft
-case class SWAwakenSphinxSacrificeAction(self : Faction, r : Region, victim : UnitRef)
-    extends BaseFactionAction(implicit g => "Sacrifice " + g.unit(victim).uclass.styled(SW) + " to awaken " + BlackSphinx.name.styled(SW), r)
 
 // Kidnap (UFA, Post-Battle — two menus: first SW decides whether to kidnap,
 // then if yes, enemy chooses which pained monster gets kidnapped).
@@ -340,21 +338,12 @@ object SWExpansion extends Expansion {
             game.awakens(f)
             game.independents(f)
 
-            val sphinxRegions = game.board.regions.%(r => f.gates.has(r) && f.pool.%(_.uclass == BlackSphinx).any &&
-                f.at(r).%(_.uclass.utype == Monster).not(Zeroed).any)
-            // Button gating: Awaken Black Sphinx cost is dynamic (8 - victim.cost - kidnapDiscount),
-            // minimum 0. Only offer button if:
-            // 1) There's a region with a gate and Black Sphinx in pool
-            // 2) At least one monster exists in such a region
-            // 3) SW has the power to afford awakening with at least one of those monsters
-            val canAwakenSphinx = sphinxRegions.exists(r => {
-                f.at(r).%(_.uclass.utype == Monster).not(Zeroed).exists(v => {
-                    val kidnapDiscount = game.swKidnapped.has(v.ref).??(SWValues.BlackSphinx_kidnapDiscount)
-                    val cost = math.max(0, SWValues.BlackSphinx_awakenBaseCost - v.uclass.cost - kidnapDiscount)
-                    f.canSpend(cost)
-                })
-            })
-            if (canAwakenSphinx)
+            val sphinxRegions = game.board.regions.%(r => f.gates.has(r) && f.pool.%(_.uclass == BlackSphinx).any)
+            // Button gating: Awaken Black Sphinx cost is 9 minus the current Hunger Track value,
+            // minimum 0. Only offer button if there's a region with SW's own gate, Black Sphinx
+            // is in the pool, and SW can afford that cost.
+            val sphinxAwakenCost = math.max(0, SWValues.BlackSphinx_awakenBaseCost - game.swHunger)
+            if (sphinxRegions.any && f.canSpend(sphinxAwakenCost))
                 + SWAwakenSphinxMainAction(f)
 
             val pitRegions = bottomlessPitRegions.%(r => game.factions.but(f).exists(e => e.at(r).%(_.uclass.utype == Monster).not(Zeroed).any))
@@ -380,8 +369,7 @@ object SWExpansion extends Expansion {
             asking
 
         case SWAwakenSphinxMainAction(self) =>
-            val regions = game.board.regions.%(r => self.gates.has(r) && self.pool.%(_.uclass == BlackSphinx).any &&
-                self.at(r).%(_.uclass.utype == Monster).not(Zeroed).any)
+            val regions = game.board.regions.%(r => self.gates.has(r) && self.pool.%(_.uclass == BlackSphinx).any)
             if (regions.isEmpty)
                 EndAction(self)
             else if (regions.num == 1)
@@ -390,31 +378,13 @@ object SWExpansion extends Expansion {
                 Ask(self).each(regions)(r => SWAwakenSphinxRegionAction(self, r)).cancel
 
         case SWAwakenSphinxRegionAction(self, r) =>
-            // Button gating: only show sacrifice options where the faction can afford the awakening cost.
-            // Cost = 8 - sacrificedMonster.cost - (3 if kidnapped), minimum 0. If no affordable options,
-            // the action ends without offering a menu.
-            val victims = self.at(r).%(_.uclass.utype == Monster).not(Zeroed)
-            val affordableVictims = victims.%(v => {
-                val kidnapDiscount = game.swKidnapped.has(v.ref).??(SWValues.BlackSphinx_kidnapDiscount)
-                val cost = math.max(0, SWValues.BlackSphinx_awakenBaseCost - v.uclass.cost - kidnapDiscount)
-                self.canSpend(cost)
-            })
-            if (affordableVictims.isEmpty)
-                EndAction(self)
-            else
-                Ask(self).each(affordableVictims)(v => SWAwakenSphinxSacrificeAction(self, r, v.ref)).cancel
-
-        case SWAwakenSphinxSacrificeAction(self, r, victim) =>
-            val u = game.unit(victim)
-            val kidnapDiscount = game.swKidnapped.has(victim).??(SWValues.BlackSphinx_kidnapDiscount)
-            val cost = math.max(0, SWValues.BlackSphinx_awakenBaseCost - u.uclass.cost - kidnapDiscount)
+            // Cost = 9 minus the current Hunger Track value, minimum 0. No sacrifice involved.
+            val cost = math.max(0, SWValues.BlackSphinx_awakenBaseCost - game.swHunger)
             if (!self.canSpend(cost))
                 EndAction(self)
             else {
                 self.power -= cost
-                self.log("sacrificed", u.uclass.styled(SW), "in", r, "to awaken", BlackSphinx.name.styled(SW), "for", cost.power)
-                game.swKidnapped = game.swKidnapped.but(victim)
-                game.eliminate(u)
+                self.log("awakened", BlackSphinx.name.styled(SW), "in", r, "for", cost.power)
                 self.place(BlackSphinx, r)
                 self.satisfy(AwakenSphinxReq, AwakenSphinxReq.text)
                 gainHunger(SWValues.Hunger_awakenGain, "Black Sphinx awakened")
