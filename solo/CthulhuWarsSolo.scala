@@ -1665,7 +1665,7 @@ object CthulhuWarsSolo {
                     // render's true cropped aspect ratio so the art does not stretch:
                     //   Demon Larvae 0.604, Gryllus 0.739, Fiend 0.762, Baphomet 1.399.
                     case DemonLarvae => DrawRect("ti-larvae",   None, x - 18, y - 54, 36, 60)
-                    case Gryllus     => DrawRect("ti-gryllus",  None, x - 22, y - 53, 44, 59)
+                    case Gryllus     => DrawRect("ti-gryllus",  None, x - 31, y - 74, 62, 83)
                     case Fiend       => DrawRect("ti-fiend",    None, x - 34, y - 78, 69, 90)
                     case Baphomet    => DrawRect("ti-baphomet", None, x - 75, y - 90, 150, 107)
 
