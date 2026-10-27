@@ -15,7 +15,9 @@ import html._
 case object BoneSculptor   extends FactionUnitClass(FM, "Bone Sculptor",   Monster,  FMValues.BoneSculptor_cost)
 case object MuscleStitcher extends FactionUnitClass(FM, "Muscle Stitcher", Monster,  FMValues.MuscleStitcher_cost)
 case object BodyArchitect  extends FactionUnitClass(FM, "Body Architect",  Terror,   FMValues.BodyArchitect_cost)
-case object ScreamingWall  extends FactionUnitClass(FM, "Screaming Wall",  Building, FMValues.ScreamingWall_cost)
+case object ScreamingWall  extends FactionUnitClass(FM, "Screaming Wall",  Building, FMValues.ScreamingWall_cost) {
+    override def canBattle(u : UnitFigure)(implicit game : Game) : Boolean = false
+}
 
 
 // ── SPELLBOOKS ──────────────────────────────────────────────────────────────
