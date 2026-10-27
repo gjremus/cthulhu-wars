@@ -2955,75 +2955,52 @@ object CthulhuWarsSolo {
                     }
                 }
 
-                // Yuggoth: 6 clickable rules icons (Laboratory, Brain Cylinder, Slime Mold,
-                // Green Pyramid, Watcher, Dice Glyph) laid out as a 3x2 grid, mirroring the
-                // Library at Celaeno icon mechanism above (same horizontal/vertical corner
-                // switch, same vertical ritual-circle anchor). See checkYuggothClick for the
-                // matching hit-test grid — keep the two in sync.
+                // Yuggoth: 6 clickable rules icons stacked vertically like Library icons
                 if (board.isYuggothMap) {
-                    val size = 90
-                    val gap = 8
-                    val dw = 12
-                    val dh = 12
-                    val fitW = (dw + mp.width + dw) * bitmap.height < bitmap.width * (dh + mp.height + dh)
-                    val imgScale = if (fitW) 1.0 * bitmap.height / (dh + mp.height + dh) else 1.0 * bitmap.width / (dw + mp.width + dw)
-                    val offsetX = if (fitW) (bitmap.width - (dw + mp.width + dw) * imgScale) / 2.0 else 0.0
-                    val offsetY = if (fitW) 0.0 else (bitmap.height - (dh + mp.height + dh) * imgScale) / 2.0
-                    def imgToCanvas(ix : Double, iy : Double) = ((offsetX + (dw + ix) * imgScale).toInt, (offsetY + (dh + iy) * imgScale).toInt)
-
                     if (horizontal) {
-                        // Horizontal: top-right corner, 3 columns growing left from the edge,
-                        // 2 rows growing down — same corner Library uses in horizontal mode.
+                        // Horizontal: top-right corner, 3 columns growing left, 2 rows down
+                        val size = 90
+                        val gap = 8
                         val rightMargin = 10
                         val col2 = mp.width - size - rightMargin
                         val col1 = col2 - size - gap
                         val col0 = col1 - size - gap
                         val row0 = 10
                         val row1 = row0 + size + gap
-                        val sizeOnCanvas = (size * imgScale).toInt
-                        val cells = $((col0, row0), (col1, row0), (col2, row0), (col0, row1), (col1, row1), (col2, row1)).map { case (x, y) => imgToCanvas(x, y) }
                         g.globalAlpha = 0.85
-                        YuggothIcons.keys.zip(cells).foreach { case ((_, assetId), (x, y)) =>
+                        YuggothIcons.keys.zipWithIndex.foreach { case ((_, assetId), i) =>
+                            val col = if (i % 3 == 0) col0 else if (i % 3 == 1) col1 else col2
+                            val row = if (i < 3) row0 else row1
                             val img = getAsset(assetId)
-                            // Draw white outline using shadow effect
                             g.shadowColor = "white"
                             g.shadowBlur = 4
-                            g.drawImage(img, x, y, sizeOnCanvas, sizeOnCanvas)
-                            // Reset shadow
+                            g.drawImage(img, col, row, size, size)
                             g.shadowColor = "transparent"
                             g.shadowBlur = 0
                         }
                         g.globalAlpha = 1.0
                     } else {
-                        // Vertical: same viewport-fixed-anchor trick as the Library stack —
-                        // backing-store pixels, anchored just below the ritual circle.
+                        // Vertical: single column stacked below ritual circle, like Library
                         val dwv = 12
                         val dhv = 12
                         val fitWv = (dwv + mp.width + dwv) * bitmap.height < bitmap.width * (dhv + mp.height + dhv)
                         val imgScale = if (fitWv) 1.0 * bitmap.height / (dhv + mp.height + dhv) else 1.0 * bitmap.width / (dwv + mp.width + dwv)
-                        val sizeV = size * imgScale
-                        val gapV = gap * imgScale
+                        val size = 90 * imgScale
+                        val gap = 8 * imgScale
                         val (colCX, stackTopY) = libraryVerticalAnchor(bitmap.canvas, bitmap.width, bitmap.height, imgScale)
-                        val gridW = 3 * sizeV + 2 * gapV
-                        val leftX = colCX - gridW / 2
-                        val col0 = leftX
-                        val col1 = leftX + sizeV + gapV
-                        val col2 = leftX + 2 * (sizeV + gapV)
-                        val row0 = stackTopY
-                        val row1 = row0 + sizeV + gapV
-                        val cells = $((col0, row0), (col1, row0), (col2, row0), (col0, row1), (col1, row1), (col2, row1))
+                        val iconX = colCX - size / 2
                         g.save()
                         g.setTransform(1, 0, 0, 1, 0, 0)
                         g.globalAlpha = 0.85
-                        YuggothIcons.keys.zip(cells).foreach { case ((_, assetId), (x, y)) =>
+                        var y = stackTopY
+                        YuggothIcons.keys.foreach { case (_, assetId) =>
                             val img = getAsset(assetId)
-                            // Draw white outline using shadow effect
                             g.shadowColor = "white"
                             g.shadowBlur = 4
-                            g.drawImage(img, x, y, sizeV, sizeV)
-                            // Reset shadow
+                            g.drawImage(img, iconX, y, size, size)
                             g.shadowColor = "transparent"
                             g.shadowBlur = 0
+                            y += size + gap
                         }
                         g.globalAlpha = 1.0
                         g.restore()
@@ -3221,36 +3198,36 @@ object CthulhuWarsSolo {
                 val offsetX = if (fitW) (canvas.width - (dw + mp.width + dw) * imgScale) / 2.0 else 0.0
                 val offsetY = if (fitW) 0.0 else (canvas.height - (dh + mp.height + dh) * imgScale) / 2.0
 
-                def imgToCanvas(ix : Double, iy : Double) = ((offsetX + (dw + ix) * imgScale).toInt, (offsetY + (dh + iy) * imgScale).toInt)
+                def imgToCanvas(ix : Int, iy : Int) = ((offsetX + (dw + ix) * imgScale).toInt, (offsetY + (dh + iy) * imgScale).toInt)
 
                 val size = 90
                 val gap = 8
-                val sizeOnCanvas = (size * imgScale).toInt
 
-                val cells = if (horizontal) {
+                val (cells, cellSize) = if (horizontal) {
                     val rightMargin = 10
                     val col2 = mp.width - size - rightMargin
                     val col1 = col2 - size - gap
                     val col0 = col1 - size - gap
                     val row0 = 10
                     val row1 = row0 + size + gap
-                    $((col0, row0), (col1, row0), (col2, row0), (col0, row1), (col1, row1), (col2, row1)).map { case (x, y) => imgToCanvas(x, y) }
+                    val positions = $(col0, col1, col2, col0, col1, col2).zip($(row0, row0, row0, row1, row1, row1))
+                    (positions.map { case (x, y) => imgToCanvas(x, y) }, (size * imgScale).toInt)
                 } else {
                     val (colCX, stackTopY) = libraryVerticalAnchor(canvas, canvas.width, canvas.height, imgScale)
-                    val sizeV = size * imgScale
-                    val gapV = gap * imgScale
-                    val gridW = 3 * sizeV + 2 * gapV
-                    val leftX = colCX - gridW / 2
-                    val col0 = leftX
-                    val col1 = leftX + sizeV + gapV
-                    val col2 = leftX + 2 * (sizeV + gapV)
-                    val row0 = stackTopY
-                    val row1 = row0 + sizeV + gapV
-                    $((col0, row0), (col1, row0), (col2, row0), (col0, row1), (col1, row1), (col2, row1)).map { case (x, y) => (x.toInt, y.toInt) }
+                    val sizeV = (size * imgScale).toInt
+                    val gapV = (gap * imgScale).toInt
+                    val iconX = (colCX - sizeV / 2).toInt
+                    var y = stackTopY.toInt
+                    val positions = YuggothIcons.keys.map { _ =>
+                        val pos = (iconX, y)
+                        y += sizeV + gapV
+                        pos
+                    }
+                    (positions, sizeV)
                 }
 
                 YuggothIcons.keys.zip(cells).foreach { case ((overlayKey, _), (x, y)) =>
-                    if (cx >= x && cx <= x + sizeOnCanvas && cy >= y && cy <= y + sizeOnCanvas) {
+                    if (cx >= x && cx <= x + cellSize && cy >= y && cy <= y + cellSize) {
                         Overlays.onExternalClick(overlayKey, true)
                         return true
                     }

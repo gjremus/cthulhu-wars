@@ -158,6 +158,11 @@ class Serialize(val game : Game) {
         case ESymbol("Tuple2") => null
         case ESymbol("UnitFigure") => null
         case ESymbol("EmptyMap") => Map.empty
+        // [LEGACY REPLAY] Pre-serialization-fix games wrote zero-parameter actions
+        // without parens (e.g. "TIBloodOfferingMainAction" instead of "TIBloodOfferingMainAction()").
+        // The parser treats bare symbols as object lookups, not constructor calls, so they
+        // throw "Unknown symbol". Map the known zero-param actions to their constructors.
+        case ESymbol("TIBloodOfferingMainAction") => TIBloodOfferingMainAction()
         case ESymbol(s) =>
             parseFaction(s).map(_.asInstanceOf[Any])
                 .orElse(parseRegion(s).map(_.asInstanceOf[Any]))
