@@ -399,9 +399,9 @@ object SWExpansion extends Expansion {
         // BOTTOMLESS PIT (own use AND cross-faction use — see Game.neutralSpellbooks)
         // ────────────────────────────────────────────────────────────────
         case SWBottomlessPitMainAction(self, regions) =>
-            // regions is already pre-filtered (MainAction's pitRegions) to regions with a
-            // valid target, so a single entry can go straight to the region step.
-            if (regions.num == 1)
+            if (regions.isEmpty)
+                EndAction(self)
+            else if (regions.num == 1)
                 Force(SWBottomlessPitRegionAction(self, regions.head))
             else
                 Ask(self).each(regions) { r =>
