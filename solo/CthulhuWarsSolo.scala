@@ -21,7 +21,7 @@ import cws.html._
 object YuggothIcons {
     val keys : $[(String, String)] = $(
         ("YuggothLaboratory", "yuggoth-laboratory"),
-        ("YuggothBrainCylinder", "yuggoth-brain-cylinder"),
+        ("YuggothBrainCylinder", "daemon-sultan-silhouette"),
         ("YuggothSlimeMold", "yuggoth-slime-mold-silhouette"),
         ("YuggothGreenPyramid", "yuggoth-green-pyramid"),
         ("YuggothWatcher", "yuggoth-watcher-silhouette"),
@@ -2973,7 +2973,7 @@ object CthulhuWarsSolo {
                             val row = if (i < 3) row0 else row1
                             val img = getAsset(assetId)
                             g.shadowColor = "white"
-                            g.shadowBlur = 4
+                            g.shadowBlur = 8
                             g.drawImage(img, col, row, size, size)
                             g.shadowColor = "transparent"
                             g.shadowBlur = 0
@@ -2996,7 +2996,7 @@ object CthulhuWarsSolo {
                         YuggothIcons.keys.foreach { case (_, assetId) =>
                             val img = getAsset(assetId)
                             g.shadowColor = "white"
-                            g.shadowBlur = 4
+                            g.shadowBlur = 8
                             g.drawImage(img, iconX, y, size, size)
                             g.shadowColor = "transparent"
                             g.shadowBlur = 0
