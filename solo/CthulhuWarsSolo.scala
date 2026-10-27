@@ -3190,7 +3190,11 @@ object CthulhuWarsSolo {
                 val cx = (clickX * scaleX).toInt
                 val cy = (clickY * scaleY).toInt
 
-                val mp = if (horizontal) getAsset(board.id + "-h") else getAsset(board.id)
+                // Yuggoth has NO "-h" image (only Library ships a pre-joined horizontal
+                // image). getAsset(board.id + "-h") returned null -> mp.width threw a
+                // TypeError, killing the whole onclick (no overlay AND no map enlarge).
+                // Use the same image the draw code uses: board.id in both orientations.
+                val mp = getAsset(board.id)
                 val dw = 12
                 val dh = 12
                 val fitW = (dw + mp.width + dw) * canvas.height < canvas.width * (dh + mp.height + dh)
