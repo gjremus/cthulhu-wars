@@ -4802,6 +4802,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             round = 0
 
+            // Recalculate active flags for all factions now that power has been gathered
+            // in the Doom Phase. This ensures factions that passed in the previous action
+            // phase (and had active=false) are correctly marked active if they now have power.
+            factions.foreach { f =>
+                f.active = (f.power > 0 || tiEternalServitudeApplies(f)) && f.hibernating.not
+            }
+
             // Watcher hook ONLY on Yuggoth maps: YuggothExpansion (its handler) is only
             // registered when board.isYuggothMap, so any other map hit a MatchError here.
             val afterWatcher = CheckSpellbooksAction(PreMainAction(game.first))
