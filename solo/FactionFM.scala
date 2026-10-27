@@ -175,8 +175,13 @@ object FMExpansion extends Expansion {
         case other          => other.cost
     }
 
-    def screamingWallsInPlay(implicit game : Game) : Int =
-        FM.units.count(u => u.uclass == ScreamingWall && u.region.onMap)
+    def screamingWallsInPlay(implicit game : Game) : Int = {
+        val actualWalls = FM.units.count(u => u.uclass == ScreamingWall && u.region.onMap)
+        val architectSubstitutes = if (FM.has(BlueprintsInBlood))
+            FM.units.count(u => u.uclass == BodyArchitect && u.region.onMap)
+        else 0
+        actualWalls + architectSubstitutes
+    }
 
     def hasScreamingWall(r : Region)(implicit game : Game) : Boolean = {
         val hasActualWall = FM.at(r).exists(_.uclass == ScreamingWall)
