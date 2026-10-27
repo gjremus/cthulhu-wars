@@ -251,7 +251,7 @@ object SWExpansion extends Expansion {
         // ────────────────────────────────────────────────────────────────
         // START OF ACTION PHASE — Hunger +1 while Black Sphinx is on the map.
         // ────────────────────────────────────────────────────────────────
-        case ActionPhaseAction if game.setup.has(SW) && SW.onMap(BlackSphinx).not(Zeroed).any =>
+        case ActionPhaseAction if game.setup.has(SW) && SW.onMap(BlackSphinx).any =>
             gainHunger(SWValues.Hunger_actionPhaseGain, "start of Action Phase, " + BlackSphinx.name + " on map")
             UnknownContinue
 
