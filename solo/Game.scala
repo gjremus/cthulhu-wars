@@ -4988,6 +4988,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 if (f == TI) {
                     if (TI.all(Gryllus).none) bs = bs.%!(_ == Scavenge)
                     if (TI.all(Fiend).none)   bs = bs.%!(_ == EntropySiphon)
+                    // HB Fix (2026-10-27): vs. Daemon Sultan (DS), 3-player games only,
+                    // TI may not choose Scavenge as its very first Spellbook pick (guide's
+                    // Final Gap List note, 2026-10-24). Only the first pick is blocked;
+                    // later picks of Scavenge (once a Gryllus is out) are unaffected.
+                    if (f.spellbooks.num == 0 && factions.num == 3 && factions.has(DS))
+                        bs = bs.%!(_ == Scavenge)
                 }
                 // OW lost-2nd-spellbook fix: attach an OutOfTurnRefresh so that if an
                 // out-of-turn power (e.g. OW Dragon Ascending) is taken between two owed
@@ -5063,6 +5069,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // downstream CheckSpellbooksAction(next) as its continuation.
             if (f == DC && DCExpansion.dcShouldDeliverOnAcquire(sb))
                 return Force(DCDeliverReservedAcolyteForceAction(DC, sb, CheckSpellbooksAction(next)))
+
+            // HB Fix (2026-10-27): vs. Bubastis (BB), 3-player games only. The moment TI
+            // earns its 5th Spellbook, the "Captured Cultists from 2+ factions" Requirement
+            // is satisfied automatically instead of needing to be met through normal play,
+            // so the 6th (final) book is freed up immediately rather than requiring a
+            // separate capture (guide's Final Gap List note, 2026-10-24).
+            if (f == TI && f.spellbooks.num == 5 && factions.num == 3 && factions.has(BB))
+                TI.satisfy(TICapturedTwoFactions, "Captured Cultists from 2+ factions (automatic vs. Bubastis)")
 
             CheckSpellbooksAction(next)
 
