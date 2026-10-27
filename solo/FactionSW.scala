@@ -125,7 +125,8 @@ case class SWKidnapSkipAction(self : Faction, enemy : Faction) extends OptionFac
 // Bottomless Pit — SW's own baseline use AND (once earned) any faction's cross-faction use
 // (offered from Game.neutralSpellbooks, same idiom as CS's Effulgent Sacrifice).
 case class SWBottomlessPitMainAction(self : Faction, l : $[Region]) extends OptionFactionAction(BottomlessPit.styled(SW)) with MainQuestion with Soft
-case class SWBottomlessPitRegionAction(self : Faction, r : Region) extends OptionFactionAction(implicit g => BottomlessPit.styled(SW) + " in", r) with PowerNeutral with Soft
+case class SWBottomlessPitRegionAction(self : Faction, r : Region)
+    extends BaseFactionAction(BottomlessPit.styled(SW) + ": choose unit to eliminate in", r) with PowerNeutral with Soft
 case class SWBottomlessPitAction(self : Faction, r : Region, victim : UnitRef)
     extends BaseFactionAction(implicit g => BottomlessPit.styled(SW) + ": eliminate " + g.unit(victim).uclass.styled(g.unit(victim).faction), r) with PowerNeutral
 
