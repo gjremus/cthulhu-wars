@@ -3195,7 +3195,6 @@ object Overlays {
         def swRef(sb : Spellbook) = swRefAs(sb, sb.name)
         def combat = """<span class="combat-color">Combat</span>"""
         def cost(s : String) = s"""<span class="cost-color">$s</span>"""
-        val hungerFooter = s"""<b>Hunger Track:</b> <span class="cost-color">${calc(g => g.swHunger)}</span>"""
         faction(SW, "info:sw-background", Kidnap, "Post-Battle",
             s"The enemy chooses one of their Pained Monsters. While it shares a region with ${QueenNitokris.name} and ${SWValues.Kidnap_minMummies}+ ${HybridMummy.plural}, it lies sideways: it is exempt from Battle (including abilities), moves for free with ${QueenNitokris.name}, and cannot be moved by any other means.",
             $(BottomlessPit, AncientEmetic, Starvation), $(
@@ -3205,14 +3204,14 @@ object Overlays {
             (QueenNitokris, SWValues.QueenNitokris_count, "" + SWValues.QueenNitokris_cost, calc(g => { implicit val gg : Game = g; SWValues.QueenNitokris_combatBase + g.swHunger }), s"""
                 <div class=p>${combat} Rolls dice equal to ${SWValues.QueenNitokris_combatBase} plus the current Hunger Track value.</div>
                 <div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(MonstrousForepaw)}, ${swRef(BottomlessPit)}</div>"""),
-            (BlackSphinx,   SWValues.BlackSphinx_count, "Awaken", calc(g => { implicit val gg : Game = g; SWValues.BlackSphinx_painsBase + g.swHunger }), s"""
+            (BlackSphinx,   SWValues.BlackSphinx_count, calc(g => "" + math.max(0, SWValues.BlackSphinx_awakenBaseCost - g.swHunger)), calc(g => { implicit val gg : Game = g; SWValues.BlackSphinx_painsBase + g.swHunger }), s"""
                 <div class=p>${cost(s"How to Awaken ${BlackSphinx.name}:")}</div>
                 <div class=p>${cost("1)")} Pay ${SWValues.BlackSphinx_awakenBaseCost} Power minus the current Hunger Track value.</div>
                 <div class=p>${cost("2)")} ${BlackSphinx.name} appears in the Area with your Controlled Gate. ${BlackSphinx.name} cannot be moved by any means.</div>
                 <div class=p>${combat} Adds Pains equal to ${SWValues.BlackSphinx_painsBase} plus the current Hunger Track value (no dice).</div>
                 <div class=p><b>Ceaseless Hunger (Ongoing):</b> Whenever ${BlackSphinx.name} is Awakened, Pained, and at the start of each Action Phase (while on the map), advance the Hunger Track by ${SWValues.Hunger_awakenGain}. When he is Killed or Eliminated, advance it by ${SWValues.Hunger_killedGain} instead. Lose Doom and/or sacrifice Cultists equal to his Hunger in the Doom Phase. An enemy-controlled Elder Thing sharing his Area fully blocks this ability.</div>
                 <div class=p>Spellbook: ${swRef(MonstrousForepaw)}</div>""")
-        ), footer = hungerFooter, setup = true)
+        ), setup = true)
     }
 
     // Tribulation v16 (TRB) — overlay dispatch helper (same idiom as swOverlay/prmOverlay
