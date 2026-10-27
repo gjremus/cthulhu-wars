@@ -399,15 +399,22 @@ object SWExpansion extends Expansion {
         // BOTTOMLESS PIT (own use AND cross-faction use — see Game.neutralSpellbooks)
         // ────────────────────────────────────────────────────────────────
         case SWBottomlessPitMainAction(self, regions) =>
-            Ask(self).each(regions) { r =>
-                val targets = game.factions.but(self)./~(e => e.at(r).%(_.uclass.utype == Monster).not(Zeroed))
-                if (targets.isEmpty) EndAction(self) else SWBottomlessPitRegionAction(self, r)
-            }.cancel
+            // regions is already pre-filtered (MainAction's pitRegions) to regions with a
+            // valid target, so a single entry can go straight to the region step.
+            if (regions.num == 1)
+                Force(SWBottomlessPitRegionAction(self, regions.head))
+            else
+                Ask(self).each(regions) { r =>
+                    val targets = game.factions.but(self)./~(e => e.at(r).%(_.uclass.utype == Monster).not(Zeroed))
+                    if (targets.isEmpty) EndAction(self) else SWBottomlessPitRegionAction(self, r)
+                }.cancel
 
         case SWBottomlessPitRegionAction(self, r) =>
             val targets = game.factions.but(self)./~(e => e.at(r).%(_.uclass.utype == Monster).not(Zeroed))
             if (targets.isEmpty)
                 EndAction(self)
+            else if (targets.num == 1)
+                Force(SWBottomlessPitAction(self, r, targets.head.ref))
             else
                 Ask(self).each(targets)(v => SWBottomlessPitAction(self, r, v.ref)).cancel
 
@@ -437,6 +444,8 @@ object SWExpansion extends Expansion {
         case SWAncientEmeticMainAction(self, choices) =>
             if (choices.isEmpty)
                 EndAction(self)
+            else if (choices.num == 1)
+                Force(SWAncientEmeticUnitAction(self, choices.head))
             else
                 Ask(self).each(choices)(uc => SWAncientEmeticUnitAction(self, uc)).cancel
 
@@ -444,6 +453,8 @@ object SWExpansion extends Expansion {
             val regions = self.gates
             if (regions.isEmpty)
                 EndAction(self)
+            else if (regions.num == 1)
+                Force(SWAncientEmeticRegionAction(self, uc, regions.head))
             else
                 Ask(self).each(regions)(r => SWAncientEmeticRegionAction(self, uc, r)).cancel
 
@@ -462,12 +473,18 @@ object SWExpansion extends Expansion {
         // Menu 2: Enemy chooses which monster (asks enemy, only if SW said yes)
         // ────────────────────────────────────────────────────────────────
         case SWKidnapOfferAction(self, enemy) =>
-            // SW agreed to kidnap. Now ask ENEMY which pained monster to kidnap.
+            // SW agreed to kidnap. Now ask ENEMY which pained monster to kidnap (Battle.scala's
+            // gate already guarantees candidates.any before this menu is ever offered).
             val swSide = if (game.battle.get.attacker == SW) game.battle.get.attackers else game.battle.get.defenders
             val enemySide = if (game.battle.get.attacker == SW) game.battle.get.defenders else game.battle.get.attackers
             val candidates = enemySide.forces.%(u => u.uclass.utype == Monster && u.health == Pained)./(_.ref)
-            self.log(Kidnap.styled(SW) + ": offered to kidnap; enemy now chooses which pained monster")
-            Ask(enemy).each(candidates)(v => SWKidnapAction(SW, enemy, v))
+            if (candidates.num == 1) {
+                self.log(Kidnap.styled(SW) + ": offered to kidnap; only one pained enemy monster, kidnapped automatically")
+                Force(SWKidnapAction(SW, enemy, candidates.head))
+            } else {
+                self.log(Kidnap.styled(SW) + ": offered to kidnap; enemy now chooses which pained monster")
+                Ask(enemy).each(candidates)(v => SWKidnapAction(SW, enemy, v))
+            }
 
         case SWKidnapDeclineAction(self, enemy) =>
             self.log(Kidnap.styled(SW) + ": declined to kidnap")
