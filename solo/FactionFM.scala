@@ -180,7 +180,7 @@ object FMExpansion extends Expansion {
     def screamingWallsInPlay(implicit game : Game) : Int = {
         val actualWalls = FM.units.count(u => u.uclass == ScreamingWall && u.region.onMap)
         val architectSubstitutes = if (FM.has(BlueprintsInBlood))
-            FM.units.count(u => u.uclass == BodyArchitect && u.region.onMap)
+            FM.units.count(u => u.uclass == BodyArchitect && u.region.onMap && !FM.at(u.region).exists(_.uclass == ScreamingWall))
         else 0
         actualWalls + architectSubstitutes
     }
