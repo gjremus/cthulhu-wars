@@ -170,6 +170,7 @@ case class TIPayPowerDoomMainAction() extends OptionFactionAction("Pay 4 Power a
 // Sacrament of Flesh (Baphomet Doom Phase, §1.8): a MANDATORY Doom-Phase step —
 // permanently remove `toRemove` Faction Units you Control (1, or 2 with all 6
 // Spellbooks, each reduced by a spared Cultist), then gain `esGain` Elder Signs.
+// Baphomet himself is exempt from this pool (matches the Awaken-Baphomet sacrifice).
 // TISacramentResolveAction is the driver (recurses removal→removal→ES→continue);
 // TISacramentRemoveUnitAction is the per-unit pick (recorded — it mutates state).
 case class TISacramentResolveAction(toRemove : Int, esGain : Int) extends ForcedAction
@@ -693,7 +694,9 @@ object TIExpansion extends Expansion {
             Force(TISacramentResolveAction(toRemove, esGain))
 
         case TISacramentResolveAction(toRemove, esGain) =>
-            val units = TI.allInPlay.%(_.region.onMapOrMoon).not(Zeroed)
+            // Baphomet himself is exempt from this removal pool, same as the
+            // Awaken-Baphomet sacrifice (TIAwakenBaphometRegionAction) already excludes him.
+            val units = TI.allInPlay.%(_.region.onMapOrMoon).not(Zeroed).%(_.uclass != Baphomet)
             if (toRemove <= 0 || units.none) {
                 if (esGain > 0) {
                     TI.takeES(esGain)
