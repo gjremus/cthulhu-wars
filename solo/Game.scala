@@ -3974,7 +3974,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     def rituals(f : Faction)(implicit w : AskWrapper) {
         val cost = f.can(Herald).?(5).|(ritualCost)
 
-        if (f.power >= cost && f.acted.not)
+        // The Invasion (TI) — Eternal Servitude (§1.5): "You cannot perform Rituals
+        // of Annihilation. This is not optional." This is an unconditional ban, not
+        // limited to the broke-at-0-Power window the rest of Eternal Servitude's
+        // virtual-2-Power grant applies to — TI must never be offered a Ritual of
+        // Annihilation even when it genuinely holds enough real Power to afford one.
+        if (f.power >= cost && f.acted.not && f != TI)
             + RitualAction(f, cost, 1)
 
         // Round 8 Bug 40: also check that CeremonyOfAnnihilation is not flipped facedown
