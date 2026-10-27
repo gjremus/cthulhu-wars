@@ -28,7 +28,7 @@ class Serialize(val game : Game) {
         case bf : BattlePhase => className(bf)
         case o : Offer => write(o.f) + "->" + write(o.n)
         case o : AzathothOffer => "AzathothOffer(" + o.productIterator.$./(write).mkString(", ") + ")"
-        case a : Action => className(a) + a.productIterator.$.some./(_./(write).mkString("(", ", ", ")")).|("")
+        case a : Action => className(a) + (if (a.productIterator.$.isEmpty) "()" else "(" + a.productIterator.$./(write).mkString(", ") + ")")
         case es : ElderSign => "$" + es.value
 
         case Some(x) => "Some(" + write(x) + ")"

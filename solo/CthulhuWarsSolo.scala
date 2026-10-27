@@ -2963,6 +2963,14 @@ object CthulhuWarsSolo {
                 if (board.isYuggothMap) {
                     val size = 90
                     val gap = 8
+                    val dw = 12
+                    val dh = 12
+                    val fitW = (dw + mp.width + dw) * bitmap.height < bitmap.width * (dh + mp.height + dh)
+                    val imgScale = if (fitW) 1.0 * bitmap.height / (dh + mp.height + dh) else 1.0 * bitmap.width / (dw + mp.width + dw)
+                    val offsetX = if (fitW) (bitmap.width - (dw + mp.width + dw) * imgScale) / 2.0 else 0.0
+                    val offsetY = if (fitW) 0.0 else (bitmap.height - (dh + mp.height + dh) * imgScale) / 2.0
+                    def imgToCanvas(ix : Double, iy : Double) = ((offsetX + (dw + ix) * imgScale).toInt, (offsetY + (dh + iy) * imgScale).toInt)
+
                     if (horizontal) {
                         // Horizontal: top-right corner, 3 columns growing left from the edge,
                         // 2 rows growing down — same corner Library uses in horizontal mode.
@@ -2972,13 +2980,18 @@ object CthulhuWarsSolo {
                         val col0 = col1 - size - gap
                         val row0 = 10
                         val row1 = row0 + size + gap
-                        val cells = $((col0, row0), (col1, row0), (col2, row0), (col0, row1), (col1, row1), (col2, row1))
+                        val sizeOnCanvas = (size * imgScale).toInt
+                        val cells = $((col0, row0), (col1, row0), (col2, row0), (col0, row1), (col1, row1), (col2, row1)).map { case (x, y) => imgToCanvas(x, y) }
                         g.globalAlpha = 0.85
                         YuggothIcons.keys.zip(cells).foreach { case ((_, assetId), (x, y)) =>
-                            g.drawImage(getAsset(assetId), x, y, size, size)
-                            g.strokeStyle = "rgba(255, 255, 255, 0.8)"
-                            g.lineWidth = 2
-                            g.strokeRect(x, y, size, size)
+                            val img = getAsset(assetId)
+                            // Draw white outline using shadow effect
+                            g.shadowColor = "white"
+                            g.shadowBlur = 4
+                            g.drawImage(img, x, y, sizeOnCanvas, sizeOnCanvas)
+                            // Reset shadow
+                            g.shadowColor = "transparent"
+                            g.shadowBlur = 0
                         }
                         g.globalAlpha = 1.0
                     } else {
@@ -3003,10 +3016,14 @@ object CthulhuWarsSolo {
                         g.setTransform(1, 0, 0, 1, 0, 0)
                         g.globalAlpha = 0.85
                         YuggothIcons.keys.zip(cells).foreach { case ((_, assetId), (x, y)) =>
-                            g.drawImage(getAsset(assetId), x, y, sizeV, sizeV)
-                            g.strokeStyle = "rgba(255, 255, 255, 0.8)"
-                            g.lineWidth = 2
-                            g.strokeRect(x, y, sizeV, sizeV)
+                            val img = getAsset(assetId)
+                            // Draw white outline using shadow effect
+                            g.shadowColor = "white"
+                            g.shadowBlur = 4
+                            g.drawImage(img, x, y, sizeV, sizeV)
+                            // Reset shadow
+                            g.shadowColor = "transparent"
+                            g.shadowBlur = 0
                         }
                         g.globalAlpha = 1.0
                         g.restore()
