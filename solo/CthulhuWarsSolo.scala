@@ -2976,6 +2976,9 @@ object CthulhuWarsSolo {
                         g.globalAlpha = 0.85
                         YuggothIcons.keys.zip(cells).foreach { case ((_, assetId), (x, y)) =>
                             g.drawImage(getAsset(assetId), x, y, size, size)
+                            g.strokeStyle = "rgba(255, 255, 255, 0.8)"
+                            g.lineWidth = 2
+                            g.strokeRect(x, y, size, size)
                         }
                         g.globalAlpha = 1.0
                     } else {
@@ -3001,6 +3004,9 @@ object CthulhuWarsSolo {
                         g.globalAlpha = 0.85
                         YuggothIcons.keys.zip(cells).foreach { case ((_, assetId), (x, y)) =>
                             g.drawImage(getAsset(assetId), x, y, sizeV, sizeV)
+                            g.strokeStyle = "rgba(255, 255, 255, 0.8)"
+                            g.lineWidth = 2
+                            g.strokeRect(x, y, sizeV, sizeV)
                         }
                         g.globalAlpha = 1.0
                         g.restore()
@@ -3052,26 +3058,6 @@ object CthulhuWarsSolo {
                     }
                 }
 
-                // The Invasion (TI): Unquenchable Thirst is mandatory and makes Attack/
-                // Capture cost 1 Doom instead of 1 Power in Baphomet's current Area
-                // (§1.8/§3.4.2) — a small label there so the substitution is visible
-                // before paying. Baphomet's Area is evaluated fresh every render since
-                // he can move.
-                if (setup.seating.has(TI)) {
-                    TI.onMap(Baphomet).not(Zeroed).starting.foreach { u =>
-                        val r = u.region
-                        val (gx, gy) = gateXY(r)
-                        val by = gy - (55 * board.unitScale).toInt
-                        g.font = "bold " + (14 * board.unitScale).toInt + "px sans-serif"
-                        g.textAlign = "center"
-                        g.textBaseline = "middle"
-                        g.lineWidth = 3.0
-                        g.strokeStyle = "rgba(0,0,0,0.85)"
-                        g.fillStyle = "#c9a4ff"
-                        g.strokeText("Doom, not Power", gx, by)
-                        g.fillText("Doom, not Power", gx, by)
-                    }
-                }
             }
 
             // Library (vertical only): the ritual-circle HUD marker is a viewport-fixed
