@@ -3204,7 +3204,7 @@ object Overlays {
             (QueenNitokris, SWValues.QueenNitokris_count, "" + SWValues.QueenNitokris_cost, calc(g => { implicit val gg : Game = g; SWValues.QueenNitokris_combatBase + g.swHunger }), s"""
                 <div class=p>${combat} Rolls dice equal to ${SWValues.QueenNitokris_combatBase} plus the current Hunger Track value.</div>
                 <div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(MonstrousForepaw)}, ${swRef(BottomlessPit)}</div>"""),
-            (BlackSphinx,   SWValues.BlackSphinx_count, calc(g => math.max(0, SWValues.BlackSphinx_awakenBaseCost - g.swHunger).toString), calc(g => { implicit val gg : Game = g; SWValues.BlackSphinx_painsBase + g.swHunger }), s"""
+            (BlackSphinx,   SWValues.BlackSphinx_count, calc(g => math.max(0, SWValues.BlackSphinx_awakenBaseCost - g.swHunger)), calc(g => { implicit val gg : Game = g; SWValues.BlackSphinx_painsBase + g.swHunger }), s"""
                 <div class=p>${cost(s"How to Awaken ${BlackSphinx.name}:")}</div>
                 <div class=p>${cost("1)")} Pay ${SWValues.BlackSphinx_awakenBaseCost} Power minus the current Hunger Track value.</div>
                 <div class=p>${cost("2)")} ${BlackSphinx.name} appears in the Area with your Controlled Gate. ${BlackSphinx.name} cannot be moved by any means.</div>
