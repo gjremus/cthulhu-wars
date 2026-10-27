@@ -3202,34 +3202,40 @@ object CthulhuWarsSolo {
 
                 val size = 90
                 val gap = 8
+                val iconSize = (size * imgScale).toInt
 
-                val (cells, cellSize) = if (horizontal) {
+                if (horizontal) {
                     val rightMargin = 10
                     val col2 = mp.width - size - rightMargin
                     val col1 = col2 - size - gap
                     val col0 = col1 - size - gap
                     val row0 = 10
                     val row1 = row0 + size + gap
-                    val positions = $(col0, col1, col2, col0, col1, col2).zip($(row0, row0, row0, row1, row1, row1))
-                    (positions.map { case (x, y) => imgToCanvas(x, y) }, (size * imgScale).toInt)
+
+                    val grid = $(
+                        (col0, row0), (col1, row0), (col2, row0),
+                        (col0, row1), (col1, row1), (col2, row1)
+                    )
+
+                    YuggothIcons.keys.zip(grid).foreach { case ((overlayKey, _), (ix, iy)) =>
+                        val (ccx, ccy) = imgToCanvas(ix, iy)
+                        if (cx >= ccx && cx <= ccx + iconSize && cy >= ccy && cy <= ccy + iconSize) {
+                            Overlays.onExternalClick(overlayKey, true)
+                            return true
+                        }
+                    }
                 } else {
                     val (colCX, stackTopY) = libraryVerticalAnchor(canvas, canvas.width, canvas.height, imgScale)
-                    val sizeV = (size * imgScale).toInt
+                    val iconX = (colCX - iconSize / 2).toInt
                     val gapV = (gap * imgScale).toInt
-                    val iconX = (colCX - sizeV / 2).toInt
                     var y = stackTopY.toInt
-                    val positions = YuggothIcons.keys.map { _ =>
-                        val pos = (iconX, y)
-                        y += sizeV + gapV
-                        pos
-                    }
-                    (positions, sizeV)
-                }
 
-                YuggothIcons.keys.zip(cells).foreach { case ((overlayKey, _), (x, y)) =>
-                    if (cx >= x && cx <= x + cellSize && cy >= y && cy <= y + cellSize) {
-                        Overlays.onExternalClick(overlayKey, true)
-                        return true
+                    YuggothIcons.keys.foreach { case (overlayKey, _) =>
+                        if (cx >= iconX && cx <= iconX + iconSize && cy >= y && cy <= y + iconSize) {
+                            Overlays.onExternalClick(overlayKey, true)
+                            return true
+                        }
+                        y += iconSize + gapV
                     }
                 }
 
