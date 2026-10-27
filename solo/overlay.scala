@@ -636,7 +636,11 @@ object Overlays {
             "<div class='p nt black-border'>When a Brain Cylinder is Captured, the capturing Faction may optionally choose to Convert the captured Cylinder by replacing it with one of their own available Cylinders, instead of taking possession of the Unit for sacrifice. This still counts as a Capture for purposes of Spellbooks and Abilities.</div>")
 
         // ── Yuggoth: Slime Mold icon (Slime Molds section, full text) ──
-        case $("YuggothSlimeMold", _ : Boolean) => yuggothIconOverlay("Slime Molds", "slime-mold-icon",
+        case $("YuggothSlimeMold", _ : Boolean) => yuggothIconOverlay("Slime Molds", "yuggoth-slime-mold-silhouette",
+            "<div class='h2 black-border'><span class='lb inline-block'>Call Slime Mold</span></div>" +
+            "<div class='p nt black-border'><b>Action: Cost 1</b></div>" +
+            "<div class='p nt black-border'>Place a Slime Mold from the Pool into a Slime Mold Area.</div>" +
+            "<div class='p nt black-border' style='margin-top:1em;'><b>Slime Mold Rules:</b></div>" +
             "<div class='p nt black-border'>A player that Controls a Gate in a No Slime Mold Area may take the Slime Mold Loyalty Card. They control all Slime Molds on the map. If another Faction takes Control of this Gate, all Slime Molds in play change allegiance to the new Faction. If the Gate is Abandoned, all Slime Molds become uncontrolled. This also means that they would no longer count as part of any Faction for purposes of being Pained.</div>" +
             "<div class='p nt black-border'>If the Opener of the Way faction is in play, and Yog-Sothoth is in the Slime Sea Overlook while another Faction Controls a normal Gate there, only the other Faction may take the Loyalty Card.</div>" +
             "<div class='p nt black-border'>The Slime Molds are Neutral Monster Units which are considered to have 1 Cost. When uncontrolled, they are also considered to have no Spellbooks, Doom, Power, or any other normal features of a Faction for any purposes. They may be targeted by any Spellbooks or Abilities that target or reference Monsters without requiring a faction be named.</div>" +
@@ -644,7 +648,7 @@ object Overlays {
             "<div class='p nt black-border'>Slime Molds cannot be Summoned normally or placed on the Map due to any ability other than Call Slime Mold. When Called, Slime Molds are placed into a Slime Mold Area.</div>" +
             "<div class='p nt black-border'>If the Black Goat faction is in play, Fertility Cult may be used to Call Slime Molds alongside Summoning other Monsters, but these Slime Molds must still appear in a Slime Mold Area.</div>" +
             "<div class='p nt black-border'>Slime Molds cannot use a Move Action to go to the No Slime Mold Area, but may be Pained there or transferred there by a movement-like ability.</div>" +
-            "<div class='p nt black-border'>If the Windwalker faction is in play, Windwalker chooses where the Slimes retreat when using Howl against them.</div>")
+            "<div class='p nt black-border'>If the Windwalker faction is in play, Windwalker chooses where the Slimes retreat when using Howl against them.</div>", "10vh")
 
         // ── Yuggoth: Green Pyramid icon (Green Pyramid section, full text) ──
         case $("YuggothGreenPyramid", _ : Boolean) => yuggothIconOverlay("The Green Pyramid", "yuggoth-green-pyramid",
@@ -652,7 +656,7 @@ object Overlays {
 
         // ── Yuggoth: Watcher icon (Watcher section, start up to but not including the
         // Dice Glyph paragraph — the Awaken-by-die-roll mechanic is the Dice Glyph icon below) ──
-        case $("YuggothWatcher", _ : Boolean) => yuggothIconOverlay("The Watcher", "watcher-icon",
+        case $("YuggothWatcher", _ : Boolean) => yuggothIconOverlay("The Watcher", "yuggoth-watcher-silhouette",
             "<div class='p nt black-border'>The Watcher is a non-player Great Old One Unit which is considered to have 0 Cost, no Special Abilities, and no Spellbooks, Doom, Power, or any other normal features of a Faction for any purposes. It may not be targeted by any Spellbooks or Abilities. It is only considered an enemy Great Old One while Awake.</div>" +
             "<div class='p nt black-border'>At the beginning of each Doom Phase, if the Watcher is already Awake, it Decays. Roll a die and lower the Watcher Token's position on the Doom Track by that many spaces. If it Decays to 0, it is Killed and removed from the Map. Flip the Watcher token to its dark side. Do not Decay the Watcher if it Awakened in this Doom Phase.</div>")
 
@@ -2482,7 +2486,7 @@ object Overlays {
 
     // Yuggoth map: image + rules-text popup, same spellbook-table shell as tomeOverlay/
     // mapUnitOverlay but with the reference image (wiki art) shown above the text.
-    def yuggothIconOverlay(name : String, imgKey : String, text : String) = s"""
+    def yuggothIconOverlay(name : String, imgKey : String, text : String, imgHeight : String = "20vh") = s"""
         <table class="spellbook-table" style="">
             <thead>
                 <tr>
@@ -2496,7 +2500,7 @@ object Overlays {
                     <td></td>
                     <td>
                         <div class="h1 black-border"><span class="lb inline-block">${name}</span></div>
-                        <div style="text-align:center;"><img class="img" src="${imageSource(imgKey)}" style="max-height:20vh;max-height:20dvh;width:auto;"></div>
+                        <div style="text-align:center;"><img class="img" src="${imageSource(imgKey)}" style="max-height:${imgHeight};max-height:${imgHeight.replace("vh","dvh")};width:auto;"></div>
                         <div class="white-border">
                             <div class="nt black-border">${text}</div>
                         </div>
