@@ -1576,6 +1576,28 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
+                // Fleshmason (FM) Screaming Wall: a Screaming Wall is a BUILDING and never
+                // participates in Battle. Exempt all Screaming Walls from battle — they neither
+                // attack nor are killed in any circumstances. This mirrors the Cathedral exemption
+                // above and prevents enemy factions (like GC) from destroying Screaming Walls
+                // through battle.
+                if (sides.%(_.forces.%(_.uclass == ScreamingWall).any).any) {
+                    sides.foreach { s =>
+                        s.forces.%(_.uclass == ScreamingWall).foreach { u =>
+                            log(u.uclass.styled(u.faction), "in", arena, "is a Building and does not participate in Battle")
+                            exempt(u)
+                        }
+                    }
+                    if (attacker.forces.none && !battleStartReplayExpectsContinue) {
+                        log("No attackers left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                    if (defender.forces.none && !battleStartReplayExpectsContinue) {
+                        log("No defenders left to battle")
+                        return jump(PostBattlePhase)
+                    }
+                }
+
                 // Albino Penguins: transferred penguins are now in the battle side's units list
                 // (transferred during LaughingstockPhase before BattleStart)
                 // so they're picked up naturally by attacker.at(arena) / defender.at(arena)
