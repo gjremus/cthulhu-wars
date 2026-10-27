@@ -1113,7 +1113,7 @@ class Player(private val f : Faction)(implicit game : Game) {
     }
 
     def takeES(n : Int) {
-        val total = factions./(f => f.es.num + f.revealed.num).sum
+        val total = factions./(f => f.es.num + f.revealed.num).sum + game.tiBloodOfferingDiscardedES.num
         var count = n
 
         if (total + count > 36) {
@@ -1975,6 +1975,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // new Game(). Needed because a queued-but-not-yet-proceeded Scavenge Battle leaves the
     // enemy target present, so "still has a target" alone cannot tell the loop an Area is done.
     var tiScavengeResolvedAreas : $[Region] = $
+    // Blood Offering (§1.10 / §3.10.5): Elder Signs TI has accepted an enemy's offer
+    // for (creator correction, 2026-10-27) are discarded permanently, not returned to
+    // the pool — kept here (rather than on any faction's es/revealed) so they count
+    // against the shared 36-token pool forever without being owned by anyone. Reset
+    // by new Game() so undo replay re-derives it from the recorded TIBloodOfferingAcceptAction log.
+    var tiBloodOfferingDiscardedES : $[ElderSign] = $
 
     // DS singleton vars must be reset here so undo replay (which creates a new Game) starts clean
     DS.chaosGateRegions = $
@@ -5020,7 +5026,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (fe.any) {
                 val f = fe(0)
                 val n = f.es.%(_.value == 0).num
-                val es = factions./~(f => f.es ++ f.revealed)
+                val es = factions./~(f => f.es ++ f.revealed) ++ tiBloodOfferingDiscardedES
 
                 // The Invasion (TI): Infernolatreia (Ongoing, §1.10) — before resolving
                 // TI's next plain blind draw for Elder Sign(s) it is owed, offer TI the

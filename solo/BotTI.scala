@@ -325,9 +325,10 @@ class GameEvaluationTI(implicit game : Game) extends GameEvaluation(TI)(game) {
                 need(TICapturedTwoFactions) |=> 500 -> "progress captured-2-factions requirement"
                 others.exists(_.cultists.any) |=> 200 -> "enemies have eligible cultists"
 
-            // TI's choice of which (at most one) offer to accept: minimize the
-            // Doom handed to the offering enemy, maximize the value of the
-            // Cultist captured, and avoid feeding the current Doom leader.
+            // TI's choice of which offer to accept (mandatory once any exists,
+            // 2026-10-27 correction): minimize the Doom handed to the offering
+            // enemy, maximize the value of the Cultist captured, and avoid
+            // feeding the current Doom leader.
             case TIBloodOfferingAcceptAction(who, ur, i, drawn) =>
                 val u = game.unit(ur)
                 val es = drawn(i)
@@ -336,9 +337,6 @@ class GameEvaluationTI(implicit game : Game) extends GameEvaluation(TI)(game) {
                 u.onGate |=> 400 -> "denies enemy gatekeeper"
                 true |=> -(es.value * 150) -> "doom handed to offering enemy"
                 isDoomLeader |=> -400 -> "avoid feeding the doom leader"
-
-            case TIBloodOfferingDeclineAllAction(offers) =>
-                true |=> 150 -> "decline all: baseline, beats a bad accept"
 
             // ================================================================
             // INFERNOLATREIA (§1.10) — strictly at-least-as-good as a blind

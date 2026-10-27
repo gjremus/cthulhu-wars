@@ -261,7 +261,6 @@ case class TIBloodOfferingResolveAction(drawn : $[ElderSign], offers : $[(Factio
 case class TIBloodOfferingAcceptAction(who : Faction, ur : UnitRef, i : Int, drawn : $[ElderSign]) extends BaseFactionAction(
     g => "Blood Offering: accepted " + who + "'s offer of " + ur,
     implicit g => "Accept " + ur.full + " from " + who.full + " for " + drawn(i).short) { override def self = TI }
-case class TIBloodOfferingDeclineAllAction(offers : $[(Faction, UnitRef, Int)]) extends BaseFactionAction(None, "Decline all offers") { override def self = TI }
 
 // Infernolatreia (library Spellbook, Ongoing, §1.10) — see overlay.scala's spellbook
 // description for the exact player-facing wording. Hooked centrally at the one
@@ -899,16 +898,18 @@ object TIExpansion extends Expansion {
         // Draw loop: one real Elder-Sign draw at a time via the same DrawES physical-
         // companion seam every other ES gain in the engine uses (Game.CheckSpellbooksAction),
         // weighted by what is not already accounted for — every faction's held/revealed
-        // ES, PLUS this card's own already-drawn-but-not-yet-returned tokens (so the 4
-        // draws within a single Blood Offering never double-count each other). x == 0
-        // means the shared 36-token pool is exhausted — stop early with whatever was
-        // drawn so far rather than loop forever or crash on drawn(i).
+        // ES, this card's own already-drawn-but-not-yet-returned tokens (so the 4
+        // draws within a single Blood Offering never double-count each other), PLUS any
+        // Elder Signs permanently discarded by a past Blood Offering (see
+        // tiBloodOfferingDiscardedES). x == 0 means the shared 36-token pool is
+        // exhausted — stop early with whatever was drawn so far rather than loop
+        // forever or crash on drawn(i).
         case TIBloodOfferingDrawAction(drawn, remaining) if remaining <= 0 =>
             TI.log(BloodOffering.styled(TI), "revealed", drawn./(_.short).mkString(" "))
             Force(TIBloodOfferingOfferLoopAction(game.factions.but(TI), drawn, $))
 
         case TIBloodOfferingDrawAction(drawn, remaining) =>
-            val known = game.factions./~(f => f.es ++ f.revealed) ++ drawn
+            val known = game.factions./~(f => f.es ++ f.revealed) ++ drawn ++ game.tiBloodOfferingDiscardedES
             DrawES("Blood Offering draws an Elder Sign",
                 18 - known.count(_.value == 1), 12 - known.count(_.value == 2), 6 - known.count(_.value == 3),
                 (x, _) => if (x == 0) TIBloodOfferingDrawAction(drawn, 0) else TIBloodOfferingDrawAction(drawn :+ ElderSign(x), remaining - 1))
@@ -942,18 +943,22 @@ object TIExpansion extends Expansion {
         case TIBloodOfferingDeclineAction(who, queue, drawn, offers) =>
             Force(TIBloodOfferingOfferLoopAction(queue, drawn, offers))
 
-        // TI's final choice: accept AT MOST ONE offer (never forced — "may accept," per
-        // the card), Capturing that Cultist for free and awarding the matching Elder
-        // Sign's Doom to the offering enemy. Every Elder Sign not used this way (the
-        // other 3, or all 4 if TI declines) simply returns to the pool — they were never
-        // added to any faction's es/revealed track, so no further bookkeeping is needed.
+        // TI's final choice (creator correction, 2026-10-27, superseding the original
+        // 2026-09-08 "Option A" ruling): if ANY enemy offered a Cultist, TI MUST accept
+        // one of them — no decline option is offered once offers.any. Accepting Captures
+        // that Cultist for free and awards the matching Elder Sign's Doom to the
+        // offering enemy; that one Elder Sign is discarded for the rest of the game
+        // (tiBloodOfferingDiscardedES), not returned to the pool. The other drawn Elder
+        // Signs (the unaccepted ones, or all 4 if no enemy offered) were never added to
+        // any faction's es/revealed track, so they simply return to the pool with no
+        // further bookkeeping.
         case TIBloodOfferingResolveAction(drawn, offers) =>
             if (offers.none) {
                 TI.log(BloodOffering.styled(TI) + ": no enemy offered a Cultist — all Elder Signs return to the pool")
                 EndAction(TI)
             }
             else
-                Ask(TI).each(offers)(o => TIBloodOfferingAcceptAction(o._1, o._2, o._3, drawn)).add(TIBloodOfferingDeclineAllAction(offers))
+                Ask(TI).each(offers)(o => TIBloodOfferingAcceptAction(o._1, o._2, o._3, drawn))
 
         case TIBloodOfferingAcceptAction(who, ur, i, drawn) =>
             val es = drawn(i)
@@ -963,14 +968,11 @@ object TIExpansion extends Expansion {
             val r = victim.region
             game.eliminate(victim)
             victim.region = TI.prison
-            TI.log("captures", victim, "in", r, "via", BloodOffering.styled(TI) + " — remaining Elder Signs return to the pool")
+            game.tiBloodOfferingDiscardedES :+= es
+            TI.log("captures", victim, "in", r, "via", BloodOffering.styled(TI) + " — that Elder Sign is discarded, the rest return to the pool")
             TI.satisfy(CaptureCultist, "Capture Cultist")
             if (game.factions.has(FB))
                 game.fbCyclopeanGazeActionRegions :+= r
-            EndAction(TI)
-
-        case TIBloodOfferingDeclineAllAction(offers) =>
-            TI.log(BloodOffering.styled(TI) + ": declined all offers — Elder Signs return to the pool")
             EndAction(TI)
 
         // Entropy Siphon Part 2 (§1.10/§3.10.6): the end-of-Doom-Phase enemy Power-loss
@@ -1034,7 +1036,7 @@ object TIExpansion extends Expansion {
 
         case TIInfernolatreiaDeclineAction(n, next) =>
             TI.log(Infernolatreia.styled(TI) + ": declined — draws blind as normal")
-            val es = game.factions./~(f => f.es ++ f.revealed)
+            val es = game.factions./~(f => f.es ++ f.revealed) ++ game.tiBloodOfferingDiscardedES
             DrawES("" + TI + " gets " + n.es, 18 - es.%(_.value == 1).num, 12 - es.%(_.value == 2).num, 6 - es.%(_.value == 3).num,
                 (x, public) => ElderSignAction(TI, n, x, public, next))
 
@@ -1065,7 +1067,7 @@ object TIExpansion extends Expansion {
                 Force(TIInfernolatreiaChooseLoopAction(n, drawn, $, next))
 
         case TIInfernolatreiaDrawAction(n, toDraw, drawn, dry, next) =>
-            val known = game.factions./~(f => f.es ++ f.revealed) ++ drawn
+            val known = game.factions./~(f => f.es ++ f.revealed) ++ drawn ++ game.tiBloodOfferingDiscardedES
             DrawES(Infernolatreia.styled(TI) + " draws an Elder Sign",
                 18 - known.count(_.value == 1), 12 - known.count(_.value == 2), 6 - known.count(_.value == 3),
                 (x, _) => if (x == 0) TIInfernolatreiaDrawAction(n, 0, drawn, true, next) else TIInfernolatreiaDrawAction(n, toDraw - 1, drawn :+ ElderSign(x), false, next))
