@@ -21,10 +21,10 @@ import cws.html._
 object YuggothIcons {
     val keys : $[(String, String)] = $(
         ("YuggothLaboratory", "yuggoth-laboratory"),
-        ("YuggothBrainCylinder", "yuggoth-brain-cylinder"),
-        ("YuggothSlimeMold", "yuggoth-slime-mold-silhouette"),
+        ("YuggothBrainCylinder", "yuggoth-brain-cylinder-silhouette"),
+        ("YuggothSlimeMold", "yuggoth-slime-mold"),
         ("YuggothGreenPyramid", "yuggoth-green-pyramid"),
-        ("YuggothWatcher", "yuggoth-watcher-silhouette"),
+        ("YuggothWatcher", "yuggoth-watcher"),
         ("YuggothDiceGlyph", "yuggoth-dice-glyph")
     )
 }
@@ -1629,6 +1629,9 @@ object CthulhuWarsSolo {
                     // asset rather than only an icon inside the Section A.6 rulebook scan.
                     case TheWatcherUnit => DrawRect("gc-cthulhu", |(tint), x - 65, y - 158, 131, 175)
 
+                    // Yuggoth Phase 3: Slime Mold — Monster-scale unit using sculpt art from guide
+                    case SlimeMoldMonster => DrawRect("n-slime-mold", |(Processing(None, |("rgba(180,180,180,0.5)"), None)), x - 30, y - 60, 60, 70)
+
                     // Faceless Blight (FBE): Fungal Thrall and Byagoona use their real sculpt art,
                     // stored light/desaturated so the SAME FBE-green #3d5f1c multiply tint produces
                     // the correct Cultist-matched green (do NOT recolor the art). A thin crisp white
@@ -2968,7 +2971,7 @@ object CthulhuWarsSolo {
                         val row0 = 10
                         val row1 = row0 + size + gap
                         g.globalAlpha = 0.85
-                        YuggothIcons.keys.zipWithIndex.foreach { case ((_, assetId), i) =>
+                        YuggothIcons.keys.zipWithIndex.foreach { case ((overlayKey, assetId), i) =>
                             val col = if (i % 3 == 0) col0 else if (i % 3 == 1) col1 else col2
                             val row = if (i < 3) row0 else row1
                             val img = getAsset(assetId)
@@ -2977,6 +2980,22 @@ object CthulhuWarsSolo {
                             g.drawImage(img, col, row, size, size)
                             g.shadowColor = "transparent"
                             g.shadowBlur = 0
+                            // Watcher icon: add status (A/S) and decay number in red
+                            if (overlayKey == "YuggothWatcher") {
+                                g.globalAlpha = 1.0
+                                g.font = "bold " + (size * 0.18).toInt + "px sans-serif"
+                                g.textAlign = "center"
+                                g.textBaseline = "middle"
+                                g.fillStyle = "red"
+                                g.strokeStyle = "black"
+                                g.lineWidth = 2.0
+                                val status = if (game.watcherAsleep) "S" else "A"
+                                g.strokeText(status, col + size / 2, row + size * 0.35)
+                                g.fillText(status, col + size / 2, row + size * 0.35)
+                                g.strokeText(game.watcherPosition.toString, col + size / 2, row + size * 0.65)
+                                g.fillText(game.watcherPosition.toString, col + size / 2, row + size * 0.65)
+                                g.globalAlpha = 0.85
+                            }
                         }
                         g.globalAlpha = 1.0
                     } else {
@@ -2993,13 +3012,29 @@ object CthulhuWarsSolo {
                         g.setTransform(1, 0, 0, 1, 0, 0)
                         g.globalAlpha = 0.85
                         var y = stackTopY
-                        YuggothIcons.keys.foreach { case (_, assetId) =>
+                        YuggothIcons.keys.foreach { case (overlayKey, assetId) =>
                             val img = getAsset(assetId)
                             g.shadowColor = "white"
                             g.shadowBlur = 8
                             g.drawImage(img, iconX, y, size, size)
                             g.shadowColor = "transparent"
                             g.shadowBlur = 0
+                            // Watcher icon: add status (A/S) and decay number in red
+                            if (overlayKey == "YuggothWatcher") {
+                                g.globalAlpha = 1.0
+                                g.font = "bold " + (size * 0.18).toInt + "px sans-serif"
+                                g.textAlign = "center"
+                                g.textBaseline = "middle"
+                                g.fillStyle = "red"
+                                g.strokeStyle = "black"
+                                g.lineWidth = 2.0
+                                val status = if (game.watcherAsleep) "S" else "A"
+                                g.strokeText(status, iconX + size / 2, y + size * 0.35)
+                                g.fillText(status, iconX + size / 2, y + size * 0.35)
+                                g.strokeText(game.watcherPosition.toString, iconX + size / 2, y + size * 0.65)
+                                g.fillText(game.watcherPosition.toString, iconX + size / 2, y + size * 0.65)
+                                g.globalAlpha = 0.85
+                            }
                             y += size + gap
                         }
                         g.globalAlpha = 1.0

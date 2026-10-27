@@ -636,10 +636,9 @@ object Overlays {
             "<div class='p nt black-border'>When a Brain Cylinder is Captured, the capturing Faction may optionally choose to Convert the captured Cylinder by replacing it with one of their own available Cylinders, instead of taking possession of the Unit for sacrifice. This still counts as a Capture for purposes of Spellbooks and Abilities.</div>")
 
         // ── Yuggoth: Slime Mold icon (Slime Molds section, full text) ──
-        case $("YuggothSlimeMold", _ : Boolean) => yuggothIconOverlay("Slime Molds", "yuggoth-slime-mold-silhouette",
-            "<div class='h2 black-border'><span class='lb inline-block'>Call Slime Mold</span></div>" +
-            "<div class='p nt black-border'><b>Action: Cost 1</b></div>" +
-            "<div class='p nt black-border'>Place a Slime Mold from the Pool into a Slime Mold Area.</div>" +
+        case $("YuggothSlimeMold", _ : Boolean) => yuggothIconOverlay("Slime Molds", "yuggoth-slime-mold",
+            "<div class='h2 black-border'><span class='lb inline-block'>Call Slime Mold (Action: Cost 0 or 1)</span></div>" +
+            "<div class='p nt black-border'>If you Control the Gate on the Slime Sea Overlook, place a Slime Mold in any Slime Sea Area. If no Slimes are in play, this costs 0. If at least one Slime is in play, pay 1.</div>" +
             "<div class='p nt black-border' style='margin-top:1em;'><b>Slime Mold Rules:</b></div>" +
             "<div class='p nt black-border'>A player that Controls a Gate in a No Slime Mold Area may take the Slime Mold Loyalty Card. They control all Slime Molds on the map. If another Faction takes Control of this Gate, all Slime Molds in play change allegiance to the new Faction. If the Gate is Abandoned, all Slime Molds become uncontrolled. This also means that they would no longer count as part of any Faction for purposes of being Pained.</div>" +
             "<div class='p nt black-border'>If the Opener of the Way faction is in play, and Yog-Sothoth is in the Slime Sea Overlook while another Faction Controls a normal Gate there, only the other Faction may take the Loyalty Card.</div>" +
@@ -656,9 +655,22 @@ object Overlays {
 
         // ── Yuggoth: Watcher icon (Watcher section, start up to but not including the
         // Dice Glyph paragraph — the Awaken-by-die-roll mechanic is the Dice Glyph icon below) ──
-        case $("YuggothWatcher", _ : Boolean) => yuggothIconOverlay("The Watcher", "yuggoth-watcher-silhouette",
-            "<div class='p nt black-border'>The Watcher is a non-player Great Old One Unit which is considered to have 0 Cost, no Special Abilities, and no Spellbooks, Doom, Power, or any other normal features of a Faction for any purposes. It may not be targeted by any Spellbooks or Abilities. It is only considered an enemy Great Old One while Awake.</div>" +
-            "<div class='p nt black-border'>At the beginning of each Doom Phase, if the Watcher is already Awake, it Decays. Roll a die and lower the Watcher Token's position on the Doom Track by that many spaces. If it Decays to 0, it is Killed and removed from the Map. Flip the Watcher token to its dark side. Do not Decay the Watcher if it Awakened in this Doom Phase.</div>")
+        case $("YuggothWatcher", _ : Boolean) => {
+            val status = currentGame./(g => if (g.watcherAsleep) "Asleep" else "Awakened").|(if (true) "Asleep" else "Awakened")
+            val decay = currentGame./(_.watcherPosition).|(12)
+            yuggothWatcherOverlay("The Watcher", "yuggoth-watcher",
+                "<div class='p nt black-border' style='font-weight:bold;text-align:center;'>" + status + "</div>" +
+                "<div class='p nt black-border' style='font-weight:bold;text-align:center;'>Watcher Decay Token: " + decay + "</div>" +
+                "<div class='p nt black-border' style='font-weight:bold;text-align:center;'>Combat: " + decay + "</div>",
+                "<div class='p nt black-border'>The Watcher is a non-player Great Old One Unit which is considered to have 0 Cost, no Special Abilities, and no Spellbooks, Doom, Power, or any other normal features of a Faction for any purposes. It may not be targeted by any Spellbooks or Abilities. It is only considered an enemy Great Old One while Awake.</div>" +
+                "<div class='p nt black-border'>At the beginning of each Doom Phase, if the Watcher is already Awake, it Decays. Roll a die and lower the Watcher Token's position on the Doom Track by that many spaces. If it Decays to 0, it is Killed and removed from the Map. Flip the Watcher token to its dark side. Do not Decay the Watcher if it Awakened in this Doom Phase.</div>" +
+                "<div class='p nt black-border' style='margin-top:1em;'>At the start of each Action Phase, if the Watcher is Awake then it will Attack before the First Player's turn.</div>" +
+                "<div class='p nt black-border'>Once per player, in player order and starting with the First Player, the controlling player must Move the Watcher into an adjacent Area of his choice containing Faction Units. If no Faction Units are in an adjacent Area, the Watcher must be moved to an Area containing Faction Units. Immediately after moving, the Watcher initiates a Battle against each Faction in that Area, attacking them separately and independently, in the order chosen by the current controller. If the Slime Molds are currently uncontrolled, the Watcher does not attack them. Each of these Battles in a single Area count as a single Watcher Attack. Afterward, control moves onto the next player, until all players have gotten a turn controlling the Watcher or the Watcher has been Killed. After this, the Action Phase proceeds as normal starting with the First Player's turn.</div>" +
+                "<div class='p nt black-border'>Any player may initiate or participate in a Battle against the Watcher. For each Kill result, reduce the position of the Watcher Token by 1 on the Doom Track. The Watcher is immune to Pain results.</div>" +
+                "<div class='p nt black-border'>If the Great Cthulhu faction is in play, it may satisfy its spellbook requirement by scoring a Kill against the Watcher.</div>" +
+                "<div class='p nt black-border'>If the Crawling Chaos faction is in play, Nyarlathotep may gain 2 Elder Signs for scoring a Kill against the Watcher, but may not gain additional Elder Signs for additional Kills scored in the same Battle.</div>" +
+                "<div class='p nt black-border'>If the Ancients faction is in play, Unholy Ground may be used to reduce the position of the Watcher Token by 1 on the Doom Track.</div>")
+        }
 
         // ── Yuggoth: Dice Glyph icon (the text directly beneath the Dice Glyph image —
         // the Awaken-by-die-roll mechanic, distinct from the Watcher text above) ──
@@ -2501,6 +2513,35 @@ object Overlays {
                     <td>
                         <div class="h1 black-border"><span class="lb inline-block">${name}</span></div>
                         <div style="text-align:center;"><img class="img" src="${imageSource(imgKey)}" style="max-height:${imgHeight};max-height:${imgHeight.replace("vh","dvh")};width:auto;"></div>
+                        <div class="white-border">
+                            <div class="nt black-border">${text}</div>
+                        </div>
+                    </td>
+                    <td></td>
+                </tr>
+                <tr><td></td><td></td><td></td></tr>
+            </tbody>
+        </table>"""
+
+    // Yuggoth Watcher: special overlay with status text to the right of the image
+    def yuggothWatcherOverlay(name : String, imgKey : String, statusText : String, text : String, imgHeight : String = "20vh") = s"""
+        <table class="spellbook-table" style="">
+            <thead>
+                <tr>
+                    <th style=width:15%></th>
+                    <th style=width:70%></th>
+                    <th style=width:15%></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td></td>
+                    <td>
+                        <div class="h1 black-border"><span class="lb inline-block">${name}</span></div>
+                        <div style="display:flex;align-items:center;justify-content:center;gap:2em;">
+                            <img class="img" src="${imageSource(imgKey)}" style="max-height:${imgHeight};max-height:${imgHeight.replace("vh","dvh")};width:auto;">
+                            <div style="display:flex;flex-direction:column;gap:0.5em;">${statusText}</div>
+                        </div>
                         <div class="white-border">
                             <div class="nt black-border">${text}</div>
                         </div>
