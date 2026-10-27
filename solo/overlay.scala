@@ -714,7 +714,7 @@ object Overlays {
         case $("FM", CrumblingYawpReq.text) => requirement(s"Roll ${FMValues.CrumblingYawpReq_dice} or more dice in a single Combat.")
         case $("FM", HymnOfSufferingReq.text) => requirement(s"Your Units in play have ${FMValues.HymnOfSufferingReq_combat} or more Combat.")
         case $("FM", TerrifyingShriekReq.text) => requirement(s"The Screaming Wall is in Areas with ${FMValues.TerrifyingShriekReq_glyphs} of the 3 Glyph types (the Yellow Sign Glyphs).")
-        case $("FM", TendonFlayingReq.text) => requirement(s"As an Action, Pay ${FMValues.TendonFlayingReq_power} Power, minus the number of Screaming Walls in play.")
+        case $("FM", TendonFlayingReq.text) => requirement(s"As an Action, Pay ${FMValues.TendonFlayingReq_power} Power, minus one for each Screaming Wall or Body Architect in play.")
         case $("FM", BlueprintsInBloodReq.text) => requirement(s"Have ${FMValues.BlueprintsInBloodReq_walls} Screaming Walls in Play.")
         case $("FM", MannedBattlementsReq.text) => requirement(s"Have ${FMValues.MannedBattlementsReq_walls} Screaming Walls in Play.")
 

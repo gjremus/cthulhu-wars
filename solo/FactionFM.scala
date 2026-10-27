@@ -40,7 +40,7 @@ case object SpitefulChisel extends FactionSpellbook(FM, "Spiteful Chisel")
 case object CrumblingYawpReq     extends Requirement("Roll " + FMValues.CrumblingYawpReq_dice + " or more dice in a single Combat")
 case object HymnOfSufferingReq   extends Requirement("Your Units in play have " + FMValues.HymnOfSufferingReq_combat + " or more Combat")
 case object TerrifyingShriekReq  extends Requirement("The Screaming Wall is in Areas with " + FMValues.TerrifyingShriekReq_glyphs + " of the 3 Glyph types")
-case object TendonFlayingReq     extends Requirement("As an Action, Pay " + FMValues.TendonFlayingReq_power + " Power, minus the number of Screaming Walls in play")
+case object TendonFlayingReq     extends Requirement("As an Action, Pay " + FMValues.TendonFlayingReq_power + " Power, minus one for each Screaming Wall or Body Architect in play")
 case object BlueprintsInBloodReq extends Requirement("Have " + FMValues.BlueprintsInBloodReq_walls + " Screaming Walls in Play")
 case object MannedBattlementsReq extends Requirement("Have " + FMValues.MannedBattlementsReq_walls + " Screaming Walls in Play")
 
@@ -219,6 +219,9 @@ object FMExpansion extends Expansion {
         val wallRegions = FM.units.filter(u => u.uclass == ScreamingWall && u.region.onMap).map(_.region)
         val distinctGlyphs = wallRegions.map(_.glyph).%(g => g == GlyphAA || g == GlyphOO || g == GlyphWW).distinct
         f.satisfyIf(TerrifyingShriekReq, TerrifyingShriekReq.text, distinctGlyphs.num >= FMValues.TerrifyingShriekReq_glyphs)
+
+        val wallCount = screamingWallsInPlay
+        f.satisfyIf(TendonFlayingReq, TendonFlayingReq.text, wallCount >= FMValues.TendonFlayingReq_power)
 
         f.satisfyIf(BlueprintsInBloodReq, BlueprintsInBloodReq.text, screamingWallsInPlay >= FMValues.BlueprintsInBloodReq_walls)
         f.satisfyIf(MannedBattlementsReq, MannedBattlementsReq.text, screamingWallsInPlay >= FMValues.MannedBattlementsReq_walls)
