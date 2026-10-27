@@ -1846,6 +1846,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // something other than the declaring side's own turn" escape hatch already used by
     // csCorruptedRendingActor below. Cleared by Battle.scala the moment it's consumed.
     var watcherForcedBattleThen : |[ForcedAction] = None
+    // Oct 2026 bug fixes: track Watcher state for proper decay/wake/battle behavior
+    var watcherAwakenedThisDoom : Boolean = false  // Skip decay on awakening Doom Phase
+    var watcherDoomCrossingPending : Boolean = false  // Detect 12-doom crossing once
+    var watcherKillsThisBattle : Int = 0  // Count kills for Harbinger/spellbooks
+    var watcherPrevDoomValues : Map[Faction, Int] = Map()  // Track doom at start of Doom Phase
 
     // Yuggoth Phase 3 — Slime Molds (controlled neutral Monsters). Controlled by whoever
     // holds the Slime Sea Overlook gate. When gate control changes, ALL Slime Molds switch
@@ -4644,6 +4649,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             fbeActionInProgress = false
             fbeSelfConsumingDeaths = $
 
+            // Oct 2026: snapshot doom values for Watcher 12-doom crossing detection
+            watcherPrevDoomValues = factions.map(f => f -> f.doom).toMap
+
             // The Invasion (TI): count Doom Phases so Spellbook Requirement 2 can fire
             // at the second one (§1.9/§3.12). The award itself (and "all other players
             // lose 1 Doom") is applied in TIExpansion.triggers() once this reaches 2, so
@@ -4933,8 +4941,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // existing game keeps its recorded end-of-doom return so old game logs stay valid.
             // moonbeastPlacedThisDoom was just cleared above, so every blocked spellbook qualifies;
             // moonbeasts placed during this same Doom phase are added afterward and so wait for next Doom.
-            // Watcher hook ONLY on Yuggoth maps (see ActionPhaseAction above).
-            val afterDoomStart : Action = if (board.isYuggothMap) WatcherDoomPhaseCheckAction(CheckSpellbooksAction(DoomPhaseAction)) else CheckSpellbooksAction(DoomPhaseAction)
+            // Oct 2026: Watcher wake check moved to END of Doom Phase (after decay)
+            val afterDoomStart : Action = CheckSpellbooksAction(DoomPhaseAction)
             if (!nextReplayActionHint.any && moonbeastOnSpellbook.any) {
                 val refs = moonbeastOnSpellbook.keys.toList
                 return Force(MoonbeastReturnLoopAction(refs, afterDoomStart))
@@ -5199,9 +5207,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Action Phase) whenever TI is absent, lacks the Spellbook, or controls no
                 // Fiend-Controlled Gate, so routing through it is always safe. Guarded here too so
                 // no TIEntropySiphonStartAction is even recorded in a game without TI holding it.
-                val afterDoom : ForcedAction =
+                // Oct 2026: Watcher decay and wake check at END of Doom Phase (before TI Entropy Siphon)
+                val afterDecayAndWake : ForcedAction =
                     if (factions.has(TI) && TI.has(EntropySiphon)) TIEntropySiphonStartAction(CheckSpellbooksAction(ActionPhaseAction))
                     else CheckSpellbooksAction(ActionPhaseAction)
+                val afterDoom : ForcedAction =
+                    if (board.isYuggothMap) WatcherDecayCheckAction(WatcherDoomPhaseCheckAction(afterDecayAndWake))
+                    else afterDecayAndWake
 
                 // Bokrug: Ghosts of Ib + Doom that Came to Sarnath fire after moonbeast return (only if Bokrug is in game)
                 val bokrugOwner = factions.find(_.loyaltyCards.has(BokrugCard))

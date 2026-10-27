@@ -752,7 +752,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s.can(Invisibility) && s.forces(FlyingPolyp).not(Invised).any)
             options :+= InvisibilityPreBattleAction(s)
 
-        if (s.can(DemandSacrifice) && s.tag(DemandSacrifice).not && s.opponent.tag(KillsArePains).not)
+        if (s.can(DemandSacrifice) && s.tag(DemandSacrifice).not && s.opponent.tag(KillsArePains).not && s.opponent != TheWatcherFaction)
             if (game.options.has(DemandTsathoggua).?(s.forces(Tsathoggua).any).|(s.has(Tsathoggua)))
                 options :+= DemandSacrificePreBattleAction(s)
 
@@ -788,7 +788,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             options :+= FiendishSpawnPreBattleAction(s)
 
         // Round 8 Bug 40: also check facedown state for IGOO spellbooks
-        if (s.can(CosmicUnity) && s.tag(CosmicUnity).not && s.forces(Daoloth).any && s.opponent.forces.goos.any && !s.forces(Daoloth).exists(u => ElderThingMindControl.suppresses(u)))
+        // Bug fix Oct 2026: Watcher immune to GOO-targeting abilities
+        if (s.can(CosmicUnity) && s.tag(CosmicUnity).not && s.forces(Daoloth).any && s.opponent.forces.goos.any && !s.forces(Daoloth).exists(u => ElderThingMindControl.suppresses(u)) && s.opponent != TheWatcherFaction)
             options :+= CosmicUnityPreBattleAction(s)
 
         // Log blocked abilities (Elder Thing or Moonbeast)
@@ -1322,7 +1323,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     def checkKillSpellbooks(s : Faction) {
         if (s.needs(KillDevour1) || s.needs(KillDevour2)) {
             var devoured = s.count(Devour)
-            var kills = s.opponent.forces.count(_.health == Killed)
+            // Oct 2026: count Watcher kills separately (Watcher isn't in opponent.forces)
+            var kills = s.opponent.forces.count(_.health == Killed) + (if (s.opponent == TheWatcherFaction) game.watcherKillsThisBattle else 0)
 
             if (devoured + kills >= 2) {
                 if (s.needs(KillDevour2)) {
@@ -1436,6 +1438,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // csInsanityMeteorOrGlobulePresent for why this can't be re-checked at BattleEnd.
                 if (factions.has(CS))
                     csInsanityMeteorOrGlobulePresent = CS.at(arena).%(u => u.uclass == Meteorite || u.uclass == LuminousGlobule).any
+
+                // Oct 2026: reset Watcher kill counter at battle start
+                game.watcherKillsThisBattle = 0
 
                 // PRM: Ycgn'àgnnisssz is an Attacker in a Battle
                 if (factions.has(PRM) && attacker == PRM) {
@@ -2079,6 +2084,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             case HarbingerKillPhase =>
                 sides.foreach { s =>
                     if (s.tag(Harbinger)) {
+                        // Oct 2026: award 2 ES for any damage to Watcher (watcherKillsThisBattle > 0)
+                        if (s.opponent == TheWatcherFaction && game.watcherKillsThisBattle > 0) {
+                            s.takeES(2)
+                            s.log("gained", 2.es, "as", Harbinger, "for damaging", "The Watcher".styled("nt"))
+                            s.remove(Harbinger)
+                            return jump(EternalKillPhase)
+                        }
                         // Holy Ground: Cathedrals count as GOOs during Action Phase (cost 3 for Harbinger)
                         // Bastet (ElderGod) counts as an enemy GOO for Harbinger's kill reward too;
                         // .goos now resolves via .isGOO so ElderGod is included. Filter locally here
@@ -4255,9 +4267,25 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             game.cathedrals :-= cr
             AN.at(cr, Building).%(_.uclass == Cathedral).starting.foreach(u => game.eliminate(u))
             log("Cathedral".styled(self), "in", cr, "was removed with", UnholyGround)
-            Ask(o)
-                .each(o.forces.goos.distinctBy(_.uclass))(u => UnholyGroundEliminateAction(o, self, u).as(u)(UnholyGround, "eliminates in", arena))
-                .bail(Then(BattleDoneAction(self)))
+            // Oct 2026: Watcher immune to elimination; lower position by 1 instead
+            if (o == TheWatcherFaction) {
+                val prev = game.watcherPosition
+                game.watcherPosition = math.max(0, prev - 1)
+                game.watcherKillsThisBattle += 1
+                log("The Watcher".styled("nt") + ":", UnholyGround, "lowers Combat by 1 (", prev, "→", game.watcherPosition + ")")
+                if (game.watcherPosition == 0) {
+                    log("The Watcher".styled("nt") + ": eliminated (Combat reached 0)")
+                    TheWatcherFaction.units.head.region = null
+                    game.watcherAsleep = true
+                    game.watcherPosition = 12
+                    game.watcherAttackQueue = $
+                }
+                proceed()
+            }
+            else
+                Ask(o)
+                    .each(o.forces.goos.distinctBy(_.uclass))(u => UnholyGroundEliminateAction(o, self, u).as(u)(UnholyGround, "eliminates in", arena))
+                    .bail(Then(BattleDoneAction(self)))
 
         case UnholyGroundEliminateAction(self, f, u) =>
             // Round 8 Bug 68: log BEFORE eliminate. For IGOO units (Nyogtha,

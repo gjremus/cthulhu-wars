@@ -929,6 +929,10 @@ case class WatcherDoomPhaseCheckAction(then : Action) extends ForcedAction
 case class WatcherAwakenRollAction(roll : Int, then : Action) extends ForcedAction
 case class WatcherAwakenAction(then : Action) extends ForcedAction
 
+// Oct 2026: Decay actions (roll die, reduce position, eliminate at 0)
+case class WatcherDecayCheckAction(then : Action) extends ForcedAction
+case class WatcherDecayRollAction(roll : Int, then : Action) extends ForcedAction
+
 // Action Phase forced-attack-sequence hook (see Game.scala's ActionPhaseAction).
 case class WatcherAttackPhaseStartAction(then : Action) extends ForcedAction
 case class WatcherAttackTurnAction(then : Action) extends ForcedAction
@@ -1057,8 +1061,10 @@ object YuggothExpansion extends Expansion {
         case WatcherDoomPhaseCheckAction(then) =>
             if (!game.board.isYuggothMap || !game.watcherAsleep)
                 Force(then)
-            else if (factions.exists(_.doom >= 12)) {
-                log("The Watcher".styled("nt") + ": a Faction's Doom has reached 12 —")
+            // Oct 2026: detect 12-doom CROSSING (from <12 to >=12), not just >=12
+            else if (game.watcherDoomCrossingPending || factions.exists(f => game.watcherPrevDoomValues.getOrElse(f, 0) < 12 && f.doom >= 12)) {
+                log("The Watcher".styled("nt") + ": a Faction's Doom has crossed 12 —")
+                game.watcherDoomCrossingPending = false
                 Force(WatcherAwakenAction(then))
             }
             else {
@@ -1091,6 +1097,31 @@ object YuggothExpansion extends Expansion {
             game.fbSuppressCGForPlacement = false
             watcherUnit.onGate = false
             log("The Watcher".styled("nt") + " Awakens! Placed at", postern, "— Combat", 12)
+            game.watcherAwakenedThisDoom = true  // Skip decay this Doom Phase
+            Force(then)
+
+        // ── DECAY: END OF DOOM PHASE (after rituals, before Action Phase) ──
+        case WatcherDecayCheckAction(then) =>
+            if (!game.board.isYuggothMap || game.watcherAsleep || game.watcherAwakenedThisDoom) {
+                game.watcherAwakenedThisDoom = false  // Reset for next Doom Phase
+                Force(then)
+            }
+            else
+                RollD6(_ => "The Watcher — Decay roll", roll => WatcherDecayRollAction(roll, then))
+
+        case WatcherDecayRollAction(roll, then) =>
+            val prev = game.watcherPosition
+            val next = prev - roll
+            log("The Watcher".styled("nt") + ": Decay roll —", roll.toString.styled("power"), "(Combat", prev, "→", math.max(0, next) + ")")
+            game.watcherPosition = math.max(0, next)
+            game.watcherAwakenedThisDoom = false  // Reset for next Doom Phase
+            if (next <= 0) {
+                log("The Watcher".styled("nt") + ": eliminated (Combat reached 0)")
+                watcherUnit.region = null
+                game.watcherAsleep = true
+                game.watcherPosition = 12
+                game.watcherAttackQueue = $
+            }
             Force(then)
 
         // ── ACTION PHASE: FORCED ATTACK SEQUENCE (before anyone's Main Phase) ──
