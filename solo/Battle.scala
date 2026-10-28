@@ -310,6 +310,11 @@ case class HowlPreBattleAction(self : Faction) extends OptionFactionAction(Howl)
 case class HowlUnitAction(self : Faction, ur : UnitRef) extends ForcedAction
 case class HowlAction(self : Faction, ur : UnitRef, r : Region) extends ForcedAction
 
+// FM: Terrifying Shriek (Pre-Battle with Bone Sculptor)
+case class TerrifyingShriekPreBattleAction(self : Faction) extends OptionFactionAction(TerrifyingShriek) with PreBattleQuestion
+case class TerrifyingShriekUnitAction(self : Faction, ur : UnitRef) extends ForcedAction
+case class TerrifyingShriekRetreatAction(self : Faction, ur : UnitRef, r : Region) extends ForcedAction
+
 case class EternalPayAction(self : Faction, u : UnitRef, result : BattleRoll) extends ForcedAction
 
 case class BerserkergangAction(self : Faction, n : Int, u : UnitRef) extends ForcedAction
@@ -843,16 +848,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (s == FM && s.can(TerrifyingShriek) && !s.oncePerAction.has(TerrifyingShriek) &&
             FMExpansion.hasScreamingWall(arena)(game) &&
             s.forces.%(_.uclass == BoneSculptor).any) {
-            // Apply the Pain immediately as a forced effect
-            val side = if (s == attacker) defenders else attackers
-            val enemyUnits = side.forces.%(u => canAssignPains(u) > 0).sortBy(_.uclass.cost)
-            if (enemyUnits.any) {
-                // Pain count comes from FMValues.TerrifyingShriek_pains (faction-values/fm.json)
-                enemyUnits.take(FMValues.TerrifyingShriek_pains).foreach { target =>
-                    target.health = Pained
-                    log(s, TerrifyingShriek.styled(FM) + ":", target.short, "pained pre-battle (Bone Sculptor present)")
-                }
-                s.oncePerAction :+= TerrifyingShriek
+            // With Bone Sculptor present, Terrifying Shriek forces retreat of enemy units
+            val enemy = if (s == attacker) defender else attacker
+            val retreatableUnits = enemy.forces.%(_.canBeMoved)
+            if (retreatableUnits.any) {
+                options :+= TerrifyingShriekPreBattleAction(s)
             }
         }
 
@@ -4174,6 +4174,26 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // arm the Hound-join offer for that faction. `self` is a battle side (the Howler's
             // opponent). No-op unless it owns the Hound card with a Hound in a Gate area.
             houndPreBattleMoveArmed = (houndPreBattleMoveArmed :+ self).distinct
+            proceed()
+
+        // FM: Terrifying Shriek (Pre-Battle with Bone Sculptor)
+        case TerrifyingShriekPreBattleAction(self) =>
+            self.add(TerrifyingShriek)
+            val e = self.opponent
+            val retreatableUnits = e.forces.%(_.canBeMoved)
+            Ask(e.real.?(e).|(self)).each(retreatableUnits)(u => TerrifyingShriekUnitAction(e, u).as(u)("Retreat unit from", TerrifyingShriek))
+
+        case TerrifyingShriekUnitAction(self, u) =>
+            Ask(self).each(arena.connectedForRetreat)(r => TerrifyingShriekRetreatAction(self, u, r).as(r)("Retreat", u.ref.full, "to"))
+
+        case TerrifyingShriekRetreatAction(self, u, r) =>
+            self.forces :-= u
+            game.fbSuppressCGForPlacement = true
+            u.region = r
+            game.fbSuppressCGForPlacement = false
+            u.onGate = false
+            log(self, TerrifyingShriek.styled(FM) + ":", u, "was terrified and retreated to", r)
+            self.oncePerAction :+= TerrifyingShriek
             proceed()
 
         // HARBINGER

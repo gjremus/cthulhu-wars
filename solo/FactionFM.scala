@@ -220,8 +220,9 @@ object FMExpansion extends Expansion {
         val distinctGlyphs = wallRegions.map(_.glyph).%(g => g == GlyphAA || g == GlyphOO || g == GlyphWW).distinct
         f.satisfyIf(TerrifyingShriekReq, TerrifyingShriekReq.text, distinctGlyphs.num >= FMValues.TerrifyingShriekReq_glyphs)
 
-        val wallCount = screamingWallsInPlay
-        f.satisfyIf(TendonFlayingReq, TendonFlayingReq.text, wallCount >= FMValues.TendonFlayingReq_power)
+        // TendonFlayingReq is NOT auto-satisfied by having enough walls in play.
+        // It requires the player to actively choose to pay Power during MainAction.
+        // The requirement is only satisfied AFTER the player performs TendonFlayingReqMainAction.
 
         f.satisfyIf(BlueprintsInBloodReq, BlueprintsInBloodReq.text, screamingWallsInPlay >= FMValues.BlueprintsInBloodReq_walls)
         f.satisfyIf(MannedBattlementsReq, MannedBattlementsReq.text, screamingWallsInPlay >= FMValues.MannedBattlementsReq_walls)
