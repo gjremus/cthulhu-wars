@@ -100,8 +100,8 @@ case object SW extends Faction { f =>
 
 // Awaken Black Sphinx (custom flow — see awakenCost override above). RegionAction is now the
 // terminal step (no more sacrifice sub-step): picking the Area pays the cost and places him.
-case class SWAwakenSphinxMainAction(self : Faction) extends OptionFactionAction(("Awaken " + BlackSphinx.name).styled(SW)) with MainQuestion with Soft
-case class SWAwakenSphinxRegionAction(self : Faction, r : Region) extends BaseFactionAction(("Awaken " + BlackSphinx.name).styled(SW) + " in", implicit g => r + self.iced(r)) with Soft
+case class SWAwakenSphinxMainAction(self : Faction) extends OptionFactionAction(("Awaken " + BlackSphinx.name).styled(SW)) with MainQuestion
+case class SWAwakenSphinxRegionAction(self : Faction, r : Region) extends BaseFactionAction(("Awaken " + BlackSphinx.name).styled(SW) + " in", implicit g => r + self.iced(r))
 
 // Kidnap (UFA, Post-Battle — two menus: first SW decides whether to kidnap,
 // then if yes, enemy chooses which pained monster gets kidnapped).
