@@ -688,6 +688,12 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
             //      penalty can't touch us) and only what little Power we can
             //      spare, since 0 has no downside for a player behind TI.
             // ────────────────────────────────────────────────────────────
+            case TIBloodOfferingPickSignAction(who, i, _, drawn, _) =>
+                val esValue = drawn(i).value
+                val eligible = who.cultists.%(u => u.uclass.canBeCaptured(u)).%(_.uclass != MindParasiteCultist)
+                val cheapestCost = eligible./(_.uclass.cost).min
+                add(esValue * 150 - cheapestCost * 200, "pick which Elder Sign to offer for via Blood Offering")
+
             case TIBloodOfferingOfferAction(who, ur, i, _, drawn, _) =>
                 val u = game.unit(ur)
                 val esValue = drawn(i).value

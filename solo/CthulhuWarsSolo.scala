@@ -21,7 +21,7 @@ import cws.html._
 object YuggothIcons {
     val keys : $[(String, String)] = $(
         ("YuggothLaboratory", "yuggoth-laboratory"),
-        ("YuggothBrainCylinder", "yuggoth-brain-cylinder-silhouette"),
+        ("YuggothBrainCylinder", "yuggoth-brain-cylinder"),
         ("YuggothSlimeMold", "yuggoth-slime-mold"),
         ("YuggothGreenPyramid", "yuggoth-green-pyramid"),
         ("YuggothWatcher", "yuggoth-watcher"),

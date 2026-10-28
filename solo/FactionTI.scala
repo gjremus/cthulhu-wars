@@ -254,6 +254,13 @@ case class TIScavengeDoneAction() extends BaseFactionAction(None, "Done") { over
 case class TIBloodOfferingMainAction() extends OptionFactionAction("Blood Offering — draw 4 Elder Signs, let enemies offer a Cultist (0 Power)") with MainQuestion { override def self = TI }
 case class TIBloodOfferingDrawAction(drawn : $[ElderSign], remaining : Int) extends ForcedAction
 case class TIBloodOfferingOfferLoopAction(queue : $[Faction], drawn : $[ElderSign], offers : $[(Faction, UnitRef, Int)]) extends ForcedAction
+// Two-step offer menu (creator request, 2026-10-28): step 1 picks which of the 4
+// revealed Elder Signs to offer for (or Decline); step 2 then lists only that
+// enemy's own eligible Cultists for the chosen Elder Sign. Replaces the earlier
+// single flat list of every (Cultist, Elder Sign) combination at once, which read
+// as if multiple Cultists/signs could be offered together even though exactly one
+// pair was always enforced.
+case class TIBloodOfferingPickSignAction(who : Faction, i : Int, queue : $[Faction], drawn : $[ElderSign], offers : $[(Faction, UnitRef, Int)]) extends BaseFactionAction(None, "Offer a Cultist for " + drawn(i).short) { override def self = who }
 case class TIBloodOfferingOfferAction(who : Faction, ur : UnitRef, i : Int, queue : $[Faction], drawn : $[ElderSign], offers : $[(Faction, UnitRef, Int)]) extends BaseFactionAction(
     g => "Blood Offering: " + who + " offers " + ur + " in " + g.unit(ur).region + " for " + drawn(i).short,
     implicit g => "Offer " + ur.full + " for " + drawn(i).short) { override def self = who }
@@ -922,7 +929,8 @@ object TIExpansion extends Expansion {
         // may offer ONE of its eligible Cultists for ONE of the 4 revealed Elder Signs, or
         // Decline; enemies with no eligible Cultist (or if none were drawn) are auto-
         // skipped. Creator ruling (2026-09-08, "Option A"): synchronous, no timer, turn
-        // order — replacing the card's real-time 2-minute window for this engine.
+        // order — replacing the card's real-time 2-minute window for this engine. Step 1
+        // of the two-step menu: pick which Elder Sign to offer for, or Decline outright.
         case TIBloodOfferingOfferLoopAction(queue, drawn, offers) =>
             if (queue.none)
                 Force(TIBloodOfferingResolveAction(drawn, offers))
@@ -931,13 +939,17 @@ object TIExpansion extends Expansion {
                 val eligible = who.cultists.%(u => u.uclass.canBeCaptured(u)).%(_.uclass != MindParasiteCultist)
                 if (eligible.none || drawn.none)
                     Force(TIBloodOfferingOfferLoopAction(queue.tail, drawn, offers))
-                else {
-                    val variants = eligible.sortBy(u => u.uclass.cost * 10 + u.onGate.??(5))./~(u => drawn.indices./(i => (u.ref, i)))
+                else
                     Ask(who)
-                        .each(variants)((ur, i) => TIBloodOfferingOfferAction(who, ur, i, queue.tail, drawn, offers))
+                        .each(drawn.indices)(i => TIBloodOfferingPickSignAction(who, i, queue.tail, drawn, offers))
                         .add(TIBloodOfferingDeclineAction(who, queue.tail, drawn, offers))
-                }
             }
+
+        // Step 2 of the two-step menu: having picked an Elder Sign, list only that
+        // enemy's own eligible Cultists to offer for it.
+        case TIBloodOfferingPickSignAction(who, i, queue, drawn, offers) =>
+            val eligible = who.cultists.%(u => u.uclass.canBeCaptured(u)).%(_.uclass != MindParasiteCultist)
+            Ask(who).each(eligible.sortBy(u => u.uclass.cost * 10 + u.onGate.??(5)))(u => TIBloodOfferingOfferAction(who, u.ref, i, queue, drawn, offers))
 
         case TIBloodOfferingOfferAction(who, ur, i, queue, drawn, offers) =>
             who.log("offers", game.unit(ur), "for", drawn(i).short, "—", BloodOffering.styled(TI))

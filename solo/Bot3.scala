@@ -883,6 +883,12 @@ case class Bot3(faction : Faction) {
                 // duplicated here — Bot3 doesn't extend GameEvaluation.
                 // See BotTI.scala's file header for the full rationale.
                 // ────────────────────────────────────────────────────────────
+                case TIBloodOfferingPickSignAction(who, i, _, drawn, _) =>
+                    val esValue = drawn(i).value
+                    val eligible = who.cultists.%(u => u.uclass.canBeCaptured(u)).%(_.uclass != MindParasiteCultist)
+                    val cheapestCost = eligible./(_.uclass.cost).min
+                    true                                   |=> (esValue * 150 - cheapestCost * 200) -> "pick which Elder Sign to offer for via Blood Offering"
+
                 case TIBloodOfferingOfferAction(who, ur, i, _, drawn, _) =>
                     val u = game.unit(ur)
                     val esValue = drawn(i).value
