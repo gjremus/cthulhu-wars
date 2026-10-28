@@ -698,7 +698,7 @@ object NoFaction extends Faction {
 
 trait Action extends Record {
     def question(implicit game : Game) : String
-    def safeQ(implicit game : Game) = question(game).splt("<br/>").first
+    def safeQ(implicit game : Game) = question(game).some.|("").splt("<br/>").first
     def option(implicit game : Game) : String
     def unwrap : Action = this
 
