@@ -23,7 +23,7 @@ case object ScreamingWall  extends FactionUnitClass(FM, "Screaming Wall",  Build
 // ── SPELLBOOKS ──────────────────────────────────────────────────────────────
 case object CrumblingYawp     extends FactionSpellbook(FM, "Crumbling Yawp")
 case object HymnOfSuffering   extends FactionSpellbook(FM, "Hymn of Suffering")
-case object TerrifyingShriek  extends FactionSpellbook(FM, "Terrifying Shriek")
+case object TerrifyingShriek  extends FactionSpellbook(FM, "Terrifying Shriek") with BattleSpellbook
 case object TendonFlaying     extends FactionSpellbook(FM, "Tendon Flaying")
 case object BlueprintsInBlood extends FactionSpellbook(FM, "Blueprints in Blood")
 case object MannedBattlements extends FactionSpellbook(FM, "Manned Battlements")
