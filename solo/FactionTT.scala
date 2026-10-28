@@ -557,7 +557,12 @@ object TTExpansion extends Expansion {
             // so the re-entered DoomAction below skips the Hell's Banquet roll. The flag is cleared at
             // DoomDoneAction, so Hell's Banquet will fire normally on subsequent doom phases.
             if (cost == 0) game.ttHellsBanquetDone = true
-            if (cost == 0) Force(DoomAction(self)) else EndAction(self)
+            // Doom-phase awaken: run the spellbook check right away (like other factions'
+            // doom-phase actions) so the "Awaken Ubbo-Sathla" spellbook is offered now and
+            // returns to TT's own doom turn. Without this the owed spellbook was picked up by
+            // a later check whose continuation was DoomPhaseAction, restarting the whole Doom
+            // Phase and awarding doom twice (game "Break against Rupture", 2026-10-28).
+            if (cost == 0) Force(CheckSpellbooksAction(DoomAction(self))) else EndAction(self)
 
         // UNSPEAKABLE OATH
         case TTUnspeakableOathMainAction(self) =>
