@@ -2514,7 +2514,7 @@ object Overlays {
                         <div class="h1 black-border"><span class="lb inline-block">${name}</span></div>
                         <div style="text-align:center;"><img class="img" src="${imageSource(imgKey)}" style="max-height:${imgHeight};max-height:${imgHeight.replace("vh","dvh")};width:auto;"></div>
                         <div class="white-border">
-                            <div class="nt black-border">${text}</div>
+                            <div class="bt white-glow">${text}</div>
                         </div>
                     </td>
                     <td></td>
@@ -2543,7 +2543,7 @@ object Overlays {
                             <div style="display:flex;flex-direction:column;gap:0.5em;">${statusText}</div>
                         </div>
                         <div class="white-border">
-                            <div class="nt black-border">${text}</div>
+                            <div class="bt white-glow">${text}</div>
                         </div>
                     </td>
                     <td></td>
