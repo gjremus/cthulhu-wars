@@ -558,11 +558,11 @@ object SWExpansion extends Expansion {
 
         case SWCarryAction(o, ur, to) =>
             val u = game.unit(ur)
+            SW.log("Funeral Procession".styled(SW) + ": carried", u.uclass.styled(u.faction), "from", o, "to", to, "for free")
             u.region = to
             u.onGate = false
             u.add(Moved)
-            SW.log("Funeral Procession".styled(SW) + ": carried", u.uclass.styled(u.faction), "from", o, "to", to, "for free")
-            Force(SWCarryOfferAction(o, to))
+            UnknownContinue
 
         case SWCarryDoneAction(o, to) =>
             UnknownContinue
