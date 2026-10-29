@@ -4027,7 +4027,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // units in the same faction can be recruited in the same phase. Offered only when at least
     // one available Whateley is affordable at its current (possibly Lavinia-halved) Power cost.
     def recruitsWhateley(f : Faction)(implicit w : AskWrapper) {
-        val availableWhateleys = whateleyCardsAvailable(f).%(c => f.power >= laviniaCost(f, c.cost, true))
+        val availableWhateleys = whateleyCardsAvailable(f).%(c =>
+            f.power >= laviniaCost(f, c.cost, true) &&
+            // Don't show recruitment option if the unit is already on the map under our control
+            f.units.find(u => u.uclass == c.unit && u.region.inPlay).none)
         if (availableWhateleys.any && controlsLavinia(f).not)
             + WhateleyRecruitMainAction(f)
     }
@@ -4035,7 +4038,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Dunwich: Lavinia "Mother of Monsters" — for her controller this single Doom menu item
     // replaces the regular hire + Whateley recruit items (see MotherOfMonstersMainAction).
     def motherOfMonsters(f : Faction)(implicit w : AskWrapper) {
-        val availableWhateleys = whateleyCardsAvailable(f).%(c => f.power >= laviniaCost(f, c.cost, true))
+        val availableWhateleys = whateleyCardsAvailable(f).%(c =>
+            f.power >= laviniaCost(f, c.cost, true) &&
+            // Don't show recruitment option if the unit is already on the map under our control
+            f.units.find(u => u.uclass == c.unit && u.region.inPlay).none)
         if (controlsLavinia(f) && (motherOfMonstersCards(f).any && f.hired.not ||
             availableWhateleys.any))
             + MotherOfMonstersMainAction(f)

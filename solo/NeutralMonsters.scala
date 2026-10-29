@@ -509,6 +509,8 @@ object NeutralMonstersExpansion extends Expansion {
         case WhateleyRecruitMainAction(self) =>
             val avail = game.whateleyCardsAvailable(self)
                 .%(c => self.power >= game.laviniaCost(self, c.cost, true))
+                // Don't show cards where the unit is already on the map under our control
+                .%(c => self.units.find(u => u.uclass == c.unit && u.region.inPlay).none)
                 .sortBy(_.unit.name)
             Ask(self).group("Recruit " + "Whateley Clan".styled("nt"))
                 .list(avail./(c => WhateleyRecruitAction(self, c)))
