@@ -4178,7 +4178,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         // FM: Terrifying Shriek (Pre-Battle with Bone Sculptor)
         case TerrifyingShriekPreBattleAction(self) =>
-            self.add(TerrifyingShriek)
             val e = self.opponent
             val retreatableUnits = e.forces.%(_.canBeMoved)
             Ask(e.real.?(e).|(self)).each(retreatableUnits)(u => TerrifyingShriekUnitAction(e, u).as(u)("Retreat unit from", TerrifyingShriek))
