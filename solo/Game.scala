@@ -3638,7 +3638,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // another owner. Offered only when at least one available Whateley is affordable at
     // its current (possibly Lavinia-halved) Power cost.
     def recruitsWhateley(f : Faction)(implicit w : AskWrapper) {
-        if (f.whateleyRecruited.not && controlsLavinia(f).not && whateleyCardsAvailable(f).exists(c => f.power >= laviniaCost(f, c.cost, true)))
+        if (f.whateleyRecruited.not && controlsLavinia(f).not && whateleyCardsAvailable(f).exists(c =>
+            f.power >= laviniaCost(f, c.cost, true) &&
+            // Don't show recruitment option if the unit is already on the map under our control
+            f.units.find(u => u.uclass == c.unit && u.region.inPlay).none))
             + WhateleyRecruitMainAction(f)
     }
 
@@ -3646,7 +3649,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // replaces the regular hire + Whateley recruit items (see MotherOfMonstersMainAction).
     def motherOfMonsters(f : Faction)(implicit w : AskWrapper) {
         if (controlsLavinia(f) && (motherOfMonstersCards(f).any && f.hired.not ||
-            f.whateleyRecruited.not && whateleyCardsAvailable(f).exists(c => f.power >= laviniaCost(f, c.cost, true))))
+            f.whateleyRecruited.not && whateleyCardsAvailable(f).exists(c =>
+                f.power >= laviniaCost(f, c.cost, true) &&
+                // Don't show recruitment option if the unit is already on the map under our control
+                f.units.find(u => u.uclass == c.unit && u.region.inPlay).none)))
             + MotherOfMonstersMainAction(f)
     }
 
