@@ -535,6 +535,13 @@ object NeutralMonstersExpansion extends Expansion {
                 case None    => self.log("recruited", card.short, "for", cost.power)
             }
 
+            // If the miniature was killed/removed since the card was last held, its figure sits
+            // off-map in the old holder's reserve rather than truly gone. The card has already
+            // moved above, so that leftover figure no longer belongs to anyone — drop it now,
+            // or the "no in-play figure found" case below would mint a brand new one, leaving
+            // two miniatures of the same Clan member on the board under different factions.
+            factions.foreach(o => o.units = o.units.%!(u => u.uclass == card.unit && !u.region.inPlay))
+
             // If the miniature is already on the Map, it stays put — only control changes,
             // so reparent the existing figure to the new owner. Otherwise place it fresh.
             val existing = prior./~(_.units.find(u => u.uclass == card.unit && u.region.inPlay))
