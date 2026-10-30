@@ -1624,6 +1624,13 @@ object CthulhuWarsSolo {
                     case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 52, y - 104, 104, 104)
                     case TheLibrarian => DrawRect("librarian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 47, y - 146, 94, 146)
 
+                    // Yuggoth Phase 2: The Watcher — real bespoke art (the same yuggoth-watcher
+                    // image already shown in its own rules popup), GOO-scale, box aspect matching
+                    // the asset's own 349x475 canvas. A prior pass removed the old gc-cthulhu
+                    // placeholder case here but never added a replacement, so the Watcher briefly
+                    // rendered with no sprite at all on the map; this restores it with real art.
+                    case TheWatcherUnit => DrawRect("yuggoth-watcher", None, x - 64, y - 175, 129, 175)
+
                     // Yuggoth Phase 3: Slime Mold — Monster-scale unit using sculpt art from guide
                     case SlimeMoldMonster => DrawRect("n-slime-mold", |(Processing(None, |("rgba(180,180,180,0.5)"), None)), x - 30, y - 60, 60, 70)
 
