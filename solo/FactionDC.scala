@@ -935,7 +935,7 @@ object DCExpansion extends Expansion {
 
         // ── Doom-Phase SB-Requirement opt-ins (wrap in CheckSpellbooksAction per Item 9) ─
         case DCProselytizeReqOptInAction(self) =>
-            val enemyGOOs = game.factions.but(self)./~(_.allInPlay).%(u => u.uclass.isGOO || (u.uclass == Cathedral && AN.can(HolyGround))).num
+            val enemyGOOs = game.factions.but(self)./(fac => if (fac == TB) fac.goos.any.??(1) else fac.goos.num).sum
             self.satisfy(ProselytizeReq, "Doom Phase SBR: gain 2 Sin per enemy GOO")
             // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
             val proselytizeWant   = 2 * enemyGOOs
