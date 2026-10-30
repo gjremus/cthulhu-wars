@@ -804,7 +804,10 @@ object CthulhuWarsSolo {
                             }
                         }
 
-                        val confirm = setup.confirm && setup.difficulty(faction) == Human
+                        // The Watcher's forced-Attack move is always shown to its controller even
+                        // when there is only one legal destination, so every player can see the
+                        // Watcher's move happen instead of it silently resolving (owner request).
+                        val confirm = (setup.confirm && setup.difficulty(faction) == Human) || actions.exists(_.isInstanceOf[WatcherMoveAction])
 
                         if (recorded.any && recorded.num > gameActions.num && localReplay.not && setup.difficulty(faction) != Human && setup.difficulty(faction) != Recorded) {
                             try { UIPerform(game, serializer.parseAction(recorded(gameActions.num).replace("&gt;", ">"))) }
