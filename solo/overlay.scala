@@ -660,7 +660,7 @@ object Overlays {
             val decay = currentGame./(_.watcherPosition).|(12)
             yuggothWatcherOverlay("The Watcher", "yuggoth-watcher",
                 "<div class='p bt white-glow' style='font-weight:bold;text-align:center;'>" + status + "</div>" +
-                "<div class='p bt white-glow' style='font-weight:bold;text-align:center;'>Watcher Decay Token: " + decay + "</div>" +
+                "<div class='p bt white-glow' style='font-weight:bold;text-align:center;'>Watcher Decay Token on Doom Track: " + decay + "</div>" +
                 "<div class='p bt white-glow' style='font-weight:bold;text-align:center;'>Combat: " + decay + "</div>",
                 "<div class='p bt white-glow'>The Watcher is a non-player Great Old One Unit which is considered to have 0 Cost, no Special Abilities, and no Spellbooks, Doom, Power, or any other normal features of a Faction for any purposes. It may not be targeted by any Spellbooks or Abilities. It is only considered an enemy Great Old One while Awake.</div>" +
                 "<div class='p bt white-glow'>At the beginning of each Doom Phase, if the Watcher is already Awake, it Decays. Roll a die and lower the Watcher Token's position on the Doom Track by that many spaces. If it Decays to 0, it is Killed and removed from the Map. Flip the Watcher token to its dark side. Do not Decay the Watcher if it Awakened in this Doom Phase.</div>" +
