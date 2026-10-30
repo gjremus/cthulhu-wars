@@ -261,7 +261,14 @@ class Serialize(val game : Game) {
         case EApply("SycRequiresAttentionResume", ps) => SycRequiresAttentionResume(parseExpr(ps(0)).asInstanceOf[Region], parseExpr(ps(1)).asInstanceOf[Int])
         case EApply("SycRitualResume", ps) => SycRitualResume(parseExpr(ps(0)).asInstanceOf[Int])
         case EApply("SycHecatombResume", ps) => SycHecatombResume(parseExpr(ps(0)).asInstanceOf[Int])
-        case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
+        // A zero-param EApply is ambiguous: it could be a bare object reference (e.g. a Faction
+        // constant like TI) or a zero-constructor-param case class (e.g. TIPayPowerDoomMainAction()).
+        // Try the object lookup first; only if that fails (not a known object) fall back to
+        // constructing a zero-arg case class the same way the non-empty branch below does — a
+        // bare parseSymbol(f).get crashed outright on any zero-param action class with
+        // "NoSuchElementException: None.get" instead of falling back.
+        case EApply(f, params) if params.none => parseSymbol(f).getOrElse(parseActionConstructor(f, 0).|!("unknown class " + f).apply($()))
+        case EApply(f, params) => parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr))
     }
 
     def parseRegion(s : String) : |[Region] = (game.board.regions :+ SL.slumber :+ GC.deep :+ TB.mantle :+ BB.moon).find(_.id == s)
