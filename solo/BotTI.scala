@@ -460,15 +460,14 @@ class GameEvaluationTI(implicit game : Game) extends GameEvaluation(TI)(game) {
         // Larvae are cheap and expendable (cannot control gates regardless);
         // Fiends and Baphomet are the valuable, hard-to-replace pieces.
         // ================================================================
-        if (game.battle.isDefined) {
+        game.battle.foreach { b =>
+            implicit val battle = b
             if (game.battle./~(_.sides).has(self).not) {
                 a match {
                     case _ => true |=> 1000 -> "todo"
                 }
             }
             else {
-                implicit val battle = game.battle.get
-
                 def elim(u : UnitFigure) {
                     u.is(DemonLarvae) |=> 800 -> "elim larva"
                     u.is(Gryllus)     |=> 400 -> "elim gryllus"
