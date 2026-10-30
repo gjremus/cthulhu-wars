@@ -460,7 +460,7 @@ class GameEvaluationTI(implicit game : Game) extends GameEvaluation(TI)(game) {
         // Larvae are cheap and expendable (cannot control gates regardless);
         // Fiends and Baphomet are the valuable, hard-to-replace pieces.
         // ================================================================
-        if (game.battle.any) {
+        if (game.battle.isDefined) {
             if (game.battle./~(_.sides).has(self).not) {
                 a match {
                     case _ => true |=> 1000 -> "todo"
