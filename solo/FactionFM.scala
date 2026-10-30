@@ -244,9 +244,11 @@ object FMExpansion extends Expansion {
 
         case DoomAction(f : FM.type) =>
             implicit val asking = Asking(f)
+            val justRitualed = f.acted  // f.acted=true only after performing a ritual in this doom phase
             game.rituals(f)
-            if (f.can(CrumblingYawp) && !f.oncePerAction.has(CrumblingYawp))
+            if (justRitualed && f.can(CrumblingYawp) && !f.oncePerAction.has(CrumblingYawp)) {
                 + CrumblingYawpMainAction(f)
+            }
             game.reveals(f)
             game.highPriests(f)
             game.hires(f)
@@ -405,7 +407,7 @@ object FMExpansion extends Expansion {
             Force(MainAction(self))
 
         case MannedBattlementsAreaAction(self, source) =>
-            val units = self.at(source)./(_.ref)
+            val units = self.at(source).%(_.uclass != ScreamingWall)./(_.ref)
             Force(MannedBattlementsUnitPickAction(self, source, $, units))
 
         case MannedBattlementsUnitPickAction(self, source, picked, remaining) =>
