@@ -6388,7 +6388,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 dcTenebrosumPrefixCost = 1
             }
 
-            self.log("moved", u, "from", o, "to", r)
+            self.log("moved", u, "from", o, "to", r, (self == TB).??(TBExpansion.tbSubterraneTag(o, r)))
 
             // Catnapping refund: if a non-BB unit moves OFF the Moon and its owner paid
             // Power, BB gains that same amount of Power. Logged AFTER the move so the

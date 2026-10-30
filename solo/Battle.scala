@@ -3773,8 +3773,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // Guard: unit may have been eliminated mid-battle (e.g. Dhole Planetary Destruction)
             val exists = u.faction.units.exists(uf => uf.uclass == u.uclass && uf.index == u.index)
             if (exists) {
+                val origin = u.region
+                val subterraneTag = (u.faction == TB).??(TBExpansion.tbSubterraneTag(origin, r))
                 retreat(u, r)
-                log(u, "retreated to", r)
+                log(u, "retreated to", r, subterraneTag)
             }
             proceed()
 
@@ -3782,8 +3784,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val refugees = f.forces.%(_.health == Pained)
 
             if (refugees.any) {
+                val origins = refugees./(_.region)
+                val subterraneTag = (f == TB).??(origins./(o => TBExpansion.tbSubterraneTag(o, r)).%(_.any).headOption.|(""))
                 refugees.foreach(u => retreat(u, r))
-                log(refugees./(_.short).mkString(", "), "retreated to", r)
+                log(refugees./(_.short).mkString(", "), "retreated to", r, subterraneTag)
             }
 
             proceed()

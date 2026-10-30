@@ -1369,4 +1369,17 @@ object TBExpansion extends Expansion {
         else
             $
     }
+
+    // -- HELPER: log tag for a Move/Retreat that crossed the Mantle using the
+    // Subterrane-only Tentacle edge (owner request: make it visible in the log
+    // when Subterrane, not the nominated tbMantleAreas, is what made the move
+    // legal). Returns "" when Subterrane wasn't the reason this edge existed.
+    def tbSubterraneTag(from : Region, to : Region)(implicit game : Game) : String = {
+        if (!game.tbMantleInPlay || !TB.has(Subterrane)) return ""
+        val tentacleAreas = TB.onMap(Tentacle)./(_.region).distinct
+        val viaSubterrane =
+            (from == TB.mantle && tentacleAreas.has(to) && !game.tbMantleAreas.has(to)) ||
+            (to == TB.mantle && tentacleAreas.has(from) && !game.tbMantleAreas.has(from))
+        if (viaSubterrane) " (via " + Subterrane.styled(TB) + ")" else ""
+    }
 }
