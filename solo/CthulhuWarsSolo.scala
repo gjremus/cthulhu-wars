@@ -2323,16 +2323,13 @@ object CthulhuWarsSolo {
                             all +:= DrawItem(r, LibraryFaction, TheLibrarian, Alive, $, 0, 0)
                     }
 
-                    // Yuggoth Phase 2: The Watcher, on-map, only while Awake (its UnitFigure
-                    // sits in TheWatcherFaction.reserve — off-map — while Asleep, so this
-                    // naturally only draws it in whichever single Area it currently occupies).
-                    // No bespoke art yet (Section A.5 of the guide still only has it as a
-                    // rulebook-scan icon) — reuses the gc-cthulhu GOO-scale sprite, grey-tinted
-                    // via TheWatcherFaction's own tint/neutralTint case below, as a real but
-                    // rough placeholder per the project's existing "placeholder sprite" idiom
-                    // (e.g. XSS/TT reusing other factions' art until bespoke art exists).
-                    if (board.isYuggothMap && !game.watcherAsleep && TheWatcherFaction.at(r).any)
-                        all +:= DrawItem(r, TheWatcherFaction, TheWatcherUnit, Alive, $, 0, 0)
+                    // Yuggoth Phase 2: The Watcher is a neutral faction in `factionlike`
+                    // (via neutrals.keys, see Game.scala), so the factionlike loop above
+                    // already draws its on-map figure whenever its UnitFigure.region is
+                    // set (Awake) and skips it whenever region is null (Asleep/off-map,
+                    // see MapExpansion's WatcherAwakenAction/decay-to-0 handling). An
+                    // explicit second draw here used to duplicate that same figure in
+                    // its Area — removed.
 
                     if (game.desecrated.has(r))
                         all +:= DrawItem(r, null, DesecrationToken, Alive, $, 0, 0)
