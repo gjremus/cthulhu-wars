@@ -16,6 +16,7 @@ case object BoneSculptor   extends FactionUnitClass(FM, "Bone Sculptor",   Monst
 case object MuscleStitcher extends FactionUnitClass(FM, "Muscle Stitcher", Monster,  FMValues.MuscleStitcher_cost)
 case object BodyArchitect  extends FactionUnitClass(FM, "Body Architect",  Terror,   FMValues.BodyArchitect_cost)
 case object ScreamingWall  extends FactionUnitClass(FM, "Screaming Wall",  Building, FMValues.ScreamingWall_cost) {
+    override def canMove(u : UnitFigure)(implicit game : Game) : Boolean = false
     override def canBattle(u : UnitFigure)(implicit game : Game) : Boolean = false
 }
 
@@ -441,7 +442,7 @@ object FMExpansion extends Expansion {
             self.power -= cost
             self.log("paid", cost.power, "for", TendonFlaying.styled(FM), "requirement")
             self.satisfy(TendonFlayingReq, TendonFlayingReq.text)
-            Then(MainAction(self))
+            EndAction(self)
 
         case BuildGateAction(f : FM.type, r) if game.setup.has(FM) =>
             f.power -= FMValues.BuildGate_cost
