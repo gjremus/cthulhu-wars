@@ -1621,14 +1621,6 @@ object CthulhuWarsSolo {
                     case TheCustodian => DrawRect("custodian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 52, y - 104, 104, 104)
                     case TheLibrarian => DrawRect("librarian-icon", |(Processing(None, |("rgba(255,255,255,0.2)"), None)), x - 47, y - 146, 94, 146)
 
-                    // Yuggoth Phase 2: The Watcher — GOO-scale placeholder sprite (no bespoke
-                    // art yet; reuses gc-cthulhu's image, grey-tinted via TheWatcherFaction's
-                    // own `tint` case above, same "reuse another faction's art as a stand-in"
-                    // idiom already used for XSS/TT elsewhere in this file). Replace with real
-                    // Watcher Token art (Section A.5 of the guide) once it exists as a clean
-                    // asset rather than only an icon inside the Section A.6 rulebook scan.
-                    case TheWatcherUnit => DrawRect("gc-cthulhu", |(tint), x - 65, y - 158, 131, 175)
-
                     // Yuggoth Phase 3: Slime Mold — Monster-scale unit using sculpt art from guide
                     case SlimeMoldMonster => DrawRect("n-slime-mold", |(Processing(None, |("rgba(180,180,180,0.5)"), None)), x - 30, y - 60, 60, 70)
 
