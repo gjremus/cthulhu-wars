@@ -2047,12 +2047,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     val killed = s.forces.%(_.health == Killed)
 
                     doubleKilled.foreach { u =>
-                        log(u, "was", "killed".styled("kill"), "with two", "Kills".styled("kill"))
+                        log(u, "was", "killed".styled("kill"), "with two", "Kills".styled("kill"), "by", s.opponent.full, "in battle")
                         u.health = Killed
                     }
 
                     if (killed.any)
-                        log(killed./(_.short).mkString(", ") + (killed.num > 1).?(" were ").|(" was ") + "killed".styled("kill"))
+                        log(killed./(_.short).mkString(", ") + (killed.num > 1).?(" were ").|(" was ") + "killed".styled("kill") + " by " + s.opponent.full + " in battle")
                 }
 
                 jump(YigSnakebitePhase)
@@ -2382,7 +2382,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // QuachilDustToDustPhase), so this captures the final kill count exactly once.
                 ttFulminationKillCount = sides./~(_.forces).count(_.health == Killed)
                 sides.foreach { s =>
-                    s.forces.%(_.health == Killed).foreach(eliminate)
+                    val plainKills = s.forces.%(_.health == Killed)
+                    if (plainKills.any)
+                        log(plainKills./(_.short).mkString(", ") + (plainKills.num > 1).?(" were ").|(" was ") + "killed in battle by", s.opponent)
+                    plainKills.foreach(eliminate)
                 }
                 // Also eliminate exempted units that were killed (e.g. Dhole from Planetary Destruction)
                 exempted.%(_.health == Killed).foreach { u =>
