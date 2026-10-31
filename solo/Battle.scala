@@ -1010,7 +1010,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         val f = assigner(s)
 
-        if (f != s && assigned == 0)
+        if (f != s && assigned == 0 && s.real)
             log(f, "assigned kills with", Vengeance)
 
         return DelayedContinue(50, Ask(f, s.forces.%(u => canAssignKills(u) > 0).sortP./(u => AssignKillAction(f, kills - assigned, s, u))))
