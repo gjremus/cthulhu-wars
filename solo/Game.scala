@@ -3673,10 +3673,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // Owner must have at least 1 Power to take any action. Offered when:
         // - Has Laziness spellbook (can be blocked by Moonbeast)
         // - Has Hagarg Ryonis in play
-        // - Not used this turn (once per turn)
+        // - Not used this turn (once per turn) — covered by f.can(Laziness)
         // - AND (Windwalker in game + Hibernating + not owner + has 1+ Power) OR (some enemy has exactly 1 Power)
         // Owner may also have 1 Power and be in the "all 1-power" target list
-        if (f.can(Laziness) && !f.oncePerGame.has(Laziness) && f.has(HagargRyonis) && f.power >= 1 && !f.oncePerTurn.has(Laziness)) {
+        if (f.can(Laziness) && f.has(HagargRyonis) && f.power >= 1) {
             val wwInGame = factions.has(WW)
             val wwCondition = wwInGame && WW.hibernating && f != WW && WW.power >= 1
             val enemyOnePower = f.enemies.%(_.power == 1).any
