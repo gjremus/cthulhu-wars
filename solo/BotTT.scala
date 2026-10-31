@@ -195,6 +195,7 @@ class GameEvaluationTT(implicit game : Game) extends GameEvaluation(TT)(game) {
 
             case MoveAction(_, u, o, d, _) if u.uclass == UbboSathla =>
                 fbMoveAvoidance(d).foreach(e => true |=> e)
+                tbGOOMoveAvoidance(game.unit(u), d).foreach(e => true |=> e)
                 d.enemyGate && others.%(ofinale).%(f => f.at(d).goos.any).any |=> 550000 -> "#TT ubbo vs finale goo"
                 d.enemyGate && others.%(ofinale).any |=> 500000 -> "#TT ubbo vs finale gate"
                 d.ownGate && d.foes.goos.active.any |=> 11000 -> "#TT ubbo defend own gate"

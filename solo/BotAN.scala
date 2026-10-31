@@ -170,8 +170,9 @@ class GameEvaluationAN(implicit game : Game) extends GameEvaluation(AN)(game) {
         // AN exception: Cathedrals don't move units, so crater avoidance applies
         // only to BuildCathedralAction via the "can't build on crater" rule.
         a.unwrap match {
-            case MoveAction(_, _, _, r, _) =>
+            case MoveAction(_, u, _, r, _) =>
                 fbMoveAvoidance(r).foreach(e => true |=> e)
+                tbGOOMoveAvoidance(game.unit(u), r).foreach(e => true |=> e)
             case BuildGateAction(_, r) =>
                 hasFBCrater(r) |=> -8000 -> "cannot build gate on FB crater"
             case RecruitAction(_, _, r) =>

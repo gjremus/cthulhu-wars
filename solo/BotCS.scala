@@ -25,8 +25,9 @@ class GameEvaluationCS(implicit game : Game) extends GameEvaluation(CS)(game) {
 
         // FB-awareness: avoid craters and CG regions
         a.unwrap match {
-            case MoveAction(_, _, _, r, _) =>
+            case MoveAction(_, u, _, r, _) =>
                 fbMoveAvoidance(r).foreach(e => true |=> e)
+                tbGOOMoveAvoidance(game.unit(u), r).foreach(e => true |=> e)
             case BuildGateAction(_, r) =>
                 hasFBCrater(r) |=> -8000 -> "cannot build gate on FB crater"
             case RecruitAction(_, _, r) =>

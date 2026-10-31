@@ -149,8 +149,9 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
 
         // Round 9: FB-awareness negative scores (see OTHER_BOTS_FB_STRATEGY.md).
         a.unwrap match {
-            case MoveAction(_, _, _, r, _) =>
+            case MoveAction(_, u, _, r, _) =>
                 fbMoveAvoidance(r).foreach(e => true |=> e)
+                tbGOOMoveAvoidance(game.unit(u), r).foreach(e => true |=> e)
             case BuildGateAction(_, r) =>
                 hasFBCrater(r) |=> -8000 -> "cannot build gate on FB crater"
             case RecruitAction(_, _, r) =>
@@ -494,6 +495,7 @@ class GameEvaluationOW(implicit game : Game) extends GameEvaluation(OW)(game) {
 
             case BeyondOneAction(_, o, uc, r) =>
                 fbMoveAvoidance(r).foreach(e => true |=> e)
+                tbGOOMoveAvoidance(uc, r).foreach(e => true |=> e)
                 uc == YogSothoth && need(GooMeetsGoo) && r.foes.goos.any && r.foes.goos.active.none |=> 120000 -> "meet up"
                 uc == YogSothoth && game.cathedrals.contains(r) |=> -5000 -> "not to cathedral"
 

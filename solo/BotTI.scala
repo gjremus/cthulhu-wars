@@ -104,8 +104,9 @@ class GameEvaluationTI(implicit game : Game) extends GameEvaluation(TI)(game) {
 
         // ---- FB-awareness (every BotX faction avoids FB craters / gaze regions) ----
         a.unwrap match {
-            case MoveAction(_, _, _, r, _) =>
+            case MoveAction(_, u, _, r, _) =>
                 fbMoveAvoidance(r).foreach(e => true |=> e)
+                tbGOOMoveAvoidance(game.unit(u), r).foreach(e => true |=> e)
             case BuildGateAction(_, r) =>
                 hasFBCrater(r) |=> -8000 -> "cannot build gate on FB crater"
             case RecruitAction(_, _, r) =>

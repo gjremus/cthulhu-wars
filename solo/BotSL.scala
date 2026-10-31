@@ -22,6 +22,7 @@ class GameEvaluationSL(implicit game : Game) extends GameEvaluation(SL)(game) {
                 } else {
                     fbMoveAvoidance(r).foreach(e => true |=> e)
                 }
+                tbGOOMoveAvoidance(game.unit(u), r).foreach(e => true |=> e)
             case BuildGateAction(_, r) =>
                 hasFBCrater(r) |=> -8000 -> "cannot build gate on FB crater"
             case RecruitAction(_, _, r) =>

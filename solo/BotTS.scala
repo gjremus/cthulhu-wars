@@ -172,8 +172,10 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 if (u.uclass == Glaaki && have(Undulate)) {
                     val combatMovers = 1 + self.at(from, DeepTendril).num + self.at(from, TombHerd).num
                     fbMultiMoveAvoidance(to, combatMovers.min(3)).foreach(e => true |=> e)
+                    tbGOOMultiMoveAvoidance(game.unit(u), to, combatMovers - 1).foreach(e => true |=> e)
                 } else {
                     fbMoveAvoidance(to).foreach(e => true |=> e)
+                    tbGOOMoveAvoidance(game.unit(u), to).foreach(e => true |=> e)
                 }
                 // HARD RULE (user-reported): when TS has 1 power left in the AP,
                 // do NOT move ANY unit off an own gate that has only 1 cultist.
@@ -196,6 +198,7 @@ class GameEvaluationTS(implicit game : Game) extends GameEvaluation(TS)(game) {
                 // Count only Glaaki + DT + TH (not acolytes), max 3
                 val combatMovers = 1 + self.at(from, DeepTendril).num + self.at(from, TombHerd).num
                 fbMultiMoveAvoidance(to, combatMovers.min(3)).foreach(e => true |=> e)
+                tbGOOMultiMoveAvoidance(game.unit(u), to, combatMovers - 1).foreach(e => true |=> e)
                 val fromOwnGateLow = from.ownGate && power <= 1 &&
                     self.at(from).%(_.cultist).num == 1 && from != to
                 fromOwnGateLow |=> -100000 -> "HARD BLOCK: don't undulate off 1-cultist own gate at 1 power"

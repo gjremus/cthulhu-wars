@@ -23,6 +23,7 @@ class GameEvaluationFM(implicit game : Game) extends GameEvaluation(FM)(game) {
         a.unwrap match {
             case MoveAction(_, u, from, to, _) =>
                 fbMoveAvoidance(to).foreach(e => true |=> e)
+                tbGOOMoveAvoidance(game.unit(u), to).foreach(e => true |=> e)
             case BuildGateAction(_, r) =>
                 hasFBCrater(r) |=> -8000 -> "cannot build gate on FB crater"
             case _ =>

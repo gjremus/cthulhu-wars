@@ -278,6 +278,42 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
         else None
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // TB-awareness helper (owner-confirmed 2026-10-31, Q6 in Burrowers
+    // Beneath's Current Tasks doc). Once Burrowers Beneath has 6+ of its 8
+    // spellbooks, their Tentacles become a real threat per the owner's
+    // ruling: a bot should never move its own Great Old One alone (no other
+    // own unit also in that Area) into an Area containing a TB Tentacle.
+    // Mirrors the FB Cyclopean-Gaze-awareness pattern above; GOO-specific,
+    // since ordinary units passing through a Tentacle Area are not at risk.
+    // ─────────────────────────────────────────────────────────────────────
+    val tbInGame = game.factions.has(TB)
+    val tbTentacleThreat = tbInGame && TB.numSB >= 6
+    def hasTBTentacle(r : Region) : Boolean = tbInGame && TB.at(r, Tentacle).any
+
+    // Moving own GOO alone into a Tentacle Area once the threat is active.
+    // (Region.allies, defined below, is relative to this bot's own faction.)
+    def tbGOOMoveAvoidance(u : UnitFigure, r : Region) : |[(Int, String)] = {
+        if (tbTentacleThreat && u.goo && hasTBTentacle(r) && _selfAtRegion.getOrElse(r, Nil).none)
+            |((-6000, "avoid stranding own GOO alone with a 6-SB TB Tentacle"))
+        else None
+    }
+    // Overload for call sites that only have the UnitClass being moved (e.g.
+    // special per-faction teleport-style move actions), not a full UnitFigure.
+    def tbGOOMoveAvoidance(uc : UnitClass, r : Region) : |[(Int, String)] = {
+        if (tbTentacleThreat && uc.isGOO && hasTBTentacle(r) && _selfAtRegion.getOrElse(r, Nil).none)
+            |((-6000, "avoid stranding own GOO alone with a 6-SB TB Tentacle"))
+        else None
+    }
+    // Multi-unit carry/undulate-style move: the GOO is escorted if any OTHER
+    // own unit is moving along with it (escortMovers >= 1) or already at the
+    // destination. Only block when the GOO would truly arrive alone.
+    def tbGOOMultiMoveAvoidance(u : UnitFigure, r : Region, escortMovers : Int) : |[(Int, String)] = {
+        if (tbTentacleThreat && u.goo && hasTBTentacle(r) && escortMovers < 1 && _selfAtRegion.getOrElse(r, Nil).none)
+            |((-6000, "avoid stranding own GOO alone with a 6-SB TB Tentacle (no escort)"))
+        else None
+    }
+
     implicit class RegionClassify(val r : Region) {
         def empty = allies.none && foes.none
         def allies = _selfAtRegion.getOrElse(r, Nil)

@@ -204,8 +204,9 @@ class GameEvaluationYS(implicit game : Game) extends GameEvaluation(YS)(game) {
         // a crater/CG region is still OK. Since the avoidance applies only to plain
         // MoveAction, the spellbook-triggered accompaniments bypass it implicitly.
         a.unwrap match {
-            case MoveAction(_, _, _, r, _) =>
+            case MoveAction(_, u, _, r, _) =>
                 fbMoveAvoidance(r).foreach(e => true |=> e)
+                tbGOOMoveAvoidance(game.unit(u), r).foreach(e => true |=> e)
             case BuildGateAction(_, r) =>
                 hasFBCrater(r) |=> -8000 -> "cannot build gate on FB crater"
             case RecruitAction(_, _, r) =>
@@ -824,6 +825,7 @@ class GameEvaluationYS(implicit game : Game) extends GameEvaluation(YS)(game) {
 
             case HWINTBNAction(_, o, d) =>
                 fbMoveAvoidance(d).foreach(e => true |=> e)
+                tbGOOMoveAvoidance(Hastur, d).foreach(e => true |=> e)
                 o.allies(KingInYellow).any && power == 1 |=>  -1000 -> "stay with kiy"
 
                 o.allies(KingInYellow).any && active.%(_.allSB).any |=> -1000 -> "stay with kiy"
