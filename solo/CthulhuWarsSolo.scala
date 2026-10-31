@@ -6398,8 +6398,8 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             for (i <- 0 until pn) playerNames(i) = "Player " + (i + 1)
 
             // [2026-10-12] Stability filter state: which levels are currently enabled.
-            // By default stable + alpha are checked (so designer factions show).
-            var enabledStability = scala.collection.mutable.Set[String]("stable", "alpha")
+            // By default stable + alpha + beta are checked (so designer and tested-beta factions show).
+            var enabledStability = scala.collection.mutable.Set[String]("stable", "alpha", "beta")
 
             // [2026-10-12] Category filter state: Official, Variants, Homebrews.
             // By default all three are enabled.
