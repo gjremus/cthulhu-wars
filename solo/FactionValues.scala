@@ -272,8 +272,7 @@ object FMValues {
     def BlueprintsInBloodReq_walls   = LiveValues.get("FM", "BlueprintsInBloodReq_walls", 3)  // SBR: Screaming Walls in play
     def MannedBattlementsReq_walls   = LiveValues.get("FM", "MannedBattlementsReq_walls", 6)  // SBR: Screaming Walls in play
     def CrumblingYawp_powerPerArea   = LiveValues.get("FM", "CrumblingYawp_powerPerArea", 1)  // SB option 1: Power per Area with enemy gate + Wall
-    def CrumblingYawp_wallsPerSign   = LiveValues.get("FM", "CrumblingYawp_wallsPerSign", 3)  // SB option 2: Screaming Walls needed per Elder Sign
-    def HymnOfSuffering_powerPerArea = LiveValues.get("FM", "HymnOfSuffering_powerPerArea", 1)  // SB: Power per adjacent Area with a Wall
+    def HymnOfSuffering_powerPerArea = LiveValues.get("FM", "HymnOfSuffering_powerPerArea", 1)  // SB: Power per Start Area with Acolyte + Wall
     def TerrifyingShriek_pains       = LiveValues.get("FM", "TerrifyingShriek_pains", 1)  // SB: Pains added to your combat results
     def TendonFlaying_option1Power   = LiveValues.get("FM", "TendonFlaying_option1Power", 1)  // SB option 1: Power gained
     def TendonFlaying_option2Power   = LiveValues.get("FM", "TendonFlaying_option2Power", 1)  // SB option 2: Power gained
@@ -282,7 +281,7 @@ object FMValues {
     def SBR1Req_num                  = LiveValues.get("FM", "SBR1Req_num", 1)  // SBR 1: number in "Roll 9 or more dice in a single Combat"
     def SBR2Req_num                  = LiveValues.get("FM", "SBR2Req_num", 2)  // SBR 2: number in "Your Units in play have 12 or more Combat"
     def SBR3Req_num                  = LiveValues.get("FM", "SBR3Req_num", 3)  // SBR 3: number in "The Screaming Wall is in Areas with 2 of the following Glyphs:"
-    def SBR4Req_num                  = LiveValues.get("FM", "SBR4Req_num", 4)  // SBR 4: number in "As an Action, Pay 6 Power, minus the number of Screaming Walls in play"
+    def SBR4Req_num                  = LiveValues.get("FM", "SBR4Req_num", 4)  // SBR 4: number in "As an Action, Pay 6 Power, minus one for each Screaming Wall or Body Architect in play"
     def SBR5Req_num                  = LiveValues.get("FM", "SBR5Req_num", 5)  // SBR 5: number in "Have 3 Screaming Walls in Play"
     def SBR6Req_num                  = LiveValues.get("FM", "SBR6Req_num", 6)  // SBR 6: number in "Have 6 Screaming Walls in Play"
 }
