@@ -3295,7 +3295,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // self actually has in its own pool, not just the recorded one.
         availableCultists./(_.uclass).distinct.reverse.foreach { uc =>
             val ucAreas = if (uc.utype == Cultist) recruitAreas.%!(_.is[MoonHold]) else recruitAreas
-            ucAreas.%(f.present).some.|(ucAreas).nex.%(r => (if (dcTenebrosumGuard) (if (f == SL) slSin else dcSin) >= f.recruitCost(uc, r) else f.affords(f.recruitCost(uc, r))(r))).some.foreach { l =>
+            ucAreas.%(r => f.at(r).%(_.uclass.utype != Building).any).some.|(ucAreas).nex.%(r => (if (dcTenebrosumGuard) (if (f == SL) slSin else dcSin) >= f.recruitCost(uc, r) else f.affords(f.recruitCost(uc, r))(r))).some.foreach { l =>
                 + RecruitMainAction(f, uc, l)
             }
         }
@@ -3305,7 +3305,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         if (f == BB && f.can(Catabolism) && !options.has(BBAlternateSpellbooks)) {
             $(CatFromMars, CatFromSaturn, CatFromUranus).foreach { uc =>
                 if (f.pool(uc).any) {
-                    areas.%(f.present).some.|(areas).nex.%(r => f.affords(f.recruitCost(uc, r))(r)).some.foreach { l =>
+                    areas.%(r => f.at(r).%(_.uclass.utype != Building).any).some.|(areas).nex.%(r => f.affords(f.recruitCost(uc, r))(r)).some.foreach { l =>
                         + RecruitMainAction(f, uc, l)
                     }
                 }
@@ -3317,7 +3317,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val poolCultistClasses = availableCultists./(_.uclass).distinct
         val velvetFanCultists = f.units.%(u => u.region.is[VelvetFanHold] && u.uclass.utype == Cultist)
         velvetFanCultists./(_.uclass).distinct.diff(poolCultistClasses).foreach { uc =>
-            areas.%(f.present).some.|(areas).nex.%(r => f.affords(f.recruitCost(uc, r))(r)).some.foreach { l =>
+            areas.%(r => f.at(r).%(_.uclass.utype != Building).any).some.|(areas).nex.%(r => f.affords(f.recruitCost(uc, r))(r)).some.foreach { l =>
                 + RecruitMainAction(f, uc, l)
             }
         }
