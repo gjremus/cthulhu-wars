@@ -1876,7 +1876,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var doomOrder : $[Faction] = $
     var first : Faction = setup.first
     var gates : $[Region] = $
-    def allGates = gates ++ factions./~(_.unitGate)./(_.region)
+    def allGates = gates ++ factions./~(_.unitGate)./(_.region) ++ tiLordsShadowRegions
     var cathedrals : $[Region] = $
     var desecrated : $[Region] = $
     // Colour Out of Space (CS) Chromatic Perversion: gate-regions corrupted into
