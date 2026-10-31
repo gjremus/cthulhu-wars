@@ -76,11 +76,6 @@ class GameEvaluationFM(implicit game : Game) extends GameEvaluation(FM)(game) {
                 case MannedBattlementsSkipAction(f) =>
                     true                                        |=> -100 -> "skip battlements"
 
-                case HymnOfSufferingMainAction(f) =>
-                    self.has(HymnOfSuffering)                   |=> 300  -> "use hymn of suffering"
-                case HymnOfSufferingSkipAction(f) =>
-                    true                                        |=> 0    -> "skip hymn"
-
                 case CrumblingYawpMainAction(f) =>
                     self.has(CrumblingYawp)                     |=> 200  -> "use crumbling yawp"
                 case CrumblingYawpSkipAction(f) =>

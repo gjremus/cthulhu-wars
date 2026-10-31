@@ -96,23 +96,10 @@ case class CrumblingYawpOption1Action(self : Faction)
     }) { def question(implicit game : Game) = CrumblingYawp.styled(FM) }
 case class CrumblingYawpOption2Action(self : Faction)
     extends OptionFactionAction(implicit g => {
-        val es = FMExpansion.screamingWallsInPlay / FMValues.CrumblingYawp_wallsPerSign
-        CrumblingYawp.styled(FM) + ": Gain " + es + " Elder Sign" + (es != 1).??("s")
+        val walls = FM.gates./~(r => FM.at(r).%(_.uclass == ScreamingWall)).num
+        val es = (walls + 1) / 2
+        CrumblingYawp.styled(FM) + ": Destroy " + walls + " Screaming Wall" + (walls != 1).??("s") + ", Gain " + es + " Elder Sign" + (es != 1).??("s")
     }) { def question(implicit game : Game) = CrumblingYawp.styled(FM) }
-
-case class HymnOfSufferingMainAction(self : Faction)
-    extends OptionFactionAction(HymnOfSuffering.styled(FM)) with Soft {
-    def question(implicit game : Game) = HymnOfSuffering.styled(FM)
-}
-case class HymnOfSufferingSkipAction(self : Faction)
-    extends OptionFactionAction(("Skip " + HymnOfSuffering.name).styled(FM)) with Soft {
-    def question(implicit game : Game) = HymnOfSuffering.styled(FM)
-}
-case class HymnOfSufferingAreaAction(self : Faction, r : Region)
-    extends BaseFactionAction(HymnOfSuffering.styled(FM), implicit g => {
-        val adj = g.board.connected(r).count(FMExpansion.hasScreamingWall) * FMValues.HymnOfSuffering_powerPerArea
-        g.desc(r) + " (+" + adj + " Power)"
-    })
 
 case class TerrifyingShriekApplyAction(self : Faction, preBattle : Boolean)
     extends ForcedAction
@@ -277,49 +264,27 @@ object FMExpansion extends Expansion {
             Force(DoomAction(self))
 
         case CrumblingYawpOption2Action(self) =>
-            val walls = screamingWallsInPlay
-            val es = walls / FMValues.CrumblingYawp_wallsPerSign
-            if (es > 0) {
+            val walls = FM.gates./~(r => FM.at(r).%(_.uclass == ScreamingWall))
+            val count = walls.num
+            val es = (count + 1) / 2
+            if (count > 0) {
+                walls.foreach(w => game.eliminate(w))
                 self.es ++= es.times(ElderSign(0))
-                self.log(CrumblingYawp.styled(FM) + ": gained", es.es)
+                self.log(CrumblingYawp.styled(FM) + ": destroyed", count, "Screaming Wall" + (count != 1).??("s") + ", gained", es.es)
             } else {
-                self.log(CrumblingYawp.styled(FM) + ": not enough Walls")
+                self.log(CrumblingYawp.styled(FM) + ": no Screaming Walls at Controlled Gates")
             }
             self.oncePerAction :+= CrumblingYawp
             Force(DoomAction(self))
 
         case AfterPowerGatherAction if game.setup.has(FM) && FM.can(HymnOfSuffering) && !FM.oncePerAction.has(HymnOfSuffering) =>
-            val eligibleAreas = game.board.regions.filter(r =>
-                FM.at(r).exists(_.uclass == Acolyte) && hasScreamingWall(r))
-            if (eligibleAreas.any)
-                Force(HymnOfSufferingMainAction(FM))
-            else {
-                FM.oncePerAction :+= HymnOfSuffering
-                Force(AfterPowerGatherAction)
+            FM.oncePerAction :+= HymnOfSuffering
+            val power = game.starting.get(FM).count(r => FM.at(r).exists(_.uclass == Acolyte) && hasScreamingWall(r)) * FMValues.HymnOfSuffering_powerPerArea
+            if (power > 0) {
+                FM.power += power
+                FM.log(HymnOfSuffering.styled(FM) + ": gained", power.power)
             }
-
-        case HymnOfSufferingMainAction(self) =>
-            val eligibleAreas = game.board.regions.filter(r =>
-                self.at(r).exists(_.uclass == Acolyte) && hasScreamingWall(r))
-            Ask(self).each(eligibleAreas)(r => HymnOfSufferingAreaAction(self, r)).add(HymnOfSufferingSkipAction(self))
-
-        case HymnOfSufferingSkipAction(self) =>
-            self.oncePerAction :+= HymnOfSuffering
-            Force(AfterPowerGatherAction)
-
-        case HymnOfSufferingAreaAction(self, r) =>
-            val wall = self.at(r).%(_.uclass == ScreamingWall).head
-            val adjacent = game.board.connected(r).count(hasScreamingWall) * FMValues.HymnOfSuffering_powerPerArea
-            // Log BEFORE eliminate (P5 pattern compliance)
-            if (adjacent > 0) {
-                self.log(HymnOfSuffering.styled(FM) + ": removed Wall in", r, ", gained", adjacent.power)
-                self.power += adjacent
-            } else {
-                self.log(HymnOfSuffering.styled(FM) + ": removed Wall in", r, "(no adjacent Walls)")
-            }
-            game.eliminate(wall)
-            self.oncePerAction :+= HymnOfSuffering
-            Force(AfterPowerGatherAction)
+            UnknownContinue
 
         case MainAction(f : FM.type) if f.active.not =>
             UnknownContinue
