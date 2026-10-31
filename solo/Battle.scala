@@ -1550,7 +1550,10 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 ttFulminationKillCount = sides./~(_.forces).count(_.health == Killed)
 
                 sides.foreach { s =>
-                    s.forces.%(_.health == Killed).foreach(eliminate)
+                    val plainKills = s.forces.%(_.health == Killed)
+                    if (plainKills.any)
+                        log(plainKills./(_.short).mkString(", ") + (plainKills.num > 1).?(" were ").|(" was ") + "killed in battle by", s.opponent)
+                    plainKills.foreach(eliminate)
                 }
                 // Also eliminate exempted units that were killed (e.g. Dhole from Planetary Destruction)
                 exempted.%(_.health == Killed).foreach { u =>
