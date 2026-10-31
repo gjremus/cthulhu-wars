@@ -36,6 +36,19 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case DoomDoneAction(f) =>
                     f == self                                    |=> 0    -> "done doom"
 
+                // Setup: 8 starting Tentacles. Owner-suggested priority: Glyph Areas
+                // (/^\, (*), |||) that aren't any playing faction's Start Area first
+                // (maximizes Thousand Writhing Maws power income and future Autotomy/
+                // SBR-4 Gates-at-GOO reach); once those run out, cluster adjacent to
+                // Tentacles already placed this Setup rather than scattering randomly.
+                case TBSetupPlaceTentacleInAction(_, r, _) =>
+                    val isGlyphArea = r.glyph == GlyphAA || r.glyph == GlyphOO || r.glyph == GlyphWW
+                    val isAnyStart = game.factions.exists(fac => game.starting.get(fac).contains(r))
+                    val adjacentToPlaced = self.all(Tentacle)./(_.region).exists(_.connected.has(r))
+                    isGlyphArea && !isAnyStart     |=> 900 -> "setup: glyph area, not a start area"
+                    !isGlyphArea && adjacentToPlaced |=> 400 -> "setup: cluster near placed tentacles"
+                    isAnyStart                      |=> -300 -> "setup: avoid faction start area"
+
                 case MoveAction(f, u, from, to, _) =>
                     u.cultist && to.freeGate                     |=> 1600 -> "cultist to free gate"
                     u.cultist && to.ownGate                      |=> 200  -> "cultist to own gate"
