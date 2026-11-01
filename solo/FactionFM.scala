@@ -189,14 +189,6 @@ object FMExpansion extends Expansion {
         }
     }
 
-    def onRoll(dice : Int)(implicit game : Game) {
-        if (!game.setup.has(FM)) return
-        game.battle.foreach { b =>
-            if ((b.attacker == FM || b.defender == FM) && dice >= FMValues.CrumblingYawpReq_dice && FM.needs(CrumblingYawpReq))
-                FM.satisfy(CrumblingYawpReq, CrumblingYawpReq.text)
-        }
-    }
-
     override def triggers()(implicit game : Game) {
         if (!game.setup.has(FM)) return
         val f = FM
@@ -372,7 +364,15 @@ object FMExpansion extends Expansion {
             Force(MainAction(self))
 
         case MannedBattlementsAreaAction(self, source) =>
-            val units = self.at(source).%(_.uclass != ScreamingWall)./(_.ref)
+            // Manned Battlements moves "other units" — units besides whichever one is acting
+            // as the Screaming Wall there. With Blueprints in Blood, exactly one Body Architect
+            // substitutes as the Wall in an Area that lacks an actual one (see hasScreamingWall);
+            // any additional Body Architects in that Area are ordinary units and remain movable.
+            val hasActualWall = self.at(source).exists(_.uclass == ScreamingWall)
+            val wallSubstitute =
+                if (!hasActualWall && self.has(BlueprintsInBlood)) self.at(source).%(_.uclass == BodyArchitect).headOption
+                else None
+            val units = self.at(source).%(_.uclass != ScreamingWall).%(u => wallSubstitute.forall(_.ref != u.ref))./(_.ref)
             Force(MannedBattlementsUnitPickAction(self, source, $, units))
 
         case MannedBattlementsUnitPickAction(self, source, picked, remaining) =>

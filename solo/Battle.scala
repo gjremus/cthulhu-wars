@@ -3701,6 +3701,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 }
             }
 
+            // FM Crumbling Yawp: satisfied by FM rolling N+ combat dice total in a single Combat.
+            if (game.setup.has(FM) && f == FM && FM.needs(CrumblingYawpReq) && f.rolls.num >= FMValues.CrumblingYawpReq_dice) {
+                FM.satisfy(CrumblingYawpReq, CrumblingYawpReq.text)
+            }
+
             jump(next)
 
         // ASSIGN
