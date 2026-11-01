@@ -3692,11 +3692,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // Req: You earned this upgrade by reaching 0 Power (during Action Phase).
         // Offered when:
         // - Has Laziness spellbook (can be blocked by Moonbeast)
-        // - Hagarg Ryonis is in play somewhere in the game
+        // - Hagarg Ryonis is in play somewhere in the game (neutral IGOO)
         // - Can take a normal action (power >= 1)
         // - Not used this turn (once per turn) — covered by f.can(Laziness)
         // - AND (Windwalker in game + Hibernating + not owner + has 1+ Power) OR (some enemy has exactly 1 Power)
-        if (f.can(Laziness) && game.units.%(_.uclass == HagargRyonis).any && f.power >= 1) {
+        if (f.can(Laziness) && factions./~(_.units).%(u => u.region.inPlay && u.uclass == HagargRyonis).any && f.power >= 1) {
             val wwInGame = factions.has(WW)
             val wwCondition = wwInGame && WW.hibernating && f != WW && WW.power >= 1
             val enemyOnePower = f.enemies.%(_.power == 1).any
