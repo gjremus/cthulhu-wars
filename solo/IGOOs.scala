@@ -1498,7 +1498,6 @@ object IGOOsExpansion extends Expansion {
             val targets = factions.%(_.power == 1)
             targets.foreach(t => t.power = 0)
             self.log("used", "Laziness".styled("nt") + ":", targets./(t => t.full).mkString(", "), "lost their last", 1.power)
-            self.oncePerTurn :+= Laziness
             EndAction(self)
 
         case LazynessWindwalkerAction(self) =>
@@ -1506,7 +1505,6 @@ object IGOOsExpansion extends Expansion {
             self.payPower(1, "on Laziness")
             WW.power -= 1
             self.log("used", "Laziness".styled("nt") + ": paid", 1.power + ";", WW, "lost", 1.power)
-            self.oncePerTurn :+= Laziness
             EndAction(self)
 
         // Ghatanothoa IGOO: Mummify

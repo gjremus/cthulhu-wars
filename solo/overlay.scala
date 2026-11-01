@@ -620,7 +620,7 @@ object Overlays {
 
     def infoFM(s : $[Any]) : |[String] = (s @@ {
         // ── FLESHMASON (FM) — HOMEBREW DESIGNER FACTION ──
-        case $("FM") => faction(FM, "", FrenzyingAdze, "Battle", "If you are the Attacker in an Area with the Screaming Wall, increase your Combat by the number of Screaming Walls in play.",
+        case $("FM") => faction(FM, "info:fm-background", FrenzyingAdze, "Battle", "If you are the Attacker in an Area with the Screaming Wall, increase your Combat by the number of Screaming Walls in play.",
             $(), $(
             (Acolyte,        6, "1", "0", ""),
             (BoneSculptor,   3, "1", "1", s"""<div class=p>Spellbook: ${reference(FM, TerrifyingShriek)}</div>"""),
