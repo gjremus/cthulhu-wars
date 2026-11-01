@@ -1168,7 +1168,6 @@ object YuggothExpansion extends Expansion {
             game.fbSuppressCGForPlacement = false
             watcherUnit.onGate = false
             controller.log("moved", "The Watcher".styled("nt"), "to", dest)
-            game.watcherAttackedThisVisit = $
             Force(WatcherBattleOrderAction(controller, dest, then))
 
         case WatcherBattleOrderAction(controller, dest, then) =>
@@ -1177,14 +1176,9 @@ object YuggothExpansion extends Expansion {
                 Force(then)
             }
             else {
-                // Each Faction present is attacked exactly ONCE per region-visit —
-                // exclude ones already attacked (a survivor of the first Battle used to
-                // be re-targeted here, e.g. Crawling Chaos attacked twice in one visit).
-                val targets = game.factions.%(f => combatPresent(f, dest)).diff(game.watcherAttackedThisVisit)
-                if (targets.none) {
-                    game.watcherAttackedThisVisit = $
+                val targets = game.factions.%(f => combatPresent(f, dest))
+                if (targets.none)
                     Force(WatcherAttackTurnAction(then))
-                }
                 else if (targets.num == 1)
                     Force(WatcherBattleStartAction(controller, dest, targets.head, then))
                 else
@@ -1199,7 +1193,6 @@ object YuggothExpansion extends Expansion {
                 Force(WatcherBattleOrderAction(controller, dest, then))
             else {
                 log("The Watcher".styled("nt") + " (Combat " + game.watcherPosition + ") attacks", target, "in", dest)
-                game.watcherAttackedThisVisit :+= target
                 game.watcherForcedBattleThen = |(WatcherBattleOrderAction(controller, dest, then))
                 game.queue = $(new Battle(dest, TheWatcherFaction, target, None)) ++ game.queue
                 Force(ProceedBattlesAction)
