@@ -2698,7 +2698,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         val cathedral = cathedrals.contains(r)
         val ds = desecrated.contains(r)
         val controler = factions.%(f => f.gates.contains(r)).single
-        val keeper = controler./~(f => f.at(r).%(_.health == Alive).%(u => u.uclass.utype == Cultist || (u.uclass == DarkYoung && f.can(RedSign))).starting)
+        // Gate Keeper label (The Invasion's Fiend, granted gate control by Entropy
+        // Siphon, is a Monster, not a Cultist/DarkYoung) -- use the same canControlGate
+        // check the engine itself uses to decide gate control, so any legitimate
+        // controlling unit is named instead of falling back to the generic "[[[ GATE ]]]"
+        // placeholder (owner-reported 2026-10-31: a Fiend-controlled gate looked
+        // uncontrolled on screen).
+        val keeper = controler./~(f => f.at(r).%(_.health == Alive).%(_.canControlGate).starting)
         val others = factions.%(f => !f.gates.contains(r)).%(_.at(r).num > 0).sortBy(f => f.strength(f.at(r), f))
         if (gate || !others.none || ds) {
             $("" + r + ":" + gate.??(" " + keeper./(u => ("[[[".styled(u.faction.style) + " " + u + " " + "]]]".styled(u.faction.style))).|("[[[ GATE ]]]".styled("power"))) + ds.??(" " + ")|(".styled(YS))) ++
