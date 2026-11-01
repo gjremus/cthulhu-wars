@@ -2759,9 +2759,22 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // default-TI-control case is NOT counted here; that Shadow lives in TI.gates and
     // is already counted by the normal f.gates.num income path. Guarded so non-TI
     // games get 0. Used additively in both the Doom-Phase and Gather-Power calcs.
+    // [2026-11-01] The "shares the Area" check used to be gates.has(r) alone, which
+    // only recognizes a real BUILT gate. tiShadowController(r) can also hand the
+    // Shadow to a faction via a unit-Gate (Yog-Sothoth, matched through unitGate —
+    // never added to the global `gates` set), so that takeover case fell through
+    // this filter entirely: triggers() correctly dropped the region from TI.gates
+    // the moment Yog-Sothoth moved in, but this method never picked it up for the
+    // new controller, so the Shadow's 2 Power simply vanished instead of
+    // transferring. Recognize a unit-Gate sharing the Area too, matching exactly
+    // what tiShadowController(r) itself already checks (owner-reported 2026-11-01,
+    // The Invasion short 2 Power in "Dread versus Time" after Opener of the Way's
+    // Yog-Sothoth moved into The Invasion's starting Lord's Shadow Area).
     def tiShadowAdditionalGates(f : Faction) : Int =
         if (!factions.has(TI)) 0
-        else tiLordsShadowRegions.count(r => gates.has(r) && tiShadowController(r) == Some(f))
+        else tiLordsShadowRegions.count(r =>
+            (gates.has(r) || factions.exists(e => e.unitGate.exists(_.region == r))) &&
+            tiShadowController(r) == Some(f))
 
     // The Invasion (TI) — the single canonical hook a gate-destroyer calls to grant TI
     // the §1.10 destruction reward (2 Elder Signs when a destroyed gate was a Lord's
@@ -4364,6 +4377,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val fromAbandoned = (abandoned > 0).?(abandoned.styled("region") + " abandoned")
                 val fromCultist = (cultists > 0).?(cultists.styled("region") + " cultist".s(cultists))
                 val fromCaptured = (captured > 0).?(captured.styled("region") + " captured")
+                val fromTiShadow = (tiShadowPower > 0).?(tiShadowAdditionalGates(f).styled("region") + " Lord's Shadow".s(tiShadowAdditionalGates(f)) + " taken over")
                 val fromGreenDecay = (greenDecayCultists > 0).?(greenDecayCultists.styled("region") + " captured cultist".s(greenDecayCultists) + " → " + greenDecayCultists.es + " (Green Decay)")
                 val fromGlaakiIGOOGreenDecay = (glaakiIGOOGreenDecayCultists > 0).?(glaakiIGOOGreenDecayCultists.styled("region") + " captured cultist".s(glaakiIGOOGreenDecayCultists) + " → " + glaakiIGOOGreenDecayCultists.es + " (Green Decay)")
                 val fromYhaNthlei = (oceanGates > 0).?(oceanGates.styled("region") + " enemy controlled ocean gate".s(oceanGates))
@@ -4383,7 +4397,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Yuggoth Phase 5 — Pyramid Power: log +1 Power per Green Pyramid gate
                 val fromPyramid = (pyramidPower > 0).?(pyramidPower.styled("region") + " Green Pyramid gate".s(pyramidPower) + " (+1 each → 3 Power)")
 
-                f.log(if (f == BB) "gained" else "got", f.power.power, "(" + $(fromHibernate, fromGates, fromWells, fromUnitGateWell, fromPyramid, fromAbandoned, fromCultist, fromCaptured, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP, fromTBTentacles, fromBBCats, fromBBHP).flatten.mkString(" + ") + ")")
+                f.log(if (f == BB) "gained" else "got", f.power.power, "(" + $(fromHibernate, fromGates, fromWells, fromUnitGateWell, fromPyramid, fromAbandoned, fromCultist, fromCaptured, fromTiShadow, fromYhaNthlei, fromDarkYoungs, fromFeast, fromWorship, fromFBHP, fromTBTentacles, fromBBCats, fromBBHP).flatten.mkString(" + ") + ")")
 
                 if (greenDecayCultists > 0) {
                     f.log("Green Decay".styled("nt") + ":", greenDecayCultists, "captured " + "cultist".s(greenDecayCultists), "→", greenDecayCultists.es, "(not power)")
