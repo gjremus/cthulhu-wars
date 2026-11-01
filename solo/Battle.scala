@@ -1874,7 +1874,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         if (ts.rolls.count(_ == Pain) >= 3)
             ts.satisfy(TSRoll3Pains, "Rolled 3 Pains in battle")
         // HIGH-2 revised: ElderGod (Bastet) counts as GOO per spec §1.3.
-        if (ts.forces.%(_.uclass == Glaaki).any && (ts.opponent.forces.%(_.uclass.isGOO).any || (AN.can(HolyGround) && ts.opponent.forces.%(_.uclass == Cathedral).any)))
+        // Oct/Nov 2026: a battle against The Watcher is a battle against an enemy GOO too
+        // (Watcher isn't in opponent.forces — same gap pattern as Harbinger/KillDevour/UnholyGround).
+        if (ts.forces.%(_.uclass == Glaaki).any && (ts.opponent.forces.%(_.uclass.isGOO).any || (AN.can(HolyGround) && ts.opponent.forces.%(_.uclass == Cathedral).any) || ts.opponent == TheWatcherFaction))
             ts.satisfy(TSGlaakiBattlesGOO, "Gla'aki battled enemy GOO")
     }
 

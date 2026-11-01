@@ -935,7 +935,9 @@ object DCExpansion extends Expansion {
 
         // ── Doom-Phase SB-Requirement opt-ins (wrap in CheckSpellbooksAction per Item 9) ─
         case DCProselytizeReqOptInAction(self) =>
-            val enemyGOOs = game.factions.but(self)./(fac => if (fac == TB) fac.goos.any.??(1) else fac.goos.num).sum
+            // Nov 2026: The Watcher is a NeutralFaction (game.neutrals), never in game.factions,
+            // so it was silently excluded from "per enemy GOO" — count it too when awake/on-board.
+            val enemyGOOs = game.factions.but(self)./(fac => if (fac == TB) fac.goos.any.??(1) else fac.goos.num).sum + (game.board.isYuggothMap && TheWatcherFaction.goos.any).??(1)
             self.satisfy(ProselytizeReq, "Doom Phase SBR: gain 2 Sin per enemy GOO")
             // HB Fix 96: clamp Sin grant to dcSinCap = 2 * ritualMarker
             val proselytizeWant   = 2 * enemyGOOs
@@ -1181,7 +1183,9 @@ object DCExpansion extends Expansion {
                 val adj = game.board.connected(area) ++ (game.factions.has(BB) && area != BB.moon).??($(BB.moon))
                 val eligible = adj./~{ r =>
                     val enemiesOfDC = game.factions.but(self)
-                    val hasEnemyGOO        = enemiesOfDC.exists(o => o.at(r).%(_.uclass.isGOO).any || (AN.can(HolyGround) && o.at(r, Cathedral).any))
+                    // Nov 2026: The Watcher is a NeutralFaction, excluded from game.factions — its
+                    // presence in r should block Lure here the same as any other enemy GOO.
+                    val hasEnemyGOO        = enemiesOfDC.exists(o => o.at(r).%(_.uclass.isGOO).any || (AN.can(HolyGround) && o.at(r, Cathedral).any)) || (game.board.isYuggothMap && TheWatcherFaction.at(r).any)
                     val hasEnemyTerror     = enemiesOfDC.exists(o => o.at(r).%(_.uclass.utype == Terror).any)
                     val hasEnemyBuilding   = enemiesOfDC.exists(o => o.at(r).%(_.uclass.utype == Building).any)
                     if (hasEnemyGOO || hasEnemyTerror || hasEnemyBuilding) $()
@@ -2194,7 +2198,8 @@ object DCExpansion extends Expansion {
 // Satiate: "SBR: +X Power, +Y Sin (1P/ other earned SB, 1S/ pool SB excl. this)" where X+Y=5
 case class DCProselytizeReqOptInAction(self : Faction)
     extends OptionFactionAction(implicit g => {
-        val enemyGOOs = g.factions.but(self)./~(_.allInPlay).%(u => u.uclass.isGOO || (u.uclass == Cathedral && AN.can(HolyGround))).num
+        // Nov 2026: include The Watcher (NeutralFaction, excluded from g.factions) — mirror the handler above.
+        val enemyGOOs = g.factions.but(self)./~(_.allInPlay).%(u => u.uclass.isGOO || (u.uclass == Cathedral && AN.can(HolyGround))).num + (g.board.isYuggothMap && TheWatcherFaction.goos.any).??(1)
         val total = 2 * enemyGOOs
         "SBR".styled(DC) + ": " + ("+" + total + " Sin").styled("dc") + " (2/ enemy GOO)"
     })

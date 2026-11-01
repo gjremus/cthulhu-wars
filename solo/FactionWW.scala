@@ -131,7 +131,9 @@ object WWExpansion extends Expansion {
             implicit val asking = Asking(f)
 
             if (f.can(Hibernate))
-                + HibernateMainAction(f, min(f.power, f.enemies./~(_.goos.distinctBy(_.uclass)).num))
+                // Nov 2026: The Watcher (NeutralFaction, excluded from f.enemies) is a distinct
+                // enemy GOO type too when awake/on-board — count it alongside the normal factions.
+                + HibernateMainAction(f, min(f.power, f.enemies./~(_.goos.distinctBy(_.uclass)).num + (game.board.isYuggothMap && TheWatcherFaction.goos.any).??(1)))
 
             game.moves(f)
 

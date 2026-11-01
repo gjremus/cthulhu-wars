@@ -223,7 +223,9 @@ object SLExpansion extends Expansion {
                     + LethargyMainAction(f)
 
             if (f.can(Hibernate))
-                + HibernateMainAction(f, min(f.power, f.enemies./~(_.goos.distinctBy(_.uclass)).num))
+                // Nov 2026: The Watcher (NeutralFaction, excluded from f.enemies) is a distinct
+                // enemy GOO type too when awake/on-board — count it alongside the normal factions.
+                + HibernateMainAction(f, min(f.power, f.enemies./~(_.goos.distinctBy(_.uclass)).num + (game.board.isYuggothMap && TheWatcherFaction.goos.any).??(1)))
 
             // Psychosis borrowed via Ancient Sorcery (DS ability). Must be offered
             // inside SL's own MainAction menu — the mirror handler in FactionDS
@@ -238,7 +240,9 @@ object SLExpansion extends Expansion {
 
             game.moves(f)
 
-            if (f.has(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(r => f.affords(1)(r) && f.enemies.%(_.at(r, GOO, ElderGod).any).none).any)
+            // Nov 2026: The Watcher (NeutralFaction, excluded from f.enemies) counts as an enemy
+            // GOO blocking BeyondOne's "no enemy GOO here" region check too, when on the board.
+            if (f.has(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(r => f.affords(1)(r) && f.enemies.%(_.at(r, GOO, ElderGod).any).none && !(game.board.isYuggothMap && TheWatcherFaction.at(r).any)).any)
                 game.gates.%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
                     + BeyondOneMainAction(f, _)
                 }

@@ -127,7 +127,11 @@ object OWExpansion extends Expansion {
         f.satisfyIf(EightGates, "Eight Gates on the map", game.allGates.onMap.num >= 8)
         f.satisfyIf(TenGates, "Ten Gates on the map", game.allGates.onMap.num >= 10)
         f.satisfyIf(TwelveGates, "Twelve Gates on the map", game.allGates.onMap.num >= 12)
-        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && f.enemies.%(_.at(r).goos.any).any).any)
+        // Nov 2026: The Watcher is a NeutralFaction stored in game.neutrals, never in
+        // game.factions, so it never appears in f.enemies — check its own map presence
+        // directly (guarded by isYuggothMap since game.neutrals only registers it on
+        // Yuggoth boards; see TheWatcherFaction comment in MapExpansion.scala).
+        f.satisfyIf(GooMeetsGoo, "GOO shares Area with another GOO", areas.%(r => f.at(r).goos.any && (f.enemies.%(_.at(r).goos.any).any || (game.board.isYuggothMap && TheWatcherFaction.at(r).goos.any))).any)
         val unitsAtEnemyGatesThreshold = if (game.options.has(OpenerCheapMutants)) 3 else 2
         val unitsAtEnemyGatesLabel = if (game.options.has(OpenerCheapMutants)) "Units at three enemy Gates" else "Units at two enemy Gates"
         f.satisfyIf(UnitsAtEnemyGates, unitsAtEnemyGatesLabel, areas.%(r => f.at(r).any && f.enemies.%(_.gates.has(r)).any).num >= unitsAtEnemyGatesThreshold)
@@ -195,8 +199,10 @@ object OWExpansion extends Expansion {
 
             game.moves(f)
 
+            // Nov 2026: The Watcher (NeutralFaction, excluded from f.enemies) counts as an enemy
+            // GOO disqualifying an origin Gate here too, when on the board.
             if (f.can(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(f.affords(1)).any)
-                game.gates.%(r => f.enemies.%(_.at(r, GOO, ElderGod).any).none).%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
+                game.gates.%(r => f.enemies.%(_.at(r, GOO, ElderGod).any).none && !(game.board.isYuggothMap && TheWatcherFaction.at(r).any)).%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
                     + BeyondOneMainAction(f, _)
                 }
 
