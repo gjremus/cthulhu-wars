@@ -164,6 +164,14 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case TBOverlayMantleTransferAction(f, _, _) =>
                     true                                         |=> 200  -> "transfer gate to mantle"
 
+                // Awaken Shudde M'ell (Head): cost 8, Mantle-only. No prior case matched
+                // this, so it fell through to the catch-all "unknown" -1000 penalty below,
+                // meaning the bot almost never awakened it -- blocking Subterrane, Ensnare,
+                // Grasp, Autotomy and every later Spellbook that depends on them.
+                case AwakenAction(f, ShuddeMellHead, _, _) =>
+                    self.needs(AwakenShuddeMellReq)              |=> 2500 -> "awaken Shudde M'ell for SBR"
+                    true                                         |=> 1800 -> "awaken Shudde M'ell (unlocks engine)"
+
                 // SBR-3: Remove Gate, Place Chthonian (end-of-Action-Phase prompt)
                 case TBRemoveGatePlaceChthonianPromptAction(f, _) =>
                     self.gates.num > 2                           |=> 400  -> "remove gate place chthonian"
