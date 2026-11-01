@@ -588,6 +588,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // back to Asleep/12 there, per I5).
         if (unit.uclass == TheWatcherUnit) {
             watcherKillsThisBattle += 1
+            game.watcherKillsThisBattle += 1
             game.watcherPosition = max(0, game.watcherPosition - 1)
             log("The Watcher".styled("nt") + ": Kill lands — Token now at", game.watcherPosition)
             if (game.watcherPosition <= 0)
