@@ -5983,7 +5983,24 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     println(s"[FB-TRACE] round=$round set-active: power=${f.power} hibernating=${f.hibernating} -> active=${f.active}")
             }
 
-            factions = factions.drop(1) ++ factions.take(1)
+            // General turn-order guard (applies to every faction, not any one GOO/ability):
+            // always rotate PAST the faction whose turn just ended (prev), wherever they
+            // currently sit in the list. The old code blindly dropped factions.first,
+            // assuming prev was always at the front. If anything re-enters
+            // NextPlayerAction for prev while the list had already moved on (e.g. a
+            // forced follow-up continuation firing after an out-of-turn interrupt),
+            // dropping factions.first would rotate the WRONG faction out and leave prev
+            // parked near the front — handing prev an extra turn and permanently
+            // desyncing whose turn comes next. Rotating by prev's own index is a no-op
+            // in the normal case (prev == factions.first, same result as before) and
+            // self-corrects the rare desynced case. (Main build commit — DS Avatar
+            // Thesis / Sleeper reactivation bug, 2026-11-01.)
+            val prevIdx = factions.indexOf(prev)
+            if (prevIdx > 0)
+                log("[warn] turn order: " + prev + " was not at the front of the rotation (index " + prevIdx + ") — rotating past it anyway to avoid granting an extra turn")
+
+            factions = if (prevIdx >= 0) factions.drop(prevIdx + 1) ++ factions.take(prevIdx + 1)
+                       else factions.drop(1) ++ factions.take(1)
 
             val next = factions.first
 
