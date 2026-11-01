@@ -3676,13 +3676,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             + NuclearChaosMainAction(f)
 
         // Hagarg Ryonis: Laziness spellbook (Action: Cost 0)
-        // Req: You have 0 Power (during Action Phase).
+        // Req: You earned this upgrade by reaching 0 Power (during Action Phase).
         // Offered when:
         // - Has Laziness spellbook (can be blocked by Moonbeast)
         // - Has Hagarg Ryonis in play
+        // - Can take a normal action (power >= 1)
         // - Not used this turn (once per turn) — covered by f.can(Laziness)
         // - AND (Windwalker in game + Hibernating + not owner + has 1+ Power) OR (some enemy has exactly 1 Power)
-        if (f.can(Laziness) && f.has(HagargRyonis) && f.power == 0) {
+        if (f.can(Laziness) && f.has(HagargRyonis) && f.power >= 1) {
             val wwInGame = factions.has(WW)
             val wwCondition = wwInGame && WW.hibernating && f != WW && WW.power >= 1
             val enemyOnePower = f.enemies.%(_.power == 1).any
