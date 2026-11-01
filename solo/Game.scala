@@ -1840,6 +1840,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var watcherAsleep : Boolean = true
     var watcherPosition : Int = 12
     var watcherAttackQueue : $[Faction] = $
+    //   watcherAttackedThisVisit — Factions the Watcher has ALREADY attacked in its
+    //                       current region-visit (reset on every WatcherMoveAction). Rules:
+    //                       each Faction present is attacked exactly ONCE per visit, so a
+    //                       survivor of the first Battle must not be re-targeted.
+    var watcherAttackedThisVisit : $[Faction] = $
     // BattleEnd routing hook (Battle.scala): when set, a just-finished Battle that the
     // Watcher's forced attack sequence started returns control to THIS action instead of
     // the normal AfterAction(attacker) terminus — exactly the same "battle was forced by
