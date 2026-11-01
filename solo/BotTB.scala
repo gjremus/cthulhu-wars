@@ -11,6 +11,10 @@ import hrf.colmat._
 //  (3) Shudde M'ell awaken timing (cost 8, Mantle must be in play).
 //  (4) Autotomy Elder Sign farming via Unlimited Battles.
 //  (5) Overlay the Mantle (SBR-1) as early as possible for mobility.
+//  (6) 2026-11-01: creator-specified early-game Tentacle-rush weighting (10-
+//      Tentacle SBR-2, Thousand Writhing Maws type/placement, Setup glyph
+//      priority, Stalk tentacle-spread, and a Spellbook pick order -- Stalk
+//      first, Psychic Shriek second) -- see TB Current Tasks doc.
 // ============================================================================
 object BotTB extends BotX(implicit g => new GameEvaluationTB)
 
@@ -33,21 +37,50 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case PlayDirectionAction(_, order) =>
                     (order == game.factions)                     |=> 20   -> "natural order"
 
+                // Spellbook ability pick order (creator-specified 2026-11-01): Stalk
+                // first (unlocks the early Tentacle-spread engine), Psychic Shriek
+                // second (named explicitly for the SBR-3 Remove-Gate-Place-Chthonian
+                // follow-up), then the rest in a sensible default order; Subterrane
+                // and Grasp are the most situational so they rank lowest.
+                case SpellbookAction(_, sb, _) => sb match {
+                    case Stalk =>
+                        true |=> 1800 -> "pick stalk first"
+                    case PsychicShriek =>
+                        true |=> 1500 -> "pick psychic shriek"
+                    case Autotomy =>
+                        true |=> 1200 -> "pick autotomy"
+                    case Ensnare =>
+                        true |=> 900  -> "pick ensnare"
+                    case Subterrane =>
+                        true |=> 600  -> "pick subterrane"
+                    case Grasp =>
+                        true |=> 300  -> "pick grasp"
+                    case _ =>
+                        true |=> -1000 -> "unknown spellbook"
+                }
+
                 case DoomDoneAction(f) =>
                     f == self                                    |=> 0    -> "done doom"
 
-                // Setup: 8 starting Tentacles. Owner-suggested priority: Glyph Areas
-                // (/^\, (*), |||) that aren't any playing faction's Start Area first
-                // (maximizes Thousand Writhing Maws power income and future Autotomy/
-                // SBR-4 Gates-at-GOO reach); once those run out, cluster adjacent to
-                // Tentacles already placed this Setup rather than scattering randomly.
+                // Setup: 8 starting Tentacles. Creator-specified priority (2026-11-01):
+                // Glyph Areas in order /^\ (AA) then (*) (OO) then ||| (WW) that aren't
+                // any playing faction's Start Area, farthest from any Start Area first;
+                // once those run out, cluster adjacent to Tentacles already placed this
+                // Setup; any leftover Tentacles go on a playing faction's Start Area,
+                // but never on Great Cthulhu's Start Area.
                 case TBSetupPlaceTentacleInAction(_, r, _) =>
                     val isGlyphArea = r.glyph == GlyphAA || r.glyph == GlyphOO || r.glyph == GlyphWW
-                    val isAnyStart = game.factions.exists(fac => game.starting.get(fac).contains(r))
+                    val startRegions = game.factions./~(fac => game.starting.get(fac))
+                    val isAnyStart = startRegions.has(r)
+                    val isGCStart = game.starting.get(GC).contains(r)
+                    val farFromStart = startRegions./(sr => game.board.distance(r, sr)).minOr(0)
                     val adjacentToPlaced = self.all(Tentacle)./(_.region).exists(_.connected.has(r))
-                    isGlyphArea && !isAnyStart     |=> 900 -> "setup: glyph area, not a start area"
-                    !isGlyphArea && adjacentToPlaced |=> 400 -> "setup: cluster near placed tentacles"
-                    isAnyStart                      |=> -300 -> "setup: avoid faction start area"
+                    r.glyph == GlyphAA && !isAnyStart               |=> (1300 + farFromStart) -> "setup: /^\\ glyph area, not a start area"
+                    r.glyph == GlyphOO && !isAnyStart               |=> (1200 + farFromStart) -> "setup: (*) glyph area, not a start area"
+                    r.glyph == GlyphWW && !isAnyStart               |=> (1100 + farFromStart) -> "setup: ||| glyph area, not a start area"
+                    !isGlyphArea && adjacentToPlaced && !isAnyStart |=> (500 + farFromStart)  -> "setup: cluster near placed tentacles"
+                    isAnyStart && !isGCStart                        |=> 100 -> "setup: leftover tentacle on faction start area"
+                    isGCStart                                       |=> -500 -> "setup: avoid Great Cthulhu's start area"
 
                 case MoveAction(f, u, from, to, _) =>
                     u.cultist && to.freeGate                     |=> 1600 -> "cultist to free gate"
@@ -57,6 +90,7 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     to.freeGate                                  |=> 400  -> "move to free gate"
 
                 case RecruitAction(f, uc, r) =>
+                    uc == Tentacle && self.needs(TenTentaclesReq) |=> 650  -> "recruit tentacle toward 10-tentacle SBR"
                     uc == Cadavolyte && r.freeGate               |=> 700  -> "cadavolyte to free gate"
                     uc == Cadavolyte                             |=> 300  -> "recruit cadavolyte"
                     uc == Tentacle                               |=> 150  -> "recruit tentacle"
@@ -73,18 +107,26 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     e.at(r).goos.any                             |=> 700  -> "attack enemy goo"
                     e.at(r).num >= 2                             |=> 400  -> "attack cluster"
 
-                // Thousand Writhing Maws: double recruit/summon
+                // Thousand Writhing Maws: double recruit/summon. Creator-specified
+                // priority (2026-11-01): recruit 2 Tentacles while short of the
+                // 10-Tentacle SBR (SBR-2), placing them on a Tentacle area adjacent
+                // to an empty area; once SBR-2 is satisfied, switch to recruiting 2
+                // Cadavolytes instead.
                 case TBWrithingMawsMainAction(f) =>
                     true                                         |=> 600  -> "writhing maws double summon"
                 case TBWrithingMawsTypeAction(f, uc) =>
-                    uc == Chthonian                              |=> 500  -> "maws chthonians"
-                    uc == Cadavolyte                             |=> 400  -> "maws cadavolytes"
-                    uc == Tentacle                               |=> 200  -> "maws tentacles"
+                    uc == Tentacle && self.needs(TenTentaclesReq)    |=> 900  -> "maws tentacles (toward 10-tentacle SBR)"
+                    uc == Cadavolyte && !self.needs(TenTentaclesReq) |=> 800  -> "maws cadavolytes (post 10-tentacle SBR)"
+                    uc == Chthonian                                  |=> 500  -> "maws chthonians"
+                    uc == Cadavolyte                                 |=> 400  -> "maws cadavolytes"
+                    uc == Tentacle                                   |=> 200  -> "maws tentacles"
                 case TBWrithingMawsPlaceFirstAction(f, _) =>
                     true                                         |=> 100  -> "maws place first"
-                case TBWrithingMawsPlaceSecondAction(f, _, _) =>
+                case TBWrithingMawsPlaceSecondAction(f, uc, r1) =>
+                    uc == Tentacle && self.at(r1, Tentacle).any && r1.connected.exists(c => self.at(c, Tentacle).none) |=> 400 -> "maws: tentacle area next to an empty area"
                     true                                         |=> 100  -> "maws place second"
-                case TBWrithingMawsAction(f, _, _, _) =>
+                case TBWrithingMawsAction(f, uc, r1, r2) =>
+                    uc == Tentacle && self.at(r2, Tentacle).any && r2.connected.exists(c => self.at(c, Tentacle).none) |=> 400 -> "maws: tentacle area next to an empty area"
                     true                                         |=> 300  -> "maws commit"
 
                 // Behemoth: Move Part to Mantle
@@ -95,7 +137,9 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case TBMovePartToMantleAction(f, _) =>
                     true                                         |=> 200  -> "move part commit"
 
-                // Stalk: post-move relocation
+                // Stalk: post-move relocation. Creator-specified priority (2026-11-01):
+                // send a Tentacle from an area holding 2+ Tentacles to any area with
+                // no Tentacles, whenever that choice is available.
                 case TBStalkMainAction(f, _, _) =>
                     true                                         |=> 300  -> "stalk relocation"
                 case TBStalkUseAction(f, _, _) =>
@@ -104,9 +148,11 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 0    -> "skip stalk"
                 case TBStalkPickCultistAction(f, _, _) =>
                     true                                         |=> 100  -> "pick stalk cultist"
-                case TBStalkDestAction(f, _, _, _) =>
+                case TBStalkDestAction(f, cultist, _, _) =>
+                    cultist.uclass == Tentacle && self.at(game.unit(cultist).region, Tentacle).num >= 2 |=> 400 -> "stalk: pick tentacle from a crowded area"
                     true                                         |=> 100  -> "pick stalk dest"
-                case TBStalkAction(f, _, _, _) =>
+                case TBStalkAction(f, cultist, dest, _) =>
+                    cultist.uclass == Tentacle && self.at(dest, Tentacle).none |=> 400 -> "stalk: tentacle to an empty area"
                     true                                         |=> 200  -> "stalk commit"
 
                 // Autotomy: post-battle Kill transfer
@@ -172,9 +218,12 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     self.needs(AwakenShuddeMellReq)              |=> 2500 -> "awaken Shudde M'ell for SBR"
                     true                                         |=> 1800 -> "awaken Shudde M'ell (unlocks engine)"
 
-                // SBR-3: Remove Gate, Place Chthonian (end-of-Action-Phase prompt)
+                // SBR-3: Remove Gate, Place Chthonian (end-of-Action-Phase prompt).
+                // Creator-specified priority (2026-11-01): trigger this strongly when
+                // an enemy threatens a Cadavolyte guarding one of TB's own Gates.
                 case TBRemoveGatePlaceChthonianPromptAction(f, _) =>
-                    self.gates.num > 2                           |=> 400  -> "remove gate place chthonian"
+                    self.gates.num > 2                                              |=> 400  -> "remove gate place chthonian"
+                    self.gates.exists(r => self.at(r, Cadavolyte).any && r.foes.any) |=> 900  -> "remove gate place chthonian: cadavolyte-held gate under threat"
                 case TBRemoveGatePlaceChthonianPickGateAction(f, _) =>
                     true                                         |=> 100  -> "pick gate to remove"
                 case TBRemoveGatePlaceChthonianGateAction(f, _, _) =>
