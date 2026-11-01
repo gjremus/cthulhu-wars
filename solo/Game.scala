@@ -3694,7 +3694,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // - Has Laziness spellbook (can be blocked by Moonbeast)
         // - Hagarg Ryonis is in play somewhere in the game (neutral IGOO)
         // - Can take a normal action (power >= 1)
-        // - Not used this turn (once per turn) — covered by f.can(Laziness)
+        // - NO once-per-turn limit (card has none; entry 445). f.can() still lets Moonbeast block it.
         // - AND (Windwalker in game + Hibernating + not owner + has 1+ Power) OR (some enemy has exactly 1 Power)
         if (f.can(Laziness) && factions./~(_.units).%(u => u.region.inPlay && u.uclass == HagargRyonis).any && f.power >= 1) {
             val wwInGame = factions.has(WW)

@@ -1534,7 +1534,10 @@ object IGOOsExpansion extends Expansion {
             val targets = factions.%(_.power == 1)
             targets.foreach(t => t.power = 0)
             self.log("used", "Laziness".styled("nt") + ":", targets./(t => t.full).mkString(", "), "lost their last", 1.power)
-            self.oncePerTurn :+= Laziness
+            // 2026-11-01 entry 445: NO once-per-turn mark. The card (Something About Cats) has no
+            // usage limit; it is gated only by "an enemy has exactly 1 Power" / "Windwalker Hibernating".
+            // The old oncePerTurn mark (cleared only at Power Gather) hid the button for the rest of
+            // the Action Phase after one use ("Dread as Space": used on CC, then hidden vs GC at 1 Power).
             EndAction(self)
 
         case LazynessWindwalkerAction(self) =>
@@ -1542,7 +1545,7 @@ object IGOOsExpansion extends Expansion {
             self.payPower(1, "on Laziness")
             WW.power -= 1
             self.log("used", "Laziness".styled("nt") + ": paid", 1.power + ";", WW, "lost", 1.power)
-            self.oncePerTurn :+= Laziness
+            // 2026-11-01 entry 445: no once-per-turn mark (card has no usage limit; see LazynessAllAction).
             EndAction(self)
 
         // Ghatanothoa IGOO: Mummify
