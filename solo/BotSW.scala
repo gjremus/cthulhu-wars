@@ -70,7 +70,7 @@ class GameEvaluationSW(implicit game : Game) extends GameEvaluation(SW)(game) {
                 case SWHungerSacrificeDoomAction(_) =>
                     self.doom < 20                               |=> 400  -> "pay hunger with doom"
                     true                                         |=> 100  -> "pay hunger with doom"
-                case SWHungerSacrificeCultistAction(_, _) =>
+                case SWHungerSacrificeCultistAction(_, _, _) =>
                     true                                         |=> 200  -> "pay hunger with cultist"
 
                 case EndTurnAction(f) =>
