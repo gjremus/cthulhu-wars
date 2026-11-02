@@ -277,10 +277,13 @@ object SWExpansion extends Expansion {
                 implicit val asking = Asking(SW)
                 if (SW.doom > 0)
                     + SWHungerSacrificeDoomAction(remaining)
-                SW.onMap(Acolyte).not(Zeroed).foreach(u => {
-                    val gateStatus = if (SW.gates.has(u.region)) " On Gate" else ""
-                    + SWHungerSacrificeCultistAction(remaining, u.ref, gateStatus)
-                })
+                SW.onMap(Acolyte).not(Zeroed).groupBy(_.region).foreach { case (r, us) =>
+                    asking.ask = asking.ask.group(r.name)
+                    us.foreach(u => {
+                        val gateStatus = if (SW.gates.has(u.region)) " On Gate" else ""
+                        + SWHungerSacrificeCultistAction(remaining, u.ref, gateStatus)
+                    })
+                }
                 if (asking.ask.actions.none) {
                     // Nothing left to pay with (no Doom, no Cultists on map) — obligation lapses.
                     SW.log("Hunger sacrifice: nothing left to pay with, obligation lapses")
