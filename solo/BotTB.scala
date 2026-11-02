@@ -93,12 +93,24 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     val isGCStart = game.starting.get(GC).contains(r)
                     val farFromStart = startRegions./(sr => game.board.distance(r, sr)).minOr(0)
                     val adjacentToPlaced = self.all(Tentacle)./(_.region).exists(_.connected.has(r))
-                    r.glyph == GlyphAA && !isAnyStart               |=> (1300 + farFromStart) -> "setup: /^\\ glyph area, not a start area"
-                    r.glyph == GlyphOO && !isAnyStart               |=> (1200 + farFromStart) -> "setup: (*) glyph area, not a start area"
-                    r.glyph == GlyphWW && !isAnyStart               |=> (1100 + farFromStart) -> "setup: ||| glyph area, not a start area"
-                    !isGlyphArea && adjacentToPlaced && !isAnyStart |=> (500 + farFromStart)  -> "setup: cluster near placed tentacles"
-                    isAnyStart && !isGCStart                        |=> 100 -> "setup: leftover tentacle on faction start area"
-                    isGCStart                                       |=> -500 -> "setup: avoid Great Cthulhu's start area"
+                    // Creator fix (2026-11-02): the per-Area score below (glyph tier +
+                    // distance) never checked whether this Area already held a Tentacle,
+                    // so an already-occupied Area with a slightly higher distance score
+                    // could keep winning over an empty one, stacking 2+ Tentacles into the
+                    // same Area during Setup -- exactly what the creator reported ("never
+                    // more than 1 tentacle in an area if it can be avoided"), and the
+                    // resulting clusters starved the rest of the game's Power income (which
+                    // scales with the number of distinct Tentacle-occupied Areas). A heavy
+                    // penalty now pushes any already-occupied Area below every still-empty
+                    // Area, while still ranking sensibly among occupied Areas on the rare
+                    // placement where every legal Area already has a Tentacle.
+                    val stackPenalty = self.at(r, Tentacle).any.?(-5000).|(0)
+                    r.glyph == GlyphAA && !isAnyStart               |=> (1300 + farFromStart + stackPenalty) -> "setup: /^\\ glyph area, not a start area"
+                    r.glyph == GlyphOO && !isAnyStart               |=> (1200 + farFromStart + stackPenalty) -> "setup: (*) glyph area, not a start area"
+                    r.glyph == GlyphWW && !isAnyStart               |=> (1100 + farFromStart + stackPenalty) -> "setup: ||| glyph area, not a start area"
+                    !isGlyphArea && adjacentToPlaced && !isAnyStart |=> (500 + farFromStart + stackPenalty)  -> "setup: cluster near placed tentacles"
+                    isAnyStart && !isGCStart                        |=> (100 + stackPenalty) -> "setup: leftover tentacle on faction start area"
+                    isGCStart                                       |=> (-500 + stackPenalty) -> "setup: avoid Great Cthulhu's start area"
 
                 case MoveAction(f, u, from, to, _) =>
                     u.cultist && to.freeGate                     |=> 1600 -> "cultist to free gate"
