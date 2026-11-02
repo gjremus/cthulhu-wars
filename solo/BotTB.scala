@@ -15,6 +15,15 @@ import hrf.colmat._
 //      Tentacle SBR-2, Thousand Writhing Maws type/placement, Setup glyph
 //      priority, Stalk tentacle-spread, and a Spellbook pick order -- Stalk
 //      first, Psychic Shriek second) -- see TB Current Tasks doc.
+//  (7) 2026-11-02: creator-specified late-game sequencing from the same
+//      instructions -- Subterrane pick once the Mantle is placed, Ensnare
+//      pick once Shudde M'ell is awakened, moving Head/Segments onto the
+//      three Glyph Areas and paying for the alt Three-Glyphs SBR once 4 of
+//      the other 5 SBRs are fulfilled, Grasp pick once Three-Glyphs is
+//      satisfied, the Gates-at-every-GOO SBR once 5 Spellbooks + 8 Power,
+//      Psychic Shriek once all Spellbooks earned and an enemy exceeds 6
+//      Power, and Thousand Writhing Maws raw-count thresholds (8 or fewer
+//      Tentacles / 2 or fewer Cadavolytes) alongside the existing SBR gates.
 // ============================================================================
 object BotTB extends BotX(implicit g => new GameEvaluationTB)
 
@@ -27,6 +36,12 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
         }
 
         if (game.battle.none) {
+            // Creator priority (2026-11-02): count of the 6 Spellbook Requirements,
+            // excluding the Three-Glyphs one itself, already satisfied -- used to
+            // time the alt-payment / glyph-placement push for Three Glyphs + Grasp.
+            val sbReqsDoneExclGlyphs = $(OverlayMantleReq, TenTentaclesReq, RemoveGatePlaceChthonianReq,
+                GatesAtGOOsReq, AwakenShuddeMellReq).%(req => !self.needs(req)).num
+
             a match {
 
                 case FirstPlayerAction(_, f) =>
@@ -50,10 +65,13 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     case Autotomy =>
                         true |=> 1200 -> "pick autotomy"
                     case Ensnare =>
+                        game.tbShuddeMellEverAwakened |=> 2000 -> "pick ensnare (shudde m'ell awakened, creator priority)"
                         true |=> 900  -> "pick ensnare"
                     case Subterrane =>
+                        game.tbMantleInPlay |=> 2200 -> "pick subterrane (mantle placed, creator priority)"
                         true |=> 600  -> "pick subterrane"
                     case Grasp =>
+                        !self.needs(ShuddeMellInThreeGlyphsReq) |=> 2100 -> "pick grasp (three-glyphs SBR fulfilled, creator priority)"
                         true |=> 300  -> "pick grasp"
                     case _ =>
                         true |=> -1000 -> "unknown spellbook"
@@ -87,6 +105,8 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     u.cultist && to.ownGate                      |=> 200  -> "cultist to own gate"
                     u.monster && to.foes.any && self.power > 3   |=> 500  -> "chthonian toward enemies"
                     u.goo && to.foes.any                         |=> 700  -> "shudde mell toward enemies"
+                    (u.goo || u.is(ShuddeMellSegment)) && sbReqsDoneExclGlyphs >= 4 && self.all(ShuddeMellSegment).num >= 2 &&
+                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> 1900 -> "move part to glyph area (three-glyphs SBR, creator priority)"
                     to.freeGate                                  |=> 400  -> "move to free gate"
 
                 case RecruitAction(f, uc, r) =>
@@ -116,7 +136,9 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 600  -> "writhing maws double summon"
                 case TBWrithingMawsTypeAction(f, uc) =>
                     uc == Tentacle && self.needs(TenTentaclesReq)    |=> 900  -> "maws tentacles (toward 10-tentacle SBR)"
+                    uc == Tentacle && self.all(Tentacle).num <= 8     |=> 850  -> "maws tentacles (creator: 8 or fewer tentacles)"
                     uc == Cadavolyte && !self.needs(TenTentaclesReq) |=> 800  -> "maws cadavolytes (post 10-tentacle SBR)"
+                    uc == Cadavolyte && self.all(Cadavolyte).num <= 2 |=> 750 -> "maws cadavolytes (creator: 2 or fewer cadavolytes)"
                     uc == Chthonian                                  |=> 500  -> "maws chthonians"
                     uc == Cadavolyte                                 |=> 400  -> "maws cadavolytes"
                     uc == Tentacle                                   |=> 200  -> "maws tentacles"
@@ -186,6 +208,7 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
 
                 // Psychic Shriek
                 case TBPsychicShriekMainAction(f) =>
+                    allSB && others.%(_.power > 6).any           |=> 1700 -> "psychic shriek (all spellbooks earned, enemy power > 6, creator priority)"
                     true                                         |=> 500  -> "psychic shriek"
                 case TBPsychicShriekPickEnemyAction(f, _) =>
                     true                                         |=> 100  -> "pick shriek target"
@@ -235,12 +258,15 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
 
                 // SBR-4: Gates at every GOO Area
                 case TBGatesAtGOOsMainAction(f) =>
+                    numSB >= 5 && self.power >= 8                |=> 2300 -> "gates at goo areas SBR (5 spellbooks + 8 power, creator priority)"
                     true                                         |=> 700  -> "gates at goo areas SBR"
                 case TBGatesAtGOOsAction(f) =>
+                    numSB >= 5 && self.power >= 8                |=> 1800 -> "gates at goo commit (creator priority)"
                     true                                         |=> 500  -> "gates at goo commit"
 
                 // SBR-6: Three Glyphs alt payment
                 case TBThreeGlyphsPayAction(f) =>
+                    sbReqsDoneExclGlyphs >= 4                    |=> 2000 -> "three glyphs pay 6 power (4 SBRs fulfilled, creator priority)"
                     true                                         |=> 600  -> "three glyphs pay 6"
                 case TBThreeGlyphsPayConfirmAction(f) =>
                     true                                         |=> 400  -> "three glyphs confirm"
