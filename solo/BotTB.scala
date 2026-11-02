@@ -129,7 +129,7 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     uc == Tentacle && self.at(r2, Tentacle).any && r2.connected.exists(c => self.at(c, Tentacle).none) |=> 400 -> "maws: tentacle area next to an empty area"
                     true                                         |=> 300  -> "maws commit"
 
-                // Behemoth: Move Part to Mantle
+                // Abyssal Cline: Move Part to Mantle
                 case TBMovePartToMantleMainAction(f) =>
                     true                                         |=> 400  -> "behemoth move part to mantle"
                 case TBMovePartToMantlePickAction(f, _) =>

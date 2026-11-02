@@ -63,11 +63,12 @@ case object Grasp         extends FactionSpellbook(TB, "Grasp")         with Bat
 case object Ensnare       extends FactionSpellbook(TB, "Ensnare")
 case object PsychicShriek extends FactionSpellbook(TB, "Psychic Shriek")
 
-// TB Unique Abilities — Thousand Writhing Maws + Behemoth (Ongoing). Declared as
-// FactionSpellbook objects so they appear in the faction status panel and can be
-// borrowed via Ancient Sorcery.
+// TB Unique Abilities — Thousand Writhing Maws + Behemoth (Ongoing) + Abyssal
+// Cline (0-Cost Unlimited Action). Declared as FactionSpellbook objects so they
+// appear in the faction status panel and can be borrowed via Ancient Sorcery.
 case object ThousandWrithingMaws extends FactionSpellbook(TB, "Thousand Writhing Maws")
 case object Behemoth             extends FactionSpellbook(TB, "Behemoth")
+case object AbyssalCline         extends FactionSpellbook(TB, "Abyssal Cline")
 
 
 // -- SPELLBOOK REQUIREMENTS (§1.9) --------------------------------------------
@@ -97,8 +98,10 @@ case object TB extends Faction { f =>
     def short = "TB"
     def style = "tb"
 
-    // Thousand Writhing Maws + Behemoth are the always-on ongoing abilities (§1.5).
-    override def abilities = $(ThousandWrithingMaws, Behemoth)
+    // Thousand Writhing Maws + Behemoth are the always-on ongoing abilities (§1.5);
+    // Abyssal Cline is the always-available 0-Cost Unlimited Action that moves a
+    // Part to the Mantle (split out from Behemoth's printed text).
+    override def abilities = $(ThousandWrithingMaws, Behemoth, AbyssalCline)
     override def library   = $(Stalk, Autotomy, Subterrane, Grasp, Ensnare, PsychicShriek)
     override def requirements(options : $[GameOption]) =
         $(OverlayMantleReq, TenTentaclesReq, RemoveGatePlaceChthonianReq, GatesAtGOOsReq, AwakenShuddeMellReq, ShuddeMellInThreeGlyphsReq)
@@ -174,12 +177,12 @@ case class TBWrithingMawsPlaceSecondAction(self : Faction, uc : UnitClass, r1 : 
 case class TBWrithingMawsAction(self : Faction, uc : UnitClass, r1 : Region, r2 : Region)
     extends ForcedAction
 
-// -- BEHEMOTH: Move any Part to the Mantle (0-Cost Unlimited, §1.8 / §3.4.3 / §4.6) --
+// -- ABYSSAL CLINE: Move any Part to the Mantle (0-Cost Unlimited, §1.8 / §3.4.3 / §4.6) --
 case class TBMovePartToMantleMainAction(self : Faction)
-    extends OptionFactionAction(Behemoth.styled(TB) + ": move a Part to " + TB.mantle) with MainQuestion with Soft
+    extends OptionFactionAction(AbyssalCline.styled(TB) + ": move a Part to " + TB.mantle) with MainQuestion with Soft
 case class TBMovePartToMantlePickAction(self : Faction, parts : $[UnitRef])
     extends ForcedAction with PowerNeutral {
-    override def question(implicit game : Game) = Behemoth.styled(TB) + ": move which Part to " + TB.mantle
+    override def question(implicit game : Game) = AbyssalCline.styled(TB) + ": move which Part to " + TB.mantle
 }
 case class TBMovePartToMantleAction(self : Faction, part : UnitRef)
     extends ForcedAction with PowerNeutral
@@ -536,7 +539,7 @@ object TBExpansion extends Expansion {
                     + TBUnlimitedBattleMainAction(f, validAreas)
             }
 
-            // Behemoth: Move any Part to the Mantle (0-Cost Unlimited, §1.8 / §3.4.3)
+            // Abyssal Cline: Move any Part to the Mantle (0-Cost Unlimited, §1.8 / §3.4.3)
             if (game.tbMantleInPlay && game.tbShuddeMellEverAwakened) {
                 val partsNotOnMantle = (f.all(ShuddeMellHead) ++ f.all(ShuddeMellSegment)).%(_.region != TB.mantle)
                 if (partsNotOnMantle.any)
@@ -585,7 +588,7 @@ object TBExpansion extends Expansion {
             game.awakens(f)
             game.independents(f)
 
-            // Behemoth: Move any Part to the Mantle (0-Cost Unlimited, §1.8 / §3.4.3)
+            // Abyssal Cline: Move any Part to the Mantle (0-Cost Unlimited, §1.8 / §3.4.3)
             if (game.tbMantleInPlay && game.tbShuddeMellEverAwakened) {
                 val partsNotOnMantle = (f.all(ShuddeMellHead) ++ f.all(ShuddeMellSegment)).%(_.region != TB.mantle)
                 if (partsNotOnMantle.any)
@@ -699,7 +702,7 @@ object TBExpansion extends Expansion {
             val from = u.region
             u.region = TB.mantle
             u.onGate = false
-            self.log(Behemoth.styled(TB) + ": moved", u.uclass.styled(TB), "from", from, "to", TB.mantle)
+            self.log(AbyssalCline.styled(TB) + ": moved", u.uclass.styled(TB), "from", from, "to", TB.mantle)
             // Chronophage: moving a Part (a Unit) to the Mantle → offer Hound teleport (A23).
             // Unlimited — return to main action (FCG #19) after any teleport.
             CronophageAfterMoveAction(self, MainAction(self))
