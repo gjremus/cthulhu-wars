@@ -182,8 +182,8 @@ case class SWHungerSacrificeDoomAction(remaining : Int) extends OptionFactionAct
     def self = SW
     def question(implicit game : Game) = "Ceaseless Hunger".styled(SW)
 }
-case class SWHungerSacrificeCultistAction(remaining : Int, ref : UnitRef)
-    extends OptionFactionAction(implicit g => "Sacrifice " + Acolyte.styled(SW) + " in " + g.unit(ref).region) with PowerNeutral {
+case class SWHungerSacrificeCultistAction(remaining : Int, ref : UnitRef, gateStatus : String = "")
+    extends OptionFactionAction(implicit g => "Sacrifice " + Acolyte.styled(SW) + " in " + g.unit(ref).region + gateStatus) with PowerNeutral {
     def self = SW
     def question(implicit game : Game) = "Ceaseless Hunger".styled(SW)
 }
@@ -277,7 +277,10 @@ object SWExpansion extends Expansion {
                 implicit val asking = Asking(SW)
                 if (SW.doom > 0)
                     + SWHungerSacrificeDoomAction(remaining)
-                SW.onMap(Acolyte).not(Zeroed).headOption.foreach(u => + SWHungerSacrificeCultistAction(remaining, u.ref))
+                SW.onMap(Acolyte).not(Zeroed).foreach(u => {
+                    val gateStatus = if (SW.gates.has(u.region)) " On Gate" else ""
+                    + SWHungerSacrificeCultistAction(remaining, u.ref, gateStatus)
+                })
                 if (asking.ask.actions.none) {
                     // Nothing left to pay with (no Doom, no Cultists on map) — obligation lapses.
                     SW.log("Hunger sacrifice: nothing left to pay with, obligation lapses")
