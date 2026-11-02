@@ -1944,6 +1944,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // set true once the per-player loop finishes so the base seating loop can proceed
     // to seat Opener of the Way last. Replay-safe (set inside the recorded flow).
     var tiPortentSetupDone : Boolean = false
+    // Sacrament of Flesh (§1.8): "Spare 1 Unit for each Cultist that was on your
+    // Faction Card during Gather Power" (guide's exact wording) — set from the
+    // `captured` value already computed for TI inside the per-faction Power-calc
+    // loop, BEFORE the universal release-captured-cultists step that runs later in
+    // the same Gather Power (Game.scala's PowerGatherAction) returns every captured
+    // Cultist to its owner's pool. A Cultist captured during TI's OWN Action Phase
+    // (after this round's Gather Power already ran) correctly does not spare this
+    // round's removal under this wording — it spares NEXT round's, once it has
+    // actually produced Power for TI at that round's Gather Power.
+    var tiSacramentSpared : Int = 0
     // Sacrament of Flesh has already resolved this Doom Phase (guards the re-entrant
     // Force(DoomAction(TI)) that hands control back to the normal doom flow). Reset
     // to false at the start of every Doom Phase.
@@ -4306,6 +4316,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     factions./~(w => w.at(f.prison)).%(u => u.faction == TT && u.cultist).num
                 else 0
                 val captured = allCaptured - greenDecayCultists - glaakiIGOOGreenDecayCultists - soullessCultists
+                // Sacrament of Flesh (§1.8): snapshot the exact count that is about to
+                // produce Power for TI this Gather Power — the universal release step
+                // later in this same PowerGatherAction empties TI.prison right after,
+                // so this must be captured here, not re-derived from prison afterward.
+                if (f == TI) tiSacramentSpared = captured
                 // Disaster Looms (Bloated Woman spellbook): Gates earn 1 ES instead of 2 Power
                 val disasterLooms = f.can(DisasterLooms)
                 val yogGateSuppressed = f.unitGate.any && f.unitGate.exists(u => ElderThingMindControl.suppresses(u))

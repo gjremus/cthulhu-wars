@@ -674,20 +674,28 @@ object TIExpansion extends Expansion {
         // SACRAMENT OF FLESH (Baphomet Doom Phase, §1.8 / §2.4)
         // ================================================================
         // Mandatory at TI's Doom Phase while Baphomet is in play: permanently remove
-        // 1 Unit (2 with all 6 Spellbooks), reduced by 1 per Cultist currently held on
-        // TI's Faction Sheet (read live, at Doom Phase, not a stale Gather-Power
-        // snapshot — a Cultist captured earlier THIS round, during the Action Phase,
-        // must still spare a removal at this same round's Doom Phase), then gain
-        // 1 Elder Sign (2 with all 6 Spellbooks). We intercept DoomAction(TI) ONCE (guarded by the
-        // per-phase tiSacramentDoneThisDoom flag), resolve Sacrament, then Force
-        // DoomAction(TI) again — the guard is now false, so TIExpansion returns
-        // UnknownContinue and Game.scala's normal DoomAction(f) flow (rituals / reveals /
-        // high priests / hires / doomDone) runs. Elder Signs route through takeES so the
-        // 36-pool overflow-to-Doom (and future Infernolatreia) applies.
+        // 1 Unit (2 with all 6 Spellbooks), reduced by 1 per Cultist that was on TI's
+        // Faction Sheet during THIS round's Gather Power (game.tiSacramentSpared —
+        // the guide's exact wording, §1.8). That snapshot is taken in Game.scala
+        // before this same Gather Power's universal release step returns every
+        // captured Cultist to its owner's pool, so by Doom Phase TI.prison is
+        // normally already empty — reading it live here would silently zero out the
+        // spare every single round (confirmed against the "Dread versus Time" game,
+        // 2026-11-01: 2 captures that had already produced Power this round still
+        // forced a full removal under a live-prison read). A Cultist captured during
+        // TI's own Action Phase (after this round's Gather Power) correctly does not
+        // spare this round's removal — it spares next round's, once it has actually
+        // produced Power for TI. Then gain 1 Elder Sign (2 with all 6 Spellbooks). We
+        // intercept DoomAction(TI) ONCE (guarded by the per-phase tiSacramentDoneThisDoom
+        // flag), resolve Sacrament, then Force DoomAction(TI) again — the guard is now
+        // false, so TIExpansion returns UnknownContinue and Game.scala's normal
+        // DoomAction(f) flow (rituals / reveals / high priests / hires / doomDone) runs.
+        // Elder Signs route through takeES so the 36-pool overflow-to-Doom (and future
+        // Infernolatreia) applies.
         case DoomAction(f : TI.type) if !game.tiSacramentDoneThisDoom && f.onMap(Baphomet).not(Zeroed).any =>
             game.tiSacramentDoneThisDoom = true
             val base     = if (f.hasAllSB) 2 else 1
-            val spared   = game.factions./~(e => e.at(TI.prison)).%(_.uclass.utype == Cultist).num
+            val spared   = game.tiSacramentSpared
             val toRemove = 0.max(base - spared)
             val esGain   = if (f.hasAllSB) 2 else 1
             f.log(SacramentOfFlesh.styled(TI) + ": must remove", toRemove.toString.styled("kill"),
