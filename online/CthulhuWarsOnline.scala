@@ -132,6 +132,19 @@ object CthulhuWarsOnline {
 
         val liveGames = TableQuery[LiveGames]
 
+        // Completed-game registry. Presence of a gameId here means the game has
+        // reached GameOver (a log entry contains "GameOverPhaseAction"). Recorded
+        // at write time so the admin UI can query this table instead of searching
+        // 300k+ log lines on every login.
+        case class CompletedGame(gameId : Int)
+
+        class CompletedGames(tag : Tag) extends Table[CompletedGame](tag, "CompletedGame") {
+            def gameId = column[Int]("gameId", O.PrimaryKey)
+            def * = (gameId).mapTo[CompletedGame]
+        }
+
+        val completedGames = TableQuery[CompletedGames]
+
         val db = Database.forURL("jdbc:hsqldb:file:" + database, driver="org.hsqldb.jdbcDriver")
 
         object q {
@@ -188,6 +201,17 @@ object CthulhuWarsOnline {
             case e : Exception => println("LiveGames table init: " + e.getMessage)
         }
 
+        // CompletedGame registry — same idempotent CREATE IF NOT EXISTS pattern.
+        // Written to when a game writes a log entry containing "GameOverPhaseAction",
+        // so the admin UI can check this table instead of searching all log rows.
+        try {
+            import slick.jdbc.HsqldbProfile.api.actionBasedSQLInterpolation
+            q(sqlu"""CREATE TABLE IF NOT EXISTS "CompletedGame" ("gameId" INTEGER PRIMARY KEY)""")
+        }
+        catch {
+            case e : Exception => println("CompletedGame table init: " + e.getMessage)
+        }
+
         if (!mode.contains("run")) {
             return
         }
@@ -203,6 +227,15 @@ object CthulhuWarsOnline {
         def touchMeta(gameId : Int) : Unit = {
             val now = System.currentTimeMillis
             q(meta.filter(_.gameId === gameId).delete, meta += Meta(gameId, now))
+        }
+
+        // Mark a game as completed if any of the given log values contains "GameOverPhaseAction".
+        // Called from /write endpoints to avoid searching all log rows on every admin login.
+        def markCompletedIfGameOver(gameId : Int, logValues : List[String]) : Unit = {
+            if (logValues.exists(_.contains("GameOverPhaseAction"))) {
+                try { q(completedGames += CompletedGame(gameId)) }
+                catch { case _ : Throwable => () } // Already marked, ignore duplicate
+            }
         }
 
         // Undo-turn validation and execution. Returns (success, errorMessage).
@@ -368,6 +401,8 @@ object CthulhuWarsOnline {
                             })
                             try { touchMeta(q(roles.filter(_.secret === role).filter(_.name =!= "#").map(_.gameId).result.head)) }
                             catch { case _ : Throwable => () }
+                            try { markCompletedIfGameOver(q(roles.filter(_.secret === role).filter(_.name =!= "#").map(_.gameId).result.head), ss) }
+                            catch { case _ : Throwable => () }
                             complete(StatusCodes.Accepted)
                         }
                         catch {
@@ -462,6 +497,8 @@ object CthulhuWarsOnline {
                                     logs ++= 0.until(ss.size).map(n => Log(id, index + n, name, ss(n)))
                                 })
                                 try { touchMeta(q(roles.filter(_.secret === role).filter(_.name =!= "#").map(_.gameId).result.head)) }
+                                catch { case _ : Throwable => () }
+                                try { markCompletedIfGameOver(q(roles.filter(_.secret === role).filter(_.name =!= "#").map(_.gameId).result.head), ss) }
                                 catch { case _ : Throwable => () }
                                 complete(StatusCodes.Accepted)
                             }
@@ -565,6 +602,8 @@ object CthulhuWarsOnline {
                                 })
                                 try { touchMeta(q(roles.filter(_.secret === role).filter(_.name =!= "#").map(_.gameId).result.head)) }
                                 catch { case _ : Throwable => () }
+                                try { markCompletedIfGameOver(q(roles.filter(_.secret === role).filter(_.name =!= "#").map(_.gameId).result.head), ss) }
+                                catch { case _ : Throwable => () }
                                 complete(StatusCodes.Accepted)
                             }
                             catch {
@@ -662,6 +701,8 @@ object CthulhuWarsOnline {
                                 })
                                 try { touchMeta(q(roles.filter(_.secret === role).filter(_.name =!= "#").map(_.gameId).result.head)) }
                                 catch { case _ : Throwable => () }
+                                try { markCompletedIfGameOver(q(roles.filter(_.secret === role).filter(_.name =!= "#").map(_.gameId).result.head), ss) }
+                                catch { case _ : Throwable => () }
                                 complete(StatusCodes.Accepted)
                             }
                             catch {
@@ -719,19 +760,14 @@ object CthulhuWarsOnline {
                         .joinLeft(adminAnnotations).on(_._1._1.id === _.gameId)
                         .map { case (((g, r), m), a) => (g.id, g.name, r.secret, m.map(_.lastWriteMs), a.map(_.broken)) }
                         .result)
-                    // Detect completion per game: any log row whose value contains
-                    // "GameOverPhaseAction" means the engine reached the end-of-game phase.
-                    // One query per game keeps the per-row computation simple; for the
-                    // current game counts (< 200) this is fast.
-                    val completed = rows.map(_._1).map { id =>
-                        val n = q(logs.filter(_.gameId === id).filter(_.value.like("%GameOverPhaseAction%")).length.result)
-                        id -> (n > 0)
-                    }.toMap
+                    // Detect completion: check the completedGames registry (written at /write time).
+                    // This replaces the old approach which searched 300k+ log lines on every login.
+                    val completed = q(completedGames.map(_.gameId).result).toSet
                     val botFlagged = q(botGames.map(_.gameId).result).toSet
                     val liveFlagged = q(liveGames.map(_.gameId).result).toSet
                     txt(rows.map { case (id, name, secret, lastMs, broken) =>
                         val b = if (broken.getOrElse(false)) "1" else "0"
-                        val c = if (completed.getOrElse(id, false)) "1" else "0"
+                        val c = if (completed.contains(id)) "1" else "0"
                         val ib = if (botFlagged.contains(id)) "1" else "0"
                         val il = if (liveFlagged.contains(id)) "1" else "0"
                         s"$id\t$name\t$secret\t${lastMs.getOrElse(0L)}\t$b\t$c\t$ib\t0\t0\t$il"
