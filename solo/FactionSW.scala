@@ -294,7 +294,7 @@ object SWExpansion extends Expansion {
             SW.log("Hunger sacrifice: lost", 1.doom)
             Force(SWHungerSacrificeResolveAction(remaining - 1))
 
-        case SWHungerSacrificeCultistAction(remaining, ref) =>
+        case SWHungerSacrificeCultistAction(remaining, ref, _) =>
             val u = game.unit(ref)
             SW.log("Hunger sacrifice: sacrificed", Acolyte.styled(SW), "in", u.region)
             game.eliminate(u)
