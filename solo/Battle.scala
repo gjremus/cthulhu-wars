@@ -153,6 +153,7 @@ case object OleaginousPhase extends BattlePhase
 case object HarbingerPainPhase extends BattlePhase
 case object EternalPainPhase extends BattlePhase
 case object MadnessPhase extends BattlePhase
+case object PostBattleKidnapPhase extends BattlePhase
 case object AttackerDefenderRetreats extends BattlePhase
 case object DefenderAttackerRetreats extends BattlePhase
 case object AzathothCombatDiePhase extends BattlePhase
@@ -1157,7 +1158,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     def retreat(s : Faction) : Continue = {
-        val refugees = s.forces.%(_.health == Pained)
+        val refugees = s.forces.%(u => u.health == Pained && !game.swKidnapped.has(u.ref))
 
         if (refugees.none)
             return proceed()
@@ -2663,6 +2664,26 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 if (!csInsanityPainFoldArmed)
                     csInsanityReflect(false)
 
+                jump(PostBattleKidnapPhase)
+
+            case PostBattleKidnapPhase =>
+                // Sphinx Worshippers (SW) — Kidnap (UFA, Post-Battle): Two-menu flow.
+                // This phase runs BEFORE retreat, so kidnapped units can be marked and protected
+                // from paining out.
+                if (factions.has(SW) && sides.has(SW) && !SW.oncePerAction.has(Kidnap)) {
+                    val swSide = if (attacker == SW) attackers else defenders
+                    val enemy = if (attacker == SW) defender else attacker
+                    val enemySide = if (attacker == SW) defenders else attackers
+                    val mummiesHere = swSide.forces.%(_.uclass == HybridMummy).num
+                    val nitokrisHere = swSide.forces.%(_.uclass == QueenNitokris).any
+                    val candidates = enemySide.forces.%(u => u.uclass.utype == Monster && u.health == Pained)./(_.ref)
+                    if (nitokrisHere && mummiesHere >= SWValues.Kidnap_minMummies && candidates.any) {
+                        SW.oncePerAction :+= Kidnap
+                        return Ask(SW).add(SWKidnapOfferAction(SW, enemy)).add(SWKidnapDeclineAction(SW, enemy))
+                    }
+                }
+
+                // Proceed to retreat phase
                 if (retreater(attacker) == retreater(defender) && sides.forall(_.units.exists(_.health == Pained))) {
                     val f = retreater(attacker)
 
@@ -2940,30 +2961,6 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                // Sphinx Worshippers (SW) — Kidnap (UFA, Post-Battle): Two-menu flow:
-                // MENU 1: Ask SW whether to kidnap (if they have Nitokris + minMummies on board
-                //         and enemy has pained Monsters to kidnap)
-                // MENU 2: If SW said yes, ask ENEMY which pained Monster to kidnap
-                // Once kidnapped, the unit is exempt from battle and movement (see the
-                // swKidnapped checks folded into UnitClass.canMove/canBeMoved/canBattle in
-                // Game.scala) until it moves for free with Nitokris (Funeral Procession) or is
-                // sacrificed to Awaken Black Sphinx.
-                if (factions.has(SW) && sides.has(SW) && !SW.oncePerAction.has(Kidnap)) {
-                    val swSide = if (attacker == SW) attackers else defenders
-                    val enemy = if (attacker == SW) defender else attacker
-                    val enemySide = if (attacker == SW) defenders else attackers
-                    val mummiesHere = swSide.forces.%(_.uclass == HybridMummy).num
-                    val nitokrisHere = swSide.forces.%(_.uclass == QueenNitokris).any
-                    val candidates = enemySide.forces.%(u => u.uclass.utype == Monster && u.health == Pained)./(_.ref)
-                    if (nitokrisHere && mummiesHere >= SWValues.Kidnap_minMummies && candidates.any) {
-                        SW.log("[SW KIDNAP] Offering kidnap decision: Nitokris present, " + mummiesHere + " mummies, " + candidates.num + " pained enemy monsters available")
-                        SW.oncePerAction :+= Kidnap
-                        // MENU 1: Ask SW whether to kidnap. SWKidnapOfferAction will then trigger MENU 2
-                        return Ask(SW).add(SWKidnapOfferAction(SW, enemy)).add(SWKidnapDeclineAction(SW, enemy))
-                    } else if (mummiesHere > 0 || nitokrisHere) {
-                        SW.log("[SW KIDNAP] NOT offered: nitokrisHere=" + nitokrisHere + " mummies=" + mummiesHere + " painedMonsters=" + candidates.num)
-                    }
-                }
 
                 // Sphinx Worshippers (SW) — Ceaseless Hunger: Black Sphinx advances the Hunger
                 // track by 3 if Killed, else by 1 if Pained this battle (both gated by
