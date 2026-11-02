@@ -435,7 +435,7 @@ object SWExpansion extends Expansion {
                 SW.log(BottomlessPit.styled(SW) + ": gained", SWValues.BottomlessPit_swBonusPower.power, "and", SWValues.BottomlessPit_swBonusES.es, "(" + self.full + " used this ability)")
             }
             SW.satisfy(BottomlessPitReq, BottomlessPitReq.text)
-            Then(MainAction(self))
+            CheckSpellbooksAction(MainAction(self))
 
         // ────────────────────────────────────────────────────────────────
         // ANCIENT EMETIC — pick a pool Monster/Terror (affordable at a 1-power discount), then
@@ -465,7 +465,7 @@ object SWExpansion extends Expansion {
             self.place(uc, r)
             self.log(AncientEmetic.styled(SW) + ": summoned", uc.styled(SW), "in", r, "for", cost.power)
             changeHunger(SWValues.Hunger_ancientEmeticGain, AncientEmetic.name + " used")
-            Then(MainAction(self))
+            CheckSpellbooksAction(MainAction(self))
 
         // ────────────────────────────────────────────────────────────────
         // KIDNAP (UFA, Post-Battle — two-menu flow)
