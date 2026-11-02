@@ -1944,11 +1944,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // set true once the per-player loop finishes so the base seating loop can proceed
     // to seat Opener of the Way last. Replay-safe (set inside the recorded flow).
     var tiPortentSetupDone : Boolean = false
-    // Sacrament of Flesh (§1.8): the number of Cultists on TI's Faction Sheet (its
-    // prison) snapshotted during the most recent Gather Power. Each such Cultist lets
-    // TI spare one Unit from the forced Doom-Phase removal below. Snapshotted in
-    // TIExpansion.triggers() while gatherPowerPhase is true (once per Gather Power).
-    var tiSacramentSpared : Int = 0
     // Sacrament of Flesh has already resolved this Doom Phase (guards the re-entrant
     // Force(DoomAction(TI)) that hands control back to the normal doom flow). Reset
     // to false at the start of every Doom Phase.
