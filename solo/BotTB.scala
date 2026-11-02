@@ -42,6 +42,12 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
             val sbReqsDoneExclGlyphs = $(OverlayMantleReq, TenTentaclesReq, RemoveGatePlaceChthonianReq,
                 GatesAtGOOsReq, AwakenShuddeMellReq).%(req => !self.needs(req)).num
 
+            // Creator priority (2026-11-02): TB should never take a single, plain
+            // Recruit/Summon when Thousand Writhing Maws' double recruit/summon is
+            // legal this turn -- same eligibility check the game itself uses to offer
+            // the action (2+ Power, an eligible up-to-2-cost pool type available).
+            val twmAvailable = self.power >= 2 && TBExpansion.tbMawsEligibleTypes(self).any
+
             a match {
 
                 case FirstPlayerAction(_, f) =>
@@ -118,16 +124,20 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // area if it can be avoided" report, and the resulting narrow Tentacle
                 // footprint starved the bot's Power income (which scales with the number of
                 // distinct Tentacle-occupied Areas) for the rest of the game.
+                // Creator priority (2026-11-02): all plain-Recruit scoring below is
+                // gated on Thousand Writhing Maws NOT being available this turn -- when
+                // TWM is legal, TB should always use it instead of a single Recruit.
                 case RecruitAction(f, uc, r) =>
-                    uc == Tentacle && self.needs(TenTentaclesReq) && self.at(r, Tentacle).none |=> 680 -> "recruit tentacle toward 10-tentacle SBR (empty area, creator priority: spread tentacles)"
-                    uc == Tentacle && self.needs(TenTentaclesReq) |=> 650  -> "recruit tentacle toward 10-tentacle SBR"
-                    uc == Cadavolyte && r.freeGate               |=> 700  -> "cadavolyte to free gate"
-                    uc == Cadavolyte                             |=> 300  -> "recruit cadavolyte"
-                    uc == Tentacle && self.at(r, Tentacle).none  |=> 180  -> "recruit tentacle (empty area, creator priority: spread tentacles)"
-                    uc == Tentacle                               |=> 150  -> "recruit tentacle"
+                    uc == Tentacle && self.needs(TenTentaclesReq) && self.at(r, Tentacle).none && !twmAvailable |=> 680 -> "recruit tentacle toward 10-tentacle SBR (empty area, creator priority: spread tentacles)"
+                    uc == Tentacle && self.needs(TenTentaclesReq) && !twmAvailable |=> 650  -> "recruit tentacle toward 10-tentacle SBR"
+                    uc == Cadavolyte && r.freeGate               && !twmAvailable |=> 700  -> "cadavolyte to free gate"
+                    uc == Cadavolyte                             && !twmAvailable |=> 300  -> "recruit cadavolyte"
+                    uc == Tentacle && self.at(r, Tentacle).none  && !twmAvailable |=> 180  -> "recruit tentacle (empty area, creator priority: spread tentacles)"
+                    uc == Tentacle                               && !twmAvailable |=> 150  -> "recruit tentacle"
 
+                // Creator priority (2026-11-02): same TWM-always-preferred rule as Recruit.
                 case SummonAction(f, uc, r) =>
-                    uc == Chthonian                              |=> 400  -> "summon chthonian"
+                    uc == Chthonian                              && !twmAvailable |=> 400  -> "summon chthonian"
 
                 case BuildGateAction(f, r) =>
                     self.gates.num < 3                           |=> 900  -> "need more gates"
@@ -143,9 +153,15 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // 10-Tentacle SBR (SBR-2), placing them on a Tentacle area adjacent
                 // to an empty area; once SBR-2 is satisfied, switch to recruiting 2
                 // Cadavolytes instead.
+                // Creator "different opening" trial (2026-11-02): before the Mantle
+                // is overlaid, try Cadavolytes first instead -- two Cadavolytes placed
+                // in two Areas adjacent to each other, aimed at the two adjacent Gates
+                // Overlay Mantle (SBR-1) needs. Ranked above the Tentacle-SBR line below
+                // only until Overlay Mantle is satisfied; the Tentacle rush resumes after.
                 case TBWrithingMawsMainAction(f) =>
                     true                                         |=> 600  -> "writhing maws double summon"
                 case TBWrithingMawsTypeAction(f, uc) =>
+                    uc == Cadavolyte && self.needs(OverlayMantleReq) |=> 950 -> "maws cadavolytes (creator: new opening, pair toward Overlay Mantle SBR)"
                     uc == Tentacle && self.needs(TenTentaclesReq)    |=> 900  -> "maws tentacles (toward 10-tentacle SBR)"
                     uc == Tentacle && self.all(Tentacle).num <= 8     |=> 850  -> "maws tentacles (creator: 8 or fewer tentacles)"
                     uc == Cadavolyte && !self.needs(TenTentaclesReq) |=> 800  -> "maws cadavolytes (post 10-tentacle SBR)"
@@ -157,9 +173,11 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 100  -> "maws place first"
                 case TBWrithingMawsPlaceSecondAction(f, uc, r1) =>
                     uc == Tentacle && self.at(r1, Tentacle).any && r1.connected.exists(c => self.at(c, Tentacle).none) |=> 400 -> "maws: tentacle area next to an empty area"
+                    uc == Cadavolyte && self.needs(OverlayMantleReq) && r1.connected.any |=> 350 -> "maws: cadavolyte area with a neighbor available (creator: new opening, pair for adjacent gates)"
                     true                                         |=> 100  -> "maws place second"
                 case TBWrithingMawsAction(f, uc, r1, r2) =>
                     uc == Tentacle && self.at(r2, Tentacle).any && r2.connected.exists(c => self.at(c, Tentacle).none) |=> 400 -> "maws: tentacle area next to an empty area"
+                    uc == Cadavolyte && self.needs(OverlayMantleReq) && r1.connected.has(r2) |=> 500 -> "maws: two cadavolytes in adjacent areas (creator: new opening, pair toward Overlay Mantle SBR)"
                     true                                         |=> 300  -> "maws commit"
 
                 // Abyssal Cline: Move Part to Mantle
