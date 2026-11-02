@@ -48,6 +48,12 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
             // the action (2+ Power, an eligible up-to-2-cost pool type available).
             val twmAvailable = self.power >= 2 && TBExpansion.tbMawsEligibleTypes(self).any
 
+            // Creator priority (2026-11-02, "different opening" trial): the opening
+            // Cadavolyte pair should land as far as possible from any enemy-occupied
+            // Area -- used by the TWM Cadavolyte-opening scoring below.
+            val enemyRegions = game.board.regions.%(_.foes.any)
+            def distFromEnemies(r : Region) : Int = enemyRegions.%(_ != r)./(e => game.board.distance(r, e)).minOr(99)
+
             a match {
 
                 case FirstPlayerAction(_, f) =>
@@ -173,11 +179,11 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 100  -> "maws place first"
                 case TBWrithingMawsPlaceSecondAction(f, uc, r1) =>
                     uc == Tentacle && self.at(r1, Tentacle).any && r1.connected.exists(c => self.at(c, Tentacle).none) |=> 400 -> "maws: tentacle area next to an empty area"
-                    uc == Cadavolyte && self.needs(OverlayMantleReq) && r1.connected.any |=> 350 -> "maws: cadavolyte area with a neighbor available (creator: new opening, pair for adjacent gates)"
+                    uc == Cadavolyte && self.needs(OverlayMantleReq) && r1.connected.any |=> (350 + distFromEnemies(r1)) -> "maws: cadavolyte area with a neighbor available, far from enemies (creator: new opening, pair for adjacent gates away from enemies)"
                     true                                         |=> 100  -> "maws place second"
                 case TBWrithingMawsAction(f, uc, r1, r2) =>
                     uc == Tentacle && self.at(r2, Tentacle).any && r2.connected.exists(c => self.at(c, Tentacle).none) |=> 400 -> "maws: tentacle area next to an empty area"
-                    uc == Cadavolyte && self.needs(OverlayMantleReq) && r1.connected.has(r2) |=> 500 -> "maws: two cadavolytes in adjacent areas (creator: new opening, pair toward Overlay Mantle SBR)"
+                    uc == Cadavolyte && self.needs(OverlayMantleReq) && r1.connected.has(r2) |=> (500 + distFromEnemies(r2)) -> "maws: two cadavolytes in adjacent areas, far from enemies (creator: new opening, pair toward Overlay Mantle SBR away from enemies)"
                     true                                         |=> 300  -> "maws commit"
 
                 // Abyssal Cline: Move Part to Mantle
