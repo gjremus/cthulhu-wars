@@ -1261,13 +1261,36 @@ object CthulhuWarsSolo {
                         case _ => null
                     }
 
-                    // Yuggoth Phase 4: Brain Cylinder. No bespoke per-faction art exists (unlike
-                    // Acolyte/High Priest) — use the shared tintable silhouette icon (already an
-                    // asset: yuggoth-brain-cylinder-silhouette) recolored per-faction with the
-                    // same `tint` Processing used for every other shared-sprite unit below, so the
-                    // token actually shows up in the controlling faction's color instead of
-                    // continuing to show the eliminated Cultist's sprite (or nothing at all).
-                    case BrainCylinderCultist => DrawRect("yuggoth-brain-cylinder-silhouette", |(tint), x - 30, y - 30, 60, 60)
+                    // Yuggoth Phase 4: Brain Cylinder. Pre-colored per-faction art from Fandom wiki
+                    // exists for base game factions; homebrews use recolored neutral grey versions.
+                    // Each faction has its own brain-cylinder.webp matching its color scheme.
+                    case BrainCylinderCultist => faction match {
+                        case GC => DrawRect("gc-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case CC => DrawRect("cc-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case BG => DrawRect("bg-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case YS => DrawRect("ys-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case WW => DrawRect("ww-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case SL => DrawRect("sl-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case OW => DrawRect("ow-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case AN => DrawRect("an-brain-cylinder-token", None, x - 55, y - 55, 110, 110)  // Only token exists for AN
+                        case DS => DrawRect("ds-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case TT => DrawRect("tt-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case BB => DrawRect("bb-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case TS => DrawRect("ts-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case FB => DrawRect("fb-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case DC => DrawRect("dc-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case FBE => DrawRect("fbe-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case FM => DrawRect("fm-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case PRM => DrawRect("prm-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case XSS => DrawRect("xss-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case CS => DrawRect("cs-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case TI => DrawRect("ti-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case TB => DrawRect("tb-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case SW => DrawRect("sw-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case DGT => DrawRect("dgt-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case TRB => DrawRect("trb-brain-cylinder", None, x - 50, y - 50, 100, 100)
+                        case _ => DrawRect("ds-brain-cylinder", None, x - 50, y - 50, 100, 100)  // Fallback to DS
+                    }
 
                     // Mind Parasite: split color — left half THIS cultist's original
                     // faction, right half insect owner. parasiteOrig is resolved per
