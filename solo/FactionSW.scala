@@ -558,7 +558,7 @@ object SWExpansion extends Expansion {
             val carryable = (SW.at(o).%(_.uclass == HybridMummy).not(Zeroed)./(_.ref) ++
                 game.swKidnapped.%(ref => game.unit(ref).region == o)).distinct
             if (carryable.isEmpty)
-                UnknownContinue
+                MoveContinueAction(SW, true)
             else {
                 implicit val asking = Asking(SW)
                 carryable.foreach { ur => + SWCarryAction(o, ur, to).as(game.unit(ur).uclass.styled(game.unit(ur).faction), "to", to) }
@@ -572,10 +572,13 @@ object SWExpansion extends Expansion {
             u.region = to
             u.onGate = false
             u.add(Moved)
-            UnknownContinue
+            // Loop back to the offer menu (mirrors TS Undulate) so multiple units can be
+            // carried, or Done chosen; bare UnknownContinue here crashed the game (r_ next bug)
+            // because no other expansion claims this SW-specific action.
+            Force(SWCarryOfferAction(o, to))
 
         case SWCarryDoneAction(o, to) =>
-            UnknownContinue
+            MoveContinueAction(SW, true)
 
         case _ =>
             UnknownContinue
