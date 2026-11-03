@@ -5301,7 +5301,16 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val gates = f.allGates
             val valid = gates.%!(r => brood.exists(_.at(r)(Filth).any))
 
-            val doom = valid.num * k
+            // The Invasion (TI): a Lord's Shadow controlled by another faction AS AN
+            // ADDITIONAL gate (a Controlled Gate/unit-Gate shares its Area, §1.2)
+            // grants Ritual of Annihilation Doom too, same as it already does in the
+            // Doom Phase gate-income calc (tiShadowDoom above). f.allGates only
+            // tracks real built gates and this faction's own unit-Gate, not a Lord's
+            // Shadow held via that takeover rule, so it was silently dropped from
+            // Ritual Doom. Owner-reported: Opener of the Way's Yog-Sothoth took over
+            // The Invasion's starting Lord's Shadow in "Dread versus Time" and was
+            // short Doom on ritual.
+            val doom = (valid.num + tiShadowAdditionalGates(f)) * k
 
             val esGoo = if (f == TB) f.goos.factionGOOs.any.??(1) else f.goos.factionGOOs.num
             val es = esGoo + (f.can(Consecration) && !options.has(ANAlternateSpellbooks)).??($(0, 1, 1, 1, 2)(cathedrals.num))
