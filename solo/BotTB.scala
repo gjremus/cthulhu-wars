@@ -294,9 +294,11 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // SBR-4: Gates at every GOO Area
                 case TBGatesAtGOOsMainAction(f) =>
                     numSB >= 5 && self.power >= 8                |=> 2300 -> "gates at goo areas SBR (5 spellbooks + 8 power, creator priority)"
+                    self.needs(OverlayMantleReq)                 |=> 150  -> "gates at goo areas SBR (deprioritized before Overlay Mantle, creator opening takes precedence)"
                     true                                         |=> 700  -> "gates at goo areas SBR"
                 case TBGatesAtGOOsAction(f) =>
                     numSB >= 5 && self.power >= 8                |=> 1800 -> "gates at goo commit (creator priority)"
+                    self.needs(OverlayMantleReq)                 |=> 150  -> "gates at goo commit (deprioritized before Overlay Mantle)"
                     true                                         |=> 500  -> "gates at goo commit"
 
                 // SBR-6: Three Glyphs alt payment
