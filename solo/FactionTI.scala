@@ -1070,7 +1070,12 @@ object TIExpansion extends Expansion {
                 TI.doom += shortfall
                 if (game.inActionPhase)
                     game.tiElderSignDoomThisActionPhase += shortfall
-                TI.log(Infernolatreia.styled(TI), "looked at", drawn.any.?(drawn./(_.short).mkString(" ")).|("nothing") + " — no more Elder Signs left in the pool; kept them and got", shortfall.doom, "instead")
+                // HB Fix (2026-11-02): Elder Signs are secret until a faction chooses to
+                // reveal them (ElderSignAction only logs the face value when `public`);
+                // this log used to print the specific Signs looked at (.short) to the
+                // shared, all-players-visible log, leaking The Invasion's private peek.
+                // Log only the count now, matching the secrecy every other ES draw keeps.
+                TI.log(Infernolatreia.styled(TI), "looked at", drawn.any.?(drawn.num.es).|("nothing") + " — no more Elder Signs left in the pool; kept them and got", shortfall.doom, "instead")
                 CheckSpellbooksAction(next)
             }
             else if (drawn.num <= n) {
@@ -1079,7 +1084,8 @@ object TIExpansion extends Expansion {
                 // stays as ordinary undetermined tokens for the next pass through
                 // CheckSpellbooksAction's normal resolution.
                 TI.es = TI.es.%(_.value > 0) ++ TI.es.%(_.value == 0).drop(drawn.num) ++ drawn
-                TI.log(Infernolatreia.styled(TI), "looked at and kept", drawn.any.?(drawn./(_.short).mkString(" ")).|("nothing"))
+                // HB Fix (2026-11-02): see note above — count only, never the Signs' identity.
+                TI.log(Infernolatreia.styled(TI), "looked at and kept", drawn.any.?(drawn.num.es).|("nothing"))
                 CheckSpellbooksAction(next)
             }
             else
@@ -1093,7 +1099,8 @@ object TIExpansion extends Expansion {
 
         case TIInfernolatreiaChooseLoopAction(remaining, candidates, kept, next) if remaining <= 0 =>
             TI.es = TI.es.%(_.value > 0) ++ TI.es.%(_.value == 0).drop(kept.num) ++ kept
-            TI.log(Infernolatreia.styled(TI) + ": kept", kept./(_.short).mkString(" "), candidates.any.??("— returned " + candidates.num.es + " to the pool"))
+            // HB Fix (2026-11-02): see note above — count only, never the Signs' identity.
+            TI.log(Infernolatreia.styled(TI) + ": kept", kept.num.es, candidates.any.??("— returned " + candidates.num.es + " to the pool"))
             CheckSpellbooksAction(next)
 
         case TIInfernolatreiaChooseLoopAction(remaining, candidates, kept, next) =>
