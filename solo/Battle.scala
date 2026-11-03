@@ -3974,15 +3974,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             val cultists = whateleys
                 .distinctBy(_._1).sortBy(_._1.name)
 
-            val ask = Ask(self).group("Choose a loyalty card")
+            // Ask is immutable (group/list return a NEW Ask) — must reassign, or the unit rows
+            // (and their ? icons) are silently dropped and the menu renders empty.
+            var ask = Ask(self).group("Choose a loyalty card")
 
             // Add categories only if they have units
             if (monsters.any)
-                ask.group("Neutral Monsters").list(monsters.map{ case (uc, card, power, doom) => MagicianMusterAction(self, uc, card, power, doom) })
+                ask = ask.group("Neutral Monsters").list(monsters.map{ case (uc, card, power, doom) => MagicianMusterAction(self, uc, card, power, doom) })
             if (terrors.any)
-                ask.group("Neutral Terrors").list(terrors.map{ case (uc, card, power, doom) => MagicianMusterAction(self, uc, card, power, doom) })
+                ask = ask.group("Neutral Terrors").list(terrors.map{ case (uc, card, power, doom) => MagicianMusterAction(self, uc, card, power, doom) })
             if (cultists.any)
-                ask.group("Neutral Cultists").list(cultists.map{ case (uc, card, power, doom) => MagicianMusterAction(self, uc, card, power, doom) })
+                ask = ask.group("Neutral Cultists").list(cultists.map{ case (uc, card, power, doom) => MagicianMusterAction(self, uc, card, power, doom) })
 
             ask.cancel
 
