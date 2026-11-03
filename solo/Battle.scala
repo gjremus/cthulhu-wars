@@ -296,12 +296,20 @@ case class DemandSacrificeKillsArePainsAction(self : Faction) extends ForcedActi
 // Dunwich: Wizard Whateley "Magician" (Pre-Battle). If Wizard is in the battle, his controller
 // may muster one Great Old One / neutral Monster/Terror/Cultist / Clan member "as if the Doom
 // Phase" (so Lavinia's half-cost discount applies), placed straight into the battle so it fights.
-// MagicianMainAction is the skippable entry (Soft sub-menu); the leaf MagicianMusterAction
-// claims any needed card, pays the (Lavinia-adjusted) cost, and drops the unit into the arena.
-case class MagicianMainAction(self : Faction) extends OptionFactionAction("Magician".styled("nt") + " — muster a neutral unit") with PreBattleQuestion with Soft
-case class MagicianMusterAction(self : Faction, uc : UnitClass, card : |[LoyaltyCard], power : Int, doom : Int) extends BaseFactionAction(
-    implicit g => "Muster " + uc.styled(self) + card./(c => g.factions.find(_.loyaltyCards.has(c))./(o => " (take from " + o.full + ")").|("")).|(""),
-    implicit g => $((power > 0).??(power.power), (doom > 0).??(doom.doom)).but("").some./(_.mkString(" and ")).|("free"))
+// Two-menu flow: MagicianMainAction (Muster/Skip choice) → MagicianChooseUnitAction (categorized units)
+// → MagicianMusterAction (claim card, pay cost, place in arena).
+case class MagicianMainAction(self : Faction) extends OptionFactionAction("Wizard Whateley: Magician".styled("nt") + " — muster a unit as if it were the Doom Phase") with PreBattleQuestion with Soft
+case class MagicianChooseUnitAction(self : Faction) extends BaseFactionAction("Wizard Whateley: Magician".styled("nt"), "Muster")
+case class MagicianMusterAction(self : Faction, uc : UnitClass, card : |[LoyaltyCard], power : Int, doom : Int) extends BaseFactionAction(g => "", implicit g => {
+    val qm = Overlays.imageSource("question-mark")
+    val label = card./(c => c.name).|(uc.name)
+    val p = s""""${label.replace('\\'.toString, '\\'.toString + '\\'.toString)}"""".replace('"'.toString, "&quot;")
+    val paid = $((power > 0).??(power.power), (doom > 0).??(doom.doom)).but("").some./(_.mkString(" + ")).|("free")
+    "<div class=sbdiv>" +
+        uc.styled(self) + " (" + paid + ")" +
+        s"""<img class=explain src="${qm}" onclick="event.stopPropagation(); onExternalClick(${p})" onpointerover="onExternalOver(${p})" onpointerout="onExternalOut(${p})" />""" +
+    "</div>"
+})
 
 // Energy Nexus as standard pre-battle (variant option)
 case class EnergyNexusPreBattleAction(self : Faction) extends OptionFactionAction(EnergyNexus) with PreBattleQuestion
@@ -3920,12 +3928,63 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             proceed()
 
         // SEEK AND DESTROY
-        // Dunwich: Wizard "Magician" — open the combined muster menu (all costs already reflect
-        // Lavinia's Doom-Phase halving when she is controlled).
+        // Dunwich: Wizard "Magician" — first menu: Muster or Skip
         case MagicianMainAction(self) =>
-            Ask(self).group("Magician".styled("nt") + " — muster (as if the Doom Phase)")
-                .list(game.magicianMusterOffers(self)./{ case (uc, card, power, doom) => MagicianMusterAction(self, uc, card, power, doom) })
+            Ask(self).group("Wizard Whateley: Magician".styled("nt") + " — muster a unit as if it were the Doom Phase")
+                .add(MagicianChooseUnitAction(self))
                 .cancel
+
+        // Dunwich: Wizard "Magician" — second menu: categorized units (all costs already reflect
+        // Lavinia's Doom-Phase halving when she is controlled).
+        case MagicianChooseUnitAction(self) =>
+            implicit val asking = Asking(self)
+
+            val onMap = game.factions./~(_.units).%(_.region.inPlay)./(_.uclass).distinct
+
+            // 1) Awaken unclaimed iGOOs (Monsters by type)
+            val igoos = game.loyaltyCards.of[IGOOLoyaltyCard]
+                .%(c => !(c == GhatanotoaIGOOCard && game.factions.has(FB)))
+                .%(c => !(c == GlaakiIGOOCard && game.factions.has(TS)))
+                .%(c => c != DireYogSothothCard)
+                .%(c => onMap.has(c.unit).not)
+                ./(c => (c.unit, (Some(c) : |[LoyaltyCard]), game.laviniaCost(self, game.igooCost(self, c), true), 0))
+                .%(t => t._3 <= self.power)
+
+            // 2) Summon neutral units whose card `self` already holds
+            val held = self.loyaltyCards.%(c => c.is[NeutralMonsterLoyaltyCard] || c.is[NeutralTerrorLoyaltyCard] || c.is[WhateleyLoyaltyCard])
+                .%(c => self.pool.%(_.uclass == c.unit).any)
+                ./(c => (c.unit, (None : |[LoyaltyCard]), game.laviniaCost(self, c.unit.cost, true), 0))
+                .%(t => t._3 <= self.power)
+
+            // 3) Take unclaimed neutral Monster/Terror Loyalty Cards
+            val neutralCards = (game.loyaltyCards.of[NeutralMonsterLoyaltyCard] ++ game.loyaltyCards.of[NeutralTerrorLoyaltyCard])
+                ./(c => (c.unit, (Some(c) : |[LoyaltyCard]), game.laviniaCost(self, c.power, true), game.laviniaCost(self, c.doom, true)))
+                .%(t => t._3 <= self.power && t._4 <= self.doom)
+
+            // 4) Take Whateley Clan cards (Cultists)
+            val whateleys = game.whateleyCardsAvailable(self).%(c => onMap.has(c.unit).not)
+                ./(c => (c.unit, (Some(c) : |[LoyaltyCard]), game.laviniaCost(self, c.cost, true), 0))
+                .%(t => t._3 <= self.power)
+
+            // Categorize by unit type
+            val monsters = (igoos ++ held ++ neutralCards.%(t => t._1.utype == Monster))
+                .distinctBy(_._1).sortBy(_._1.name)
+            val terrors = neutralCards.%(t => t._1.utype == Terror)
+                .distinctBy(_._1).sortBy(_._1.name)
+            val cultists = whateleys
+                .distinctBy(_._1).sortBy(_._1.name)
+
+            val ask = Ask(self).group("Choose a loyalty card")
+
+            // Add categories only if they have units
+            if (monsters.any)
+                ask.group("Neutral Monsters").list(monsters.map{ case (uc, card, power, doom) => MagicianMusterAction(self, uc, card, power, doom) })
+            if (terrors.any)
+                ask.group("Neutral Terrors").list(terrors.map{ case (uc, card, power, doom) => MagicianMusterAction(self, uc, card, power, doom) })
+            if (cultists.any)
+                ask.group("Neutral Cultists").list(cultists.map{ case (uc, card, power, doom) => MagicianMusterAction(self, uc, card, power, doom) })
+
+            ask.cancel
 
         case MagicianMusterAction(self, uc, card, power, doom) =>
             self.power -= power
