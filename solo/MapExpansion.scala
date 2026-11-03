@@ -1053,6 +1053,22 @@ object YuggothExpansion extends Expansion {
     def combatPresent(f : Faction, r : Region)(implicit game : Game) : Boolean =
         f.at(r).exists(u => u.uclass.canBattle(u))
 
+    // Surgery (Brain Cylinder conversion) eligibility, per the owner-corrected spec:
+    //   - Any of the controller's own Cultist-category units (incl. non-Acolyte types
+    //     like High Priest, Whately Clan cultist-equivalents, and BB's Earth Cats —
+    //     u.targetableAsCultistByEnemy already encodes the Cultist/EarthCat-on-Moon
+    //     equivalence the rest of the engine uses for "counts as a Cultist" checks).
+    //   - ANYWHERE in play — not restricted to the Laboratory region — including
+    //     off-map-but-in-play holds: Submerged (GC.deep), Cursed Slumber (SL.slumber),
+    //     and the Moon (BB.moon). u.region.inPlay (region.glyph.inPlay) is true for all
+    //     of those and false for Pool/Prison/Extinct, so it correctly EXCLUDES cultists
+    //     still in the faction's not-yet-placed pool.
+    //   - Never an existing Brain Cylinder (can't convert a cylinder into a cylinder).
+    def surgeryEligible(u : UnitFigure)(implicit game : Game) : Boolean =
+        u.uclass != BrainCylinderCultist &&
+        u.targetableAsCultistByEnemy &&
+        u.region.inPlay
+
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) : Continue = action @@ {
 
         // ── DOOM PHASE: AWAKEN CHECK (only while Asleep; no more per-Doom-Phase
@@ -1237,12 +1253,9 @@ object YuggothExpansion extends Expansion {
         // ══════════════════════════════════════════════════════════════════════════════
 
         case SurgeryMainAction(self) =>
-            // Find all Cultists owned by self (on map, Submerged, or on Cursed Slumbering Gate)
-            val cultists = self.units.%(u =>
-                u.uclass.utype == Cultist &&
-                u.uclass != BrainCylinderCultist &&
-                (u.region.onMap || u.region == self.reserve || game.board.regions.has(u.region))
-            )./(_.ref)
+            // Find all Cultists owned by self (anywhere in play — on the Map, Submerged,
+            // on a Cursed Slumbering Gate, or on the Moon — but NOT still in the pool).
+            val cultists = self.units.%(u => surgeryEligible(u))./(_.ref)
 
             if (cultists.isEmpty)
                 EndAction(self)
@@ -1250,11 +1263,7 @@ object YuggothExpansion extends Expansion {
                 Force(SurgeryChooseCultistsAction(self, $))
 
         case SurgeryChooseCultistsAction(self, selected) =>
-            val cultists = self.units.%(u =>
-                u.uclass.utype == Cultist &&
-                u.uclass != BrainCylinderCultist &&
-                (u.region.onMap || u.region == self.reserve || game.board.regions.has(u.region))
-            )./(_.ref)
+            val cultists = self.units.%(u => surgeryEligible(u))./(_.ref)
 
             // Count existing Brain Cylinders
             val existingBCs = self.units.%(_.uclass == BrainCylinderCultist).num
@@ -1284,20 +1293,30 @@ object YuggothExpansion extends Expansion {
             } else {
                 self.payPower(1, "for Surgery")
 
-                cultists.foreach { uRef =>
-                    val u = game.unit(uRef)
-                    val region = u.region
-                    val onGate = u.onGate
+                // This is a CONVERSION, not a Kill/Capture — game.eliminate() is only used
+                // here to clear the old figure out of play cleanly (tag, reserve bookkeeping,
+                // High Priest / Mind Parasite / etc. housekeeping already in its base body).
+                // Suppress the per-faction "unit eliminated" reaction hooks (e.g. Yellow
+                // Sign's Passion) for the duration — see Game.yuggothSurgeryConversionInProgress.
+                game.yuggothSurgeryConversionInProgress = true
+                try {
+                    cultists.foreach { uRef =>
+                        val u = game.unit(uRef)
+                        val region = u.region
+                        val onGate = u.onGate
 
-                    // Remove Cultist
-                    game.eliminate(u)
+                        // Remove Cultist
+                        game.eliminate(u)
 
-                    // Create Brain Cylinder at same location (belongs to the faction, not neutrals)
-                    val bcIndex = self.units.%(_.uclass == BrainCylinderCultist).num
-                    val bc = new UnitFigure(self, BrainCylinderCultist, bcIndex, region, onGate)
-                    self.units ::= bc
+                        // Create Brain Cylinder at same location (belongs to the faction, not neutrals)
+                        val bcIndex = self.units.%(_.uclass == BrainCylinderCultist).num
+                        val bc = new UnitFigure(self, BrainCylinderCultist, bcIndex, region, onGate)
+                        self.units ::= bc
 
-                    self.log("converted", uRef.short, "to", "Brain Cylinder".styled(self), "in", region)
+                        self.log("converted", uRef.short, "to", "Brain Cylinder".styled(self), "in", region)
+                    }
+                } finally {
+                    game.yuggothSurgeryConversionInProgress = false
                 }
 
                 EndAction(self)

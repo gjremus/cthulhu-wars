@@ -95,6 +95,11 @@ case class ZingayaAction(self : YS, r : Region, f : Faction) extends BaseFaction
 
 object YSExpansion extends Expansion {
     override def eliminate(u : UnitFigure)(implicit game : Game) {
+        // Yuggoth Surgery converts a Cultist into a Brain Cylinder via this same
+        // game.eliminate() path, but that is NOT a real Kill/Capture — Passion must
+        // not fire for it. See Game.yuggothSurgeryConversionInProgress.
+        if (game.yuggothSurgeryConversionInProgress) return
+
         // The Moon is an off-map FactionRegion so region.glyph.onMap is false there;
         // a cultist killed on the Moon must still trigger Passion (it works in every
         // other non-Moon land Area). Include BB.moon explicitly.

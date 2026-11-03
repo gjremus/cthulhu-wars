@@ -2350,6 +2350,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Performance: cached flag for CG active check. Updated when spellbooks change.
     // Avoids repeated factions.has(FB) + FB.has(CG) + oncePerGame checks per unit move.
     def fbHasCGActive : Boolean = factions.has(FB) && FB.can(CyclopeanGaze)
+    // Yuggoth Surgery: converting a Cultist into a Brain Cylinder calls game.eliminate()
+    // to remove the original Cultist figure, but this is a CONVERSION, not a genuine
+    // Kill/Capture — it must not trigger Yellow Sign's Passion (which should only fire
+    // when a Cultist is actually killed/captured). Set true for the duration of
+    // SurgeryPerformAction's elimination loop (MapExpansion.scala); checked by
+    // YSExpansion.eliminate (FactionYS.scala) before awarding Passion.
+    var yuggothSurgeryConversionInProgress : Boolean = false
     var fbDevilsMarkUsedThisDoom : Boolean = false
 
     // ── Library at Celaeno state ──
@@ -3898,11 +3905,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             f.gates.contains(l) ||
             (f == OW && f.at(l).exists(_.uclass == YogSothoth))
         }
-        val hasCultistsToConvert = f.units.exists(u =>
-            u.uclass.utype == Cultist &&
-            u.uclass != BrainCylinderCultist &&
-            (u.region.onMap || u.region == f.reserve || board.regions.has(u.region))
-        )
+        val hasCultistsToConvert = f.units.exists(u => YuggothExpansion.surgeryEligible(u))
         val bcCount = f.units.%(_.uclass == BrainCylinderCultist).num
         if (canPerformSurgery && f.power >= 1 && hasCultistsToConvert && bcCount < 4)
             + SurgeryMainAction(f)

@@ -1261,6 +1261,14 @@ object CthulhuWarsSolo {
                         case _ => null
                     }
 
+                    // Yuggoth Phase 4: Brain Cylinder. No bespoke per-faction art exists (unlike
+                    // Acolyte/High Priest) — use the shared tintable silhouette icon (already an
+                    // asset: yuggoth-brain-cylinder-silhouette) recolored per-faction with the
+                    // same `tint` Processing used for every other shared-sprite unit below, so the
+                    // token actually shows up in the controlling faction's color instead of
+                    // continuing to show the eliminated Cultist's sprite (or nothing at all).
+                    case BrainCylinderCultist => DrawRect("yuggoth-brain-cylinder-silhouette", |(tint), x - 30, y - 30, 60, 60)
+
                     // Mind Parasite: split color — left half THIS cultist's original
                     // faction, right half insect owner. parasiteOrig is resolved per
                     // individual figure at construction (see the factionlike loop);
