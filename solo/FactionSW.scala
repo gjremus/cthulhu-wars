@@ -471,6 +471,10 @@ object SWExpansion extends Expansion {
             self.place(uc, r)
             self.log(AncientEmetic.styled(SW) + ": summoned", uc.styled(SW), "in", r, "for", cost.power)
             changeHunger(SWValues.Hunger_ancientEmeticGain, AncientEmetic.name + " used")
+            // Without this, re-entering MainAction below missed the `if f.acted` short-circuit
+            // (FactionSW.scala:330) and fell into the fresh-turn body (:333), granting SW an
+            // extra main action instead of ending the turn (bug r_vUC9ouG2).
+            self.acted = true
             CheckSpellbooksAction(MainAction(self))
 
         // ────────────────────────────────────────────────────────────────
