@@ -280,7 +280,7 @@ object SWExpansion extends Expansion {
                 SW.onMap(Acolyte).not(Zeroed).groupBy(_.region).foreach { case (r, us) =>
                     asking.ask = asking.ask.group(r.name)
                     us.foreach(u => {
-                        val gateStatus = if (SW.gates.has(u.region)) " On Gate" else ""
+                        val gateStatus = if (u.onGate) " On Gate" else ""
                         + SWHungerSacrificeCultistAction(remaining, u.ref, gateStatus)
                     })
                 }
