@@ -1272,7 +1272,7 @@ object CthulhuWarsSolo {
                         case WW => DrawRect("ww-brain-cylinder", None, x - 50, y - 50, 100, 100)
                         case SL => DrawRect("sl-brain-cylinder", None, x - 50, y - 50, 100, 100)
                         case OW => DrawRect("ow-brain-cylinder", None, x - 50, y - 50, 100, 100)
-                        case AN => DrawRect("an-brain-cylinder-token", None, x - 55, y - 55, 110, 110)  // Only token exists for AN
+                        case AN => DrawRect("an-brain-cylinder", None, x - 50, y - 50, 100, 100)  // Recoloured from the DS figure (wiki has only an AN token)
                         case DS => DrawRect("ds-brain-cylinder", None, x - 50, y - 50, 100, 100)
                         case TT => DrawRect("tt-brain-cylinder", None, x - 50, y - 50, 100, 100)
                         case BB => DrawRect("bb-brain-cylinder", None, x - 50, y - 50, 100, 100)
