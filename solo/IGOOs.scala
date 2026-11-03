@@ -1071,31 +1071,14 @@ object IGOOsExpansion extends Expansion {
 
         // Mother Hydra: Agony Sting
         case MotherHydraAgonyStingMainAction(self) =>
-            // === AGONY-STING-110-REVERT (game 454 replay) BEGIN ===
-            // TEMPORARY REVERT: select by CURRENT CONTROL, not true owner. Game 454
-            // ("Existence and Colour") recorded an Agony Sting that moved an enemy-
-            // CONTROLLED (Mind-Parasited) cultist whose true owner is the caster (SL).
-            // The #110 true-owner rule would skip it on replay, stranding it. Restore
-            // the #110 block below when game 454 finishes (see cw-agony-sting-restore cron).
             val oceanAreas = areas.%(_.glyph == Ocean).%(r =>
-                game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist)).exists(u => self.enemies.has(u.faction)))
-            // --- #110 version (restore when 454 done):
-            // val oceanAreas = areas.%(_.glyph == Ocean).%(r =>
-            //     game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist)).exists(u => self.enemies.has(MindParasite.trueOwner(u))))
-            // === AGONY-STING-110-REVERT END ===
+                game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist)).exists(u => self.enemies.has(MindParasite.trueOwner(u))))
             Ask(self).each(oceanAreas)(r => MotherHydraAgonyStingTargetAction(self, r)).cancel
 
         case MotherHydraAgonyStingTargetAction(self, r) =>
             self.power -= 1
-            // === AGONY-STING-110-REVERT (game 454 replay) BEGIN ===
-            // TEMPORARY REVERT: move cultists by CURRENT CONTROL (u.faction), matching
-            // how game 454 was actually played. Restore the #110 true-owner line below
-            // when game 454 finishes (see cw-agony-sting-restore cron).
             val allCultists = game.factions./~(f => f.at(r).%(_.uclass.utype == Cultist))
-            val perFaction = self.enemies./(owner => (owner, allCultists.%(u => u.faction == owner)./(_.ref))).%{ case (_, units) => units.any }
-            // --- #110 version (restore when 454 done):
-            // val perFaction = self.enemies./(owner => (owner, allCultists.%(u => MindParasite.trueOwner(u) == owner)./(_.ref))).%{ case (_, units) => units.any }
-            // === AGONY-STING-110-REVERT END ===
+            val perFaction = self.enemies./(owner => (owner, allCultists.%(u => MindParasite.trueOwner(u) == owner)./(_.ref))).%{ case (_, units) => units.any }
             self.log("The Agony Sting".styled("nt") + ": all enemy Cultists in", r, "must move to adjacent Land")
             if (perFaction.num > 1)
                 Ask(self).each(perFaction./{ case (f, _) => f })(f => ForcedCultistMoveOrderAction(self, f, r, perFaction, false, EndAction(self)))
