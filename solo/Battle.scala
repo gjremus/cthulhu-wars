@@ -300,7 +300,7 @@ case class DemandSacrificeKillsArePainsAction(self : Faction) extends ForcedActi
 // → MagicianMusterAction (claim card, pay cost, place in arena).
 case class MagicianMainAction(self : Faction) extends OptionFactionAction("Wizard Whateley: Magician".styled("nt") + " — muster a unit as if it were the Doom Phase") with PreBattleQuestion with Soft
 case class MagicianChooseUnitAction(self : Faction) extends BaseFactionAction("Wizard Whateley: Magician".styled("nt"), "Muster")
-case class MagicianMusterAction(self : Faction, uc : UnitClass, card : |[LoyaltyCard], power : Int, doom : Int) extends BaseFactionAction(g => "", implicit g => {
+case class MagicianMusterAction(self : Faction, uc : UnitClass, card : |[LoyaltyCard], power : Int, doom : Int) extends BaseFactionAction(implicit g => "", implicit g => {
     val qm = Overlays.imageSource("question-mark")
     val label = card./(c => c.name).|(uc.name)
     val p = s""""${label.replace('\\'.toString, '\\'.toString + '\\'.toString)}"""".replace('"'.toString, "&quot;")
