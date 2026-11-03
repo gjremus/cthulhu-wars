@@ -391,7 +391,7 @@ object FMExpansion extends Expansion {
             Force(MannedBattlementsDestPickAction(self, source, units))
 
         case MannedBattlementsDestPickAction(self, source, units) =>
-            val destAreas = game.board.connected(source).filter(hasScreamingWall)
+            val destAreas = game.board.regions.filter(r => r != source && hasScreamingWall(r) && self.at(r).any)
             Ask(self).each(destAreas)(r => MannedBattlementsDestAction(self, source, units, r)).cancel
 
         case MannedBattlementsDestAction(self, source, units, dest) =>
