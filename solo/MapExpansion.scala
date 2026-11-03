@@ -1263,7 +1263,7 @@ object YuggothExpansion extends Expansion {
                 Force(SurgeryChooseCultistsAction(self, $))
 
         case SurgeryChooseCultistsAction(self, selected) =>
-            val cultists = self.units.%(u => surgeryEligible(u))./(_.ref)
+            val cultists = self.units.%(u => surgeryEligible(u))
 
             // Count existing Brain Cylinders
             val existingBCs = self.units.%(_.uclass == BrainCylinderCultist).num
@@ -1271,11 +1271,20 @@ object YuggothExpansion extends Expansion {
 
             if (cultists.isEmpty)
                 Force(SurgeryPerformAction(self, selected))
-            else
-                Ask(self)
-                    .each(cultists.take(maxNew))(uRef => SurgeryToggleUnitAction(self, uRef, selected))
+            else {
+                // Group by Region (same idiom as FactionSW's Hunger Sacrifice cultist menu):
+                // a region name as a GroupAction header, with that region's eligible
+                // Cultists listed beneath it — otherwise cultists from multiple regions
+                // in the same menu are indistinguishable.
+                implicit val asking = Asking(self)
+                cultists.take(maxNew).groupBy(_.region).foreach { case (r, us) =>
+                    asking.ask = asking.ask.group(r.name)
+                    us.foreach(u => + SurgeryToggleUnitAction(self, u.ref, selected))
+                }
+                asking.ask
                     .add(SurgeryDoneAction(self, selected))
                     .add(SurgeryCancelAction(self))
+            }
 
         case SurgeryToggleUnitAction(self, uRef, selected) =>
             val newSelected = if (selected.has(uRef)) selected.but(uRef) else selected :+ uRef
