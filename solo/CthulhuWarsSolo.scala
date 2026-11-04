@@ -4060,14 +4060,19 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                             // Extract the original next action from the saved Continue.
                                             // If the Continue is already a CheckSpellbooksAction Ask, use its next.
                                             // Otherwise derive the continuation from the game state.
+                                            // Return to the menu that was open (that faction's Doom or Main menu).
+                                            // DoomPhaseAction here restarted the Doom Phase and paid doom twice.
                                             val originalNext : ForcedAction = cc.get match {
                                                 case Ask(_, actions) if actions.any =>
                                                     actions(0).unwrap match {
                                                         case SpellbookAction(_, _, next) => next
-                                                        case _ => if (game.doomPhase) DoomPhaseAction else CheckSpellbooksAction(PreMainAction(game.factions(0)))
+                                                        case _ =>
+                                                            val owner = cc.get.asInstanceOf[Ask].faction
+                                                            if (actions.exists(_.unwrap.isInstanceOf[DoomQuestion])) CheckSpellbooksAction(DoomAction(owner))
+                                                            else CheckSpellbooksAction(MainAction(owner))
                                                     }
                                                 case Then(next : ForcedAction) => next
-                                                case _ => if (game.doomPhase) DoomPhaseAction else CheckSpellbooksAction(PreMainAction(game.factions(0)))
+                                                case _ => if (game.doomPhase) CheckSpellbooksAction(DoomNextPlayerAction(game.first)) else CheckSpellbooksAction(PreMainAction(game.factions(0)))
                                             }
                                             cc = |(Ask(f).each(bs)(b => SpellbookAction(f, b, originalNext)))
                                         }

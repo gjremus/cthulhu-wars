@@ -553,7 +553,10 @@ object TTExpansion extends Expansion {
             // so the re-entered DoomAction below skips the Hell's Banquet roll. The flag is cleared at
             // DoomDoneAction, so Hell's Banquet will fire normally on subsequent doom phases.
             if (cost == 0) game.ttHellsBanquetDone = true
-            if (cost == 0) Force(DoomAction(self)) else EndAction(self)
+            // Doom-phase awaken: run the spellbook check now so the earned book returns to TT's own doom
+            // turn. Otherwise the reload check picked it up with DoomPhaseAction, restarting the Doom Phase
+            // and awarding doom twice ("Break against Rupture" HB 1ddd0282; "Agony and Space" Main).
+            if (cost == 0) Force(CheckSpellbooksAction(DoomAction(self))) else EndAction(self)
 
         // UNSPEAKABLE OATH
         case TTUnspeakableOathMainAction(self) =>
@@ -859,7 +862,8 @@ object TTExpansion extends Expansion {
                 f.place(HighPriest, r)
                 f.log(Hierophants.styled(TT), ": placed", HighPriest.styled(f), "at", r)
             }
-            val remaining = game.factions.but(TT).%(_.canRecruitHP).%(_.pool(HighPriest).any)
+            // One HP per other faction: continue with the factions after f (recomputing the full list re-asked f until its pool emptied).
+            val remaining = game.factions.but(TT).dropWhile(_ != f).drop(1).%(_.canRecruitHP).%(_.pool(HighPriest).any)
             Force(TTHierophantsOtherFactionsAction(self, remaining, next))
 
         // DOOM PHASE END: reset Dark Rituals face-up and Hell's Banquet sentinel
