@@ -1014,10 +1014,11 @@ object TIExpansion extends Expansion {
 
         case TIEntropySiphonAllocAction(queue, remaining, then) =>
             if (queue.none || remaining <= 0) {
-                // Whatever the enemies failed to lose converts to Doom loss: 1 Doom per
-                // full 4 Power short, charged to every player with more Doom than TI
-                // (clamped so it never drops a player below 0 Doom).
-                val doomLoss = remaining / 4
+                // Whatever the enemies failed to lose converts to Doom loss: the 4-Power
+                // cost is per Fiend-Controlled Gate, so any Gate left even partly unpaid
+                // still counts as a full miss — round the shortfall UP to the next whole
+                // Gate's worth, not down (clamped so it never drops a player below 0 Doom).
+                val doomLoss = (remaining + 3) / 4
                 if (doomLoss > 0)
                     game.factions.but(TI).%(_.doom > TI.doom).foreach { e =>
                         val d = doomLoss.min(e.doom)
