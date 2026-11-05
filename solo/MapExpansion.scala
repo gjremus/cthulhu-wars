@@ -1241,8 +1241,13 @@ object YuggothExpansion extends Expansion {
                 )
             })
 
-            // Create new Slime Mold
+            // Create new Slime Mold — a REAL on-map unit, owned by the controller, so it
+            // actually appears on the board and renders with that faction's tint (Bug fix:
+            // this previously only recorded bookkeeping in game.slimeMolds and never placed
+            // anything on the board).
             val nextId = if (game.slimeMolds.isEmpty) 1 else game.slimeMolds./(_.id).max + 1
+            val owner = controller.|(self)
+            owner.units :+= new UnitFigure(owner, SlimeMoldMonster, owner.units.%(_.uclass == SlimeMoldMonster).num + 1, r)
             game.slimeMolds = game.slimeMolds :+ SlimeMoldRef(nextId, r, controller)
 
             self.log("called", "Slime Mold".styled("nt"), "in", r)
@@ -1335,17 +1340,32 @@ object YuggothExpansion extends Expansion {
     }
 
     // ── AFTER ACTION HOOK: Slime Mold ownership switches when Slime Sea Overlook gate
-    // control changes. Check after every action. ──
+    // control changes. Check after every action. Moves the REAL on-map UnitFigures to
+    // the new owner's unit list (not just the game.slimeMolds bookkeeping) — a
+    // UnitFigure's faction is immutable, so a controller switch means destroying each
+    // figure under the old owner and recreating it under the new one, same idiom as
+    // NeutralAbhoth's ownership transfer when a GOO awakens on it. ──
     override def afterAction()(implicit game : Game) {
-        if (!game.board.isYuggothMap) return
+        if (!game.board.isYuggothMap || game.slimeMolds.isEmpty) return
 
         val overlook = game.board.regions.find(_.name == "Slime Sea Overlook")
         overlook.foreach { ov =>
             // Find current gate controller (if any)
             val gateController = factions.find(_.gates.contains(ov))
+            val oldOwner : Faction = game.slimeMolds.head.controller.|(SlimeMoldFaction)
+            val newOwner : Faction = gateController.|(SlimeMoldFaction)
 
-            // Switch ALL Slime Molds to new controller (or None if abandoned)
-            game.slimeMolds = game.slimeMolds.map(sm => sm.copy(controller = gateController))
+            if (newOwner != oldOwner) {
+                val existing = oldOwner.units.%(_.uclass == SlimeMoldMonster)
+                val baseIndex = newOwner.units.%(_.uclass == SlimeMoldMonster).num
+                newOwner.units ++= existing.indexed./{ case (u, i) =>
+                    new UnitFigure(newOwner, u.uclass, baseIndex + i + 1, u.region, u.onGate, u.state, u.health)
+                }
+                oldOwner.units = oldOwner.units.%(_.uclass != SlimeMoldMonster)
+
+                // Switch ALL Slime Molds to new controller (or None if abandoned)
+                game.slimeMolds = game.slimeMolds.map(sm => sm.copy(controller = gateController))
+            }
         }
     }
 

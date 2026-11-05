@@ -1821,8 +1821,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // lazy registration elsewhere — here it's unconditional at construction since the
     // Watcher's (empty) unit list must be queryable (game.neutrals(f) throws on a
     // missing key) from turn 1, even while Asleep and off-board.
-    if (board.isYuggothMap)
+    // Yuggoth Phase 3 — Slime Molds (SlimeMoldFaction), same reason: uncontrolled Slime
+    // Molds live under SlimeMoldFaction.units and can be Battle participants, which
+    // needs game.neutrals(SlimeMoldFaction) resolvable the moment the gate is Abandoned.
+    if (board.isYuggothMap) {
         neutrals += TheWatcherFaction -> new Player(TheWatcherFaction)
+        neutrals += SlimeMoldFaction -> new Player(SlimeMoldFaction)
+    }
 
     // Yuggoth Phase 2 — The Watcher's persistent state. ALL of it lives here on Game
     // (never on a MapExpansion singleton) so undo/redo/replay stay correct per the

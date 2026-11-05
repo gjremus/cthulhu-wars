@@ -1662,8 +1662,13 @@ object CthulhuWarsSolo {
                     // rendered with no sprite at all on the map; this restores it with real art.
                     case TheWatcherUnit => DrawRect("yuggoth-watcher", None, x - 64, y - 175, 129, 175)
 
-                    // Yuggoth Phase 3: Slime Mold — Monster-scale unit using sculpt art from guide
-                    case SlimeMoldMonster => DrawRect("n-slime-mold", |(Processing(None, |("rgba(180,180,180,0.5)"), None)), x - 30, y - 60, 60, 70)
+                    // Yuggoth Phase 3: Slime Mold — Monster-scale unit using sculpt art from guide.
+                    // Bug fix: this used a fixed grey screen overlay regardless of owner, so a
+                    // called/captured Slime Mold never showed as recolored to its controlling
+                    // faction. Uses the same per-owner tint as other neutral-sculpt placeholder
+                    // units (n-gnorri, n-shantak, etc.) — falls back to no tint automatically
+                    // when uncontrolled (faction == SlimeMoldFaction has no entry in the tint map).
+                    case SlimeMoldMonster => DrawRect("n-slime-mold", |(tint), x - 30, y - 60, 60, 70)
 
                     // Faceless Blight (FBE): Fungal Thrall and Byagoona use their real sculpt art,
                     // stored light/desaturated so the SAME FBE-green #3d5f1c multiply tint produces
