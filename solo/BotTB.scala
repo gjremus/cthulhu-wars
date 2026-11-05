@@ -24,6 +24,10 @@ import hrf.colmat._
 //      Psychic Shriek once all Spellbooks earned and an enemy exceeds 6
 //      Power, and Thousand Writhing Maws raw-count thresholds (8 or fewer
 //      Tentacles / 2 or fewer Cadavolytes) alongside the existing SBR gates.
+//  (8) 2026-11-05: creator follow-up -- Gates-at-every-GOO-Area's baseline
+//      (non-aggressive) score now stays deprioritized until 4 Spellbooks are
+//      earned (was only until Overlay the Mantle, 1 Spellbook), so it can no
+//      longer compete with the early-game opening in the 1-3 Spellbook window.
 // ============================================================================
 object BotTB extends BotX(implicit g => new GameEvaluationTB)
 
@@ -294,11 +298,11 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // SBR-4: Gates at every GOO Area
                 case TBGatesAtGOOsMainAction(f) =>
                     numSB >= 5 && self.power >= 8                |=> 2300 -> "gates at goo areas SBR (5 spellbooks + 8 power, creator priority)"
-                    self.needs(OverlayMantleReq)                 |=> 150  -> "gates at goo areas SBR (deprioritized before Overlay Mantle, creator opening takes precedence)"
+                    numSB < 4                                    |=> 150  -> "gates at goo areas SBR (deprioritized before 4 spellbooks earned, creator opening takes precedence)"
                     true                                         |=> 700  -> "gates at goo areas SBR"
                 case TBGatesAtGOOsAction(f) =>
                     numSB >= 5 && self.power >= 8                |=> 1800 -> "gates at goo commit (creator priority)"
-                    self.needs(OverlayMantleReq)                 |=> 150  -> "gates at goo commit (deprioritized before Overlay Mantle)"
+                    numSB < 4                                    |=> 150  -> "gates at goo commit (deprioritized before 4 spellbooks earned)"
                     true                                         |=> 500  -> "gates at goo commit"
 
                 // SBR-6: Three Glyphs alt payment
