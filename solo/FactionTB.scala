@@ -99,8 +99,9 @@ case object TB extends Faction { f =>
     def style = "tb"
 
     // Thousand Writhing Maws + Behemoth are the always-on ongoing abilities (§1.5);
-    // Abyssal Cline is the always-available 0-Cost Unlimited Action that moves a
-    // Part to the Mantle (split out from Behemoth's printed text).
+    // Abyssal Cline is the 0-Cost Unlimited Action that moves a Part to the Mantle
+    // (split out from Behemoth's printed text) — offered only BEFORE the main
+    // Action is taken, not after (creator request 2026-11-05).
     override def abilities = $(ThousandWrithingMaws, Behemoth, AbyssalCline)
     override def library   = $(Stalk, Autotomy, Subterrane, Grasp, Ensnare, PsychicShriek)
     override def requirements(options : $[GameOption]) =
@@ -539,12 +540,8 @@ object TBExpansion extends Expansion {
                     + TBUnlimitedBattleMainAction(f, validAreas)
             }
 
-            // Abyssal Cline: Move any Part to the Mantle (0-Cost Unlimited, §1.8 / §3.4.3)
-            if (game.tbMantleInPlay && game.tbShuddeMellEverAwakened) {
-                val partsNotOnMantle = (f.all(ShuddeMellHead) ++ f.all(ShuddeMellSegment)).%(_.region != TB.mantle)
-                if (partsNotOnMantle.any)
-                    + TBMovePartToMantleMainAction(f)
-            }
+            // Abyssal Cline is only offered before the main Action (creator request
+            // 2026-11-05) — not repeated here in the post-Action branch.
 
             // SBR-3: Remove a Gate, place a Chthonian (Unlimited, 0-Cost)
             if (f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
