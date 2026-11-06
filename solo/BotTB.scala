@@ -55,8 +55,13 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
             // Creator priority (2026-11-02, "different opening" trial): the opening
             // Cadavolyte pair should land as far as possible from any enemy-occupied
             // Area -- used by the TWM Cadavolyte-opening scoring below.
+            // Creator fix (2026-11-06): this used to exclude r itself from the enemy
+            // list before measuring distance, so an Area that was itself enemy-occupied
+            // got scored as if no enemy were anywhere nearby (falling through to the
+            // 99 default) instead of distance 0 -- making the bot treat an enemy's own
+            // Area as the single safest placement. Now r's own enemy occupancy counts.
             val enemyRegions = game.board.regions.%(_.foes.any)
-            def distFromEnemies(r : Region) : Int = enemyRegions.%(_ != r)./(e => game.board.distance(r, e)).minOr(99)
+            def distFromEnemies(r : Region) : Int = enemyRegions./(e => game.board.distance(r, e)).minOr(99)
 
             a match {
 
