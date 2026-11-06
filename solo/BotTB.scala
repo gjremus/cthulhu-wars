@@ -278,16 +278,30 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // this, so it fell through to the catch-all "unknown" -1000 penalty below,
                 // meaning the bot almost never awakened it -- blocking Subterrane, Ensnare,
                 // Grasp, Autotomy and every later Spellbook that depends on them.
+                // 2026-11-06: creator priority -- once the Mantle is placed, awakening
+                // Shudde M'ell must outrank every other action in the file (including
+                // Remove-Gate-Place-Chthonian below), so the bot never again removes one
+                // of the two adjacent Gates that Overlay-the-Mantle still needs before it
+                // has a chance to awaken. 5000 safely exceeds every other weight here.
                 case AwakenAction(f, ShuddeMellHead, _, _) =>
-                    self.needs(AwakenShuddeMellReq)              |=> 2500 -> "awaken Shudde M'ell for SBR"
-                    true                                         |=> 1800 -> "awaken Shudde M'ell (unlocks engine)"
+                    game.tbMantleInPlay                           |=> 5000 -> "awaken Shudde M'ell (mantle placed, creator top priority)"
+                    !game.tbMantleInPlay && self.needs(AwakenShuddeMellReq) |=> 2500 -> "awaken Shudde M'ell for SBR"
+                    !game.tbMantleInPlay                          |=> 1800 -> "awaken Shudde M'ell (unlocks engine)"
 
                 // SBR-3: Remove Gate, Place Chthonian (end-of-Action-Phase prompt).
                 // Creator-specified priority (2026-11-01): trigger this strongly when
                 // an enemy threatens a Cadavolyte guarding one of TB's own Gates.
+                // 2026-11-06: creator priority -- deprioritized to -1000 (this file's
+                // standard "almost never" idiom, same as the Three-Glyphs fix below)
+                // until Shudde M'ell is awakened. Removing one of TB's own Gates before
+                // then risked breaking the 2-adjacent-Gates precondition Overlay-the-
+                // Mantle still needed, costing TB that Spellbook Requirement entirely.
+                // The -1000 case is exclusive of the normal scoring below so no old
+                // positive weight is left active underneath it (the v2.528 mistake).
                 case TBRemoveGatePlaceChthonianPromptAction(f, _) =>
-                    self.gates.num > 2                                              |=> 400  -> "remove gate place chthonian"
-                    self.gates.exists(r => self.at(r, Cadavolyte).any && r.foes.any) |=> 900  -> "remove gate place chthonian: cadavolyte-held gate under threat"
+                    !game.tbShuddeMellEverAwakened                                                                      |=> -1000 -> "remove gate place chthonian deprioritized until Shudde M'ell awakened, creator priority"
+                    game.tbShuddeMellEverAwakened && self.gates.num > 2                                                 |=> 400  -> "remove gate place chthonian"
+                    game.tbShuddeMellEverAwakened && self.gates.exists(r => self.at(r, Cadavolyte).any && r.foes.any)   |=> 900  -> "remove gate place chthonian: cadavolyte-held gate under threat"
                 case TBRemoveGatePlaceChthonianPickGateAction(f, _) =>
                     true                                         |=> 100  -> "pick gate to remove"
                 case TBRemoveGatePlaceChthonianGateAction(f, _, _) =>
