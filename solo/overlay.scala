@@ -2131,7 +2131,7 @@ object Overlays {
         case $("TB", ThousandWrithingMaws.name) => spellbook(ThousandWrithingMaws.name, "Ongoing, not optional", "Tentacles cannot Build nor Control Gates, nor be Captured. Gain no Power from the Cadavolytes during Gather Power, but gain 1 Power per Area containing a Tentacle. 2 Power Action: may Recruit/Summon two up to 2-Cost Units of the same type.")
         case $("TB", OverlayMantleReq.text) => requirement("Control Gates in 2 adjacent Areas. Then overlay the Mantle Area on (at least) those 2 Areas. Transfer one of the Gates (and it's Cultist) to the Mantle.")
         case $("TB", TenTentaclesReq.text) => requirement("There are 10 Tentacles in play.")
-        case $("TB", RemoveGatePlaceChthonianReq.text) => requirement("Gain 2 Power, then during your Turn, remove a Gate you Control, and place a Chthonian in an Area your Unit occupies.")
+        case $("TB", RemoveGatePlaceChthonianReq.text) => requirement("Anytime, gain 2 Power, then remove a Gate you Control, and place a Chthonian in an Area your Unit(s) occupy.")
         case $("TB", GatesAtGOOsReq.text) => requirement("As an Action, pay 8 Power. In each Area containing a Great Old One Unit, place a Gate. Gain 1 Power per Gate just placed.")
         case $("TB", AwakenShuddeMellReq.text) => requirement("Awaken Shudde M'ell.")
         case $("TB", ShuddeMellInThreeGlyphsReq.text) => requirement("Shudde Mell is simultaneously in Glyph Areas /^\\ and (*) and ||| (or pay 6 Power as an Action).")
