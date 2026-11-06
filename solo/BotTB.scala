@@ -121,7 +121,9 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     u.cultist && to.ownGate                      |=> 200  -> "cultist to own gate"
                     u.monster && to.foes.any && self.power > 3   |=> 500  -> "chthonian toward enemies"
                     u.goo && to.foes.any                         |=> 700  -> "shudde mell toward enemies"
-                    (u.goo || u.is(ShuddeMellSegment)) && sbReqsDoneExclGlyphs >= 4 && self.all(ShuddeMellSegment).num >= 2 &&
+                    (u.goo || u.is(ShuddeMellSegment)) && numSB < 5 &&
+                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> -1000 -> "move part to glyph area (three-glyphs SBR deprioritized below 5 spellbooks, creator priority)"
+                    (u.goo || u.is(ShuddeMellSegment)) && numSB >= 5 && sbReqsDoneExclGlyphs >= 4 && self.all(ShuddeMellSegment).num >= 2 &&
                         (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> 1900 -> "move part to glyph area (three-glyphs SBR, creator priority)"
                     to.freeGate                                  |=> 400  -> "move to free gate"
 
@@ -309,10 +311,12 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
 
                 // SBR-6: Three Glyphs alt payment
                 case TBThreeGlyphsPayAction(f) =>
-                    sbReqsDoneExclGlyphs >= 4                    |=> 2000 -> "three glyphs pay 6 power (4 SBRs fulfilled, creator priority)"
-                    true                                         |=> 600  -> "three glyphs pay 6"
+                    numSB < 5                                    |=> -1000 -> "three glyphs pay 6 power deprioritized below 5 spellbooks, creator priority"
+                    numSB >= 5 && sbReqsDoneExclGlyphs >= 4      |=> 2000 -> "three glyphs pay 6 power (4 SBRs fulfilled, creator priority)"
+                    numSB >= 5                                   |=> 600  -> "three glyphs pay 6"
                 case TBThreeGlyphsPayConfirmAction(f) =>
-                    true                                         |=> 400  -> "three glyphs confirm"
+                    numSB < 5                                    |=> -1000 -> "three glyphs confirm deprioritized below 5 spellbooks, creator priority"
+                    numSB >= 5                                   |=> 400  -> "three glyphs confirm"
 
                 case EndTurnAction(f) =>
                     f == self                                    |=> 0    -> "end turn"
