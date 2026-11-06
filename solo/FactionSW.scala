@@ -417,6 +417,7 @@ object SWExpansion extends Expansion {
 
         case SWBottomlessPitRegionAction(self, r) =>
             val targets = game.factions.but(self)./~(e => e.at(r).%(_.uclass.utype == Monster).not(Zeroed))
+                .%(_.faction != SW)
             if (targets.isEmpty)
                 EndAction(self)
             else if (targets.num == 1)
