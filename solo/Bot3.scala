@@ -898,12 +898,14 @@ case class Bot3(faction : Faction) {
                 case TIBloodOfferingDeclineAction(who, _, _, _) =>
                     true                                   |=>   100 -> "decline TI's Blood Offering: baseline, beats a bad offer"
 
-                case TIEntropySiphonPayAction(who, amount, _, remaining, _) =>
+                case TIEntropySiphonAskAction(total, offers, _, _, who, n, _) =>
                     val aheadOfTI = who.doom > TI.doom
-                    (amount == 0 && !aheadOfTI)             |=>  1000 -> "not ahead of TI on doom - the doom penalty can't reach us"
-                    (amount == 0 && aheadOfTI)              |=>  -200 -> "ahead of TI on doom - some contribution avoids a doom penalty"
-                    (amount > 0 && aheadOfTI)                |=> (200 - amount * 40) -> "pay a little to avoid entropy siphon's doom penalty"
-                    (amount > 0 && !aheadOfTI)               |=>  -500 -> "no need to pay - not at risk of the doom penalty"
+                    (total < n + offers./(_.n).sum)     |=> -6*6*6*6*6*6 -> "dont overpay entropy siphon's demand"
+                    (n == -1 && !aheadOfTI)              |=> (4*4*4*4*4*4 * Math.random()).round.toInt -> "refuse - not ahead of TI on doom, the doom penalty can't reach us"
+                    (n == -1 && aheadOfTI)               |=> (2*4*4*4*4*4 * Math.random()).round.toInt -> "refuse entropy siphon, risk the doom penalty"
+                    (n == 0)                             |=> (3*3*3*3*3*3 * Math.random()).round.toInt -> "offer 0 toward entropy siphon"
+                    (n > 0 && aheadOfTI)                 |=> (2*3*3*3*3*3 * Math.random()).round.toInt -> "offer power toward entropy siphon to avoid the doom penalty"
+                    (n > 0 && !aheadOfTI)                |=> (3*3*3*3*2*2 * Math.random()).round.toInt -> "offer a little toward entropy siphon"
 
                 // ── Library at Celaeno ──
                 case SpendOnCustodianAction(_) =>

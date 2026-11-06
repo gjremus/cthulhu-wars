@@ -716,13 +716,17 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
             //      and might use it against a rival, not us. Only worth it
             //      when the ES value is meaningfully bigger than the Cultist
             //      we're giving up, and never worth handing over a gatekeeper.
-            //   2. TIEntropySiphonPayAction — how much Power to contribute
-            //      toward the collective enemy Power-loss pool. 0 is always
-            //      legal (the shortfall becomes a Doom penalty instead, which
-            //      only bites players AHEAD of TI on Doom) — so pay only if
-            //      we are currently ahead of TI on Doom (otherwise the Doom
-            //      penalty can't touch us) and only what little Power we can
-            //      spare, since 0 has no downside for a player behind TI.
+            //   2. TIEntropySiphonAskAction — Thousand-Forms-style multi-round
+            //      negotiation (rebuilt 2026-11-06, creator reversal of the
+            //      original one-shot design): how much Power to offer this
+            //      round toward the collective enemy demand, or refuse (-1)
+            //      to drop out of the forum. If the forum's offers end up
+            //      covering the full demand, every offering enemy actually
+            //      loses that Power; if the negotiation fails (time runs out
+            //      or the forum can no longer cover it), the WHOLE demand
+            //      converts to a Doom penalty that only bites players AHEAD
+            //      of TI on Doom — so refusing/offering 0 only costs us if we
+            //      are ahead on Doom and the rest of the forum also refuses.
             // ────────────────────────────────────────────────────────────
             case TIBloodOfferingPickSignAction(who, i, _, drawn, _) =>
                 val esValue = drawn(i).value
@@ -740,12 +744,14 @@ abstract class GameEvaluation[F <: Faction](val self : F)(implicit game : Game) 
             case TIBloodOfferingDeclineAction(who, _, _, _) =>
                 add(100, "decline TI's Blood Offering: baseline, beats a bad offer")
 
-            case TIEntropySiphonPayAction(who, amount, _, remaining, _) =>
+            case TIEntropySiphonAskAction(total, offers, _, _, who, n, _) =>
                 val aheadOfTI = who.doom > TI.doom
-                if (amount == 0 && !aheadOfTI)          add(1000, "not ahead of TI on doom - the doom penalty can't reach us")
-                if (amount == 0 && aheadOfTI)           add(-200, "ahead of TI on doom - some contribution avoids a doom penalty")
-                if (amount > 0 && aheadOfTI)            add(200 - amount * 40, "pay a little to avoid entropy siphon's doom penalty")
-                if (amount > 0 && !aheadOfTI)           add(-500, "no need to pay - not at risk of the doom penalty")
+                if (total < n + offers./(_.n).sum)     add(-6*6*6*6*6*6, "dont overpay entropy siphon's demand")
+                if (n == -1 && !aheadOfTI)              add((4*4*4*4*4*4 * Math.random()).round.toInt, "refuse - not ahead of TI on doom, the doom penalty can't reach us")
+                if (n == -1 && aheadOfTI)                add((2*4*4*4*4*4 * Math.random()).round.toInt, "refuse entropy siphon, risk the doom penalty")
+                if (n == 0)                              add((3*3*3*3*3*3 * Math.random()).round.toInt, "offer 0 toward entropy siphon")
+                if (n > 0 && aheadOfTI)                  add((2*3*3*3*3*3 * Math.random()).round.toInt, "offer power toward entropy siphon to avoid the doom penalty")
+                if (n > 0 && !aheadOfTI)                 add((3*3*3*3*2*2 * Math.random()).round.toInt, "offer a little toward entropy siphon")
 
             // ────────────────────────────────────────────────────────────
             // The Burrowers Beneath (TB): score the cross-faction prompts asked

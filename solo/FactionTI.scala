@@ -320,28 +320,29 @@ case class TIInfernolatreiaKeepOneAction(i : Int, remaining : Int, candidates : 
 // (Fiends can Control Gates) lives on Fiend.canControlGate above. Part 2 is this
 // end-of-Doom-Phase penalty: enemies collectively decide how to lose a combined
 // 4 Power per Fiend-Controlled Gate; every full 4 Power short of that total costs
-// EVERY player with more Doom than TI 1 Doom. Built as a per-enemy allocation
-// micro-phase mirroring the opponent Portent-placement micro-phase (§4.1): each
-// enemy, in turn order, is asked (Hard) how much Power to contribute toward the
-// running remaining total — 0 is always an allowed choice (declining to pay pushes
-// the shortfall onto the Doom penalty, which only bites players ahead of TI, so the
-// "collective decision" tension is preserved). Whoever controls that enemy answers,
-// exactly as the already-shipped Portent micro-phase relies on the same Ask dispatch
-// (there is no human/bot predicate in this engine to branch on, so this guide-literal
-// menu is the consistent choice). A "Fiend-Controlled Gate" is a TI-controlled Gate
-// whose controller is a Fiend — a TI.gates Area that is NOT a Lord's Shadow Area
-// (those are Shadow-controlled, tiLordsShadowRegions) and holds a live TI Fiend.
-// All transient state is carried in the action parameters (queue / remaining / then),
-// so undo replay reconstructs it deterministically. then = the end-of-Doom-Phase
-// continuation into the Action Phase. NOTE (owner review): the guide's exact
-// "Fiend-Controlled Gate" scope and menu-vs-deterministic allocation were resolved
-// here with the most guide-faithful reading available under autonomous operation.
+// EVERY player with more Doom than TI 1 Doom. REBUILT (2026-11-06, creator reversal
+// of the original one-shot sequential-ask design, Q5) as a true multi-round
+// negotiation, modeled line-for-line on Thousand Forms (FactionCC.scala) and Ghroth
+// (FactionBG.scala): enemies are asked round-robin, each sees every live offer so
+// far (the same Offer list threaded through every round), may revise upward, or
+// refuse and drop out of the forum, until the combined offers exactly cover the
+// demand (in which case each offering enemy actually loses the Power it offered —
+// no Doom penalty) or time runs out / the remaining forum can no longer cover the
+// demand (in which case all offers are abandoned and the ENTIRE demand converts to
+// the Doom penalty, matching the original one-shot resolution exactly). A "Fiend-
+// Controlled Gate" is a TI-controlled Gate whose controller is a Fiend — a TI.gates
+// Area that is NOT a Lord's Shadow Area (those are Shadow-controlled,
+// tiLordsShadowRegions) and holds a live TI Fiend. All transient state is carried in
+// the action parameters, so undo replay reconstructs it deterministically. then =
+// the end-of-Doom-Phase continuation into the Action Phase.
 case class TIEntropySiphonStartAction(then : ForcedAction) extends ForcedAction
-case class TIEntropySiphonAllocAction(queue : $[Faction], remaining : Int, then : ForcedAction) extends ForcedAction
-case class TIEntropySiphonPayAction(who : Faction, amount : Int, queue : $[Faction], remaining : Int, then : ForcedAction)
-    extends BaseFactionAction(
-        g => "Entropy Siphon: " + who + " loses " + amount + " Power",
-        implicit g => "Lose " + amount.power) { override def self = who }
+case class TIEntropySiphonAction(total : Int, then : ForcedAction) extends ForcedAction
+case class TIEntropySiphonFailAction(total : Int, then : ForcedAction) extends ForcedAction
+case class TIEntropySiphonContinueAction(total : Int, offers : $[Offer], forum : $[Faction], time : Int, then : ForcedAction) extends ForcedAction
+case class TIEntropySiphonAskAction(total : Int, offers : $[Offer], forum : $[Faction], time : Int, self : Faction, n : Int, then : ForcedAction) extends BaseFactionAction(
+    g => "" + EntropySiphon.styled(TI) + " needs enemies to collectively lose " + total.power + "<br/>" + offers./(o => "" + o.f + " offers to lose " + (o.n > 0).?(o.n.styled("power")).|("none")).mkString("<br/>") + "<hr/>" + self,
+    (n < 0).?("Refuse to negotiate").|((total == n + offers./(_.n).sum).?("Offer".styled("highlight")).|("Offer") + " " + (n > 0).?(n.styled("power") + (total == n + offers./(_.n).sum).?(" Power".styled("highlight")).|(" Power")).|((total == n + offers./(_.n).sum).?("0 Power".styled("highlight")).|("0 Power")))
+)
 
 
 // ============================================================================
@@ -1007,41 +1008,103 @@ object TIExpansion extends Expansion {
             if (total <= 0)
                 Force(then)
             else {
-                TI.log(EntropySiphon.styled(TI) + ": enemies must collectively lose", total.power,
+                TI.log(EntropySiphon.styled(TI) + ": enemies must collectively negotiate losing", total.power,
                     "for", fiendGates.num.toString.styled(TI), "Fiend-Controlled " + (fiendGates.num == 1).?("Gate").|("Gates"))
-                Force(TIEntropySiphonAllocAction(game.factions.but(TI), total, then))
+                Force(TIEntropySiphonAction(total, then))
             }
 
-        case TIEntropySiphonAllocAction(queue, remaining, then) =>
-            if (queue.none || remaining <= 0) {
-                // Whatever the enemies failed to lose converts to Doom loss: the 4-Power
-                // cost is per Fiend-Controlled Gate, so any Gate left even partly unpaid
-                // still counts as a full miss — round the shortfall UP to the next whole
-                // Gate's worth, not down (clamped so it never drops a player below 0 Doom).
-                val doomLoss = (remaining + 3) / 4
-                if (doomLoss > 0)
-                    game.factions.but(TI).%(_.doom > TI.doom).foreach { e =>
-                        val d = doomLoss.min(e.doom)
-                        e.doom -= d
-                        e.log("lost", d.doom, "—", EntropySiphon.styled(TI), "(enemies left", remaining.power, "unpaid)")
-                    }
-                Force(then)
+        // Entry point for the negotiation (mirrors ThousandFormsAction/GhrothAction):
+        // if enemies collectively don't even hold enough Power to cover the demand,
+        // skip straight to the Doom penalty — no point opening a negotiation that
+        // cannot possibly succeed.
+        case TIEntropySiphonAction(total, then) =>
+            val sm = game.factions.but(TI)./(_.power).sum
+            if (sm < total) {
+                log("Not enough Power among enemies to cover", EntropySiphon.styled(TI))
+                Force(TIEntropySiphonFailAction(total, then))
             }
             else {
-                val who = queue.head
-                val cap = who.power.min(remaining)
-                if (cap <= 0)
-                    Force(TIEntropySiphonAllocAction(queue.tail, remaining, then))   // auto-skip: no Power to give
-                else
-                    Ask(who).each((0 to cap).toList)(n => TIEntropySiphonPayAction(who, n, queue, remaining, then))
+                game.factions.but(TI).%(_.power == 0).foreach(e => e.log("had no Power"))
+                val forum = game.factions.but(TI).%(_.power > 0)
+                Force(TIEntropySiphonContinueAction(total, $, forum, forum.num * 3, then))
             }
 
-        case TIEntropySiphonPayAction(who, amount, queue, remaining, then) =>
-            if (amount > 0) {
-                who.power -= amount
-                who.log("lost", amount.power, "toward", EntropySiphon.styled(TI))
+        // Round-robin negotiation loop — identical structure to
+        // ThousandFormsContinueAction/GhrothContinueAction: each enemy in the forum
+        // sees every live offer so far and may revise upward, until either the
+        // offers exactly cover the demand (success — each offering enemy actually
+        // loses the Power it offered, no Doom penalty) or time runs out / the
+        // remaining forum can no longer cover the demand (failure — the entire
+        // demand converts to the Doom penalty, same as if no enemy had offered
+        // anything at all).
+        case TIEntropySiphonContinueAction(total, xoffers, xforum, xtime, then) =>
+            var offers = xoffers
+            var time = xtime
+
+            while (offers./(_.n).sum > total)
+                offers = offers.dropEnding
+
+            if (offers./(_.n).sum == total && offers.num == xforum.num) {
+                offers.%(_.n > 0).reverse.foreach { o =>
+                    o.f.power -= o.n
+                    o.f.log("lost", o.n.power, "—", EntropySiphon.styled(TI))
+                }
+                Force(then)
             }
-            Force(TIEntropySiphonAllocAction(queue.tail, remaining - amount, then))
+            else
+            if (time < 0 || xforum./(_.power).sum < total) {
+                log("Negotiations failed —", EntropySiphon.styled(TI), "demand was not covered")
+                Force(TIEntropySiphonFailAction(total, then))
+            }
+            else {
+                if (xforum.num == 1)
+                    time = 0
+
+                if (time == xforum.num) {
+                    time -= 1
+
+                    log("Negotiations time was running out")
+                }
+
+                val next = xforum.first
+                val forum = xforum.dropStarting :+ next
+
+                offers = offers.%(_.f != next)
+                val maxp = min(next.power, total)
+                val maxother = forum.but(next)./(_.power).sum
+                val minp = max(1, total - maxother)
+
+                Ask(next).each(-1 +: 0 +: minp.to(maxp).$)(n => TIEntropySiphonAskAction(total, offers, forum, time - (random() * 1.0).round.toInt, next, n, then))
+            }
+
+        case TIEntropySiphonAskAction(total, offers, forum, time, self, n, then) =>
+            if (n < 0) {
+                self.log("refused to negotiate")
+
+                Force(TIEntropySiphonContinueAction(total, offers, forum.but(self), time, then))
+            }
+            else {
+                if (n == 0)
+                    self.log("offered no Power")
+                else
+                    self.log("offered to lose", n.styled("highlight"))
+
+                Force(TIEntropySiphonContinueAction(total, Offer(self, n) +: offers, forum, time, then))
+            }
+
+        // Shared failure endpoint: the whole demand converts to Doom loss. The
+        // 4-Power cost is per Fiend-Controlled Gate, so a fully-failed negotiation
+        // still counts as a full miss — round the total UP to the next whole Gate's
+        // worth (clamped so it never drops a player below 0 Doom).
+        case TIEntropySiphonFailAction(total, then) =>
+            val doomLoss = (total + 3) / 4
+            if (doomLoss > 0)
+                game.factions.but(TI).%(_.doom > TI.doom).foreach { e =>
+                    val d = doomLoss.min(e.doom)
+                    e.doom -= d
+                    e.log("lost", d.doom, "—", EntropySiphon.styled(TI), "(enemies left", total.power, "unpaid)")
+                }
+            Force(then)
 
         // ================================================================
         // INFERNOLATREIA (§1.10) — see the class-declarations comment above.

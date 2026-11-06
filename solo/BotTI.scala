@@ -31,7 +31,7 @@ import hrf.colmat._
 //
 // Cross-faction decisions this file does NOT (and cannot) cover:
 //   TIBloodOfferingOfferAction/TIBloodOfferingDeclineAction and
-//   TIEntropySiphonPayAction are dispatched with `self = who`, i.e. to
+//   TIEntropySiphonAskAction are dispatched with `self = who`, i.e. to
 //   whichever ENEMY faction is being asked — the engine routes that faction's
 //   OWN bot (via CthulhuWarsSolo.scala's per-faction switch), never BotTI, so
 //   scoring them here would be dead code. Per the Guide's explicit call-out
