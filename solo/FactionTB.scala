@@ -1253,8 +1253,13 @@ object TBExpansion extends Expansion {
             self.satisfy(RemoveGatePlaceChthonianReq, "Remove a Gate, place a Chthonian")
             self.commands = self.commands.%!(_.isInstanceOf[TBRemoveGatePlan])
             self.plans = self.plans.%!(_.isInstanceOf[TBRemoveGatePlan])
-            // Not an action: clear acted flag so player returns to full action menu
-            self.acted = false
+            // 2026-11-07 creator clarification: this SBR is not designed to grant
+            // an extra turn immediately -- it gives back Power so TB has something
+            // to spend on its NEXT turn. Previously this cleared `acted` to reopen
+            // the full action menu right away, letting TB build a second Gate and
+            // pick a Spellbook in the same turn it had already acted in. Leave
+            // `acted` as it was so `then` routes back to the normal post-acted menu
+            // (or the normal pre-acted menu, if this fired before the main Action).
             then
 
         // ====================================================================
