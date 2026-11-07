@@ -36,6 +36,18 @@ import hrf.colmat._
 //      until Shudde M'ell has been awakened at least once -- a -1000 eval
 //      score is not an absolute block under BotX's lexicographic compare, and
 //      live play (Death for Rupture, game 946) proved it could still win.
+//  (10) 2026-11-07 (later same day): creator reversal of (9)'s order again --
+//      Psychic Shriek, not Subterrane, must be the very first Spellbook
+//      picked. New post-Mantle sequencing: while Shudde M'ell is unawakened
+//      and TB holds 10+ Power, spam Psychic Shriek (targeting an enemy with
+//      more than 4 Power) at top priority instead of awakening immediately;
+//      once Power drops to 9, awakening Shudde M'ell (already top priority
+//      below) takes over and the next Spellbook picked should be (only)
+//      Stalk. After Shudde M'ell is awakened, whenever TB is at 0 Power,
+//      Remove-Gate-Place-Chthonian (to bank 2 Power) becomes top priority,
+//      the next Spellbook picked should be (only) Subterrane, and that
+//      banked Power should go toward a Thousand Writhing Maws double
+//      Tentacle recruit.
 // ============================================================================
 object BotTB extends BotX(implicit g => new GameEvaluationTB)
 
@@ -83,22 +95,29 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
 
                 // Spellbook ability pick order. 2026-11-01 original: Stalk first
                 // (unlocks the early Tentacle-spread engine), Psychic Shriek second.
-                // 2026-11-07 creator reversal: Stalk should NOT be the first
-                // Spellbook picked. The first Spellbook earned -- associated with
-                // earning it from placing 2 Gates and placing the Mantle -- should
-                // be Subterrane instead. Subterrane's weight is raised above
-                // Stalk's flat weight so it wins as the very first pick (no
-                // Spellbooks earned yet, Mantle not necessarily placed), while
-                // still keeping its own "mantle placed" creator-priority bump on
-                // top for later picks.
+                // 2026-11-07 creator reversal: Subterrane should be the first
+                // Spellbook picked instead of Stalk. 2026-11-07 (later same day,
+                // see note (10) above): creator reversed this again -- Psychic
+                // Shriek, not Subterrane, must be the very first Spellbook picked.
+                // Two further exclusive-pick windows added: once the Mantle is
+                // placed but Shudde M'ell is not yet awakened (and TB is below the
+                // 10-Power Psychic-Shriek-spam threshold, see TBPsychicShriekMainAction
+                // below), Stalk should be the only Spellbook picked; once Shudde
+                // M'ell is awakened and TB is at exactly 0 Power (the Remove-Gate-
+                // Place-Chthonian banking moment, see TBRemoveGatePlaceChthonianPromptAction
+                // below), Subterrane should be the only Spellbook picked. Both windows
+                // out-rank every flat weight below so they are exclusive within their
+                // trigger condition.
                 case SpellbookAction(_, sb, _) => sb match {
-                    case Subterrane =>
-                        game.tbMantleInPlay |=> 2200 -> "pick subterrane (mantle placed, creator priority)"
-                        true |=> 1900 -> "pick subterrane first, creator priority 2026-11-07"
-                    case Stalk =>
-                        true |=> 1800 -> "pick stalk"
                     case PsychicShriek =>
-                        true |=> 1500 -> "pick psychic shriek"
+                        true |=> 1900 -> "pick psychic shriek first, creator priority 2026-11-07"
+                    case Stalk =>
+                        (game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && self.power < 10) |=> 2400 -> "pick stalk (only pick once mantle placed, pre-awaken, below shriek-spam threshold, creator priority 2026-11-07)"
+                        true |=> 1800 -> "pick stalk"
+                    case Subterrane =>
+                        (game.tbShuddeMellEverAwakened && self.power == 0) |=> 2500 -> "pick subterrane (only pick once shudde m'ell awakened and TB at 0 power, creator priority 2026-11-07)"
+                        game.tbMantleInPlay |=> 2200 -> "pick subterrane (mantle placed, creator priority)"
+                        true |=> 1000 -> "pick subterrane"
                     case Autotomy =>
                         true |=> 1200 -> "pick autotomy"
                     case Ensnare =>
@@ -191,6 +210,11 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case TBWrithingMawsMainAction(f) =>
                     true                                         |=> 600  -> "writhing maws double summon"
                 case TBWrithingMawsTypeAction(f, uc) =>
+                    // 2026-11-07 creator priority: the 2 Power just banked via Remove-
+                    // Gate-Place-Chthonian (at exactly 2 Power, post-awaken) should go
+                    // toward a Tentacle double-recruit, matching the Chthonian-swap ->
+                    // Subterrane -> Tentacle-recruit sequence requested.
+                    uc == Tentacle && game.tbShuddeMellEverAwakened && self.power == 2 |=> 1000 -> "maws tentacles (just banked 2 power via chthonian swap, creator priority 2026-11-07)"
                     uc == Cadavolyte && self.needs(OverlayMantleReq) |=> 950 -> "maws cadavolytes (creator: new opening, pair toward Overlay Mantle SBR)"
                     uc == Tentacle && self.needs(TenTentaclesReq)    |=> 900  -> "maws tentacles (toward 10-tentacle SBR)"
                     uc == Tentacle && self.all(Tentacle).num <= 8     |=> 850  -> "maws tentacles (creator: 8 or fewer tentacles)"
@@ -266,12 +290,19 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 200  -> "ensnare target commit"
 
                 // Psychic Shriek
+                // 2026-11-07 creator priority: after the Mantle is placed but before
+                // Shudde M'ell is awakened, while TB holds 10+ Power, spam Psychic
+                // Shriek against any enemy above 4 Power at the highest priority in
+                // the file (outranking even awakening Shudde M'ell) -- once Power
+                // drops to 9, this window closes and awakening takes back over.
                 case TBPsychicShriekMainAction(f) =>
+                    game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && self.power >= 10 && others.%(_.power > 4).any |=> 5500 -> "psychic shriek (mantle placed, pre-awaken, 10+ power, enemy over 4 power, creator priority 2026-11-07)"
                     allSB && others.%(_.power > 6).any           |=> 1700 -> "psychic shriek (all spellbooks earned, enemy power > 6, creator priority)"
                     true                                         |=> 500  -> "psychic shriek"
                 case TBPsychicShriekPickEnemyAction(f, _) =>
                     true                                         |=> 100  -> "pick shriek target"
-                case TBPsychicShriekTargetAction(f, _) =>
+                case TBPsychicShriekTargetAction(f, enemy) =>
+                    enemy.power > 4                              |=> 400  -> "shriek target: enemy over 4 power (creator priority 2026-11-07)"
                     true                                         |=> 200  -> "shriek target commit"
 
                 // SBR-1: Overlay the Mantle
@@ -323,6 +354,11 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // defense in depth in case any offer site is ever missed.
                 case TBRemoveGatePlaceChthonianPromptAction(f, _) =>
                     !game.tbShuddeMellEverAwakened                                                                      |=> -1000 -> "remove gate place chthonian deprioritized until Shudde M'ell awakened, creator priority"
+                    // 2026-11-07 creator priority: once Shudde M'ell is awakened, as
+                    // soon as TB hits exactly 0 Power, banking 2 Power via this ability
+                    // becomes the single highest priority in the file (it only ever
+                    // grants Power, never an extra turn, per the 2026-11-07 fix above).
+                    game.tbShuddeMellEverAwakened && self.power == 0                                                    |=> 6000 -> "remove gate place chthonian (0 power, banking toward subterrane/tentacles, creator priority 2026-11-07)"
                     game.tbShuddeMellEverAwakened && self.gates.num > 2                                                 |=> 400  -> "remove gate place chthonian"
                     game.tbShuddeMellEverAwakened && self.gates.exists(r => self.at(r, Cadavolyte).any && r.foes.any)   |=> 900  -> "remove gate place chthonian: cadavolyte-held gate under threat"
                 case TBRemoveGatePlaceChthonianPickGateAction(f, _) =>
