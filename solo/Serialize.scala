@@ -44,6 +44,14 @@ class Serialize(val game : Game) {
         case x : FBWritheKillEntry => "FBWritheKillEntry(" + x.productIterator.$./(write).mkString(", ") + ")"
         case x : FBWrithePainEntry => "FBWrithePainEntry(" + x.productIterator.$./(write).mkString(", ") + ")"
 
+        // Tcho-Tcho (TT) Sycophancy: the RoA-resume descriptor is carried as a field
+        // inside the recorded Sycophancy choice actions (give/lose Doom). Write it in
+        // call form (name + params) so the parser can rebuild it. Without this the
+        // catch-all below writes only the bare class name, dropping r/esBonus/es, and
+        // the reader throws "Unknown symbol: Syc...Resume". One case on the trait covers
+        // all three RoA paths: normal ritual, Requires Attention, and Hecatomb.
+        case x : SycophancyResume => className(x) + "(" + x.productIterator.$./(write).mkString(", ") + ")"
+
         case m : Map[_, _] => "Map(" + m.toList./({ case (k, v) => "Pair(" + write(k) + ", " + write(v) + ")" }).mkString(", ") + ")"
 
         case x => x.getClass.getSimpleName.stripSuffix("$")
@@ -217,6 +225,12 @@ class Serialize(val game : Game) {
         // with the handler doing Force(then). Map the old 3-param form to the new one with
         // then = MoveContinueAction(self, true), reproducing the original post-teleport behavior exactly.
         case EApply("CronophageTeleportAction", ps) if ps.num == 3 => CronophageTeleportAction(parseExpr(ps(0)).asInstanceOf[Faction], parseExpr(ps(1)).asInstanceOf[UnitRef], parseExpr(ps(2)).asInstanceOf[Region], MoveContinueAction(parseExpr(ps(0)).asInstanceOf[Faction], true))
+        // Tcho-Tcho (TT) Sycophancy RoA-resume descriptors — mirror the write cases above
+        // so the give/lose-Doom choice actions round-trip. These are Records (not Actions),
+        // so they need explicit parser cases like the FB helper records.
+        case EApply("SycRequiresAttentionResume", ps) => SycRequiresAttentionResume(parseExpr(ps(0)).asInstanceOf[Region], parseExpr(ps(1)).asInstanceOf[Int])
+        case EApply("SycRitualResume", ps) => SycRitualResume(parseExpr(ps(0)).asInstanceOf[Int])
+        case EApply("SycHecatombResume", ps) => SycHecatombResume(parseExpr(ps(0)).asInstanceOf[Int])
         case EApply(f, params) => params.none.?(parseSymbol(f).get).|(parseActionConstructor(f, params.num).|!("unknown class " + f).apply(params.map(parseExpr)))
     }
 
