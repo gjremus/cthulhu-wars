@@ -344,6 +344,23 @@ case class TIEntropySiphonAskAction(total : Int, offers : $[Offer], forum : $[Fa
     (n < 0).?("Refuse to negotiate").|((total == n + offers./(_.n).sum).?("Offer".styled("highlight")).|("Offer") + " " + (n > 0).?(n.styled("power") + (total == n + offers./(_.n).sum).?(" Power".styled("highlight")).|(" Power")).|((total == n + offers./(_.n).sum).?("0 Power".styled("highlight")).|("0 Power")))
 )
 
+// LEGACY REPLAY ONLY: the 2026-11-06 rebuild above (multi-round negotiation)
+// superseded this one-shot sequential-ask flow. Fresh play never produces these
+// action classes anymore, but old saved games recorded before the rebuild still
+// contain them, and replaying those histories crashed with an unhandled action
+// (found 2026-11-06 ~21:xx CST investigating an owner report that a Dread versus
+// Time game "broke" right after the rebuild deployed). Restoring these handlers
+// exactly as they worked pre-rebuild — same root-cause fix pattern already used
+// for Colour Out of Space's Effulgent Sacrifice legacy shim (FactionCS.scala) —
+// so old histories replay instead of crashing. Do not offer this flow from any
+// menu; only the new TIEntropySiphonAction negotiation is ever asked for going
+// forward.
+case class TIEntropySiphonAllocAction(queue : $[Faction], remaining : Int, then : ForcedAction) extends ForcedAction
+case class TIEntropySiphonPayAction(who : Faction, amount : Int, queue : $[Faction], remaining : Int, then : ForcedAction)
+    extends BaseFactionAction(
+        g => "Entropy Siphon: " + who + " loses " + amount + " Power",
+        implicit g => "Lose " + amount.power) { override def self = who }
+
 
 // ============================================================================
 // The Invasion (TI) EXPANSION — action dispatch, triggers, setup, main menu.
@@ -1105,6 +1122,36 @@ object TIExpansion extends Expansion {
                     e.log("lost", d.doom, "—", EntropySiphon.styled(TI), "(enemies left", total.power, "unpaid)")
                 }
             Force(then)
+
+        // LEGACY REPLAY ONLY handlers for TIEntropySiphonAllocAction/TIEntropySiphonPayAction
+        // — see the class-declarations comment above. Identical logic to the pre-2026-11-06
+        // one-shot sequential-ask flow; only reachable while replaying an old saved game.
+        case TIEntropySiphonAllocAction(queue, remaining, then) =>
+            if (queue.none || remaining <= 0) {
+                val doomLoss = (remaining + 3) / 4
+                if (doomLoss > 0)
+                    game.factions.but(TI).%(_.doom > TI.doom).foreach { e =>
+                        val d = doomLoss.min(e.doom)
+                        e.doom -= d
+                        e.log("lost", d.doom, "—", EntropySiphon.styled(TI), "(enemies left", remaining.power, "unpaid)")
+                    }
+                Force(then)
+            }
+            else {
+                val who = queue.head
+                val cap = who.power.min(remaining)
+                if (cap <= 0)
+                    Force(TIEntropySiphonAllocAction(queue.tail, remaining, then))   // auto-skip: no Power to give
+                else
+                    Ask(who).each((0 to cap).toList)(n => TIEntropySiphonPayAction(who, n, queue, remaining, then))
+            }
+
+        case TIEntropySiphonPayAction(who, amount, queue, remaining, then) =>
+            if (amount > 0) {
+                who.power -= amount
+                who.log("lost", amount.power, "toward", EntropySiphon.styled(TI))
+            }
+            Force(TIEntropySiphonAllocAction(queue.tail, remaining - amount, then))
 
         // ================================================================
         // INFERNOLATREIA (§1.10) — see the class-declarations comment above.
