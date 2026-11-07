@@ -5582,7 +5582,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     + SacrificeHighPriestPromptAction(f, PreMainAction(f)).as("Sacrifice", HighPriest.styled(f))("Unspeakable Oath".hl, reasons./("<br/>(" + _ + ")").mkString(""))
             }
 
-            if (f == TB && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any) {
+            // 2026-11-07: creator priority -- withheld until Shudde M'ell has been
+            // awakened at least once (see FactionTB.scala MainAction comments).
+            if (f == TB && game.tbShuddeMellEverAwakened && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any) {
                 var reasons = f.commands.has(TBRemoveGatePrompt).$("always prompted")
 
                 f.enemies.%(e => e.active || e.all(HighPriest).any).foreach { e =>
@@ -5718,7 +5720,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     }
                 }
 
-                if (f == TB && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any) {
+                if (f == TB && game.tbShuddeMellEverAwakened && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any) {
                     var reasons = f.commands.has(TBRemoveGatePrompt).$("always prompted")
 
                     if (f.commands.has(TBRemoveGateThreatOfCapture) && canAct)
@@ -6068,7 +6070,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     if (f.commands.has(ShamblerOpportunityEndOfPhase) || f.commands.has(ShamblerPrompt))
                         + ShamblerDeployPromptAction(f, CheckSpellbooksAction(EndPhasePromptsAction(next, l.but(f)))).as(DimensionalShamblerUnit.styled(f), "to Map")("End of Action Phase")
 
-                if (f == TB && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
+                if (f == TB && game.tbShuddeMellEverAwakened && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
                     if (f.commands.has(TBRemoveGateOpportunityEndOfPhase) || f.commands.has(TBRemoveGatePrompt))
                         + TBRemoveGatePlaceChthonianPromptAction(f, EndPhasePromptsAction(next, l.but(f))).as(RemoveGatePlaceChthonianReq.text.styled(TB))("End of Action Phase")
 

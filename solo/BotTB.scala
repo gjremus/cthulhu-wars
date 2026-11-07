@@ -14,7 +14,8 @@ import hrf.colmat._
 //  (6) 2026-11-01: creator-specified early-game Tentacle-rush weighting (10-
 //      Tentacle SBR-2, Thousand Writhing Maws type/placement, Setup glyph
 //      priority, Stalk tentacle-spread, and a Spellbook pick order -- Stalk
-//      first, Psychic Shriek second) -- see TB Current Tasks doc.
+//      first, Psychic Shriek second) -- see TB Current Tasks doc. SUPERSEDED
+//      by (9) below: the first Spellbook pick is now Subterrane, not Stalk.
 //  (7) 2026-11-02: creator-specified late-game sequencing from the same
 //      instructions -- Subterrane pick once the Mantle is placed, Ensnare
 //      pick once Shudde M'ell is awakened, moving Head/Segments onto the
@@ -28,6 +29,13 @@ import hrf.colmat._
 //      (non-aggressive) score now stays deprioritized until 4 Spellbooks are
 //      earned (was only until Overlay the Mantle, 1 Spellbook), so it can no
 //      longer compete with the early-game opening in the 1-3 Spellbook window.
+//  (9) 2026-11-07: creator reversal of (6)'s Spellbook order -- Subterrane
+//      must be the first Spellbook picked (it's earned from placing 2 Gates
+//      and placing the Mantle), not Stalk. Also: Remove-Gate-Place-Chthonian
+//      (SBR-3) is now withheld from TB's menu entirely (not just deprioritized)
+//      until Shudde M'ell has been awakened at least once -- a -1000 eval
+//      score is not an absolute block under BotX's lexicographic compare, and
+//      live play (Death for Rupture, game 946) proved it could still win.
 // ============================================================================
 object BotTB extends BotX(implicit g => new GameEvaluationTB)
 
@@ -73,14 +81,22 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case PlayDirectionAction(_, order) =>
                     (order == game.factions)                     |=> 20   -> "natural order"
 
-                // Spellbook ability pick order (creator-specified 2026-11-01): Stalk
-                // first (unlocks the early Tentacle-spread engine), Psychic Shriek
-                // second (named explicitly for the SBR-3 Remove-Gate-Place-Chthonian
-                // follow-up), then the rest in a sensible default order; Subterrane
-                // and Grasp are the most situational so they rank lowest.
+                // Spellbook ability pick order. 2026-11-01 original: Stalk first
+                // (unlocks the early Tentacle-spread engine), Psychic Shriek second.
+                // 2026-11-07 creator reversal: Stalk should NOT be the first
+                // Spellbook picked. The first Spellbook earned -- associated with
+                // earning it from placing 2 Gates and placing the Mantle -- should
+                // be Subterrane instead. Subterrane's weight is raised above
+                // Stalk's flat weight so it wins as the very first pick (no
+                // Spellbooks earned yet, Mantle not necessarily placed), while
+                // still keeping its own "mantle placed" creator-priority bump on
+                // top for later picks.
                 case SpellbookAction(_, sb, _) => sb match {
+                    case Subterrane =>
+                        game.tbMantleInPlay |=> 2200 -> "pick subterrane (mantle placed, creator priority)"
+                        true |=> 1900 -> "pick subterrane first, creator priority 2026-11-07"
                     case Stalk =>
-                        true |=> 1800 -> "pick stalk first"
+                        true |=> 1800 -> "pick stalk"
                     case PsychicShriek =>
                         true |=> 1500 -> "pick psychic shriek"
                     case Autotomy =>
@@ -88,9 +104,6 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     case Ensnare =>
                         game.tbShuddeMellEverAwakened |=> 2000 -> "pick ensnare (shudde m'ell awakened, creator priority)"
                         true |=> 900  -> "pick ensnare"
-                    case Subterrane =>
-                        game.tbMantleInPlay |=> 2200 -> "pick subterrane (mantle placed, creator priority)"
-                        true |=> 600  -> "pick subterrane"
                     case Grasp =>
                         !self.needs(ShuddeMellInThreeGlyphsReq) |=> 2100 -> "pick grasp (three-glyphs SBR fulfilled, creator priority)"
                         true |=> 300  -> "pick grasp"
@@ -296,13 +309,18 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // SBR-3: Remove Gate, Place Chthonian (end-of-Action-Phase prompt).
                 // Creator-specified priority (2026-11-01): trigger this strongly when
                 // an enemy threatens a Cadavolyte guarding one of TB's own Gates.
-                // 2026-11-06: creator priority -- deprioritized to -1000 (this file's
-                // standard "almost never" idiom, same as the Three-Glyphs fix below)
-                // until Shudde M'ell is awakened. Removing one of TB's own Gates before
-                // then risked breaking the 2-adjacent-Gates precondition Overlay-the-
-                // Mantle still needed, costing TB that Spellbook Requirement entirely.
-                // The -1000 case is exclusive of the normal scoring below so no old
-                // positive weight is left active underneath it (the v2.528 mistake).
+                // 2026-11-06: creator priority -- deprioritized to -1000 until Shudde
+                // M'ell is awakened, so as not to break the 2-adjacent-Gates
+                // precondition Overlay-the-Mantle still needed.
+                // 2026-11-07: a -1000 eval score is not an absolute block under
+                // BotX's lexicographic compare -- EndTurnAction (scored ~0) could
+                // still lose to it if no OTHER candidate scored closer to 0, which is
+                // exactly what happened live (Death for Rupture, game 946). The real
+                // fix is withholding this action from the menu entirely before Shudde
+                // M'ell is awakened (see the game.tbShuddeMellEverAwakened guards
+                // added at every offer site in FactionTB.scala / Game.scala). The
+                // -1000 case below is now unreachable in that window but is kept as
+                // defense in depth in case any offer site is ever missed.
                 case TBRemoveGatePlaceChthonianPromptAction(f, _) =>
                     !game.tbShuddeMellEverAwakened                                                                      |=> -1000 -> "remove gate place chthonian deprioritized until Shudde M'ell awakened, creator priority"
                     game.tbShuddeMellEverAwakened && self.gates.num > 2                                                 |=> 400  -> "remove gate place chthonian"
