@@ -770,7 +770,21 @@ object TBExpansion extends Expansion {
             u.onGate = false
             self.log(Stalk.styled(TB) + ": relocated", u.uclass.styled(TB), "from", from, "to", dest)
             game.checkGatesGained(self)
-            EndAction(mover)
+
+            // TB: immediately trigger Mantle overlay if 2 adjacent gates now exist
+            val mantleReady =
+                if (self == TB && TB.needs(OverlayMantleReq) && !game.tbMantleInPlay) {
+                    val ownGates = TB.gates
+                    val adjacentPairs = ownGates./~(r1 =>
+                        ownGates.%(r2 => r1 != r2 && game.board.connected(r1).has(r2))./(r2 => (r1, r2)))
+                        .map { case (a, b) => if (a.hashCode <= b.hashCode) (a, b) else (b, a) }.distinct
+                    adjacentPairs.any
+                } else false
+
+            if (mantleReady)
+                Force(TBOverlayMantleMainAction(TB))
+            else
+                EndAction(mover)
 
         // ====================================================================
         // AUTOTOMY: Pre-Kill-Assignment Kill transfer (§3.10.2)
