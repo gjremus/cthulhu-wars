@@ -332,7 +332,8 @@ object FBEExpansion extends Expansion {
     override def eliminate(u : UnitFigure)(implicit game : Game) {
         if (!game.setup.has(FBE)) return
         if (game.fbeHPSacrificeInProgress) return
-        if (!game.fbeActionInProgress) return
+        // Self Consuming triggers on any unit death during an Action, not just FBE actions.
+        // External eliminations (e.g., via Defiler's Court Satiate) count toward the ability.
         // A Shapestolen Monster is FBE-controlled for this Combat (battle-scoped
         // control), so if it dies here it counts toward FBE's 3+ Doom clause
         // (user requirement: killing the stolen unit works for Self Consuming doom).

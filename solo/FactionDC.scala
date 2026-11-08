@@ -1144,7 +1144,9 @@ object DCExpansion extends Expansion {
                 self.log(Satiate.styled(DC) + ": no Elder Sign because no captures beyond the first")
             // HB Fix SC-Satiate: multi-capture procs Self Consuming. Each captured
             // cultist counts as a unit removed for Self Consuming purposes (not FBE-controlled).
-            if (game.setup.has(FBE) && game.fbeActionInProgress && capturedSoFar > 0)
+            // Self Consuming triggers on ANY unit elimination, so we record them even when
+            // DC (not FBE) is performing the action.
+            if (game.setup.has(FBE) && capturedSoFar > 0)
                 (1 to capturedSoFar).foreach(_ => game.fbeSelfConsumingDeaths :+= (area, None))
             EndAction(self)
 
