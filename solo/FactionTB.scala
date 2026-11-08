@@ -551,7 +551,10 @@ object TBExpansion extends Expansion {
             // so EndTurnAction (scored ~0) was still losing to it. Filtering the
             // action out of the menu before evaluation, same pattern as the
             // BotGateLockout fix in BotX.scala, makes this a real block.
-            if (game.tbShuddeMellEverAwakened && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
+            // 2026-11-08: creator priority -- also withheld unless at least one
+            // Segment is in play (on the Mantle via Behemoth), not just withheld
+            // until Shudde M'ell is awakened.
+            if (game.tbShuddeMellEverAwakened && f.all(ShuddeMellSegment).any && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
                 + TBRemoveGatePlaceChthonianMainAction(f)
 
             game.reveals(f)
@@ -621,7 +624,9 @@ object TBExpansion extends Expansion {
             // SBR-3: Remove a Gate, place a Chthonian (Unlimited, 0-Cost, anytime during turn like GC Devolve)
             // 2026-11-07: creator priority -- withheld from the menu until Shudde
             // M'ell has been awakened at least once. See matching comment above.
-            if (game.tbShuddeMellEverAwakened && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
+            // 2026-11-08: creator priority -- also withheld unless at least one
+            // Segment is in play. See matching comment above.
+            if (game.tbShuddeMellEverAwakened && f.all(ShuddeMellSegment).any && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
                 + TBRemoveGatePlaceChthonianMainAction(f)
 
             // SBR-4: Gates at every GOO Area (Action, pay 8 Power)

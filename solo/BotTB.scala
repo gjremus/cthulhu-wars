@@ -180,6 +180,13 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     u.cultist && to.freeGate                     |=> 1600 -> "cultist to free gate"
                     u.cultist && to.ownGate                      |=> 200  -> "cultist to own gate"
                     u.monster && to.foes.any && self.power > 3   |=> 500  -> "chthonian toward enemies"
+                    // 2026-11-08 creator priority: once Shudde M'ell is awakened and TB
+                    // is down to 1 Power, if TB still controls a Gate on the main map
+                    // (not the Mantle), move the Head there to protect it. Outranks
+                    // every other Move option so it is not overridden by 2026-11-07's
+                    // "shudde mell toward enemies" line below.
+                    u.is(ShuddeMellHead) && game.tbShuddeMellEverAwakened && self.power == 1 &&
+                        self.gates.has(to) && to != TB.mantle    |=> 3000 -> "move shudde m'ell to protect own gate (1 power after awaken, creator priority 2026-11-08)"
                     u.goo && to.foes.any                         |=> 700  -> "shudde mell toward enemies"
                     (u.goo || u.is(ShuddeMellSegment)) && numSB < 5 &&
                         (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> -1000 -> "move part to glyph area (three-glyphs SBR deprioritized below 5 spellbooks, creator priority)"
@@ -237,7 +244,11 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // Gate-Place-Chthonian (at exactly 2 Power, post-awaken) should go
                     // toward a Tentacle double-recruit, matching the Chthonian-swap ->
                     // Subterrane -> Tentacle-recruit sequence requested.
-                    uc == Tentacle && game.tbShuddeMellEverAwakened && self.power == 2 |=> 1000 -> "maws tentacles (just banked 2 power via chthonian swap, creator priority 2026-11-07)"
+                    // 2026-11-08: creator widened this -- post-awaken, Tentacles should
+                    // outrank Cadavolytes for ANY remaining Power (not just exactly the
+                    // 2 Power just banked), per "with gained 2 power, or remaining power,
+                    // thousand writhing maws recruit tentacles > cadavolytes".
+                    uc == Tentacle && game.tbShuddeMellEverAwakened && self.power >= 2  |=> 1000 -> "maws tentacles (post-awaken, any remaining power, creator priority 2026-11-08)"
                     uc == Cadavolyte && self.needs(OverlayMantleReq) |=> 950 -> "maws cadavolytes (creator: new opening, pair toward Overlay Mantle SBR)"
                     uc == Tentacle && self.needs(TenTentaclesReq)    |=> 900  -> "maws tentacles (toward 10-tentacle SBR)"
                     uc == Tentacle && self.all(Tentacle).num <= 8     |=> 850  -> "maws tentacles (creator: 8 or fewer tentacles)"
