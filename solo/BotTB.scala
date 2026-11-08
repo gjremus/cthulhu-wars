@@ -109,8 +109,18 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // out-rank every flat weight below so they are exclusive within their
                 // trigger condition.
                 case SpellbookAction(_, sb, _) => sb match {
+                    // 2026-11-07 fix: the very first Spellbook decision offers all 6
+                    // unclaimed library books at once, and Stalk's conditional 2400
+                    // (mantle just placed, pre-awaken, below the shriek-spam threshold)
+                    // was scoring above this flat 1900 -- so the bot kept picking Stalk
+                    // first exactly as the creator reported (live in "Gate for Time").
+                    // 2600 safely exceeds every other book's ceiling (Stalk's 2400,
+                    // Subterrane's 2500) only on the first pick; PsychicShriek is
+                    // removed from the offered set as soon as it's chosen, so this
+                    // branch only ever applies once.
                     case PsychicShriek =>
-                        true |=> 1900 -> "pick psychic shriek first, creator priority 2026-11-07"
+                        self.spellbooks.num == 0 |=> 2600 -> "pick psychic shriek first (guaranteed first pick, creator priority 2026-11-07)"
+                        true |=> 1900 -> "pick psychic shriek"
                     case Stalk =>
                         (game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && self.power < 10) |=> 2400 -> "pick stalk (only pick once mantle placed, pre-awaken, below shriek-spam threshold, creator priority 2026-11-07)"
                         true |=> 1800 -> "pick stalk"
@@ -365,10 +375,16 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 100  -> "pick gate to remove"
                 case TBRemoveGatePlaceChthonianGateAction(f, _, _) =>
                     true                                         |=> 100  -> "gate removal commit"
+                // 2026-11-07 fix: destination choice had no preference at all, so the
+                // bot placed the freed Chthonian anywhere TB had a unit (e.g. an empty
+                // overseas Area) instead of on TB's own remaining Gate, leaving that
+                // Gate undefended -- matching the creator's "Gate for Time" report.
                 case TBRemoveGatePlaceChthonianPickAreaAction(f, _, _) =>
                     true                                         |=> 100  -> "pick chthonian placement"
-                case TBRemoveGatePlaceChthonianAreaAction(f, _, _, _) =>
-                    true                                         |=> 200  -> "chthonian placement commit"
+                case TBRemoveGatePlaceChthonianAreaAction(f, removedGate, dest, _) =>
+                    self.gates.has(dest) && dest != removedGate && dest.foes.any |=> 700  -> "chthonian placement: own gate under threat, creator priority 2026-11-07"
+                    self.gates.has(dest) && dest != removedGate                   |=> 500  -> "chthonian placement: own gate, creator priority 2026-11-07"
+                    true                                                          |=> 200  -> "chthonian placement commit"
 
                 // SBR-4: Gates at every GOO Area
                 case TBGatesAtGOOsMainAction(f) =>
