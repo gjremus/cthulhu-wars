@@ -313,26 +313,25 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 200  -> "ensnare target commit"
 
                 // Psychic Shriek
-                // 2026-11-08 creator priority (game "Torment through Tentacles"):
-                // after the Mantle is placed but before Shudde M'ell is awakened,
-                // spam Psychic Shriek against any enemy above 3 Power at the
-                // highest priority in the file (outranking even awakening Shudde
-                // M'ell), with NO requirement on TB's own Power. Removed the prior
-                // "TB holds more than 9 Power" self-gate (2026-11-07) -- in this
-                // game TB's own Power never climbed above 9 pre-awaken, so Shriek
-                // could never fire at all and the bot awakened immediately instead,
-                // exactly as reported. Shriek naturally stops once no enemy remains
-                // above 3 Power (or all have already been targeted this phase via
-                // tbShriekTargetedThisPhase), at which point Awaken (5000) takes
-                // back over. Target preference for Yellow Sign and Crawling Chaos
-                // over GC when more than one enemy qualifies is unchanged.
+                // 2026-11-08 (2nd fix same day): root cause found. TBPsychicShriekMainAction
+                // is `Soft`, and BotX.askE scores only Explode.explode's output, which drops
+                // every Soft action before eval() ever runs -- so the 5500/1700 priority
+                // weights on the MainAction case below were dead code, never once compared
+                // against AwakenAction's 5000. The actual leaf action that survives
+                // explosion and competes against Awaken is TBPsychicShriekTargetAction, so
+                // the creator's priority (mantle placed, pre-awaken, enemy over 3 power,
+                // outranks even awakening Shudde M'ell) has to live there instead. Confirmed
+                // via browser console trace capture on game "Continuum and Colour" (rowId
+                // 963): turn=2, f.power=10, enemy Great Cthulhu at power=10 (>3), yet the
+                // bot still awakened -- exactly consistent with the dead-code diagnosis.
                 case TBPsychicShriekMainAction(f) =>
-                    game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && others.%(_.power > 3).any |=> 5500 -> "psychic shriek (mantle placed, pre-awaken, enemy over 3 power, creator priority 2026-11-08)"
-                    allSB && others.%(_.power > 6).any           |=> 1700 -> "psychic shriek (all spellbooks earned, enemy power > 6, creator priority)"
                     true                                         |=> 500  -> "psychic shriek"
                 case TBPsychicShriekPickEnemyAction(f, _) =>
                     true                                         |=> 100  -> "pick shriek target"
                 case TBPsychicShriekTargetAction(f, enemy) =>
+                    game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && enemy.power > 3 && (enemy == YS || enemy == CC) |=> 5550 -> "shriek target: mantle placed, pre-awaken, enemy over 3 power, preferred faction YS/CC (creator priority 2026-11-08)"
+                    game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && enemy.power > 3 |=> 5500 -> "shriek target: mantle placed, pre-awaken, enemy over 3 power (creator priority 2026-11-08)"
+                    allSB && enemy.power > 6                     |=> 1700 -> "shriek target: all spellbooks earned, enemy power > 6 (creator priority)"
                     enemy.power > 3 && (enemy == YS || enemy == CC) |=> 450 -> "shriek target: enemy over 3 power, preferred faction YS/CC (creator priority 2026-11-07)"
                     enemy.power > 3                              |=> 400  -> "shriek target: enemy over 3 power (creator priority 2026-11-07)"
                     true                                         |=> 200  -> "shriek target commit"

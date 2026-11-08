@@ -611,40 +611,11 @@ object TBExpansion extends Expansion {
             }
 
             // Psychic Shriek (§1.10 SB6): Action Cost 1, requires Mantle in play
-            // 2026-11-08 trace widened: the prior trace only printed on the two
-            // "withheld" branches, and neither fired for the "Continuum and
-            // Colour" / "Break in Shift" reproductions (creator report, same
-            // day) even though the bot still skipped straight to Awaken without
-            // ever casting Shriek -- meaning the menu offer itself is not the
-            // gap. Printing unconditionally on every TB MainAction while the
-            // Mantle is in play, whether or not Shriek is offered, to capture
-            // the exact power/can/enemy state at the moment the bot chooses
-            // between Shriek and Awaken.
-            if (game.tbMantleInPlay) {
-                val validEnemies = game.factions.but(f).%(e =>
-                    !game.tbShriekTargetedThisPhase.has(e) && e.allInPlay.any && !e.hibernating)
-                println("[TB-TRACE2] turn=" + game.turn + " f.power=" + f.power +
-                    " can(Shriek)=" + f.can(PsychicShriek) + " has=" + f.has(PsychicShriek) +
-                    " used=" + f.used(PsychicShriek) + " offeredShriek=" +
-                    (f.can(PsychicShriek) && f.power >= 1 && validEnemies.any) +
-                    " everAwakened=" + game.tbShuddeMellEverAwakened +
-                    " enemies=" + game.factions.but(f)./(e => e + ":pow=" + e.power +
-                        ":targetedThisPhase=" + game.tbShriekTargetedThisPhase.has(e) +
-                        ":allInPlay=" + e.allInPlay.any + ":hibernating=" + e.hibernating).mkString(","))
-            }
             if (f.can(PsychicShriek) && f.power >= 1 && game.tbMantleInPlay) {
                 val validEnemies = game.factions.but(f).%(e =>
                     !game.tbShriekTargetedThisPhase.has(e) && e.allInPlay.any && !e.hibernating)
                 if (validEnemies.any)
                     + TBPsychicShriekMainAction(f)
-                else
-                    println("[TB-TRACE] Shriek menu withheld turn=" + game.turn + " f.power=" + f.power +
-                        " enemies=" + game.factions.but(f)./(e => e + ":pow=" + e.power +
-                            ":targetedThisPhase=" + game.tbShriekTargetedThisPhase.has(e) +
-                            ":allInPlay=" + e.allInPlay.any + ":hibernating=" + e.hibernating).mkString(","))
-            } else if (f.power >= 1 && game.tbMantleInPlay) {
-                println("[TB-TRACE] Shriek menu withheld (can=false) turn=" + game.turn +
-                    " has=" + f.has(PsychicShriek) + " used=" + f.used(PsychicShriek))
             }
 
             // SBR-3: Remove a Gate, place a Chthonian (Unlimited, 0-Cost, anytime during turn like GC Devolve)
