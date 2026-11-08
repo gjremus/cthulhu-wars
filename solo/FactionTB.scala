@@ -616,6 +616,14 @@ object TBExpansion extends Expansion {
                     !game.tbShriekTargetedThisPhase.has(e) && e.allInPlay.any && !e.hibernating)
                 if (validEnemies.any)
                     + TBPsychicShriekMainAction(f)
+                else
+                    println("[TB-TRACE] Shriek menu withheld turn=" + game.turn + " f.power=" + f.power +
+                        " enemies=" + game.factions.but(f)./(e => e + ":pow=" + e.power +
+                            ":targetedThisPhase=" + game.tbShriekTargetedThisPhase.has(e) +
+                            ":allInPlay=" + e.allInPlay.any + ":hibernating=" + e.hibernating).mkString(","))
+            } else if (f.power >= 1 && game.tbMantleInPlay) {
+                println("[TB-TRACE] Shriek menu withheld (can=false) turn=" + game.turn +
+                    " has=" + f.has(PsychicShriek) + " used=" + f.used(PsychicShriek))
             }
 
             // SBR-3: Remove a Gate, place a Chthonian (Unlimited, 0-Cost, anytime during turn like GC Devolve)
