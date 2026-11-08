@@ -48,6 +48,22 @@ import hrf.colmat._
 //      the next Spellbook picked should be (only) Subterrane, and that
 //      banked Power should go toward a Thousand Writhing Maws double
 //      Tentacle recruit.
+//  (11) 2026-11-08: creator report (game "Torment through Tentacles") --
+//      sequencing from (10) still didn't fire correctly. Two bugs found:
+//      (a) the Psychic Shriek window's own "TB holds 10+ Power" gate meant
+//      it could never fire in a game where TB's power never climbed above
+//      9 pre-awaken (confirmed: it never fired this game at all) -- removed
+//      that self-power requirement, matching the creator's latest wording
+//      ("as soon as action phase 2 starts... a faction who has more than 3
+//      power", no TB-side power threshold). (b) Stalk's and Subterrane's
+//      pick-order bonuses were keyed on live game state (Mantle/Awakened/
+//      Power) that both become simultaneously true right after Awaken
+//      (TB's Power often lands at exactly 0 the instant Awaken's 8-Power
+//      cost is paid), so Subterrane's bonus could fire ahead of Stalk's
+//      intended second-pick slot -- reworked both to key on
+//      self.spellbooks.num (the count of Spellbooks already picked) so
+//      Stalk is unambiguously the 2nd pick and Subterrane the 3rd,
+//      independent of the Power/Awaken race.
 // ============================================================================
 object BotTB extends BotX(implicit g => new GameEvaluationTB)
 
@@ -93,21 +109,18 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case PlayDirectionAction(_, order) =>
                     (order == game.factions)                     |=> 20   -> "natural order"
 
-                // Spellbook ability pick order. 2026-11-01 original: Stalk first
-                // (unlocks the early Tentacle-spread engine), Psychic Shriek second.
-                // 2026-11-07 creator reversal: Subterrane should be the first
-                // Spellbook picked instead of Stalk. 2026-11-07 (later same day,
-                // see note (10) above): creator reversed this again -- Psychic
-                // Shriek, not Subterrane, must be the very first Spellbook picked.
-                // Two further exclusive-pick windows added: once the Mantle is
-                // placed but Shudde M'ell is not yet awakened (and TB is below the
-                // 10-Power Psychic-Shriek-spam threshold, see TBPsychicShriekMainAction
-                // below), Stalk should be the only Spellbook picked; once Shudde
-                // M'ell is awakened and TB is at exactly 0 Power (the Remove-Gate-
-                // Place-Chthonian banking moment, see TBRemoveGatePlaceChthonianPromptAction
-                // below), Subterrane should be the only Spellbook picked. Both windows
-                // out-rank every flat weight below so they are exclusive within their
-                // trigger condition.
+                // Spellbook ability pick order: Psychic Shriek 1st, Stalk 2nd,
+                // Subterrane 3rd (see note (10)/(11) above for history). 2026-11-08
+                // fix: Stalk's and Subterrane's exclusive-pick bonuses used to key on
+                // live game state (Mantle placed / Shudde M'ell awakened / Power == 0)
+                // instead of pick order directly -- but Awaken can make all three of
+                // those conditions flip true in the same instant (Power often lands at
+                // exactly 0 right when Awaken's 8-Power cost is paid), so Subterrane's
+                // bonus could outscore Stalk's intended 2nd-pick slot. Now both key on
+                // self.spellbooks.num (how many Spellbooks already picked) instead,
+                // which is unambiguous and independent of the Power/Awaken race. Both
+                // windows out-rank every flat weight below so they are exclusive
+                // within their trigger condition.
                 case SpellbookAction(_, sb, _) => sb match {
                     // 2026-11-07 fix: the very first Spellbook decision offers all 6
                     // unclaimed library books at once, and Stalk's conditional 2400
@@ -122,10 +135,10 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                         self.spellbooks.num == 0 |=> 2600 -> "pick psychic shriek first (guaranteed first pick, creator priority 2026-11-07)"
                         true |=> 1900 -> "pick psychic shriek"
                     case Stalk =>
-                        (game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && self.power < 10) |=> 2400 -> "pick stalk (only pick once mantle placed, pre-awaken, below shriek-spam threshold, creator priority 2026-11-07)"
+                        (game.tbMantleInPlay && self.spellbooks.num == 1) |=> 2400 -> "pick stalk (second spellbook pick, right after psychic shriek, creator priority 2026-11-08)"
                         true |=> 1800 -> "pick stalk"
                     case Subterrane =>
-                        (game.tbShuddeMellEverAwakened && self.power == 0) |=> 2500 -> "pick subterrane (only pick once shudde m'ell awakened and TB at 0 power, creator priority 2026-11-07)"
+                        (self.spellbooks.num >= 2 && game.tbShuddeMellEverAwakened && self.power == 0) |=> 2500 -> "pick subterrane (third spellbook pick, 0 power after remove-gate-place-chthonian banking, creator priority 2026-11-08)"
                         game.tbMantleInPlay |=> 2200 -> "pick subterrane (mantle placed, creator priority)"
                         true |=> 1000 -> "pick subterrane"
                     case Autotomy =>
@@ -300,19 +313,21 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 200  -> "ensnare target commit"
 
                 // Psychic Shriek
-                // 2026-11-07 creator priority: after the Mantle is placed but before
-                // Shudde M'ell is awakened, while TB holds more than 9 Power, spam
-                // Psychic Shriek against any enemy above 3 Power at the highest
-                // priority in the file (outranking even awakening Shudde M'ell) --
-                // once Power drops to 9, this window closes and awakening takes back
-                // over. Lowered from "above 4 Power" (same day, later report, game
-                // "Horror in Existence") -- the bot had 12 Power pre-awaken but no
-                // enemy exceeded the old >4 threshold at that moment, so it fell
-                // through to awakening instead of shrieking. Also added a target
-                // preference for Yellow Sign and Crawling Chaos over GC when more
-                // than one enemy qualifies.
+                // 2026-11-08 creator priority (game "Torment through Tentacles"):
+                // after the Mantle is placed but before Shudde M'ell is awakened,
+                // spam Psychic Shriek against any enemy above 3 Power at the
+                // highest priority in the file (outranking even awakening Shudde
+                // M'ell), with NO requirement on TB's own Power. Removed the prior
+                // "TB holds more than 9 Power" self-gate (2026-11-07) -- in this
+                // game TB's own Power never climbed above 9 pre-awaken, so Shriek
+                // could never fire at all and the bot awakened immediately instead,
+                // exactly as reported. Shriek naturally stops once no enemy remains
+                // above 3 Power (or all have already been targeted this phase via
+                // tbShriekTargetedThisPhase), at which point Awaken (5000) takes
+                // back over. Target preference for Yellow Sign and Crawling Chaos
+                // over GC when more than one enemy qualifies is unchanged.
                 case TBPsychicShriekMainAction(f) =>
-                    game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && self.power > 9 && others.%(_.power > 3).any |=> 5500 -> "psychic shriek (mantle placed, pre-awaken, over 9 power, enemy over 3 power, creator priority 2026-11-07)"
+                    game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && others.%(_.power > 3).any |=> 5500 -> "psychic shriek (mantle placed, pre-awaken, enemy over 3 power, creator priority 2026-11-08)"
                     allSB && others.%(_.power > 6).any           |=> 1700 -> "psychic shriek (all spellbooks earned, enemy power > 6, creator priority)"
                     true                                         |=> 500  -> "psychic shriek"
                 case TBPsychicShriekPickEnemyAction(f, _) =>
