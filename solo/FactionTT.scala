@@ -859,7 +859,8 @@ object TTExpansion extends Expansion {
                 f.place(HighPriest, r)
                 f.log(Hierophants.styled(TT), ": placed", HighPriest.styled(f), "at", r)
             }
-            val remaining = game.factions.but(TT).%(_.pool(HighPriest).any).dropWhile(_ != f).drop(1)
+            // Order first, then filter: f may have just placed its last HP and dropped out of a filtered list.
+            val remaining = game.factions.but(TT).dropWhile(_ != f).drop(1).%(_.pool(HighPriest).any)
             Force(TTHierophantsOtherFactionsAction(self, remaining, next))
 
         // DOOM PHASE END: reset Dark Rituals face-up and Hell's Banquet sentinel
