@@ -301,18 +301,25 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
 
                 // Psychic Shriek
                 // 2026-11-07 creator priority: after the Mantle is placed but before
-                // Shudde M'ell is awakened, while TB holds 10+ Power, spam Psychic
-                // Shriek against any enemy above 4 Power at the highest priority in
-                // the file (outranking even awakening Shudde M'ell) -- once Power
-                // drops to 9, this window closes and awakening takes back over.
+                // Shudde M'ell is awakened, while TB holds more than 9 Power, spam
+                // Psychic Shriek against any enemy above 3 Power at the highest
+                // priority in the file (outranking even awakening Shudde M'ell) --
+                // once Power drops to 9, this window closes and awakening takes back
+                // over. Lowered from "above 4 Power" (same day, later report, game
+                // "Horror in Existence") -- the bot had 12 Power pre-awaken but no
+                // enemy exceeded the old >4 threshold at that moment, so it fell
+                // through to awakening instead of shrieking. Also added a target
+                // preference for Yellow Sign and Crawling Chaos over GC when more
+                // than one enemy qualifies.
                 case TBPsychicShriekMainAction(f) =>
-                    game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && self.power >= 10 && others.%(_.power > 4).any |=> 5500 -> "psychic shriek (mantle placed, pre-awaken, 10+ power, enemy over 4 power, creator priority 2026-11-07)"
+                    game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && self.power > 9 && others.%(_.power > 3).any |=> 5500 -> "psychic shriek (mantle placed, pre-awaken, over 9 power, enemy over 3 power, creator priority 2026-11-07)"
                     allSB && others.%(_.power > 6).any           |=> 1700 -> "psychic shriek (all spellbooks earned, enemy power > 6, creator priority)"
                     true                                         |=> 500  -> "psychic shriek"
                 case TBPsychicShriekPickEnemyAction(f, _) =>
                     true                                         |=> 100  -> "pick shriek target"
                 case TBPsychicShriekTargetAction(f, enemy) =>
-                    enemy.power > 4                              |=> 400  -> "shriek target: enemy over 4 power (creator priority 2026-11-07)"
+                    enemy.power > 3 && (enemy == YS || enemy == CC) |=> 450 -> "shriek target: enemy over 3 power, preferred faction YS/CC (creator priority 2026-11-07)"
+                    enemy.power > 3                              |=> 400  -> "shriek target: enemy over 3 power (creator priority 2026-11-07)"
                     true                                         |=> 200  -> "shriek target commit"
 
                 // SBR-1: Overlay the Mantle
