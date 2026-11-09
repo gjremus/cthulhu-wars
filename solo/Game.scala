@@ -2146,6 +2146,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var tbShriekTargetedThisPhase : $[Faction] = $
     var tbSBR4Gates : $[Region] = $
     var tbAutotomyPendingSegments : Boolean = false
+    // One-shot latch (§3.6.3 / §3.12.3): set when the Remove-Gate-Place-Chthonian
+    // SBR banks its 2 Power without clearing f.acted, so that Power's one-time
+    // shot at reaching Thousand Writhing Maws in the post-Action menu can be
+    // told apart from TB's ordinary leftover Power sitting in that same menu.
+    // Cleared as soon as that menu is shown once, win or lose.
+    var tbChthonianSwapPending : Boolean = false
     // Behemoth edge-trigger latch (§3.4.3). Behemoth places a Segment WHENEVER
     // TB's Power reaches 0, so it must fire once per 0-crossing — not once per
     // action while TB happens to be sitting at 0. Set when a Segment is placed

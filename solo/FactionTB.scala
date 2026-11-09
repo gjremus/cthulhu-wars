@@ -513,6 +513,7 @@ object TBExpansion extends Expansion {
             game.tbEnsnareTargetedThisPhase = $
             game.tbShriekTargetedThisPhase = $
             game.tbAutotomyPendingSegments = false
+            game.tbChthonianSwapPending = false
             UnknownContinue
 
         // ====================================================================
@@ -536,10 +537,20 @@ object TBExpansion extends Expansion {
             // double recruit mid-turn. Without this offer here, that Power had no way
             // to reach Thousand Writhing Maws on the same turn, so the bot fell
             // through to EndTurnAction and only got another chance to recruit via
-            // normal moves on a later turn (creator-reported recurrence, curse against
-            // blindness, 2026-11-09).
-            if (f.power >= 2 && tbMawsEligibleTypes(f).any)
-                + TBWrithingMawsMainAction(f)
+            // normal moves on a later turn (creator-reported recurrence 2026-11-09).
+            // 2026-11-09: gated behind tbChthonianSwapPending (one-shot, cleared right
+            // below) instead of a bare f.power >= 2 check -- the earlier fix offered
+            // this on ANY leftover Power in this branch, so a fresh game's ordinary
+            // starting Power kept re-entering this menu turn after turn (PreMainAction
+            // loops back here whenever acted is already true) and recruiting over and
+            // over instead of ever returning to the pre-Action menu to build Gates
+            // (creator-reported regression, 6 Cadavolytes + 2 Tentacles in one action,
+            // zero Gates built, 2026-11-09).
+            if (game.tbChthonianSwapPending) {
+                game.tbChthonianSwapPending = false
+                if (f.power >= 2 && tbMawsEligibleTypes(f).any)
+                    + TBWrithingMawsMainAction(f)
+            }
 
             game.controls(f)
 
@@ -1232,6 +1243,11 @@ object TBExpansion extends Expansion {
             // Gain 2 Power first (per the Spellbook Requirement)
             self.power += 2
             self.log(RemoveGatePlaceChthonianReq.text.styled(TB) + ": gained", 2.power)
+            // Latch so this specific 2 Power (and only this) gets one shot at
+            // reaching Thousand Writhing Maws if `then` routes back into the
+            // post-Action menu (see MainAction(f) if f.acted below).
+            if (self.acted)
+                game.tbChthonianSwapPending = true
             // TB was benched when it ran out of power; the 2 Power just gained is
             // spendable, so put TB back in the turn order (same as a High Priest
             // sacrifice). TB has no Hibernate, but guard anyway for consistency.
