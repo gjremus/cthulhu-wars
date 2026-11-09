@@ -452,8 +452,15 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 300  -> "confirm mantle overlay"
                 case TBOverlayMantlePickTransferAction(f, _, _, _) =>
                     true                                         |=> 100  -> "pick gate to transfer"
-                case TBOverlayMantleTransferAction(f, _, _) =>
-                    true                                         |=> 200  -> "transfer gate to mantle"
+                // 2026-11-09 creator priority (game "Failure through blindness"): when
+                // choosing which of the two adjacent Gates to transfer to the Mantle,
+                // prefer the one closest to enemy-occupied Areas -- the Mantle is safer
+                // ground, so the more exposed Gate should be the one moved there, not
+                // the one already furthest from any threat. Was a flat score with no
+                // enemy-distance preference at all, so the choice was effectively
+                // arbitrary between the two gated Areas.
+                case TBOverlayMantleTransferAction(f, source, _) =>
+                    true                                         |=> (200 + (20 - distFromEnemies(source).min(20))) -> "transfer gate to mantle: prefer the gate closest to enemies (creator priority 2026-11-09)"
 
                 // Awaken Shudde M'ell (Head): cost 8, Mantle-only. No prior case matched
                 // this, so it fell through to the catch-all "unknown" -1000 penalty below,

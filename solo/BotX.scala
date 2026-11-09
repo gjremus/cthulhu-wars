@@ -135,13 +135,23 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
                     println("[BotGateLockout] FILTER drop AbandonGate f=" + f +
                         " r=" + r + " turn=" + game.turn)
                     false
-                // TB Tentacle-move-per-turn lockout (2026-11-09): once TB has
-                // moved one Tentacle this turn, drop every further
-                // MoveSelectAction offering another Tentacle as the unit to
-                // move (the "pick a unit" step of the Move loop), so the bot
-                // can still move a non-Tentacle unit but cannot pick a second
-                // Tentacle in the same turn.
-                case MoveSelectAction(f, u, _, _) if f == TB && f == ev.self &&
+                // TB Tentacle-move-per-turn lockout (2026-11-09, re-fixed 2026-11-09):
+                // once TB has moved one Tentacle this turn, drop every further
+                // candidate that would move another Tentacle, so the bot can still
+                // move a non-Tentacle unit but cannot pick a second Tentacle in the
+                // same turn.
+                // Re-fix note: the original match was on MoveSelectAction (the "pick
+                // a unit" step), but MoveSelectAction is Soft and Explode.explode
+                // auto-performs every Soft action before this filter (or scoring)
+                // ever runs -- so by the time the candidate list reaches here, every
+                // MoveSelectAction has already been replaced by the MoveAction(s) for
+                // each of its destinations. The filter was checking for an action
+                // type that could never survive to this point, same dead-Soft-action
+                // bug class as the Psychic Shriek (v2.548) and Writhing Maws (v2.557)
+                // fixes. Confirmed live: game "Failure through blindness" (server
+                // gameId 980) still moved 2 Tentacles in one turn under v2.562.
+                // Matching on the surviving MoveAction leaf instead.
+                case MoveAction(f, u, _, _, _) if f == TB && f == ev.self &&
                         u.uclass == Tentacle && BotTBTentacleMoveLockout.isLocked(f, game.turn) =>
                     println("[BotTBTentacleMoveLockout] FILTER drop Tentacle move f=" + f +
                         " u=" + u + " turn=" + game.turn)
@@ -208,9 +218,12 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
             }
 
             // TB Tentacle-move-per-turn lockout (2026-11-09): burn the lockout
-            // the moment the bot actually picks a Tentacle to move.
+            // the moment the bot actually picks a Tentacle to move. Re-fix
+            // 2026-11-09: match the surviving MoveAction leaf, not the Soft
+            // MoveSelectAction step that Explode.explode already consumed
+            // (see the matching filter fix above for the full explanation).
             chosen.action.unwrap match {
-                case MoveSelectAction(f, u, _, _) if f == TB && f == ev.self && u.uclass == Tentacle =>
+                case MoveAction(f, u, _, _, _) if f == TB && f == ev.self && u.uclass == Tentacle =>
                     BotTBTentacleMoveLockout.gc(game.turn)
                     BotTBTentacleMoveLockout.recordMove(f, game.turn)
                 case _ =>
