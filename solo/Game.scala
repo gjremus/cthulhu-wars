@@ -1674,6 +1674,11 @@ case class MindParasiteCaptureTargetAction(self : Faction, r : Region, ur : Unit
 // Mind Parasite: original faction can block capture of their parasitized cultist
 case class MindParasiteBlockCaptureAction(self : Faction, captor : Faction, r : Region, ur : UnitRef) extends BaseFactionAction("Mind Parasite", "Block capture of parasitized Acolyte")
 case class MindParasiteAllowCaptureAction(self : Faction, captor : Faction, r : Region, ur : UnitRef) extends BaseFactionAction("Mind Parasite", "Allow capture")
+// Brain Cylinder (Yuggoth): capturing a Brain Cylinder lets the capturing Faction choose
+// to Convert it into their own color (up to their own 4-Cylinder cap) instead of a normal
+// capture. Only offered while the capturing Faction is under that cap.
+case class BrainCylinderConvertAction(self : Faction, r : Region, victimOwner : Faction, ur : UnitRef, effect : |[Spellbook]) extends BaseFactionAction("Brain Cylinder captured", "Convert into your own Brain Cylinder")
+case class BrainCylinderSacrificeAction(self : Faction, r : Region, victimOwner : Faction, ur : UnitRef, effect : |[Spellbook]) extends BaseFactionAction("Brain Cylinder captured", "Capture normally (for Sacrifice)")
 // Cat from Venus: Honeymoon — special capture that grants +1 Power and returns cultist to pool
 case class CatFromVenusCaptureMainAction(self : Faction) extends OptionFactionAction("Cat from Venus - Capture cultist") with MainQuestion with Soft
 case class CatFromVenusCaptureAction(self : Faction, r : Region, f : Faction) extends ForcedAction
@@ -2693,6 +2698,31 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // !! // f.commands = f.commands.notOf[HighPriestGatesPlan]
             }
         }
+    }
+
+    // Shared capture epilogue (Yith Possession logging, Capture Cultist satisfaction,
+    // Faceless Blight Cyclopean Gaze tracking, Nyogtha chained-capture re-entry). Factored
+    // out so the Brain Cylinder Convert/Sacrifice branches (which fork before this point)
+    // and the normal/Mind-Parasite capture branches all finish the same way.
+    def afterCapture(f : Faction, r : Region, yithPresent : Boolean, overrideUsed : Boolean, effect : |[Spellbook]) : Continue = {
+        if (yithPresent) {
+            if (overrideUsed)
+                f.log("Possession".styled("nt") + ":", GreatRaceOfYith.styled(f), "captured in", r, "(overrode normal capture restrictions)")
+            else
+                f.log("Possession".styled("nt") + ":", GreatRaceOfYith.styled(f), "captured in", r)
+        }
+
+        f.satisfy(CaptureCultist, "Capture Cultist")
+
+        if (factions.has(FB))
+            fbCyclopeanGazeActionRegions :+= r
+
+        if (effect.has(FromBelow).not)
+            f.all(Nyogtha)./(_.region).diff($(r)).foreach { x =>
+                return Force(CaptureMainAction(f, $(x), |(FromBelow)))
+            }
+
+        EndAction(f)
     }
 
     def compareUnitsActive(a : UnitFigure, b : UnitFigure) : Boolean = {
@@ -3963,11 +3993,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def highPriests(f : Faction)(implicit w : AskWrapper) {
-        if (f.all(HighPriest).any)
-            if (doomPhase)
-                + SacrificeHighPriestDoomAction(f)
-            else
+        if (f.all(HighPriest).any) {
+            if (doomPhase) {
+                if (f.commands.has(UnspeakableOathPrompt))
+                    + SacrificeHighPriestPromptAction(f, DoomAction(f)).as("Sacrifice", HighPriest.styled(f))("Unspeakable Oath".hl)
+                else
+                    + SacrificeHighPriestDoomAction(f)
+            } else
                 + SacrificeHighPriestMainAction(f)
+        }
     }
 
     def initHighPriestPlans(f : Faction) {
