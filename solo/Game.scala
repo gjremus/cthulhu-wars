@@ -2664,11 +2664,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     }
 
     def highPriests(f : Faction)(implicit w : AskWrapper) {
-        if (f.all(HighPriest).any)
-            if (doomPhase)
-                + SacrificeHighPriestDoomAction(f)
-            else
+        if (f.all(HighPriest).any) {
+            if (doomPhase) {
+                if (f.commands.has(UnspeakableOathPrompt))
+                    + SacrificeHighPriestPromptAction(f, DoomAction(f)).as("Sacrifice", HighPriest.styled(f))("Unspeakable Oath".hl)
+                else
+                    + SacrificeHighPriestDoomAction(f)
+            } else
                 + SacrificeHighPriestMainAction(f)
+        }
     }
 
     def initHighPriestPlans(f : Faction) {
