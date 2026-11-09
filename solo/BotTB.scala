@@ -192,6 +192,32 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // "undefined against colour", rowId 969).
                     u.is(ShuddeMellHead) && game.tbShuddeMellEverAwakened &&
                         self.gates.has(to) && to != TB.mantle    |=> 3000 -> "move shudde m'ell to protect own gate (creator priority 2026-11-08)"
+                    // 2026-11-08 (3rd fix same day): creator's full post-awaken Power
+                    // priority list for the main-action menu is 1) protect own Gate with
+                    // the Head (above, 3000) 2) Thousand Writhing Maws recruit Tentacles
+                    // (TBWrithingMawsTypeAction, 1000) 3) move a Tentacle to an Area with
+                    // no TB Unit in it 4) Thousand Writhing Maws recruit Cadavolytes
+                    // (950 and below). This Move option has to slot between tiers 2 and 4
+                    // since all of Move/Recruit/TWM compete directly in the same
+                    // Action-Phase main menu.
+                    u.is(Tentacle) && game.tbShuddeMellEverAwakened && to.allies.none |=> 975 -> "move tentacle to area without TB units (post-awaken priority 3, creator priority 2026-11-08)"
+                    // 2026-11-08 (3rd fix same day): "until on 6 spellbooks, Shudde M'ell
+                    // should not move to adjacent gates nor [move to capture] acolytes...
+                    // should not move into ocean/sea areas." Hard-blocks (large negative,
+                    // same style as the existing -6000/-1000000 hard blocks elsewhere in
+                    // this file) so they outrank the generic "toward enemies"/"free gate"
+                    // lines below regardless of magnitude-sorted tie-breaking. Restricted
+                    // to freeGate/enemyGate so it does not fight the own-Gate-protection
+                    // rule immediately above (which is unaffected, and un-gated by
+                    // spellbook count).
+                    u.goo && numSB < 6 && (to.freeGate || to.enemyGate) |=> -2000 -> "avoid moving shudde m'ell to an adjacent (non-own) gate until 6 spellbooks (creator priority 2026-11-08)"
+                    // "...nor acolytes to capture": Shudde M'ell's presence in an Area
+                    // with an enemy Cultist makes that Cultist capturable (the GOO-capture
+                    // rule at Game.scala canCapture: f.at(r).goos.any => true), so moving
+                    // toward an Area with a capturable enemy Cultist is itself the
+                    // "going for a capture" move this restriction targets.
+                    u.goo && numSB < 6 && to.foes.cultists.%(c => c.uclass.canBeCaptured(c)).any |=> -2000 -> "avoid moving shudde m'ell to capture enemy cultists until 6 spellbooks (creator priority 2026-11-08)"
+                    (u.goo || u.is(ShuddeMellSegment)) && numSB < 6 && to.ocean |=> -2000 -> "avoid moving shudde m'ell into ocean/sea areas until 6 spellbooks (creator priority 2026-11-08)"
                     u.goo && to.foes.any                         |=> 700  -> "shudde mell toward enemies"
                     (u.goo || u.is(ShuddeMellSegment)) && numSB < 5 &&
                         (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> -1000 -> "move part to glyph area (three-glyphs SBR deprioritized below 5 spellbooks, creator priority)"
@@ -361,6 +387,15 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     enemy.power > 3 && (enemy == YS || enemy == CC) |=> 450 -> "shriek target: enemy over 3 power, preferred faction YS/CC (creator priority 2026-11-07)"
                     enemy.power > 3                              |=> 400  -> "shriek target: enemy over 3 power (creator priority 2026-11-07)"
                     true                                         |=> 200  -> "shriek target commit"
+                    // 2026-11-08 (3rd fix same day): creator priority -- among any
+                    // targets tied on every consideration above, prefer whichever
+                    // enemy currently holds the most Power. Kept deliberately
+                    // low-magnitude (enemy.power tops out well under 200, the
+                    // lowest existing tier above) so it only ever breaks a tie
+                    // within a tier and never outranks or reorders the tiers
+                    // themselves, per "target faction with most power first...
+                    // in addition to other considerations already set out".
+                    true                                         |=> enemy.power -> "shriek target: prefer higher-power enemy as tie-break (creator priority 2026-11-08, 'most power first')"
 
                 // SBR-1: Overlay the Mantle
                 case TBOverlayMantleMainAction(f) =>
