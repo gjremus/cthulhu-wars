@@ -268,7 +268,20 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // in two Areas adjacent to each other, aimed at the two adjacent Gates
                 // Overlay Mantle (SBR-1) needs. Ranked above the Tentacle-SBR line below
                 // only until Overlay Mantle is satisfied; the Tentacle rush resumes after.
+                // 2026-11-09 fix (game "colour against lunacy"): this flat 600 was
+                // always below the post-awaken "move tentacle to empty area" Move option
+                // (975, added 2026-11-08), so once Shudde M'ell was awakened the bot
+                // never even entered the Thousand Writhing Maws flow to spend its 2
+                // banked Power on a Tentacle double-recruit -- it just moved an existing
+                // Tentacle instead, exactly as the creator reported. The creator's
+                // documented post-awaken Power priority order is 1) protect own Gate
+                // (3000) 2) TWM recruit Tentacles 3) move Tentacle to empty Area (975)
+                // 4) TWM recruit Cadavolytes, so this main menu entry now scores above
+                // 975 specifically when post-awaken and still short of the 10-Tentacle
+                // SBR with a Tentacle double-recruit available.
                 case TBWrithingMawsMainAction(f) =>
+                    game.tbShuddeMellEverAwakened && f.needs(TenTentaclesReq) &&
+                        TBExpansion.tbMawsEligibleTypes(f).has(Tentacle) |=> 1000 -> "writhing maws double summon (post-awaken, prefer over moving a tentacle, creator priority 2026-11-08)"
                     true                                         |=> 600  -> "writhing maws double summon"
                 case TBWrithingMawsTypeAction(f, uc) =>
                     // 2026-11-07 creator priority: the 2 Power just banked via Remove-
