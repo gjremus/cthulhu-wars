@@ -180,13 +180,18 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     u.cultist && to.freeGate                     |=> 1600 -> "cultist to free gate"
                     u.cultist && to.ownGate                      |=> 200  -> "cultist to own gate"
                     u.monster && to.foes.any && self.power > 3   |=> 500  -> "chthonian toward enemies"
-                    // 2026-11-08 creator priority: once Shudde M'ell is awakened and TB
-                    // is down to 1 Power, if TB still controls a Gate on the main map
-                    // (not the Mantle), move the Head there to protect it. Outranks
-                    // every other Move option so it is not overridden by 2026-11-07's
-                    // "shudde mell toward enemies" line below.
-                    u.is(ShuddeMellHead) && game.tbShuddeMellEverAwakened && self.power == 1 &&
-                        self.gates.has(to) && to != TB.mantle    |=> 3000 -> "move shudde m'ell to protect own gate (1 power after awaken, creator priority 2026-11-08)"
+                    // 2026-11-08 creator priority: once Shudde M'ell is awakened, if TB
+                    // still controls a Gate on the main map (not the Mantle), move the
+                    // Head there to protect it. Outranks every other Move option so it
+                    // is not overridden by the "shudde mell toward enemies" line below.
+                    // 2026-11-08 (2nd fix same day): dropped the "exactly 1 Power" gate
+                    // -- restricting this to one exact Power value meant the rule almost
+                    // never fired, and the Head instead followed the generic "toward
+                    // enemies" 700 score into whatever Area an enemy happened to be,
+                    // leaving TB's own Gate to fend for itself (creator report, game
+                    // "undefined against colour", rowId 969).
+                    u.is(ShuddeMellHead) && game.tbShuddeMellEverAwakened &&
+                        self.gates.has(to) && to != TB.mantle    |=> 3000 -> "move shudde m'ell to protect own gate (creator priority 2026-11-08)"
                     u.goo && to.foes.any                         |=> 700  -> "shudde mell toward enemies"
                     (u.goo || u.is(ShuddeMellSegment)) && numSB < 5 &&
                         (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> -1000 -> "move part to glyph area (three-glyphs SBR deprioritized below 5 spellbooks, creator priority)"
@@ -292,6 +297,16 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 100  -> "pick stalk dest"
                 case TBStalkAction(f, cultist, dest, _) =>
                     cultist.uclass == Tentacle && self.at(dest, Tentacle).none |=> 400 -> "stalk: tentacle to an empty area"
+                    // 2026-11-08 creator priority: Cadavolytes must not abandon a Gate
+                    // they're holding -- the scoring here (TBStalkAction, not the Soft
+                    // TBStalkPickCultistAction/TBStalkDestAction above) is the real leaf
+                    // that competes against TBStalkSkipAction's 0, per the same
+                    // Soft-is-dead-code lesson as the Psychic Shriek fix -- so a
+                    // gate-holding cultist's relocation must score below Skip's 0,
+                    // not just below the other Stalk options (creator report: "why did
+                    // the cadavolyte abandon the Mantle gate?", game "undefined against
+                    // colour", rowId 969).
+                    game.unit(cultist).onGate                    |=> -500 -> "stalk: avoid relocating a gate-holding cultist off its own gate (creator priority 2026-11-08)"
                     true                                         |=> 200  -> "stalk commit"
 
                 // Autotomy: post-battle Kill transfer
