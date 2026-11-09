@@ -219,10 +219,22 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     u.goo && numSB < 6 && to.foes.cultists.%(c => c.uclass.canBeCaptured(c)).any |=> -2000 -> "avoid moving shudde m'ell to capture enemy cultists until 6 spellbooks (creator priority 2026-11-08)"
                     (u.goo || u.is(ShuddeMellSegment)) && numSB < 6 && to.ocean |=> -2000 -> "avoid moving shudde m'ell into ocean/sea areas until 6 spellbooks (creator priority 2026-11-08)"
                     u.goo && to.foes.any                         |=> 700  -> "shudde mell toward enemies"
-                    (u.goo || u.is(ShuddeMellSegment)) && numSB < 5 &&
-                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> -1000 -> "move part to glyph area (three-glyphs SBR deprioritized below 5 spellbooks, creator priority)"
-                    (u.goo || u.is(ShuddeMellSegment)) && numSB >= 5 && sbReqsDoneExclGlyphs >= 4 && self.all(ShuddeMellSegment).num >= 2 &&
-                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> 1900 -> "move part to glyph area (three-glyphs SBR, creator priority)"
+                    // 2026-11-09 fix: this used to require numSB >= 5 (5 Spellbooks
+                    // already picked) before Shudde M'ell would move onto the three
+                    // Glyph Areas -- but Grasp (the 5th Spellbook pick) only outranks
+                    // Autotomy's flat 1200 score (SpellbookAction case above) when the
+                    // Three-Glyphs SBR is ALREADY satisfied at the moment of that 5th
+                    // pick (numSB == 4). Gating the move on numSB >= 5 meant Three-Glyphs
+                    // could never be satisfied before the 5th pick, so Autotomy always
+                    // won that pick instead of Grasp -- the exact "TB must select Grasp
+                    // as the 5th spellbook" requirement this open item describes. Moved
+                    // the threshold to numSB >= 4 (right after Ensnare, the 4th pick, and
+                    // before the 5th pick is offered) so the glyph-move -- and the Req it
+                    // satisfies -- lands in time for Grasp to win that pick.
+                    (u.goo || u.is(ShuddeMellSegment)) && numSB < 4 &&
+                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> -1000 -> "move part to glyph area (three-glyphs SBR deprioritized below 4 spellbooks, creator priority 2026-11-09)"
+                    (u.goo || u.is(ShuddeMellSegment)) && numSB >= 4 && sbReqsDoneExclGlyphs >= 4 && self.all(ShuddeMellSegment).num >= 2 &&
+                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> 1900 -> "move part to glyph area (three-glyphs SBR, creator priority 2026-11-09: timed before the 5th spellbook pick so Grasp can win it)"
                     to.freeGate                                  |=> 400  -> "move to free gate"
 
                 // Creator fix (2026-11-02): recruiting a Tentacle had no Area-spread
