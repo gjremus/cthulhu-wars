@@ -56,6 +56,37 @@ object BotGateLockout {
         switches = switches.filter { case ((_, t, _), _) => t >= currentTurn }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TB Tentacle-move-per-turn lockout (2026-11-09).
+//
+// Creator report (game "Sacrifice against Space" / "Curse and decay"): TB's
+// bot was moving multiple Tentacles (up to 8 in one turn) via repeated
+// MoveSelectAction picks inside a single Move action loop, wasting Power
+// instead of using Thousand Writhing Maws to recruit. The creator's standing
+// instruction is TB should never move more than 1 Tentacle in a turn. Same
+// shape of fix as BotGateLockout above: filter candidate MoveSelectActions
+// BEFORE evaluation once a Tentacle has already moved this turn, rather than
+// relying on a score penalty that competing lines could outrank.
+// ─────────────────────────────────────────────────────────────────────────────
+object BotTBTentacleMoveLockout {
+    private var movedThisTurn : scala.collection.mutable.Map[(Faction, Int), Int] =
+        scala.collection.mutable.Map()
+
+    def count(f : Faction, turn : Int) : Int =
+        movedThisTurn.getOrElse((f, turn), 0)
+
+    def recordMove(f : Faction, turn : Int) : Unit = {
+        val k = (f, turn)
+        movedThisTurn(k) = movedThisTurn.getOrElse(k, 0) + 1
+    }
+
+    def isLocked(f : Faction, turn : Int) : Boolean =
+        count(f, turn) >= 1
+
+    def gc(currentTurn : Int) : Unit =
+        movedThisTurn = movedThisTurn.filter { case ((_, t), _) => t >= currentTurn }
+}
+
 class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
     def sortByAbs(a : $[Int]) : $[Int] =
         a.sortBy(v => -v.abs)
@@ -103,6 +134,17 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
                 case AbandonGateAction(f, r, _) if f == ev.self && BotGateLockout.isLocked(f, game.turn, r) =>
                     println("[BotGateLockout] FILTER drop AbandonGate f=" + f +
                         " r=" + r + " turn=" + game.turn)
+                    false
+                // TB Tentacle-move-per-turn lockout (2026-11-09): once TB has
+                // moved one Tentacle this turn, drop every further
+                // MoveSelectAction offering another Tentacle as the unit to
+                // move (the "pick a unit" step of the Move loop), so the bot
+                // can still move a non-Tentacle unit but cannot pick a second
+                // Tentacle in the same turn.
+                case MoveSelectAction(f, u, _, _) if f == TB && f == ev.self &&
+                        u.uclass == Tentacle && BotTBTentacleMoveLockout.isLocked(f, game.turn) =>
+                    println("[BotTBTentacleMoveLockout] FILTER drop Tentacle move f=" + f +
+                        " u=" + u + " turn=" + game.turn)
                     false
                 case _ => true
             })
@@ -162,6 +204,15 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
                 case AbandonGateAction(f, r, _) if f == ev.self =>
                     BotGateLockout.gc(game.turn)
                     BotGateLockout.recordSwitch(f, game.turn, r)
+                case _ =>
+            }
+
+            // TB Tentacle-move-per-turn lockout (2026-11-09): burn the lockout
+            // the moment the bot actually picks a Tentacle to move.
+            chosen.action.unwrap match {
+                case MoveSelectAction(f, u, _, _) if f == TB && f == ev.self && u.uclass == Tentacle =>
+                    BotTBTentacleMoveLockout.gc(game.turn)
+                    BotTBTentacleMoveLockout.recordMove(f, game.turn)
                 case _ =>
             }
         }

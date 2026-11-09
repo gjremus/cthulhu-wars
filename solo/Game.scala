@@ -6316,9 +6316,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     destinations = (destinations ++ tbMantleAreas).distinct
                 } else if (tbMantleAreas.has(from)) {
                     destinations = (destinations ++ $(TB.mantle)).distinct
-                } else if (self.has(Flight) && destinations.exists(tbMantleAreas.has)) {
-                    // HB Fix (2026-07-07): Flight can reach Mantle if any 2-hop
-                    // destination is a Mantle-adjacent area.
+                } else if (self.has(Flight) && board.connected(from).exists(tbMantleAreas.has)) {
+                    // HB Fix (2026-07-07): Flight can reach Mantle if a 1-hop
+                    // ground-adjacent area is itself Mantle-adjacent (i.e. the
+                    // Mantle is reachable within Flight's normal 2-hop range:
+                    // one ground hop then the Mantle-entry hop). Checking
+                    // board.connected(from) (true 1-hop adjacency) rather than
+                    // the already Flight-expanded `destinations` (already a
+                    // 2-hop set) prevents a 3rd effective hop into the Mantle.
                     destinations = (destinations ++ $(TB.mantle)).distinct
                 }
             }

@@ -4636,7 +4636,13 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         }
                     }
                     def safe(s : String) : String = s.replace("\"", "").replace("'", "").replace(";", "").replace("|", "")
-                    val mantleGateControlled = mantleGatePresent && mantleFigs.exists(_.uclass == Cadavolyte)
+                    // 2026-11-09 fix (game "Sacrifice against Space"): this checked
+                    // uclass == Cadavolyte, assuming only TB's own Cadavolyte could ever
+                    // control the Mantle Gate. Any faction's controlling unit (e.g. CC's
+                    // Acolyte) can hold the Mantle Gate, and the engine already tracks
+                    // that accurately via UnitFigure.onGate -- use that instead of
+                    // hardcoding TB's own unit class.
+                    val mantleGateControlled = mantleGatePresent && mantleFigs.exists(_.onGate)
                     val gateEntry = if (mantleGatePresent) $(if (mantleGateControlled) "gate|Gate (controlled)|76" else "gate|Gate (abandoned)|76") else $[String]()
                     val unitEntries = mantleFigs./(u => {
                         val asset   = safe(mantleSpriteAssetId(u))

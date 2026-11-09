@@ -357,6 +357,12 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 100  -> "pick stalk dest"
                 case TBStalkAction(f, cultist, dest, _) =>
                     cultist.uclass == Tentacle && self.at(dest, Tentacle).none |=> 400 -> "stalk: tentacle to an empty area"
+                    // 2026-11-09 creator priority (game "Curse and decay"): Stalk must
+                    // never relocate a Tentacle into an Area that already holds a
+                    // Tentacle -- the bot had done exactly that, crowding Tentacles
+                    // together instead of spreading them. Same hard-block style as the
+                    // gate-holding-cultist rule below (must outrank TBStalkSkipAction's 0).
+                    cultist.uclass == Tentacle && self.at(dest, Tentacle).any  |=> -500 -> "stalk: avoid moving a tentacle into an area with another tentacle (creator priority 2026-11-09)"
                     // 2026-11-08 creator priority: Cadavolytes must not abandon a Gate
                     // they're holding -- the scoring here (TBStalkAction, not the Soft
                     // TBStalkPickCultistAction/TBStalkDestAction above) is the real leaf
@@ -489,6 +495,14 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     game.tbShuddeMellEverAwakened && self.gates.exists(r => self.at(r, Cadavolyte).any && r.foes.any)   |=> 900  -> "remove gate place chthonian: cadavolyte-held gate under threat"
                 case TBRemoveGatePlaceChthonianPickGateAction(f, _) =>
                     true                                         |=> 100  -> "pick gate to remove"
+                // 2026-11-09 creator priority (game "Curse and decay"): prefer
+                // removing a main-map Gate over the Mantle Gate -- the bot had
+                // removed the Mantle Gate instead, which the creator flagged
+                // as a mistake. The Mantle is TB's own staging area and only
+                // reachable via its nominated adjacency, so losing its Gate
+                // is costlier than losing an ordinary main-map Gate.
+                case TBRemoveGatePlaceChthonianGateAction(f, r, _) if r == TB.mantle =>
+                    true                                         |=> 50   -> "gate removal commit: avoid removing the Mantle gate if a main-map gate is available (creator priority 2026-11-09)"
                 case TBRemoveGatePlaceChthonianGateAction(f, _, _) =>
                     true                                         |=> 100  -> "gate removal commit"
                 // 2026-11-07 fix: destination choice had no preference at all, so the
