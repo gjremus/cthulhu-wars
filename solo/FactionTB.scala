@@ -530,6 +530,17 @@ object TBExpansion extends Expansion {
         case MainAction(f : TB.type) if f.acted =>
             implicit val asking = Asking(f)
 
+            // Thousand Writhing Maws (§1.5.1 / §3.6.3): this post-Action branch is
+            // also reached by the Remove-Gate-Place-Chthonian SBR's "then" continuation
+            // (it does not clear f.acted), which can bank the 2 Power needed for a
+            // double recruit mid-turn. Without this offer here, that Power had no way
+            // to reach Thousand Writhing Maws on the same turn, so the bot fell
+            // through to EndTurnAction and only got another chance to recruit via
+            // normal moves on a later turn (creator-reported recurrence, curse against
+            // blindness, 2026-11-09).
+            if (f.power >= 2 && tbMawsEligibleTypes(f).any)
+                + TBWrithingMawsMainAction(f)
+
             game.controls(f)
 
             if (f.hasAllSB) {
