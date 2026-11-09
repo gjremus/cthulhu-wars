@@ -308,6 +308,15 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     uc == Cadavolyte && self.needs(OverlayMantleReq) && r1.connected.any |=> (350 + distFromEnemies(r1)) -> "maws: cadavolyte area with a neighbor available, far from enemies (creator: new opening, pair for adjacent gates away from enemies)"
                     true                                         |=> 100  -> "maws place second"
                 case TBWrithingMawsAction(f, uc, r1, r2) =>
+                    // 2026-11-09 fix (game "omen versus oblivion"): TBWrithingMawsMainAction
+                    // and TBWrithingMawsTypeAction above are both Soft, so Explode.explode
+                    // (see Explode.scala) auto-performs and discards them before scoring ever
+                    // runs -- their 1000-point post-awaken priorities were dead code, never
+                    // once compared against the "move tentacle to empty area" Move option's
+                    // 975 (BotTB.scala, MoveAction case). Same dead-Soft-action bug class
+                    // already fixed for Psychic Shriek in v2.548. TBWrithingMawsAction is the
+                    // only non-Soft leaf in this chain, so the real priority has to live here.
+                    uc == Tentacle && game.tbShuddeMellEverAwakened && self.needs(TenTentaclesReq) |=> 1050 -> "maws commit: tentacle double-recruit (post-awaken, toward 10-tentacle SBR, outranks moving a tentacle, creator priority 2026-11-09)"
                     uc == Tentacle && self.at(r2, Tentacle).any && r2.connected.exists(c => self.at(c, Tentacle).none) |=> 400 -> "maws: tentacle area next to an empty area"
                     uc == Cadavolyte && self.needs(OverlayMantleReq) && r1.connected.has(r2) |=> (500 + distFromEnemies(r2)) -> "maws: two cadavolytes in adjacent areas, far from enemies (creator: new opening, pair toward Overlay Mantle SBR away from enemies)"
                     true                                         |=> 300  -> "maws commit"
