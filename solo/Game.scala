@@ -1677,8 +1677,8 @@ case class MindParasiteAllowCaptureAction(self : Faction, captor : Faction, r : 
 // Brain Cylinder (Yuggoth): capturing a Brain Cylinder lets the capturing Faction choose
 // to Convert it into their own color (up to their own 4-Cylinder cap) instead of a normal
 // capture. Only offered while the capturing Faction is under that cap.
-case class BrainCylinderConvertAction(self : Faction, r : Region, victimOwner : Faction, ur : UnitRef, effect : |[Spellbook]) extends BaseFactionAction("Brain Cylinder captured", "Convert into your own Brain Cylinder")
-case class BrainCylinderSacrificeAction(self : Faction, r : Region, victimOwner : Faction, ur : UnitRef, effect : |[Spellbook]) extends BaseFactionAction("Brain Cylinder captured", "Capture normally (for Sacrifice)")
+case class BrainCylinderConvertAction(self : Faction, r : Region, victimOwner : Faction, ur : UnitRef, yithPresent : Boolean, overrideUsed : Boolean, effect : |[Spellbook]) extends BaseFactionAction("Brain Cylinder captured", "Convert into your own Brain Cylinder")
+case class BrainCylinderSacrificeAction(self : Faction, r : Region, victimOwner : Faction, ur : UnitRef, yithPresent : Boolean, overrideUsed : Boolean, effect : |[Spellbook]) extends BaseFactionAction("Brain Cylinder captured", "Capture normally (for Sacrifice)")
 // Cat from Venus: Honeymoon — special capture that grants +1 Power and returns cultist to pool
 case class CatFromVenusCaptureMainAction(self : Faction) extends OptionFactionAction("Cat from Venus - Capture cultist") with MainQuestion with Soft
 case class CatFromVenusCaptureAction(self : Faction, r : Region, f : Faction) extends ForcedAction
@@ -6757,6 +6757,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Enemy faction here is the unit's owner (not necessarily self)
             val victimOwner = unitFig.faction
             val overrideUsed = yithPresent && (victimOwner.at(r, GOO).any || victimOwner.at(r, Terror).any || victimOwner.at(r, Monster).any)
+            // Brain Cylinder (Yuggoth): the capturing Faction (f) may Convert the captured
+            // Cylinder into one of their own, instead of a normal capture -- but only while
+            // f is still under their own 4-Cylinder cap. At the cap, Convert isn't offered
+            // and this falls through to a normal capture (held for Sacrifice at next Gather Power).
+            if (unitFig.uclass == BrainCylinderCultist && f.units.%(_.uclass == BrainCylinderCultist).num < 4) {
+                Ask(f)
+                    .add(BrainCylinderConvertAction(f, r, self, u, yithPresent, overrideUsed, effect))
+                    .add(BrainCylinderSacrificeAction(f, r, self, u, yithPresent, overrideUsed, effect))
+            } else
             // If MPC captured by third faction, unparasitize first — restore to original faction, then capture that acolyte
             if (unitFig.uclass == MindParasiteCultist) {
                 val origFac = mindParasiteOriginalFaction.get(u)
@@ -6770,30 +6779,37 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 } else {
                     f.log("captured an Acolyte in", r, effect./("with " + _).|(""))
                 }
+                afterCapture(f, r, yithPresent, overrideUsed, effect)
             } else {
                 eliminate(unitFig)
                 unitFig.region = f.prison
                 f.log("captured", unitFig, "in", r, effect./("with " + _).|(""))
+                afterCapture(f, r, yithPresent, overrideUsed, effect)
             }
 
-            if (yithPresent) {
-                if (overrideUsed)
-                    f.log("Possession".styled("nt") + ":", GreatRaceOfYith.styled(f), "captured in", r, "(overrode normal capture restrictions)")
-                else
-                    f.log("Possession".styled("nt") + ":", GreatRaceOfYith.styled(f), "captured in", r)
-            }
+        // Brain Cylinder: capturing Faction (self) converts the captured Cylinder into
+        // one of their own color, in the same place it was captured. This still counts
+        // as a Capture for Spellbooks/Abilities (Capture Cultist is still satisfied below).
+        case BrainCylinderConvertAction(self, r, victimOwner, ur, yithPresent, overrideUsed, effect) =>
+            val unitFig = unit(ur)
+            val region = unitFig.region
+            val onGate = unitFig.onGate
+            eliminate(unitFig)
+            val bcIndex = self.units.%(_.uclass == BrainCylinderCultist).num
+            val bc = new UnitFigure(self, BrainCylinderCultist, bcIndex, region, onGate)
+            self.units ::= bc
+            self.log("captured and Converted", victimOwner.full + "'s", "Brain Cylinder".styled(victimOwner), "in", r, effect./("with " + _).|(""))
+            afterCapture(self, r, yithPresent, overrideUsed, effect)
 
-            f.satisfy(CaptureCultist, "Capture Cultist")
-
-            if (factions.has(FB))
-                fbCyclopeanGazeActionRegions :+= r
-
-            if (effect.has(FromBelow).not)
-                f.all(Nyogtha)./(_.region).diff($(r)).foreach { x =>
-                    return Force(CaptureMainAction(f, $(x), |(FromBelow)))
-                }
-
-            EndAction(f)
+        // Brain Cylinder: capturing Faction (self) instead takes a normal capture (held
+        // for Sacrifice at the next Gather Power) -- offered when self chooses not to
+        // Convert, or forced when self is already at their own 4-Cylinder cap.
+        case BrainCylinderSacrificeAction(self, r, victimOwner, ur, yithPresent, overrideUsed, effect) =>
+            val unitFig = unit(ur)
+            eliminate(unitFig)
+            unitFig.region = self.prison
+            self.log("captured", unitFig, "in", r, effect./("with " + _).|(""))
+            afterCapture(self, r, yithPresent, overrideUsed, effect)
 
         // Mind Parasite: separate capture flow — single menu with region-grouped targets
         case MindParasiteCaptureMainAction(self) =>
