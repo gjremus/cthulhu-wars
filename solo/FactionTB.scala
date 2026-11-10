@@ -815,7 +815,12 @@ object TBExpansion extends Expansion {
             u.region = dest
             u.onGate = false
             self.log(Stalk.styled(TB) + ": relocated", u.uclass.styled(TB), "from", from, "to", dest)
-            game.checkGatesGained(self)
+            // Per creator ruling (Q5, 2026-11-10): Stalk firing off an ENEMY's Move
+            // (mover != self) must not let TB seize an uncontrolled gate at the
+            // destination on that enemy's turn. Stalk chained off TB's own Move
+            // (mover == self, the "...TB moves a Unit" condition) is TB's own turn
+            // and still gains the gate normally.
+            game.checkGatesGained(self, (mover != self).$(dest))
 
             // TB: immediately trigger Mantle overlay if 2 adjacent gates now exist
             val mantleReady =

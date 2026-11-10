@@ -3013,7 +3013,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     var gateBlockedLog : $[String] = $
 
-    def checkGatesGained(self : Faction) {
+    def checkGatesGained(self : Faction, suppressGainAt : $[Region] = $()) {
         checkGatesLost()
 
         triggers()
@@ -3026,7 +3026,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 println(s"[GATE CONTROL TRACE] - Self units at Mantle: ${self.at(r).map(u => s"${u.uclass}(canControl=${u.canControlGate})").mkString(", ")}")
                 println(s"[GATE CONTROL TRACE] - Factions with gate at Mantle: ${factions.%(_.gates.has(r)).map(_.name).mkString(", ")}")
             }
-            if (r != BB.moon) {
+            if (r != BB.moon && suppressGainAt.has(r).not) {
                 if (self.abandoned.has(r).not) {
                     if (DS.chaosGateRegions.has(r).not || self == DS) {
                         if (factions.%(_.gates.has(r)).none) {
