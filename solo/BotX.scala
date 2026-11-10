@@ -87,6 +87,33 @@ object BotTBTentacleMoveLockout {
         movedThisTurn = movedThisTurn.filter { case ((_, t), _) => t >= currentTurn }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TB Cadavolyte-move-per-turn lockout (2026-11-10).
+//
+// Creator report (game "Catastrophe through Blindness", rowId 987): same
+// "too much movement in one action" complaint as the Tentacle lockout above,
+// this time for Cadavolytes. Same shape of fix: filter candidate Cadavolyte
+// MoveActions BEFORE evaluation once one has already moved this turn.
+// ─────────────────────────────────────────────────────────────────────────────
+object BotTBCadavolyteMoveLockout {
+    private var movedThisTurn : scala.collection.mutable.Map[(Faction, Int), Int] =
+        scala.collection.mutable.Map()
+
+    def count(f : Faction, turn : Int) : Int =
+        movedThisTurn.getOrElse((f, turn), 0)
+
+    def recordMove(f : Faction, turn : Int) : Unit = {
+        val k = (f, turn)
+        movedThisTurn(k) = movedThisTurn.getOrElse(k, 0) + 1
+    }
+
+    def isLocked(f : Faction, turn : Int) : Boolean =
+        count(f, turn) >= 1
+
+    def gc(currentTurn : Int) : Unit =
+        movedThisTurn = movedThisTurn.filter { case ((_, t), _) => t >= currentTurn }
+}
+
 class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
     def sortByAbs(a : $[Int]) : $[Int] =
         a.sortBy(v => -v.abs)
@@ -154,6 +181,13 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
                 case MoveAction(f, u, _, _, _) if f == TB && f == ev.self &&
                         u.uclass == Tentacle && BotTBTentacleMoveLockout.isLocked(f, game.turn) =>
                     println("[BotTBTentacleMoveLockout] FILTER drop Tentacle move f=" + f +
+                        " u=" + u + " turn=" + game.turn)
+                    false
+                // TB Cadavolyte-move-per-turn lockout (2026-11-10): same shape as
+                // the Tentacle lockout above, see BotTBCadavolyteMoveLockout.
+                case MoveAction(f, u, _, _, _) if f == TB && f == ev.self &&
+                        u.uclass == Cadavolyte && BotTBCadavolyteMoveLockout.isLocked(f, game.turn) =>
+                    println("[BotTBCadavolyteMoveLockout] FILTER drop Cadavolyte move f=" + f +
                         " u=" + u + " turn=" + game.turn)
                     false
                 case _ => true
@@ -226,6 +260,9 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
                 case MoveAction(f, u, _, _, _) if f == TB && f == ev.self && u.uclass == Tentacle =>
                     BotTBTentacleMoveLockout.gc(game.turn)
                     BotTBTentacleMoveLockout.recordMove(f, game.turn)
+                case MoveAction(f, u, _, _, _) if f == TB && f == ev.self && u.uclass == Cadavolyte =>
+                    BotTBCadavolyteMoveLockout.gc(game.turn)
+                    BotTBCadavolyteMoveLockout.recordMove(f, game.turn)
                 case _ =>
             }
         }

@@ -201,6 +201,14 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // since all of Move/Recruit/TWM compete directly in the same
                     // Action-Phase main menu.
                     u.is(Tentacle) && game.tbShuddeMellEverAwakened && to.allies.none |=> 975 -> "move tentacle to area without TB units (post-awaken priority 3, creator priority 2026-11-08)"
+                    // 2026-11-10 creator priority (game "Catastrophe through
+                    // Blindness", rowId 987): when a Shudde M'ell Part's destination
+                    // is the Mantle itself, Abyssal Cline (TBMovePartToMantleAction)
+                    // already moves it there for free -- a paid Move to the same
+                    // destination just wastes Power. Hard-block so this never
+                    // outranks the free alternative.
+                    (u.goo || u.is(ShuddeMellSegment)) && game.tbMantleInPlay &&
+                        game.tbShuddeMellEverAwakened && to == TB.mantle |=> -3000 -> "avoid paying Power to move a part to the Mantle when Abyssal Cline does it for free (creator priority 2026-11-10)"
                     // 2026-11-08 (3rd fix same day): "until on 6 spellbooks, Shudde M'ell
                     // should not move to adjacent gates nor [move to capture] acolytes...
                     // should not move into ocean/sea areas." Hard-blocks (large negative,
@@ -249,6 +257,15 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                             .%(_.ref != u)./(_.region.glyph).distinct
                         (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) && !otherGlyphsCovered.has(to.glyph)
                     } |=> 1900 -> "move part to still-needed glyph area (three-glyphs SBR, creator priority 2026-11-09, glyph-coverage fix 2026-11-10)"
+                    // 2026-11-10 creator priority (game "Catastrophe through
+                    // Blindness", rowId 987): a gate-holding Cadavolyte was moved
+                    // off its own main-map Gate via a plain Move, abandoning TB's
+                    // only remaining main-map Gate -- the same "don't abandon your
+                    // own Gate" guard already existed for the Stalk path (above)
+                    // but had no counterpart here for ordinary Move. Must outrank
+                    // every other Move option (hard-block style) so it isn't
+                    // overridden by any of the scores above.
+                    game.unit(u).onGate                          |=> -2500 -> "avoid relocating a gate-holding cultist off its own gate (creator priority 2026-11-10)"
                     to.freeGate                                  |=> 400  -> "move to free gate"
 
                 // Creator fix (2026-11-02): recruiting a Tentacle had no Area-spread
