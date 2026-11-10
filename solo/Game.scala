@@ -2117,6 +2117,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var fbeCardDice : $[Int] = $
     var fbeSelfConsumingDeaths : $[(Region, |[Faction])] = $
     var fbeShapestolen : $[UnitRef] = $
+    var dcSatiateCaptureFactions : $[Faction] = $
 
     // Permeation (PRM) state — spellbook manipulation and Ycgn'àgnnisssz control
     var prmFlippedDownSpellbooks : $[Spellbook] = $
@@ -4744,6 +4745,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             doomPhase = true
             fbeActionInProgress = false
             fbeSelfConsumingDeaths = $
+            dcSatiateCaptureFactions = $
 
             // Oct 2026: snapshot doom values for Watcher 12-doom crossing detection
             watcherPrevDoomValues = factions.map(f => f -> f.doom).toMap
