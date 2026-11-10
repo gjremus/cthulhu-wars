@@ -576,14 +576,14 @@ object TBExpansion extends Expansion {
             // 2026-11-08: creator priority -- also withheld unless at least one
             // Segment is in play (on the Mantle via Behemoth), not just withheld
             // until Shudde M'ell is awakened.
-            // 2026-11-09: added the matching SBR3-TRACE println here too -- this
-            // branch (f.acted, i.e. TB has already taken its Action this turn) has
-            // its own separate copy of the SBR-3 offer check, and the first trace
-            // added below only covered the OTHER copy (f not yet acted). A bot that
-            // reaches 0 Power after already acting this turn would silently fall
-            // through this un-instrumented copy with no evidence captured.
-            if (f.power == 0)
-                println(s"[TB-SBR3-TRACE] MainAction(f.acted=true) power=0: everAwakened=${game.tbShuddeMellEverAwakened} segmentInPlay=${f.all(ShuddeMellSegment).any} needsReq=${f.needs(RemoveGatePlaceChthonianReq)} hasGate=${f.gates.any} chthonianInPool=${f.pool(Chthonian).any} unitsInPlay=${f.allInPlay.any}")
+            // 2026-11-09/10: confirmed via a live-game browser replay that this
+            // offer is correctly withheld when TB controls zero Gates -- the
+            // ability's cost is "remove a Gate you Control", so with none to
+            // remove there is nothing to offer. The "catastrophe versus blindness"
+            // report (0 Power, Segment in play, ability allegedly skipped) traced
+            // to exactly this: hasGate=false at the moment Power hit 0. Working as
+            // designed, not a bug; diagnostic trace removed now that the cause is
+            // confirmed.
             if (game.tbShuddeMellEverAwakened && f.all(ShuddeMellSegment).any && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
                 + TBRemoveGatePlaceChthonianMainAction(f)
 
@@ -656,8 +656,8 @@ object TBExpansion extends Expansion {
             // M'ell has been awakened at least once. See matching comment above.
             // 2026-11-08: creator priority -- also withheld unless at least one
             // Segment is in play. See matching comment above.
-            if (f.power == 0)
-                println(s"[TB-SBR3-TRACE] MainAction(f.acted=false) power=0: everAwakened=${game.tbShuddeMellEverAwakened} segmentInPlay=${f.all(ShuddeMellSegment).any} needsReq=${f.needs(RemoveGatePlaceChthonianReq)} hasGate=${f.gates.any} chthonianInPool=${f.pool(Chthonian).any} unitsInPlay=${f.allInPlay.any}")
+            // 2026-11-09/10: confirmed correctly withheld with zero Gates controlled
+            // -- see matching comment in the f.acted branch above.
             if (game.tbShuddeMellEverAwakened && f.all(ShuddeMellSegment).any && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
                 + TBRemoveGatePlaceChthonianMainAction(f)
 
@@ -1402,7 +1402,6 @@ object TBExpansion extends Expansion {
     // awakened and Mantle is in play and pool has Segments, dispatch recorded action.
     def tbCheckBehemoth(then : ForcedAction)(implicit game : Game) : Continue = {
         val f = TB
-        println(s"[TB-SBR3-TRACE] tbCheckBehemoth: power=${f.power} everAwakened=${game.tbShuddeMellEverAwakened} mantleInPlay=${game.tbMantleInPlay} segmentPool=${f.pool(ShuddeMellSegment).num} zeroLatched=${game.tbBehemothZeroLatched} ready=$tbBehemothReady")
         if (tbBehemothReady && game.tbBehemothZeroLatched.not)
             Force(TBBehemothSegmentAction(f, then))
         else
