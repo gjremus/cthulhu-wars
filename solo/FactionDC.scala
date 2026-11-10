@@ -341,9 +341,9 @@ case class DCSatiateConfirmAction(self : Faction)
     extends BaseFactionAction(Satiate.styled(DC), "Confirm".styled("power"))
 // Per-faction Cultist pick (self=affectedFaction). Hard — once a faction has
 // committed to Satiate the captured unit is no longer cancelable.
-case class DCSatiateFactionPickAction(self : Faction, area : Region, remaining : $[Faction], capturedSoFar : Int)
+case class DCSatiateFactionPickAction(self : Faction, area : Region, remaining : $[Faction], capturedSoFar : Int, capturedFromFactions : $[Faction])
     extends ForcedAction with PowerNeutral
-case class DCSatiatePickCultistAction(self : Faction, area : Region, cultist : UnitRef, remaining : $[Faction], capturedSoFar : Int)
+case class DCSatiatePickCultistAction(self : Faction, area : Region, cultist : UnitRef, remaining : $[Faction], capturedSoFar : Int, capturedFromFactions : $[Faction])
     extends BaseFactionAction(Satiate.styled(DC) + ": " + self.short.styled(self) + " loses",
         // HB Task #125 (2026-08-10): the menu listed every capturable cultist as
         // plain "Acolyte" with no way to tell an on-gate cultist (whose capture
@@ -352,7 +352,7 @@ case class DCSatiatePickCultistAction(self : Faction, area : Region, cultist : U
         // identically.
         implicit g => g.unit(cultist).uclass.styled(self) + (if (g.unit(cultist).onGate) " (on gate)" else " (off gate)"))
     with PowerNeutral
-case class DCSatiateFinishAction(self : Faction, area : Region, capturedSoFar : Int)
+case class DCSatiateFinishAction(self : Faction, area : Region, capturedSoFar : Int, capturedFromFactions : $[Faction])
     extends ForcedAction with PowerNeutral
 
 // ── Lure (Action: Cost 1 — §1.10) ──────────────────────────────────────────
@@ -1064,14 +1064,14 @@ object DCExpansion extends Expansion {
                     val factionsWithCultists = game.factions.%(ff => ff.at(area).%(_.uclass.utype == Cultist).any)
                     println(s"[SATIATE-CONFIRM-TRACE] Y'Golonac in ${area}. Factions with cultists: ${factionsWithCultists.mkString(", ")}. All units in area: ${game.factions./~(_.at(area))./(u => s"${u.ref}@${u.region}").mkString(", ")}")
                     // Per-faction pick chain (Item 8): each faction with 2+ cultists chooses which to lose.
-                    Force(DCSatiateFactionPickAction(self, area, factionsWithCultists, 0))
+                    Force(DCSatiateFactionPickAction(self, area, factionsWithCultists, 0, $))
                 case None =>
                     EndAction(self)
             }
 
-        case DCSatiateFactionPickAction(self, area, remaining, capturedSoFar) =>
+        case DCSatiateFactionPickAction(self, area, remaining, capturedSoFar, capturedFromFactions) =>
             if (remaining.none) {
-                Force(DCSatiateFinishAction(self, area, capturedSoFar))
+                Force(DCSatiateFinishAction(self, area, capturedSoFar, capturedFromFactions))
             } else {
                 val ff = remaining.first
                 val cultists = ff.at(area).%(_.uclass.utype == Cultist)
@@ -1083,7 +1083,7 @@ object DCExpansion extends Expansion {
                     c.region = self.prison
                     c.onGate = false
                     ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(only one in", area, ")")
-                    Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1))
+                    Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1, capturedFromFactions :+ ff))
                 } else if (cultists.num > 1) {
                     // HB Fix 112 (2026-07-09): sanitize stale onGate flags before
                     // deciding whether to prompt. A cultist forcibly moved (e.g.
@@ -1110,28 +1110,28 @@ object DCExpansion extends Expansion {
                         c.region = self.prison
                         c.onGate = false
                         ff.log(Satiate.styled(DC) + ":", ff.short.styled(ff), "loses", c.uclass.styled(ff), "(all equivalent in", area, ")")
-                        Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1))
+                        Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar + 1, capturedFromFactions :+ ff))
                     } else {
                         implicit val asking = Asking(ff)
                         cultists.foreach { c =>
-                            + DCSatiatePickCultistAction(ff, area, c.ref, remaining.dropStarting, capturedSoFar)
+                            + DCSatiatePickCultistAction(ff, area, c.ref, remaining.dropStarting, capturedSoFar, capturedFromFactions)
                         }
                         asking
                     }
                 } else {
-                    Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar))
+                    Force(DCSatiateFactionPickAction(self, area, remaining.dropStarting, capturedSoFar, capturedFromFactions))
                 }
             }
 
-        case DCSatiatePickCultistAction(self, area, cultistRef, remaining, capturedSoFar) =>
+        case DCSatiatePickCultistAction(self, area, cultistRef, remaining, capturedSoFar, capturedFromFactions) =>
             val c = game.unit(cultistRef)
             YSExpansion.passionOnCapture(c)
             c.region = DC.prison
             c.onGate = false
             self.log(Satiate.styled(DC) + ":", self.short.styled(self), "loses", c.uclass.styled(self), "to", DC.full)
-            Force(DCSatiateFactionPickAction(DC, area, remaining, capturedSoFar + 1))
+            Force(DCSatiateFactionPickAction(DC, area, remaining, capturedSoFar + 1, capturedFromFactions :+ self))
 
-        case DCSatiateFinishAction(self, area, capturedSoFar) =>
+        case DCSatiateFinishAction(self, area, capturedSoFar, capturedFromFactions) =>
             val bonus = math.max(0, capturedSoFar - 1)
             if (bonus > 0) self.takeES(bonus)
             self.log(Satiate.styled(DC) + ": captured", capturedSoFar, "cultist".s(capturedSoFar), "in", area,
@@ -1143,11 +1143,11 @@ object DCExpansion extends Expansion {
             if (capturedSoFar > 0 && bonus == 0)
                 self.log(Satiate.styled(DC) + ": no Elder Sign because no captures beyond the first")
             // HB Fix SC-Satiate: multi-capture procs Self Consuming. Each captured
-            // cultist counts as a unit removed for Self Consuming purposes (not FBE-controlled).
-            // Self Consuming triggers on ANY unit elimination, so we record them even when
-            // DC (not FBE) is performing the action.
+            // cultist counts as a unit removed for Self Consuming purposes. Record the
+            // faction that controlled each cultist so FBE's Self Consuming can properly
+            // award power to FBE if FBE units died here.
             if (game.setup.has(FBE) && capturedSoFar > 0)
-                (1 to capturedSoFar).foreach(_ => game.fbeSelfConsumingDeaths :+= (area, None))
+                capturedFromFactions.foreach(f => game.fbeSelfConsumingDeaths :+= (area, |(f)))
             EndAction(self)
 
         // ── Lure (cost 1, force-move adjacent enemy cultists into Y'Golonac's area) ──
