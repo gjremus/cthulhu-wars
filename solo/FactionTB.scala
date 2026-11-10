@@ -1243,6 +1243,15 @@ object TBExpansion extends Expansion {
             // Gain 2 Power first (per the Spellbook Requirement)
             self.power += 2
             self.log(RemoveGatePlaceChthonianReq.text.styled(TB) + ": gained", 2.power)
+            // This ability's `then` routes straight back into MainAction, not
+            // EndAction/AfterAction, so the generic Behemoth 0-crossing watcher
+            // (which normally clears the latch once Power > 0) never runs here.
+            // Without this, a stale latch from an earlier 0-crossing (e.g. the
+            // Awaken-Shudde-M'ell Power spend) silently blocked the Segment that
+            // should have been placed on the VERY NEXT drop back to 0 (e.g. this
+            // same banked 2 Power spent immediately via Thousand Writhing Maws).
+            if (self.power > 0)
+                game.tbBehemothZeroLatched = false
             // Latch so this specific 2 Power (and only this) gets one shot at
             // reaching Thousand Writhing Maws if `then` routes back into the
             // post-Action menu (see MainAction(f) if f.acted below).
