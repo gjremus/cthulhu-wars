@@ -341,9 +341,9 @@ case class DCSatiateConfirmAction(self : Faction)
     extends BaseFactionAction(Satiate.styled(DC), "Confirm".styled("power"))
 // Per-faction Cultist pick (self=affectedFaction). Hard — once a faction has
 // committed to Satiate the captured unit is no longer cancelable.
-case class DCSatiateFactionPickAction(self : Faction, area : Region, remaining : $[Faction], capturedSoFar : Int, capturedFromFactions : $[Faction])
+case class DCSatiateFactionPickAction(self : Faction, area : Region, remaining : $[Faction], capturedSoFar : Int, capturedFromFactions : $[Faction] = $)
     extends ForcedAction with PowerNeutral
-case class DCSatiatePickCultistAction(self : Faction, area : Region, cultist : UnitRef, remaining : $[Faction], capturedSoFar : Int, capturedFromFactions : $[Faction])
+case class DCSatiatePickCultistAction(self : Faction, area : Region, cultist : UnitRef, remaining : $[Faction], capturedSoFar : Int, capturedFromFactions : $[Faction] = $)
     extends BaseFactionAction(Satiate.styled(DC) + ": " + self.short.styled(self) + " loses",
         // HB Task #125 (2026-08-10): the menu listed every capturable cultist as
         // plain "Acolyte" with no way to tell an on-gate cultist (whose capture
@@ -352,7 +352,7 @@ case class DCSatiatePickCultistAction(self : Faction, area : Region, cultist : U
         // identically.
         implicit g => g.unit(cultist).uclass.styled(self) + (if (g.unit(cultist).onGate) " (on gate)" else " (off gate)"))
     with PowerNeutral
-case class DCSatiateFinishAction(self : Faction, area : Region, capturedSoFar : Int, capturedFromFactions : $[Faction])
+case class DCSatiateFinishAction(self : Faction, area : Region, capturedSoFar : Int, capturedFromFactions : $[Faction] = $)
     extends ForcedAction with PowerNeutral
 
 // ── Lure (Action: Cost 1 — §1.10) ──────────────────────────────────────────
