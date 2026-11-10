@@ -373,6 +373,11 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // the cadavolyte abandon the Mantle gate?", game "undefined against
                     // colour", rowId 969).
                     game.unit(cultist).onGate                    |=> -500 -> "stalk: avoid relocating a gate-holding cultist off its own gate (creator priority 2026-11-08)"
+                    // 2026-11-09 creator priority (game "gate in blindness"): Stalk
+                    // must never relocate a Cadavolyte into an Area where it could be
+                    // captured -- same hard-block style as the other two Stalk
+                    // avoidance rules above (must outrank TBStalkSkipAction's 0).
+                    cultist.uclass == Cadavolyte && dest.capturers.active.any |=> -500 -> "stalk: avoid moving a cadavolyte into an area where it could be captured (creator priority 2026-11-09)"
                     true                                         |=> 200  -> "stalk commit"
 
                 // Autotomy: post-battle Kill transfer
@@ -521,6 +526,12 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case TBRemoveGatePlaceChthonianAreaAction(f, removedGate, dest, _) =>
                     self.gates.has(dest) && dest != removedGate && dest.foes.any |=> 700  -> "chthonian placement: own gate under threat, creator priority 2026-11-07"
                     self.gates.has(dest) && dest != removedGate                   |=> 500  -> "chthonian placement: own gate, creator priority 2026-11-07"
+                    // 2026-11-09 creator priority (game "gate in blindness"): if TB has
+                    // no other controlled Gate left to defend (the one being removed
+                    // here was the only one), prioritise placing the Chthonian on the
+                    // Mantle instead -- TB's own safe home Area -- over any ordinary
+                    // occupied Area.
+                    self.gates.but(removedGate).none && dest == TB.mantle           |=> 600  -> "chthonian placement: no TB-controlled gate remains, prioritise the Mantle (creator priority 2026-11-09)"
                     true                                                          |=> 200  -> "chthonian placement commit"
 
                 // SBR-4: Gates at every GOO Area
