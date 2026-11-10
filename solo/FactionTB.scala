@@ -576,6 +576,14 @@ object TBExpansion extends Expansion {
             // 2026-11-08: creator priority -- also withheld unless at least one
             // Segment is in play (on the Mantle via Behemoth), not just withheld
             // until Shudde M'ell is awakened.
+            // 2026-11-09: added the matching SBR3-TRACE println here too -- this
+            // branch (f.acted, i.e. TB has already taken its Action this turn) has
+            // its own separate copy of the SBR-3 offer check, and the first trace
+            // added below only covered the OTHER copy (f not yet acted). A bot that
+            // reaches 0 Power after already acting this turn would silently fall
+            // through this un-instrumented copy with no evidence captured.
+            if (f.power == 0)
+                println(s"[TB-SBR3-TRACE] MainAction(f.acted=true) power=0: everAwakened=${game.tbShuddeMellEverAwakened} segmentInPlay=${f.all(ShuddeMellSegment).any} needsReq=${f.needs(RemoveGatePlaceChthonianReq)} hasGate=${f.gates.any} chthonianInPool=${f.pool(Chthonian).any} unitsInPlay=${f.allInPlay.any}")
             if (game.tbShuddeMellEverAwakened && f.all(ShuddeMellSegment).any && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
                 + TBRemoveGatePlaceChthonianMainAction(f)
 
@@ -649,7 +657,7 @@ object TBExpansion extends Expansion {
             // 2026-11-08: creator priority -- also withheld unless at least one
             // Segment is in play. See matching comment above.
             if (f.power == 0)
-                println(s"[TB-SBR3-TRACE] MainAction(acted) power=0: everAwakened=${game.tbShuddeMellEverAwakened} segmentInPlay=${f.all(ShuddeMellSegment).any} needsReq=${f.needs(RemoveGatePlaceChthonianReq)} hasGate=${f.gates.any} chthonianInPool=${f.pool(Chthonian).any} unitsInPlay=${f.allInPlay.any}")
+                println(s"[TB-SBR3-TRACE] MainAction(f.acted=false) power=0: everAwakened=${game.tbShuddeMellEverAwakened} segmentInPlay=${f.all(ShuddeMellSegment).any} needsReq=${f.needs(RemoveGatePlaceChthonianReq)} hasGate=${f.gates.any} chthonianInPool=${f.pool(Chthonian).any} unitsInPlay=${f.allInPlay.any}")
             if (game.tbShuddeMellEverAwakened && f.all(ShuddeMellSegment).any && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
                 + TBRemoveGatePlaceChthonianMainAction(f)
 
