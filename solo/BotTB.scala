@@ -233,8 +233,22 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // satisfies -- lands in time for Grasp to win that pick.
                     (u.goo || u.is(ShuddeMellSegment)) && numSB < 4 &&
                         (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> -1000 -> "move part to glyph area (three-glyphs SBR deprioritized below 4 spellbooks, creator priority 2026-11-09)"
-                    (u.goo || u.is(ShuddeMellSegment)) && numSB >= 4 && sbReqsDoneExclGlyphs >= 4 && self.all(ShuddeMellSegment).num >= 2 &&
-                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> 1900 -> "move part to glyph area (three-glyphs SBR, creator priority 2026-11-09: timed before the 5th spellbook pick so Grasp can win it)"
+                    // 2026-11-10 fix (creator report, game "Lunacy for Space", rowId 985):
+                    // this used to reward a move onto ANY of the three glyph types with
+                    // the same flat score, with no check of which glyph type(s) the
+                    // OTHER Shudde M'ell parts already sit on. That let the bot move the
+                    // Head from one (*) Area to another (*) Area (a pure wasted-Power
+                    // no-op, since (*) was already covered) and send both Segments onto
+                    // /^\ Areas instead of splitting across /^\ and ||| -- leaving the
+                    // three-glyphs requirement permanently unsatisfied. Now only the
+                    // glyph type(s) not already held by one of this part's OTHER parts
+                    // (head/segments, excluding the one being moved) count toward the
+                    // bonus, so each part is steered at a distinct, still-needed glyph.
+                    (u.goo || u.is(ShuddeMellSegment)) && numSB >= 4 && sbReqsDoneExclGlyphs >= 4 && self.all(ShuddeMellSegment).num >= 2 && {
+                        val otherGlyphsCovered = (self.all(ShuddeMellHead) ++ self.all(ShuddeMellSegment))
+                            .%(_.ref != u)./(_.region.glyph).distinct
+                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) && !otherGlyphsCovered.has(to.glyph)
+                    } |=> 1900 -> "move part to still-needed glyph area (three-glyphs SBR, creator priority 2026-11-09, glyph-coverage fix 2026-11-10)"
                     to.freeGate                                  |=> 400  -> "move to free gate"
 
                 // Creator fix (2026-11-02): recruiting a Tentacle had no Area-spread
