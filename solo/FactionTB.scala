@@ -648,6 +648,8 @@ object TBExpansion extends Expansion {
             // M'ell has been awakened at least once. See matching comment above.
             // 2026-11-08: creator priority -- also withheld unless at least one
             // Segment is in play. See matching comment above.
+            if (f.power == 0)
+                println(s"[TB-SBR3-TRACE] MainAction(acted) power=0: everAwakened=${game.tbShuddeMellEverAwakened} segmentInPlay=${f.all(ShuddeMellSegment).any} needsReq=${f.needs(RemoveGatePlaceChthonianReq)} hasGate=${f.gates.any} chthonianInPool=${f.pool(Chthonian).any} unitsInPlay=${f.allInPlay.any}")
             if (game.tbShuddeMellEverAwakened && f.all(ShuddeMellSegment).any && f.needs(RemoveGatePlaceChthonianReq) && f.gates.any && f.pool(Chthonian).any && f.allInPlay.any)
                 + TBRemoveGatePlaceChthonianMainAction(f)
 
@@ -1392,6 +1394,7 @@ object TBExpansion extends Expansion {
     // awakened and Mantle is in play and pool has Segments, dispatch recorded action.
     def tbCheckBehemoth(then : ForcedAction)(implicit game : Game) : Continue = {
         val f = TB
+        println(s"[TB-SBR3-TRACE] tbCheckBehemoth: power=${f.power} everAwakened=${game.tbShuddeMellEverAwakened} mantleInPlay=${game.tbMantleInPlay} segmentPool=${f.pool(ShuddeMellSegment).num} zeroLatched=${game.tbBehemothZeroLatched} ready=$tbBehemothReady")
         if (tbBehemothReady && game.tbBehemothZeroLatched.not)
             Force(TBBehemothSegmentAction(f, then))
         else
