@@ -239,8 +239,15 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // the threshold to numSB >= 4 (right after Ensnare, the 4th pick, and
                     // before the 5th pick is offered) so the glyph-move -- and the Req it
                     // satisfies -- lands in time for Grasp to win that pick.
-                    (u.goo || u.is(ShuddeMellSegment)) && numSB < 4 &&
-                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> -1000 -> "move part to glyph area (three-glyphs SBR deprioritized below 4 spellbooks, creator priority 2026-11-09)"
+                    // 2026-11-10 fix (task: "more foolproof sequence"): this used to
+                    // block ALL glyph moves until 4 Spellbooks, full stop -- but the
+                    // creator's new requested opening explicitly starts the glyph-move
+                    // push the moment Remove-Gate-Place-Chthonian (SBR-3) banks its 2
+                    // Power, well before 4 Spellbooks are picked. Narrowed the block to
+                    // only apply while that SBR is still outstanding, so it no longer
+                    // fights the earlier trigger the creator asked for.
+                    (u.goo || u.is(ShuddeMellSegment)) && numSB < 4 && self.needs(RemoveGatePlaceChthonianReq) &&
+                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) |=> -1000 -> "move part to glyph area (three-glyphs SBR deprioritized until remove-gate-place-chthonian satisfied, creator priority 2026-11-09, narrowed 2026-11-10)"
                     // 2026-11-10 fix (creator report, game "Lunacy for Space", rowId 985):
                     // this used to reward a move onto ANY of the three glyph types with
                     // the same flat score, with no check of which glyph type(s) the
@@ -252,11 +259,22 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // glyph type(s) not already held by one of this part's OTHER parts
                     // (head/segments, excluding the one being moved) count toward the
                     // bonus, so each part is steered at a distinct, still-needed glyph.
-                    (u.goo || u.is(ShuddeMellSegment)) && numSB >= 4 && sbReqsDoneExclGlyphs >= 4 && self.all(ShuddeMellSegment).num >= 2 && {
+                    // 2026-11-10 fix (task: "more foolproof sequence"): widened the
+                    // trigger from "4 of the other 5 SBRs done" (sbReqsDoneExclGlyphs >= 4,
+                    // which in practice meant late-game, after Gates-at-GOOs) to "Remove-
+                    // Gate-Place-Chthonian satisfied" -- the creator's literal request is
+                    // to push the Head+first-Segment glyph move immediately off that SBR's
+                    // 2 banked Power, with the second Segment following as the first action
+                    // of the next Action Phase (naturally highest-scored once the Head/
+                    // first-Segment glyph is already covered, since that's the only glyph
+                    // move left to make). sbReqsDoneExclGlyphs retained as an alternate
+                    // (OR'd) path so the pre-existing late-game fallback keeps working for
+                    // games where Remove-Gate-Place-Chthonian is reached later or skipped.
+                    (u.goo || u.is(ShuddeMellSegment)) && (!self.needs(RemoveGatePlaceChthonianReq) || sbReqsDoneExclGlyphs >= 4) && self.all(ShuddeMellSegment).num >= 2 && {
                         val otherGlyphsCovered = (self.all(ShuddeMellHead) ++ self.all(ShuddeMellSegment))
                             .%(_.ref != u)./(_.region.glyph).distinct
                         (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) && !otherGlyphsCovered.has(to.glyph)
-                    } |=> 1900 -> "move part to still-needed glyph area (three-glyphs SBR, creator priority 2026-11-09, glyph-coverage fix 2026-11-10)"
+                    } |=> 1900 -> "move part to still-needed glyph area (three-glyphs SBR, creator priority 2026-11-09, glyph-coverage fix 2026-11-10, early-trigger widening 2026-11-10)"
                     // 2026-11-10 creator priority (game "Catastrophe through
                     // Blindness", rowId 987): a gate-holding Cadavolyte was moved
                     // off its own main-map Gate via a plain Move, abandoning TB's
@@ -360,6 +378,25 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // already fixed for Psychic Shriek in v2.548. TBWrithingMawsAction is the
                     // only non-Soft leaf in this chain, so the real priority has to live here.
                     uc == Tentacle && game.tbShuddeMellEverAwakened && self.needs(TenTentaclesReq) |=> 1050 -> "maws commit: tentacle double-recruit (post-awaken, toward 10-tentacle SBR, outranks moving a tentacle, creator priority 2026-11-09)"
+                    // 2026-11-10 fix (task: "more foolproof sequence"): new creator step
+                    // after Gates-at-GOOs (5th SBR) -- with Power still available, use TWM
+                    // to place Cadavolytes defending Areas that already hold a Shudde
+                    // M'ell Part and are one of TB's own Gates (dual Gate+GOO defense).
+                    uc == Cadavolyte && !self.needs(GatesAtGOOsReq) &&
+                        self.gates.has(r1) && (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any) &&
+                        self.gates.has(r2) && (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any) |=> 1150 -> "maws commit: two cadavolytes defending shudde m'ell gate areas (creator priority 2026-11-10)"
+                    uc == Cadavolyte && !self.needs(GatesAtGOOsReq) &&
+                        ((self.gates.has(r1) && (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any)) ||
+                         (self.gates.has(r2) && (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any))) |=> 1100 -> "maws commit: cadavolyte defending a shudde m'ell gate area (creator priority 2026-11-10)"
+                    // 2026-11-10 fix (task: "more foolproof sequence"): new creator step
+                    // heading into the 6th (final) Spellbook pick -- place Tentacles into
+                    // Areas a Shudde M'ell Part already occupies, to protect it.
+                    uc == Tentacle && numSB >= 5 &&
+                        (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any) &&
+                        (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any) |=> 1075 -> "maws commit: two tentacles protecting shudde m'ell areas (creator priority 2026-11-10)"
+                    uc == Tentacle && numSB >= 5 &&
+                        (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any ||
+                         self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any) |=> 1060 -> "maws commit: tentacle protecting a shudde m'ell area (creator priority 2026-11-10)"
                     uc == Tentacle && self.at(r2, Tentacle).any && r2.connected.exists(c => self.at(c, Tentacle).none) |=> 400 -> "maws: tentacle area next to an empty area"
                     uc == Cadavolyte && self.needs(OverlayMantleReq) && r1.connected.has(r2) |=> (500 + distFromEnemies(r2)) -> "maws: two cadavolytes in adjacent areas, far from enemies (creator: new opening, pair toward Overlay Mantle SBR away from enemies)"
                     true                                         |=> 300  -> "maws commit"
