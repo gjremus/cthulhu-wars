@@ -207,6 +207,10 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
 
         val o = eas.sortWith(compare)
 
+        if (ev.self == TB) {
+            println(s"[TB-TRACE-TOPACTIONS] turn=${game.turn} top3=${o.take(3).map(ae => (ae.action, ae.evaluations.map(e => (e.weight, e.desc))))}")
+        }
+
         if (ev.self == CC && o.num > 1) {
             val top = o.head.action
             val descs = o./~(_.evaluations./(_.desc)).distinct

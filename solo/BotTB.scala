@@ -318,7 +318,9 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     (u.goo || u.is(ShuddeMellSegment)) && (!self.needs(RemoveGatePlaceChthonianReq) || sbReqsDoneExclGlyphs >= 4) && self.all(ShuddeMellSegment).num >= 2 && {
                         val otherGlyphsCovered = (self.all(ShuddeMellHead) ++ self.all(ShuddeMellSegment))
                             .%(_.ref != u)./(_.region.glyph).distinct
-                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) && to.glyph != from.glyph && !otherGlyphsCovered.has(to.glyph)
+                        val qualifies = (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) && to.glyph != from.glyph && !otherGlyphsCovered.has(to.glyph)
+                        println(s"[TB-TRACE-GLYPH] u=$u from=$from(${from.glyph}) to=$to(${to.glyph}) otherGlyphsCovered=$otherGlyphsCovered qualifies=$qualifies")
+                        qualifies
                     } |=> 1900 -> "move part to still-needed glyph area (three-glyphs SBR, creator priority 2026-11-09, glyph-coverage fix 2026-11-10, early-trigger widening 2026-11-10, same-glyph-waste fix 2026-11-11)"
                     // 2026-11-10 creator priority (game "Catastrophe through
                     // Blindness", rowId 987): a gate-holding Cadavolyte was moved
@@ -429,6 +431,7 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // (and won, at 1050) the moment Remove-Gate-Place-Chthonian banked its
                     // 2 Power, spending that Power on Tentacles instead of the glyph-area
                     // moves the creator wants prioritized during that exact window.
+                    if (uc == Tentacle) println(s"[TB-TRACE-TWM] uc=$uc r1=$r1 r2=$r2 glyphPushActive=$glyphPushActive needsGlyphs=${self.needs(ShuddeMellInThreeGlyphsReq)} needsRGPC=${self.needs(RemoveGatePlaceChthonianReq)} sbReqsDoneExclGlyphs=$sbReqsDoneExclGlyphs needsTen=${self.needs(TenTentaclesReq)}")
                     uc == Tentacle && game.tbShuddeMellEverAwakened && !glyphPushActive && self.needs(TenTentaclesReq) |=> 1050 -> "maws commit: tentacle double-recruit (post-awaken, toward 10-tentacle SBR, outranks moving a tentacle, creator priority 2026-11-09, deferred to glyph push 2026-11-11)"
                     // 2026-11-10 fix (task: "more foolproof sequence"): new creator step
                     // after Gates-at-GOOs (5th SBR) -- with Power still available, use TWM
