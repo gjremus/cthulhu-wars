@@ -215,8 +215,18 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // enemies" 700 score into whatever Area an enemy happened to be,
                     // leaving TB's own Gate to fend for itself (creator report, game
                     // "undefined against colour", rowId 969).
+                    // 2026-11-11 fix (creator report, game "Break through Lunacy", rowId
+                    // 995): this used to fire for ANY destination Gate, even one the Head
+                    // was already effectively guarding from -- so a Head already sitting
+                    // on TB's own South America Gate got "rewarded" 3000 to relocate to
+                    // TB's OTHER own Gate in North America (action 447), a pure
+                    // wasted-Power lateral move since both Gates were already safe (no
+                    // enemy present at either). Added a from-is-already-an-own-Gate
+                    // exclusion so this only fires when the Head is actually leaving a
+                    // non-Gate Area to go protect one.
                     u.is(ShuddeMellHead) && game.tbShuddeMellEverAwakened &&
-                        self.gates.has(to) && to != TB.mantle    |=> 3000 -> "move shudde m'ell to protect own gate (creator priority 2026-11-08)"
+                        self.gates.has(to) && to != TB.mantle &&
+                        !(self.gates.has(from) && from != TB.mantle) |=> 3000 -> "move shudde m'ell to protect own gate (creator priority 2026-11-08, gate-to-gate waste fix 2026-11-11)"
                     // 2026-11-08 (3rd fix same day): creator's full post-awaken Power
                     // priority list for the main-action menu is 1) protect own Gate with
                     // the Head (above, 3000) 2) Thousand Writhing Maws recruit Tentacles
@@ -412,7 +422,14 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // 975 (BotTB.scala, MoveAction case). Same dead-Soft-action bug class
                     // already fixed for Psychic Shriek in v2.548. TBWrithingMawsAction is the
                     // only non-Soft leaf in this chain, so the real priority has to live here.
-                    uc == Tentacle && game.tbShuddeMellEverAwakened && self.needs(TenTentaclesReq) |=> 1050 -> "maws commit: tentacle double-recruit (post-awaken, toward 10-tentacle SBR, outranks moving a tentacle, creator priority 2026-11-09)"
+                    // 2026-11-11 fix (creator report, game "Break through Lunacy", rowId
+                    // 995): the Move-based glyphPushActive block (above, in MoveAction)
+                    // only stopped a Tentacle/Chthonian MOVE during the glyph push -- it
+                    // had no counterpart here, so this Tentacle double-recruit still fired
+                    // (and won, at 1050) the moment Remove-Gate-Place-Chthonian banked its
+                    // 2 Power, spending that Power on Tentacles instead of the glyph-area
+                    // moves the creator wants prioritized during that exact window.
+                    uc == Tentacle && game.tbShuddeMellEverAwakened && !glyphPushActive && self.needs(TenTentaclesReq) |=> 1050 -> "maws commit: tentacle double-recruit (post-awaken, toward 10-tentacle SBR, outranks moving a tentacle, creator priority 2026-11-09, deferred to glyph push 2026-11-11)"
                     // 2026-11-10 fix (task: "more foolproof sequence"): new creator step
                     // after Gates-at-GOOs (5th SBR) -- with Power still available, use TWM
                     // to place Cadavolytes defending Areas that already hold a Shudde
