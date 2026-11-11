@@ -669,6 +669,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         else if (unit.uclass == Cathedral) 0
         // PRM Mother's Aid: Ycgn'àgnnisssz cannot be assigned combat results while controlled by an enemy
         else if (unit.uclass == Ycgnagnnisssz && game.prmYcgnaTemporaryController.isDefined && game.prmYcgnaTemporaryController.get != unit.faction) 0
+        // Yuggoth: Brain Cylinders cannot be assigned Pain results (per spec; they also don't
+        // prevent Pains from landing on other units in their Area, which is handled elsewhere).
+        else if (unit.uclass == BrainCylinderCultist) 0
         else unit.health match {
             case DoubleHP(Alive, Alive) => 2
             case DoubleHP(Alive, _) => 1
