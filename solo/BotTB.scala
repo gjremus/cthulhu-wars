@@ -82,6 +82,19 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
             val sbReqsDoneExclGlyphs = $(OverlayMantleReq, TenTentaclesReq, RemoveGatePlaceChthonianReq,
                 GatesAtGOOsReq, AwakenShuddeMellReq).%(req => !self.needs(req)).num
 
+            // 2026-11-10 fix (creator report, game "Break through Undefined", rowId
+            // 994): same window as the glyph-move bonus below (self already past
+            // Remove-Gate-Place-Chthonian, or 4 of the other 5 SBRs done) -- while
+            // Three-Glyphs is still unsatisfied and that window is open, the creator's
+            // literal instruction is "don't move any other units than Shudde M'ell
+            // units when targeting fulfilling the glyph requirement." The bot had
+            // instead moved a Tentacle (action 629, toward "spread" scoring) and a
+            // Chthonian (action 631, toward "toward enemies" scoring) in the very
+            // same Action Phase as the glyph push, wasting Power that should have
+            // gone entirely to Shudde M'ell parts.
+            val glyphPushActive = self.needs(ShuddeMellInThreeGlyphsReq) &&
+                (!self.needs(RemoveGatePlaceChthonianReq) || sbReqsDoneExclGlyphs >= 4)
+
             // Creator priority (2026-11-02): TB should never take a single, plain
             // Recruit/Summon when Thousand Writhing Maws' double recruit/summon is
             // legal this turn -- same eligibility check the game itself uses to offer
@@ -177,6 +190,18 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     isGCStart                                       |=> -500 -> "setup: avoid Great Cthulhu's start area"
 
                 case MoveAction(f, u, from, to, _) =>
+                    // 2026-11-10 fix (creator report, game "Break through Undefined",
+                    // rowId 994): "Dont move any other units than shudde mell units
+                    // when targeting gaining [the glyph-area] spellbook requirement."
+                    // While the glyph push is active (see glyphPushActive above), moving
+                    // a Tentacle or Chthonian -- neither of which can ever satisfy
+                    // Three-Glyphs -- just burns Power that should go entirely to Shudde
+                    // M'ell's Head/Segments. Hard-block, same style/magnitude as the
+                    // other large negative blocks in this file, so it outranks every
+                    // positive score these units would otherwise get below (action 629:
+                    // Tentacle moved to Arabia for no reason; action 631: Chthonian moved
+                    // toward enemies for no reason, both during an active glyph push).
+                    (u.is(Tentacle) || u.monster) && glyphPushActive |=> -2000 -> "avoid moving tentacle/chthonian while the three-glyphs push is active (creator priority 2026-11-10)"
                     u.cultist && to.freeGate                     |=> 1600 -> "cultist to free gate"
                     u.cultist && to.ownGate                      |=> 200  -> "cultist to own gate"
                     u.monster && to.foes.any && self.power > 3   |=> 500  -> "chthonian toward enemies"
@@ -270,11 +295,21 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // move left to make). sbReqsDoneExclGlyphs retained as an alternate
                     // (OR'd) path so the pre-existing late-game fallback keeps working for
                     // games where Remove-Gate-Place-Chthonian is reached later or skipped.
+                    // 2026-11-10 fix (creator report, game "Break through Undefined",
+                    // rowId 994): this used to reward a move onto any glyph not covered
+                    // by the part's OTHER parts, but never checked whether the MOVING
+                    // part itself already occupied that same glyph type before the move
+                    // -- so Shudde M'ell's Head, already sitting on a (*) Area, could be
+                    // "rewarded" 1900 to move to a DIFFERENT (*) Area, a pure wasted-Power
+                    // no-op (action 627: Head moved North America (*) to South America
+                    // (*), still only covering (*), gaining nothing). Added
+                    // from.glyph != to.glyph so a part already providing a glyph's
+                    // coverage is never paid to relocate within that same glyph type.
                     (u.goo || u.is(ShuddeMellSegment)) && (!self.needs(RemoveGatePlaceChthonianReq) || sbReqsDoneExclGlyphs >= 4) && self.all(ShuddeMellSegment).num >= 2 && {
                         val otherGlyphsCovered = (self.all(ShuddeMellHead) ++ self.all(ShuddeMellSegment))
                             .%(_.ref != u)./(_.region.glyph).distinct
-                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) && !otherGlyphsCovered.has(to.glyph)
-                    } |=> 1900 -> "move part to still-needed glyph area (three-glyphs SBR, creator priority 2026-11-09, glyph-coverage fix 2026-11-10, early-trigger widening 2026-11-10)"
+                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) && to.glyph != from.glyph && !otherGlyphsCovered.has(to.glyph)
+                    } |=> 1900 -> "move part to still-needed glyph area (three-glyphs SBR, creator priority 2026-11-09, glyph-coverage fix 2026-11-10, early-trigger widening 2026-11-10, same-glyph-waste fix 2026-11-11)"
                     // 2026-11-10 creator priority (game "Catastrophe through
                     // Blindness", rowId 987): a gate-holding Cadavolyte was moved
                     // off its own main-map Gate via a plain Move, abandoning TB's
