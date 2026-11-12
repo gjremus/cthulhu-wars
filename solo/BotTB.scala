@@ -328,13 +328,22 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // (*), still only covering (*), gaining nothing). Added
                     // from.glyph != to.glyph so a part already providing a glyph's
                     // coverage is never paid to relocate within that same glyph type.
-                    (u.goo || u.is(ShuddeMellSegment)) && (!self.needs(RemoveGatePlaceChthonianReq) || sbReqsDoneExclGlyphs >= 4) && self.all(ShuddeMellSegment).num >= 2 && {
+                    // 2026-11-12 fix (creator report, game "Tentacles versus Shift",
+                    // rowId 1002, mistakes 4/6/7): this used to also require 2+
+                    // Segments already in play before it would fire at all, so the
+                    // very first Head move (0 Segments) and the Head-or-first-Segment
+                    // move (1 Segment) right after Remove-Gate-Place-Chthonian never
+                    // scored anything, leaving the Thousand Writhing Maws fallback
+                    // (flat +300, see TBWrithingMawsAction below) to win those turns by
+                    // default instead. The glyph-coverage check below already handles
+                    // 0/1/2-Segment states correctly on its own (a part with no other
+                    // parts placed yet simply has nothing marked "covered"), so the
+                    // Segment-count gate was removed entirely.
+                    (u.goo || u.is(ShuddeMellSegment)) && (!self.needs(RemoveGatePlaceChthonianReq) || sbReqsDoneExclGlyphs >= 4) && {
                         val otherGlyphsCovered = (self.all(ShuddeMellHead) ++ self.all(ShuddeMellSegment))
                             .%(_.ref != u)./(_.region.glyph).distinct
-                        val qualifies = (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) && to.glyph != from.glyph && !otherGlyphsCovered.has(to.glyph)
-                        println(s"[TB-TRACE-GLYPH] u=$u from=$from(${from.glyph}) to=$to(${to.glyph}) otherGlyphsCovered=$otherGlyphsCovered qualifies=$qualifies")
-                        qualifies
-                    } |=> 1900 -> "move part to still-needed glyph area (three-glyphs SBR, creator priority 2026-11-09, glyph-coverage fix 2026-11-10, early-trigger widening 2026-11-10, same-glyph-waste fix 2026-11-11)"
+                        (to.glyph == GlyphAA || to.glyph == GlyphOO || to.glyph == GlyphWW) && to.glyph != from.glyph && !otherGlyphsCovered.has(to.glyph)
+                    } |=> 1900 -> "move part to still-needed glyph area (three-glyphs SBR, creator priority 2026-11-09, glyph-coverage fix 2026-11-10, early-trigger widening 2026-11-10, same-glyph-waste fix 2026-11-11, 0/1-segment gap fix 2026-11-12)"
                     // 2026-11-10 creator priority (game "Catastrophe through
                     // Blindness", rowId 987): a gate-holding Cadavolyte was moved
                     // off its own main-map Gate via a plain Move, abandoning TB's
@@ -444,8 +453,20 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // (and won, at 1050) the moment Remove-Gate-Place-Chthonian banked its
                     // 2 Power, spending that Power on Tentacles instead of the glyph-area
                     // moves the creator wants prioritized during that exact window.
-                    if (uc == Tentacle) println(s"[TB-TRACE-TWM] uc=$uc r1=$r1 r2=$r2 glyphPushActive=$glyphPushActive needsGlyphs=${self.needs(ShuddeMellInThreeGlyphsReq)} needsRGPC=${self.needs(RemoveGatePlaceChthonianReq)} sbReqsDoneExclGlyphs=$sbReqsDoneExclGlyphs needsTen=${self.needs(TenTentaclesReq)}")
-                    uc == Tentacle && game.tbShuddeMellEverAwakened && !glyphPushActive && self.needs(TenTentaclesReq) |=> 1050 -> "maws commit: tentacle double-recruit (post-awaken, toward 10-tentacle SBR, outranks moving a tentacle, creator priority 2026-11-09, deferred to glyph push 2026-11-11)"
+                    // 2026-11-12 fix (creator report, game "Tentacles versus Shift",
+                    // rowId 1002, mistake 3 vs. mistake 5 reconciled): confirmed against
+                    // the real game log that action 334-336's 2-Power Tentacle recruit
+                    // happened with ZERO Shudde M'ell Segments in play yet (mistake 3's
+                    // exact condition, not mistake 5's "1 Segment" one) -- at 0 Segments
+                    // there is no Head-only glyph move available to compete with this
+                    // (moving the Head alone can never satisfy Three-Glyphs), so this
+                    // Tentacle double-recruit staying top priority here is correct by
+                    // the creator's own mistake (3). The 1/2-Segment cases from mistakes
+                    // (5)/(6)/(7) are handled by the Move-based glyph bonus above, which
+                    // now fires at any Segment count (see the 0/1-segment gap fix there)
+                    // and by glyphPushActive already blocking this Tentacle recruit once
+                    // a glyph move is actually available to make instead.
+                    uc == Tentacle && game.tbShuddeMellEverAwakened && !glyphPushActive && self.needs(TenTentaclesReq) |=> 1050 -> "maws commit: tentacle double-recruit (post-awaken, toward 10-tentacle SBR, outranks moving a tentacle, creator priority 2026-11-09, deferred to glyph push 2026-11-11, 0-segment case confirmed correct 2026-11-12)"
                     // 2026-11-10 fix (task: "more foolproof sequence"): new creator step
                     // after Gates-at-GOOs (5th SBR) -- with Power still available, use TWM
                     // to place Cadavolytes defending Areas that already hold a Shudde
@@ -687,14 +708,24 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                                          |=> 200  -> "chthonian placement commit"
 
                 // SBR-4: Gates at every GOO Area
+                // 2026-11-12 fix (creator report, game "Tentacles versus Shift", rowId
+                // 1002, mistake 8): "conditional on three-glyphs spellbook requirement
+                // fulfilled and if on more than 8 power, immediately do the 8 power
+                // spellbook." The old numSB >= 5 trigger only turns true once Grasp (the
+                // Spellbook earned BY satisfying Three-Glyphs) is actually picked, which
+                // happens on a later turn than the Req itself being satisfied -- leaving
+                // a gap where the bot could sit on 8+ Power for a full extra Action Phase
+                // before paying for this SBR. Keyed directly on the Req instead, so it
+                // fires the instant Three-Glyphs is satisfied, matching the creator's
+                // literal wording.
                 case TBGatesAtGOOsMainAction(f) =>
-                    val aggressive = numSB >= 5 && self.power >= 8
-                    aggressive                                   |=> 2300 -> "gates at goo areas SBR (5 spellbooks + 8 power, creator priority)"
+                    val aggressive = !self.needs(ShuddeMellInThreeGlyphsReq) && self.power >= 8
+                    aggressive                                   |=> 2300 -> "gates at goo areas SBR (three-glyphs fulfilled + 8 power, creator priority 2026-11-12)"
                     !aggressive && numSB < 4                     |=> 150  -> "gates at goo areas SBR (deprioritized before 4 spellbooks earned, creator opening takes precedence)"
                     !aggressive && numSB >= 4                    |=> 700  -> "gates at goo areas SBR"
                 case TBGatesAtGOOsAction(f) =>
-                    val aggressive = numSB >= 5 && self.power >= 8
-                    aggressive                                   |=> 1800 -> "gates at goo commit (creator priority)"
+                    val aggressive = !self.needs(ShuddeMellInThreeGlyphsReq) && self.power >= 8
+                    aggressive                                   |=> 1800 -> "gates at goo commit (three-glyphs fulfilled + 8 power, creator priority 2026-11-12)"
                     !aggressive && numSB < 4                     |=> 150  -> "gates at goo commit (deprioritized before 4 spellbooks earned)"
                     !aggressive && numSB >= 4                    |=> 500  -> "gates at goo commit"
 
