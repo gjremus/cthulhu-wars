@@ -454,6 +454,22 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                          self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any) |=> 1060 -> "maws commit: tentacle protecting a shudde m'ell area (creator priority 2026-11-10)"
                     uc == Tentacle && self.at(r2, Tentacle).any && r2.connected.exists(c => self.at(c, Tentacle).none) |=> 400 -> "maws: tentacle area next to an empty area"
                     uc == Cadavolyte && self.needs(OverlayMantleReq) && r1.connected.has(r2) |=> (500 + distFromEnemies(r2)) -> "maws: two cadavolytes in adjacent areas, far from enemies (creator: new opening, pair toward Overlay Mantle SBR away from enemies)"
+                    // 2026-11-11 fix (creator report, game "Doom in Omen", rowId
+                    // 1001, action 282): once Overlay-the-Mantle is already done, the
+                    // "far from enemies" Cadavolyte placement bonus above stops
+                    // applying and the dedicated "defend a Shudde M'ell gate area"
+                    // bonuses further above only fire once Gates-at-GOOs is also
+                    // done -- leaving a gap window where TWM Cadavolyte placement had
+                    // no enemy-awareness at all. Here a Cadavolyte was placed into
+                    // IndianOcean right next to an enemy Acolyte that had just moved
+                    // in, an easy future capture target. Same hard-block style already
+                    // used for Stalk's Cadavolyte-safety check (above): refuse a
+                    // placement Area where an enemy could already capture a Cadavolyte
+                    // there, whenever none of the other, more specific Cadavolyte
+                    // placement bonuses already apply. Both r1 and r2 receive a
+                    // Cadavolyte here (see TBWrithingMawsAction in FactionTB.scala),
+                    // so check both.
+                    uc == Cadavolyte && (r1.capturers.active.any || r2.capturers.active.any) |=> -500 -> "maws: avoid placing a cadavolyte in an area where it could be captured (creator priority 2026-11-11)"
                     true                                         |=> 300  -> "maws commit"
 
                 // Abyssal Cline: Move Part to Mantle
