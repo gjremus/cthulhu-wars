@@ -236,6 +236,19 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // since all of Move/Recruit/TWM compete directly in the same
                     // Action-Phase main menu.
                     u.is(Tentacle) && game.tbShuddeMellEverAwakened && to.allies.none |=> 975 -> "move tentacle to area without TB units (post-awaken priority 3, creator priority 2026-11-08)"
+                    // 2026-11-12 fix (creator report, game "Tentacles versus Shift",
+                    // rowId 1002, action 329): the bot moved a Tentacle into an Area
+                    // that already held another TB Tentacle (NorthAmerica, placed
+                    // there at setup), stacking two Tentacles in one Area for no
+                    // reason -- Tentacles can never control Gates, so stacking them
+                    // together gains nothing and wastes the Area-spread Power-income
+                    // benefit the creator's 2026-11-02 spread priority already exists
+                    // to protect. Creator: "bot can never move a tentacle into another
+                    // tentacle area, and if they must move, should always move away
+                    // from areas with other tentacles." Hard-block stacking, and
+                    // reward moving out of an already-stacked Area.
+                    u.is(Tentacle) && self.at(to, Tentacle).any |=> -2500 -> "avoid moving a tentacle into an area that already holds a TB tentacle (creator priority 2026-11-12)"
+                    u.is(Tentacle) && self.at(from, Tentacle).num >= 2 && self.at(to, Tentacle).none |=> 500 -> "move tentacle away from an area stacked with another tentacle (creator priority 2026-11-12)"
                     // 2026-11-10 creator priority (game "Catastrophe through
                     // Blindness", rowId 987): when a Shudde M'ell Part's destination
                     // is the Mantle itself, Abyssal Cline (TBMovePartToMantleAction)
