@@ -2297,19 +2297,29 @@ object CthulhuWarsSolo {
                     val csWell = game.csPrismaticWellRegions.has(r)
 
                     // The Invasion (TI): a Lord's Shadow Area renders its own distinct
-                    // token instead of the plain Gate art (see LordsShadowGate below).
+                    // token instead of the plain Gate art (see LordsShadowGate below) —
+                    // but only while no REAL built Gate also occupies the Area. Per guide
+                    // §1.2 rule 3, a Controlled Gate sharing a Shadow's Area takes the
+                    // Shadow over as an additional gate for that controller — the Shadow
+                    // doesn't disappear mechanically, but the real Gate is now the visible,
+                    // controlled object there, so it must render instead of being hidden
+                    // behind the generic Shadow icon. Without the `gated.not` guard here, a
+                    // real Gate relocated into a Shadow's Area (e.g. Sleeper's Beyond One) had
+                    // no visible Gate token at all — only the unchanged Shadow icon — making it
+                    // look like the gate had "disappeared" (owner-reported, game Power and
+                    // Colour, 2026-11-12).
                     val tiShadow = game.tiLordsShadowRegions.has(r)
 
-                    if (gated && DS.chaosGateRegions.has(r).not && csWell.not && tiShadow.not)
+                    if (gated && DS.chaosGateRegions.has(r).not && csWell.not)
                         fixed +:= DrawItem(r, null, Gate, Alive, $, adjGatePx, adjGatePy)
 
-                    if (gated && DS.chaosGateRegions.has(r).not && csWell && tiShadow.not)
+                    if (gated && DS.chaosGateRegions.has(r).not && csWell)
                         fixed +:= DrawItem(r, CS, PrismaticWell, Alive, $, adjGatePx, adjGatePy)
 
                     if (DS.chaosGateRegions.has(r))
                         fixed +:= DrawItem(r, DS, ChaosGate, Alive, $, adjGatePx, adjGatePy)
 
-                    if (tiShadow)
+                    if (tiShadow && gated.not)
                         fixed +:= DrawItem(r, TI, LordsShadowGate, Alive, $, adjGatePx, adjGatePy)
 
                     keeper match {
