@@ -688,7 +688,15 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // SBR-6: Three Glyphs alt payment
                 case TBThreeGlyphsPayAction(f) =>
                     numSB < 5                                    |=> -1000 -> "three glyphs pay 6 power deprioritized below 5 spellbooks, creator priority"
-                    numSB >= 5 && sbReqsDoneExclGlyphs >= 4      |=> 2000 -> "three glyphs pay 6 power (4 SBRs fulfilled, creator priority)"
+                    // 2026-11-11 fix: was 2000, which beat the free "move part to
+                    // still-needed glyph area" bonus (1900, above) by only 100 points --
+                    // whenever both were simultaneously legal, the bot could pay 6 Power
+                    // instead of taking a free positioning move toward the same
+                    // requirement. Lowered below 1900 so the free move always wins when
+                    // one is actually available; this Pay action only wins when no
+                    // qualifying free move exists (the free-move bonus condition above is
+                    // state-gated, so it simply won't fire in that case).
+                    numSB >= 5 && sbReqsDoneExclGlyphs >= 4      |=> 1700 -> "three glyphs pay 6 power (4 SBRs fulfilled, creator priority)"
                     numSB >= 5                                   |=> 600  -> "three glyphs pay 6"
                 case TBThreeGlyphsPayConfirmAction(f) =>
                     numSB < 5                                    |=> -1000 -> "three glyphs confirm deprioritized below 5 spellbooks, creator priority"
