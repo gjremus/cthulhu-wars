@@ -3174,7 +3174,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     areas.nex.%!(gates.has).exists(r => f.at(r).%(_.canControlGate).any)
 
             case "Recruit" =>
-                val availableCultists = if (f == FB) f.pool.cultists.%(_.uclass != HighPriest) else f.pool.cultists
+                val availableCultists = (if (f == FB) f.pool.cultists.%(_.uclass != HighPriest) else f.pool.cultists).%(_.uclass.canBeRecruited(f))
                 val recruitAreas = areas ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))
                 // Check if any recruitable unit costs >= requiredPower
                 availableCultists.exists { u =>
@@ -3364,7 +3364,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     def recruits(f : Faction)(implicit w : AskWrapper) {
         // Firstborn (FB): FB cannot recruit High Priests, so filter them out of available cultists
-        val availableCultists = if (f == FB) f.pool.cultists.%(_.uclass != HighPriest) else f.pool.cultists
+        // Brain Cylinders (Yuggoth): never recruitable — they only enter play via Surgery or
+        // capture-Convert (BrainCylinderCultist.canBeRecruited is false); a Cylinder Killed in
+        // battle otherwise falls back into the normal pool and must be excluded here too.
+        val availableCultists = (if (f == FB) f.pool.cultists.%(_.uclass != HighPriest) else f.pool.cultists).%(_.uclass.canBeRecruited(f))
         val recruitAreas = areas ++ ((f == TB && tbMantleInPlay).??($(TB.mantle)))
         // HB Fix 130 (2026-09-07): under a DC/SL Tenebrosum repeat (dcTenebrosumGuard)
         // the action is paid in Sin, not Power — mirrors the same bypass already

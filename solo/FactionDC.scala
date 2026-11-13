@@ -1965,7 +1965,7 @@ object DCExpansion extends Expansion {
         case _ : RecruitAction =>
             val recruitAreas = areas.nex.%!(_.is[MoonHold])
             val accessibleAreas = recruitAreas.%(self.present).some.|(recruitAreas)
-            val candidates = self.pool.cultists./(_.uclass).distinct
+            val candidates = self.pool.cultists.%(_.uclass.canBeRecruited(self))./(_.uclass).distinct
             if (accessibleAreas.none || candidates.none) Int.MaxValue
             else candidates./(uc => accessibleAreas./(r => self.recruitCost(uc, r)).min).min
         case _ : AwakenAction | _ : IndependentGOOAction | _ : CthughaAwakenAction =>
@@ -2045,7 +2045,7 @@ object DCExpansion extends Expansion {
             // DC/SL recruited last, which the other faction may never have —
             // e.g. Sleeper has no High Priests at all).
             case _ : RecruitAction =>
-                self.pool.cultists.any && areas.%(self.present).some.|(areas).nex.any
+                self.pool.cultists.%(_.uclass.canBeRecruited(self)).any && areas.%(self.present).some.|(areas).nex.any
             // SUMMON — HB Fix 113 (2026-06-13): broadened repeat may bring out a
             // DIFFERENT unit, so the offer appears whenever ANY summonable unit
             // (faction monster or neutral loyalty-card monster in pool) has an

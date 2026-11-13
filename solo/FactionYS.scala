@@ -260,6 +260,7 @@ object YSExpansion extends Expansion {
                 log(KingInYellow, "failed", r, "desecration with roll [" + x.styled("power") + "]")
 
             val us = (self.pool.cultists ++ self.pool.monsters)./(_.uclass).distinct.%(_.cost <= 2)
+                .%(uc => if (uc.utype == Cultist) uc.canBeRecruited(self) else uc.canBeSummoned(self))
 
             if (us.any)
                 Ask(self).each(us)(uc => DesecratePlaceAction(self, r, uc))
