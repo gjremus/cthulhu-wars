@@ -387,6 +387,22 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     (u.goo || u.is(ShuddeMellSegment)) && numSB >= 6 &&
                         tbOffenseTargets.exists(_.region == to) && self.at(to, Tentacle).any |=> 1950 -> "move shudde m'ell to a weakly-protected enemy goo/terror area already held by our tentacle (creator priority 2026-11-13, item 7)"
 
+                // 2026-11-13 fix (creator report, game "Failure against Colour", rowId
+                // 1007, item 4): every other faction's bot scores MoveDoneAction with a
+                // flat positive weight (BotGC/BotCC/BotTT/BotSL/etc. all use 1000) so the
+                // bot stops moving once no remaining move is actually worth making. TB
+                // had no case for it at all, so it fell through to the generic
+                // "unknown" catch-all (-1000) -- which always loses to ANY other legal
+                // Move option, even one with zero applicable scoring rules. That let a
+                // Shudde M'ell Head with no legal glyph-advancing destination left (all
+                // reachable glyphs already covered by its own Segments that turn) get
+                // pushed into a pure wasted-Power lateral move (NorthAmerica (*) to
+                // South America (*), action 474) simply because "move somewhere" beat
+                // "stop" by default. Added the same flat score every sibling bot uses so
+                // TB can choose to stop once nothing left actually helps.
+                case MoveDoneAction(_) =>
+                    true |=> 1000 -> "move done"
+
                 // Creator fix (2026-11-02): recruiting a Tentacle had no Area-spread
                 // preference at all, unlike Thousand Writhing Maws' double-recruit (which
                 // already favors an empty Area). Standard Recruit legality naturally offers
@@ -516,6 +532,25 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     uc == Cadavolyte && !self.needs(GatesAtGOOsReq) &&
                         ((self.gates.has(r1) && (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any)) ||
                          (self.gates.has(r2) && (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any))) |=> 1100 -> "maws commit: cadavolyte defending a shudde m'ell gate area (creator priority 2026-11-10)"
+                    // 2026-11-13 fix (creator report, game "Failure against Colour",
+                    // rowId 1007, item 5): "conditional on shudde mell head or segment
+                    // parts being in play, thousand writhing maws recruit cadavolyes in
+                    // areas with shudde mell head or segment parts." The two bonuses
+                    // just above already cover this, but only once Gates-at-GOOs (5th
+                    // SBR) is satisfied AND the Area is one of TB's own Gates -- at
+                    // action 610-612 of the reported game, TB had neither (only 4
+                    // Spellbooks picked, no Gates-at-GOOs yet), so both Cadavolytes
+                    // went to WestAfrica/EastAfrica -- nowhere near the Head, which had
+                    // not left North America yet. The creator's literal ask has no Gate
+                    // or SBR condition at all, so this unconditional pair fills that
+                    // early-game gap; kept below the more specific Gate-defense bonuses
+                    // so those still win once they also apply.
+                    uc == Cadavolyte &&
+                        (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any) &&
+                        (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any) |=> 950 -> "maws commit: two cadavolytes in areas with shudde m'ell parts (creator priority 2026-11-13, item 5)"
+                    uc == Cadavolyte &&
+                        ((self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any) ||
+                         (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any)) |=> 900 -> "maws commit: cadavolyte in an area with a shudde m'ell part (creator priority 2026-11-13, item 5)"
                     // 2026-11-10 fix (task: "more foolproof sequence"): new creator step
                     // heading into the 6th (final) Spellbook pick -- place Tentacles into
                     // Areas a Shudde M'ell Part already occupies, to protect it.
@@ -555,6 +590,23 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                         r2.freeGate && self.at(r2, Tentacle).any |=> 1400 -> "maws commit: two cadavolytes onto open gates held by our tentacles (creator priority 2026-11-13, items 1/9)"
                     uc == Cadavolyte && numSB >= 6 &&
                         ((r1.freeGate && self.at(r1, Tentacle).any) || (r2.freeGate && self.at(r2, Tentacle).any)) |=> 1350 -> "maws commit: cadavolyte onto an open gate held by our tentacle (creator priority 2026-11-13, items 1/9)"
+                    // 2026-11-13 fix (creator report, game "Failure against Colour",
+                    // rowId 1007, item 8): "TB should have thousand writhing maws
+                    // recruited a cadavolyte in on the two open gates australia and
+                    // south america in the same action." The two bonuses just above
+                    // already cover placing both Cadavolytes onto open Tentacle-held
+                    // Gates in one TWM action, but only once numSB >= 6 -- at action
+                    // 883 of the reported game, TB was still on its 5th Spellbook
+                    // (Autotomy, picked at action 840), one short of that gate, so
+                    // neither bonus applied and only one Cadavolyte reached an open
+                    // gate while the other went to the Mantle instead. The creator's
+                    // literal request has no Spellbook-count condition, so these
+                    // unconditional (lower-weight) duplicates fill that gap; kept
+                    // below the numSB >= 6 versions so those still win once reached.
+                    uc == Cadavolyte && r1.freeGate && self.at(r1, Tentacle).any &&
+                        r2.freeGate && self.at(r2, Tentacle).any |=> 1000 -> "maws commit: two cadavolytes onto open gates held by our tentacles (creator priority 2026-11-13, item 8)"
+                    uc == Cadavolyte &&
+                        ((r1.freeGate && self.at(r1, Tentacle).any) || (r2.freeGate && self.at(r2, Tentacle).any)) |=> 970 -> "maws commit: cadavolyte onto an open gate held by our tentacle (creator priority 2026-11-13, item 8)"
                     // 2026-11-13 (task: 6-spellbook behavior spec, item 3): once on 6
                     // Spellbooks and holding a good number of Gates (3+), recruit
                     // Chthonians onto Gate Areas that already hold a Cadavolyte or a
