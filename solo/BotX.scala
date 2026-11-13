@@ -114,6 +114,47 @@ object BotTBCadavolyteMoveLockout {
         movedThisTurn = movedThisTurn.filter { case ((_, t), _) => t >= currentTurn }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TB exclusive-Move lockout (2026-11-13).
+//
+// Creator report (game "Doom versus Colour", rowId 1005): at action 465-468 the
+// bot bundled two Shudde M'ell Segment moves, one Cadavolyte move, and one Head
+// move into a single Move turn (one MoveDoneAction). The creator's standing,
+// repeated instruction (also restated for this game: "Dont move cadavolytes or
+// tentacles in same action as moving other units") is stronger than the existing
+// BotTBTentacleMoveLockout/BotTBCadavolyteMoveLockout above: those only cap each
+// of Tentacle and Cadavolyte to 1 move per turn, but do nothing to stop either
+// of them from being combined with a Shudde M'ell Head/Segment move (or any
+// other unit) in that same turn. This lockout makes a Tentacle or Cadavolyte
+// move and any OTHER unit's move mutually exclusive within one turn: whichever
+// kind moves first locks out the other kind for the rest of the turn.
+// ─────────────────────────────────────────────────────────────────────────────
+object BotTBExclusiveMoveLockout {
+    private var exclusiveMoved : scala.collection.mutable.Map[(Faction, Int), Boolean] =
+        scala.collection.mutable.Map()
+    private var otherMoved : scala.collection.mutable.Map[(Faction, Int), Boolean] =
+        scala.collection.mutable.Map()
+
+    def isExclusiveClass(uc : UnitClass) : Boolean = uc == Tentacle || uc == Cadavolyte
+
+    def otherLocked(f : Faction, turn : Int) : Boolean =
+        exclusiveMoved.getOrElse((f, turn), false)
+
+    def exclusiveLocked(f : Faction, turn : Int) : Boolean =
+        otherMoved.getOrElse((f, turn), false)
+
+    def recordExclusiveMove(f : Faction, turn : Int) : Unit =
+        exclusiveMoved((f, turn)) = true
+
+    def recordOtherMove(f : Faction, turn : Int) : Unit =
+        otherMoved((f, turn)) = true
+
+    def gc(currentTurn : Int) : Unit = {
+        exclusiveMoved = exclusiveMoved.filter { case ((_, t), _) => t >= currentTurn }
+        otherMoved = otherMoved.filter { case ((_, t), _) => t >= currentTurn }
+    }
+}
+
 class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
     def sortByAbs(a : $[Int]) : $[Int] =
         a.sortBy(v => -v.abs)
@@ -189,6 +230,20 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
                         u.uclass == Cadavolyte && BotTBCadavolyteMoveLockout.isLocked(f, game.turn) =>
                     println("[BotTBCadavolyteMoveLockout] FILTER drop Cadavolyte move f=" + f +
                         " u=" + u + " turn=" + game.turn)
+                    false
+                // TB exclusive-Move lockout (2026-11-13): a Tentacle/Cadavolyte move
+                // and any other unit's move are mutually exclusive within one turn.
+                case MoveAction(f, u, _, _, _) if f == TB && f == ev.self &&
+                        BotTBExclusiveMoveLockout.isExclusiveClass(u.uclass) &&
+                        BotTBExclusiveMoveLockout.exclusiveLocked(f, game.turn) =>
+                    println("[BotTBExclusiveMoveLockout] FILTER drop exclusive-class move f=" + f +
+                        " u=" + u + " turn=" + game.turn + " (another unit already moved this turn)")
+                    false
+                case MoveAction(f, u, _, _, _) if f == TB && f == ev.self &&
+                        !BotTBExclusiveMoveLockout.isExclusiveClass(u.uclass) &&
+                        BotTBExclusiveMoveLockout.otherLocked(f, game.turn) =>
+                    println("[BotTBExclusiveMoveLockout] FILTER drop other-unit move f=" + f +
+                        " u=" + u + " turn=" + game.turn + " (a tentacle/cadavolyte already moved this turn)")
                     false
                 case _ => true
             })
@@ -267,6 +322,18 @@ class BotX[F <: Faction](ge : Game => GameEvaluation[F]) {
                 case MoveAction(f, u, _, _, _) if f == TB && f == ev.self && u.uclass == Cadavolyte =>
                     BotTBCadavolyteMoveLockout.gc(game.turn)
                     BotTBCadavolyteMoveLockout.recordMove(f, game.turn)
+                case _ =>
+            }
+
+            // TB exclusive-Move lockout (2026-11-13): record which "side" moved
+            // first this turn so the filter above can lock out the other side.
+            chosen.action.unwrap match {
+                case MoveAction(f, u, _, _, _) if f == TB && f == ev.self =>
+                    BotTBExclusiveMoveLockout.gc(game.turn)
+                    if (BotTBExclusiveMoveLockout.isExclusiveClass(u.uclass))
+                        BotTBExclusiveMoveLockout.recordExclusiveMove(f, game.turn)
+                    else
+                        BotTBExclusiveMoveLockout.recordOtherMove(f, game.turn)
                 case _ =>
             }
         }
