@@ -95,6 +95,21 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
             val glyphPushActive = self.needs(ShuddeMellInThreeGlyphsReq) &&
                 (!self.needs(RemoveGatePlaceChthonianReq) || sbReqsDoneExclGlyphs >= 4)
 
+            // 2026-11-13 fix (creator report, game "Failure against Colour", rowId
+            // 1007, item 4 backup): "if TB has 2 parts on the same glyph, abyssal
+            // cline to the mantle and move head or segments to a glyph that a head
+            // or segment was not already in." The direct "move to still-needed
+            // glyph" Move bonus above can never fire for a Part that is ALREADY
+            // stuck sharing its glyph type with another Part (moving within the
+            // same glyph type is explicitly excluded there as wasted Power), so
+            // without this backup such a Part just sits put for the rest of the
+            // glyph push. Detects any Head/Segment on a glyph Area whose glyph
+            // type is also held by a DIFFERENT Head/Segment.
+            val glyphDuplicateParts = (self.all(ShuddeMellHead) ++ self.all(ShuddeMellSegment))
+                .%(p => p.region.glyph != NoGlyph &&
+                    (self.all(ShuddeMellHead) ++ self.all(ShuddeMellSegment)).%(_.ref != p.ref).exists(_.region.glyph == p.region.glyph))
+                ./(_.ref)
+
             // Creator priority (2026-11-02): TB should never take a single, plain
             // Recruit/Summon when Thousand Writhing Maws' double recruit/summon is
             // legal this turn -- same eligibility check the game itself uses to offer
@@ -631,9 +646,22 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // above (dead-Soft-action pattern, same as Psychic Shriek/Writhing Maws).
                 case TBMovePartToMantlePickAction(f, _) =>
                     numSB >= 6 && (tbDefenseTargets.any || tbOffenseTargets.any) |=> 1450 -> "abyssal cline: stage shudde m'ell parts on the mantle to open the attack/defense chain (creator priority 2026-11-13, items 5/7)"
+                    // 2026-11-13 (item 4 backup): offer to pull a glyph-duplicated
+                    // Part back to the Mantle for redeployment -- see glyphDuplicateParts
+                    // above. Must outrank the generic fallback Move options (TWM commit
+                    // 1050, "move tentacle to empty area" 975) since those parts have no
+                    // other useful Move available to them while stuck on a duplicate glyph.
+                    glyphPushActive && glyphDuplicateParts.any |=> 1100 -> "abyssal cline: pull a glyph-duplicated shudde m'ell part back to the mantle for redeployment (creator priority 2026-11-13, item 4 backup)"
                     true                                         |=> 100  -> "pick part for mantle"
-                case TBMovePartToMantleAction(f, _) =>
+                case TBMovePartToMantleAction(f, part) =>
                     numSB >= 6 && (tbDefenseTargets.any || tbOffenseTargets.any) |=> 300 -> "abyssal cline: move part to mantle for the attack/defense chain (creator priority 2026-11-13, items 5/7)"
+                    // 2026-11-13 fix (creator report, game "Failure against Colour",
+                    // rowId 1007, item 4 backup): "if TB has 2 parts on the same glyph,
+                    // abyssal cline to the mantle and move head or segments to a glyph
+                    // that a head or segment was not already in." Selects the specific
+                    // duplicated Part (not just any Part) to send back, so the Part that
+                    // IS already providing a unique glyph's coverage stays put.
+                    glyphPushActive && glyphDuplicateParts.has(part) |=> 1050 -> "abyssal cline: move glyph-duplicated part back to the mantle for redeployment (creator priority 2026-11-13, item 4 backup)"
                     true                                         |=> 200  -> "move part commit"
 
                 // Stalk: post-move relocation. Creator-specified priority (2026-11-01):
