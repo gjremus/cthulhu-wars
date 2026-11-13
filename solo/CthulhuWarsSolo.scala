@@ -2297,30 +2297,33 @@ object CthulhuWarsSolo {
                     val csWell = game.csPrismaticWellRegions.has(r)
 
                     // The Invasion (TI): a Lord's Shadow Area renders its own distinct
-                    // token instead of the plain Gate art (see LordsShadowGate below) —
-                    // but only while no REAL built Gate also occupies the Area. Per guide
-                    // §1.2 rule 3, a Controlled Gate sharing a Shadow's Area takes the
-                    // Shadow over as an additional gate for that controller — the Shadow
-                    // doesn't disappear mechanically, but the real Gate is now the visible,
-                    // controlled object there, so it must render instead of being hidden
-                    // behind the generic Shadow icon. Without the `gated.not` guard here, a
-                    // real Gate relocated into a Shadow's Area (e.g. Sleeper's Beyond One) had
-                    // no visible Gate token at all — only the unchanged Shadow icon — making it
-                    // look like the gate had "disappeared" (owner-reported, game Power and
-                    // Colour, 2026-11-12).
+                    // token (see LordsShadowGate below). Per guide §1.2 rule 3, a Controlled
+                    // Gate sharing a Shadow's Area takes the Shadow over as an additional gate
+                    // for that controller — the Shadow does NOT disappear mechanically, it's
+                    // still there, just no longer the controlled object. So when both a real
+                    // Gate and a Shadow occupy the same Area, both tokens must render, offset
+                    // apart so neither fully hides the other. (v2.586 tried hiding the Shadow
+                    // behind a `gated.not` guard whenever a Gate was also present, which fixed
+                    // the original "gate disappeared" report but caused a new one — the Shadow
+                    // itself then vanished instead, e.g. Sleeper's Beyond One relocating a Gate
+                    // into a Shadow's Area, game Power and Colour, 2026-11-12/13.)
                     val tiShadow = game.tiLordsShadowRegions.has(r)
+                    val tiShadowSideBySide = tiShadow && gated
+                    val sideOffset = (28 * board.unitScale).toInt
+                    val gateDrawPx = if (tiShadowSideBySide) adjGatePx - sideOffset else adjGatePx
+                    val shadowDrawPx = if (tiShadowSideBySide) adjGatePx + sideOffset else adjGatePx
 
                     if (gated && DS.chaosGateRegions.has(r).not && csWell.not)
-                        fixed +:= DrawItem(r, null, Gate, Alive, $, adjGatePx, adjGatePy)
+                        fixed +:= DrawItem(r, null, Gate, Alive, $, gateDrawPx, adjGatePy)
 
                     if (gated && DS.chaosGateRegions.has(r).not && csWell)
-                        fixed +:= DrawItem(r, CS, PrismaticWell, Alive, $, adjGatePx, adjGatePy)
+                        fixed +:= DrawItem(r, CS, PrismaticWell, Alive, $, gateDrawPx, adjGatePy)
 
                     if (DS.chaosGateRegions.has(r))
                         fixed +:= DrawItem(r, DS, ChaosGate, Alive, $, adjGatePx, adjGatePy)
 
-                    if (tiShadow && gated.not)
-                        fixed +:= DrawItem(r, TI, LordsShadowGate, Alive, $, adjGatePx, adjGatePy)
+                    if (tiShadow)
+                        fixed +:= DrawItem(r, TI, LordsShadowGate, Alive, $, shadowDrawPx, adjGatePy)
 
                     keeper match {
                         case Some(u) =>
@@ -2331,7 +2334,7 @@ object CthulhuWarsSolo {
                             // a fraction of the Cultist's own drawn height, so it stays aligned
                             // with the well's rim under library-map scaling. Any faction's Cultist.
                             val wellCrop = (csWell && u.uclass.utype == Cultist).?(0.40).|(0.0)
-                            fixed +:= DrawItem(r, u.faction, u.uclass, u.health, tags, adjGatePx, adjGatePy, cropBottomFrac = wellCrop)
+                            fixed +:= DrawItem(r, u.faction, u.uclass, u.health, tags, gateDrawPx, adjGatePy, cropBottomFrac = wellCrop)
                         case _ =>
                     }
 
