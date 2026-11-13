@@ -675,6 +675,15 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case TBEnsnarePickEnemyAction(f, _) =>
                     true                                         |=> 100  -> "pick ensnare target"
                 case TBEnsnareTargetAction(f, enemy, area) =>
+                    // 2026-11-13 (task: open item 7, game "Failure against Colour",
+                    // rowId 1007): creator report -- action index 633 targeted Yellow
+                    // Sign with Ensnare while YS sat at 0 Power, so count =
+                    // math.min(roll, 0) = 0: no units relocated, just a wasted 1 Power
+                    // cast, same root cause as item 1's Psychic Shriek fix above.
+                    // "should not have targeted any faction with less than 2 power with
+                    // ensnare." Mirrors the Shriek fix: -1200 outweighs CancelAction's
+                    // default -1000 when no qualifying target exists.
+                    enemy.power < 2                               |=> -1200 -> "ensnare target: avoid casting against a faction under 2 power, cast would do nothing (creator priority 2026-11-13, item 7)"
                     // 2026-11-13 (task: 6-spellbook behavior spec, item 5): "...then
                     // Ensnare the enemy GOO or terror" -- once a weakly-protected enemy
                     // GOO/Terror sits in the Tentacle Area the Abyssal-Cline-staged Head
@@ -702,6 +711,18 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case TBPsychicShriekPickEnemyAction(f, _) =>
                     true                                         |=> 100  -> "pick shriek target"
                 case TBPsychicShriekTargetAction(f, enemy) =>
+                    // 2026-11-13 (task: open item 1, game "Failure against Colour",
+                    // rowId 1007): creator report confirmed via admin log -- action
+                    // index 384 targeted Great Cthulhu with Psychic Shriek while GC sat
+                    // at 0 Power (having just paid 10 Power to Awaken Cthulhu with no
+                    // Gather Power in between), so the retreat count forced to
+                    // math.min(roll, 2*0) = 0: the whole cast did nothing but still cost
+                    // 1 Power. "target a faction conditional on having 5 or more power."
+                    // A flat -1200 outweighs CancelAction's default -1000 (BotX's
+                    // compareEL ranks by sorted absolute weight, so -1200 beats -1000)
+                    // whenever no qualifying target exists, so the bot skips casting
+                    // Shriek entirely rather than targeting any under-5-power enemy.
+                    enemy.power < 5                               |=> -1200 -> "shriek target: avoid casting against a faction under 5 power, cast would do nothing (creator priority 2026-11-13, item 1)"
                     // 2026-11-13 (task: 6-spellbook behavior spec, item 4): "at the
                     // beginning of each action phase use psychic shriek as much as you
                     // can to make chaos highest priority" -- once all 6 Spellbooks are
