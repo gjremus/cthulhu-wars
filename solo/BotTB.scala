@@ -112,6 +112,21 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
             val enemyRegions = game.board.regions.%(_.foes.any)
             def distFromEnemies(r : Region) : Int = enemyRegions./(e => game.board.distance(r, e)).minOr(99)
 
+            // 2026-11-13 (task: 6-spellbook behavior spec, items 5/7): a "weakly
+            // protected" enemy Great Old One or Terror is one sharing its Area with
+            // at most 2 other enemy units (the creator's literal "2 or less enemy
+            // protecting units") -- the target for the Abyssal Cline -> Ensnare/Move
+            // -> Unlimited Battle -> Autotomy attack/defense chain scored below.
+            // Item 5 (defense) additionally requires the Area already hold a TB
+            // Tentacle (the defensive trigger); item 7 (offense) does not, since TB
+            // has to move a Tentacle there first as part of the chain itself.
+            def tbProtectingCount(u : UnitFigure) : Int =
+                u.faction.at(u.region).num - u.faction.at(u.region).%(x => x.goo || x.terror).num
+            def tbWeaklyProtected(u : UnitFigure) : Boolean =
+                (u.goo || u.terror) && tbProtectingCount(u) <= 2
+            val tbDefenseTargets = others./~(e => e.allInPlay.%(u => tbWeaklyProtected(u) && self.at(u.region, Tentacle).any))
+            val tbOffenseTargets = others./~(e => e.allInPlay.%(tbWeaklyProtected))
+
             a match {
 
                 case FirstPlayerAction(_, f) =>
@@ -361,6 +376,16 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // per the capturable/capturers helpers in BotX.scala).
                     u.is(ShuddeMellSegment) && numSB >= 6 && self.gates.has(to) &&
                         self.at(to, Cadavolyte).any && to.capturers.active.any |=> 1500 -> "move segment to protect a gate-sitting cadavolyte at risk of capture (creator priority 2026-11-13, item 2)"
+                    // 2026-11-13 (task: 6-spellbook behavior spec, item 7): "to attack an
+                    // enemy GOO or terror... move tentacle to enemy GOO or terror area,
+                    // then move Head and segment to GOO area." The Tentacle leg comes
+                    // first (it has no Power cost gate on arrival and is what makes the
+                    // Area a legal Ensnare/Unlimited-Battle target); the Head/Segment leg
+                    // only follows once a TB Tentacle has already reached that Area, so
+                    // this does not fire both legs in the same turn out of order.
+                    u.is(Tentacle) && numSB >= 6 && tbOffenseTargets.exists(_.region == to) |=> 1000 -> "move tentacle to a weakly-protected enemy goo/terror area (creator priority 2026-11-13, item 7)"
+                    (u.goo || u.is(ShuddeMellSegment)) && numSB >= 6 &&
+                        tbOffenseTargets.exists(_.region == to) && self.at(to, Tentacle).any |=> 1950 -> "move shudde m'ell to a weakly-protected enemy goo/terror area already held by our tentacle (creator priority 2026-11-13, item 7)"
 
                 // Creator fix (2026-11-02): recruiting a Tentacle had no Area-spread
                 // preference at all, unlike Thousand Writhing Maws' double-recruit (which
@@ -394,6 +419,13 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     self.strength(self.at(r), e) > e.strength(e.at(r), self) |=> 1200 -> "favorable battle"
                     e.at(r).goos.any                             |=> 700  -> "attack enemy goo"
                     e.at(r).num >= 2                             |=> 400  -> "attack cluster"
+                    // 2026-11-13 (task: 6-spellbook behavior spec, items 5/7): once the
+                    // chain's setup (Tentacle in the Area, Shudde M'ell parts staged)
+                    // is in place, Unlimited-Battling a weakly-protected enemy GOO/Terror
+                    // (<=2 other protecting units) is the whole point of the chain --
+                    // this is the surviving AttackAction leaf for both the plain-Attack
+                    // and the Soft TBUnlimitedBattleMainAction->AttackMainAction route.
+                    numSB >= 6 && (tbDefenseTargets.exists(_.region == r) || tbOffenseTargets.exists(_.region == r)) |=> 1250 -> "attack/unlimited-battle a weakly-protected enemy goo/terror (creator priority 2026-11-13, items 5/7)"
 
                 // Thousand Writhing Maws: double recruit/summon. Creator-specified
                 // priority (2026-11-01): recruit 2 Tentacles while short of the
@@ -538,9 +570,18 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // Abyssal Cline: Move Part to Mantle
                 case TBMovePartToMantleMainAction(f) =>
                     true                                         |=> 400  -> "behemoth move part to mantle"
+                // 2026-11-13 (task: 6-spellbook behavior spec, items 5/7): the attack/
+                // defense chain opens by staging the Head and a Segment on the Mantle --
+                // either to turn the Mantle into the Ensnare-lure kill-zone (item 5) or
+                // to bank them for a direct assault move-out afterward (item 7). This is
+                // the real (non-Soft) leaf that decides whether Abyssal Cline is used
+                // this turn at all, so the boost belongs here, not on the Soft MainAction
+                // above (dead-Soft-action pattern, same as Psychic Shriek/Writhing Maws).
                 case TBMovePartToMantlePickAction(f, _) =>
+                    numSB >= 6 && (tbDefenseTargets.any || tbOffenseTargets.any) |=> 1450 -> "abyssal cline: stage shudde m'ell parts on the mantle to open the attack/defense chain (creator priority 2026-11-13, items 5/7)"
                     true                                         |=> 100  -> "pick part for mantle"
                 case TBMovePartToMantleAction(f, _) =>
+                    numSB >= 6 && (tbDefenseTargets.any || tbOffenseTargets.any) |=> 300 -> "abyssal cline: move part to mantle for the attack/defense chain (creator priority 2026-11-13, items 5/7)"
                     true                                         |=> 200  -> "move part commit"
 
                 // Stalk: post-move relocation. Creator-specified priority (2026-11-01):
@@ -598,11 +639,27 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> -5000 -> "never decline autotomy (creator priority 2026-11-13, item 6)"
                 case TBAutotomyPickSegmentAction(f, _) =>
                     true                                         |=> 100  -> "pick segment for autotomy"
-                case TBAutotomyRetreatAction(f, _, _) =>
+                // 2026-11-13 (task: 6-spellbook behavior spec, items 5/7): "...if you
+                // have 2 other surviving Units in area autotomy retreat to another GOO
+                // area" -- once the battle area still holds 2+ other TB units besides
+                // the Segment just sacrificed, retreat toward another Area holding an
+                // enemy GOO/Terror instead of a safe Gate, so the chain can re-engage
+                // and Autotomy again rather than just going defensive.
+                case TBAutotomyRetreatAction(f, segment, arena) =>
+                    val survivingOthers = self.at(arena).%(_.ref != segment).num
+                    numSB >= 6 && survivingOthers >= 2 |=> 150 -> "autotomy retreat: enough surviving units to re-engage (creator priority 2026-11-13, items 5/7)"
                     true                                         |=> 100  -> "pick autotomy retreat"
-                case TBAutotomyRetreatExecuteAction(f, _, _) =>
+                case TBAutotomyRetreatExecuteAction(f, retreatDest, arena) =>
+                    numSB >= 6 && retreatDest.foes.exists(u => u.goo || u.terror) |=> 150 -> "autotomy retreat: toward another area with an enemy goo/terror to re-engage (creator priority 2026-11-13, items 5/7)"
                     true                                         |=> 100  -> "autotomy retreat commit"
-                case TBAutotomyAction(f, _, _, _) =>
+                // 2026-11-13 (task: 6-spellbook behavior spec, items 5/7): "autotomy
+                // kill a segment not on mantle" -- Behemoth only stockpiles Segments on
+                // the Mantle when Power drops to 0, and the chain relies on that banked
+                // stockpile for its NEXT Abyssal-Cline staging/Autotomy cycle, so
+                // sacrifice a field Segment (not on the Mantle) over a Mantle-stockpiled
+                // one whenever both are offered as candidates.
+                case TBAutotomyAction(f, segment, _, _) =>
+                    numSB >= 6 && game.unit(segment).region != TB.mantle |=> 150 -> "autotomy: kill a segment not on the mantle, preserve the mantle stockpile (creator priority 2026-11-13, items 5/7)"
                     true                                         |=> 500  -> "autotomy commit"
 
                 // Subterrane consent under enemy Madness: deny by default so the
@@ -617,7 +674,15 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 600  -> "ensnare enemy"
                 case TBEnsnarePickEnemyAction(f, _) =>
                     true                                         |=> 100  -> "pick ensnare target"
-                case TBEnsnareTargetAction(f, _, _) =>
+                case TBEnsnareTargetAction(f, enemy, area) =>
+                    // 2026-11-13 (task: 6-spellbook behavior spec, item 5): "...then
+                    // Ensnare the enemy GOO or terror" -- once a weakly-protected enemy
+                    // GOO/Terror sits in the Tentacle Area the Abyssal-Cline-staged Head
+                    // now covers, Ensnaring that enemy drags it (and the D6-rolled count
+                    // of its other units) toward the Head -- normally the Mantle, per
+                    // TBEnsnareRollAction's headArea fallback -- setting up the
+                    // Unlimited Battle + Autotomy finish.
+                    numSB >= 6 && enemy.at(area).exists(tbWeaklyProtected) |=> 1300 -> "ensnare target: drag a weakly-protected enemy goo/terror toward shudde m'ell (creator priority 2026-11-13, item 5)"
                     true                                         |=> 200  -> "ensnare target commit"
 
                 // Psychic Shriek
