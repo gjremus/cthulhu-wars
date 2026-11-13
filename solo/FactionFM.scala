@@ -271,7 +271,7 @@ object FMExpansion extends Expansion {
 
         case AfterPowerGatherAction if game.setup.has(FM) && FM.can(HymnOfSuffering) && !FM.oncePerAction.has(HymnOfSuffering) =>
             FM.oncePerAction :+= HymnOfSuffering
-            val power = game.starting.get(FM).count(r => FM.at(r).exists(_.uclass == Acolyte) && hasScreamingWall(r)) * FMValues.HymnOfSuffering_powerPerArea
+            val power = game.board.regions.count(r => FM.at(r).exists(_.uclass == Acolyte) && hasScreamingWall(r)) * FMValues.HymnOfSuffering_powerPerArea
             if (power > 0) {
                 FM.power += power
                 FM.log(HymnOfSuffering.styled(FM) + ": gained", power.power)
