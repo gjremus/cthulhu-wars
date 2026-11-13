@@ -354,6 +354,13 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // overridden by any of the scores above.
                     game.unit(u).onGate                          |=> -2500 -> "avoid relocating a gate-holding cultist off its own gate (creator priority 2026-11-10)"
                     to.freeGate                                  |=> 400  -> "move to free gate"
+                    // 2026-11-13 (task: 6-spellbook behavior spec, item 2): once on 6
+                    // Spellbooks, move a Segment onto a Gate Area that holds a TB
+                    // Cadavolyte currently exposed to capture, so the Segment (a GOO)
+                    // shields it (region.capturers requires allies.goos.none to apply,
+                    // per the capturable/capturers helpers in BotX.scala).
+                    u.is(ShuddeMellSegment) && numSB >= 6 && self.gates.has(to) &&
+                        self.at(to, Cadavolyte).any && to.capturers.active.any |=> 1500 -> "move segment to protect a gate-sitting cadavolyte at risk of capture (creator priority 2026-11-13, item 2)"
 
                 // Creator fix (2026-11-02): recruiting a Tentacle had no Area-spread
                 // preference at all, unlike Thousand Writhing Maws' double-recruit (which
@@ -504,6 +511,28 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // Cadavolyte here (see TBWrithingMawsAction in FactionTB.scala),
                     // so check both.
                     uc == Cadavolyte && (r1.capturers.active.any || r2.capturers.active.any) |=> -500 -> "maws: avoid placing a cadavolyte in an area where it could be captured (creator priority 2026-11-11)"
+                    // 2026-11-13 (task: 6-spellbook behavior spec, items 1 and 9): once
+                    // on 6 Spellbooks, recruiting Cadavolytes onto an open (uncontrolled)
+                    // Gate where TB already has a Tentacle is the single highest TWM
+                    // Cadavolyte-placement priority -- outranking even the post-Gates-at-
+                    // GOOs defensive pairing above -- as long as the placement is still
+                    // capture-safe (the capture-avoidance block above already rejects any
+                    // r1/r2 where the Cadavolyte could be captured, so it fires first and
+                    // this bonus is never reached for an unsafe Area).
+                    uc == Cadavolyte && numSB >= 6 && r1.freeGate && self.at(r1, Tentacle).any &&
+                        r2.freeGate && self.at(r2, Tentacle).any |=> 1400 -> "maws commit: two cadavolytes onto open gates held by our tentacles (creator priority 2026-11-13, items 1/9)"
+                    uc == Cadavolyte && numSB >= 6 &&
+                        ((r1.freeGate && self.at(r1, Tentacle).any) || (r2.freeGate && self.at(r2, Tentacle).any)) |=> 1350 -> "maws commit: cadavolyte onto an open gate held by our tentacle (creator priority 2026-11-13, items 1/9)"
+                    // 2026-11-13 (task: 6-spellbook behavior spec, item 3): once on 6
+                    // Spellbooks and holding a good number of Gates (3+), recruit
+                    // Chthonians onto Gate Areas that already hold a Cadavolyte or a
+                    // Shudde M'ell Part, to protect them.
+                    uc == Chthonian && numSB >= 6 && self.gates.num >= 3 &&
+                        self.gates.has(r1) && (self.at(r1, Cadavolyte).any || self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any) &&
+                        self.gates.has(r2) && (self.at(r2, Cadavolyte).any || self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any) |=> 1300 -> "maws commit: two chthonians protecting gates (creator priority 2026-11-13, item 3)"
+                    uc == Chthonian && numSB >= 6 && self.gates.num >= 3 &&
+                        ((self.gates.has(r1) && (self.at(r1, Cadavolyte).any || self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any)) ||
+                         (self.gates.has(r2) && (self.at(r2, Cadavolyte).any || self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any))) |=> 1250 -> "maws commit: chthonian protecting a gate (creator priority 2026-11-13, item 3)"
                     true                                         |=> 300  -> "maws commit"
 
                 // Abyssal Cline: Move Part to Mantle
@@ -554,10 +583,19 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 200  -> "stalk commit"
 
                 // Autotomy: post-battle Kill transfer
+                // 2026-11-13 (task: 6-spellbook behavior spec, item 6): "always agree
+                // yes to Autotomy, never decline." TBAutotomyUseAction is Soft (see
+                // FactionTB.scala), so Explode.explode auto-performs it into the
+                // non-Soft TBAutotomyPickSegmentAction below (100) before this 800
+                // score ever runs -- same dead-Soft-action pattern as Psychic Shriek/
+                // Writhing Maws. The real decision is PickSegmentAction vs Skip, so
+                // Skip is hard-blocked here (large negative, same style as the other
+                // absolute blocks in this file) to make "never decline" unconditional
+                // rather than relying on the existing 100-vs-(-200) margin.
                 case TBAutotomyUseAction(f) =>
                     true                                         |=> 800  -> "use autotomy (ES farming)"
                 case TBAutotomySkipAction(f) =>
-                    true                                         |=> -200 -> "skip autotomy"
+                    true                                         |=> -5000 -> "never decline autotomy (creator priority 2026-11-13, item 6)"
                 case TBAutotomyPickSegmentAction(f, _) =>
                     true                                         |=> 100  -> "pick segment for autotomy"
                 case TBAutotomyRetreatAction(f, _, _) =>
@@ -599,6 +637,13 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 case TBPsychicShriekPickEnemyAction(f, _) =>
                     true                                         |=> 100  -> "pick shriek target"
                 case TBPsychicShriekTargetAction(f, enemy) =>
+                    // 2026-11-13 (task: 6-spellbook behavior spec, item 4): "at the
+                    // beginning of each action phase use psychic shriek as much as you
+                    // can to make chaos highest priority" -- once all 6 Spellbooks are
+                    // picked, Psychic Shriek targeting outranks every other tier below
+                    // (including the pre-awaken 5500/5550 window, which by this point in
+                    // the game no longer applies since Shudde M'ell is long awakened).
+                    numSB >= 6                                    |=> 7000 -> "shriek target: 6 spellbooks earned, use psychic shriek as much as possible (creator priority 2026-11-13, item 4)"
                     game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && enemy.power > 3 && (enemy == YS || enemy == CC) |=> 5550 -> "shriek target: mantle placed, pre-awaken, enemy over 3 power, preferred faction YS/CC (creator priority 2026-11-08)"
                     game.tbMantleInPlay && !game.tbShuddeMellEverAwakened && enemy.power > 3 |=> 5500 -> "shriek target: mantle placed, pre-awaken, enemy over 3 power (creator priority 2026-11-08)"
                     allSB && enemy.power > 6                     |=> 1700 -> "shriek target: all spellbooks earned, enemy power > 6 (creator priority)"
