@@ -734,6 +734,16 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 100  -> "pick stalk dest"
                 case TBStalkAction(f, cultist, dest, _) =>
                     cultist.uclass == Tentacle && self.at(dest, Tentacle).none |=> 400 -> "stalk: tentacle to an empty area"
+                    // 2026-11-14 fix (creator report, game "Power and Space", rowId
+                    // 1017, action 1473): "pick tentacle from a crowded area" was
+                    // only scored on TBStalkPickCultistAction/TBStalkDestAction
+                    // above, but those are both Soft -- same dead-Soft-action bug
+                    // class as the other Stalk/TWM fixes -- so a Tentacle sitting in
+                    // an already-stacked Area never actually scored any higher than
+                    // one that wasn't, and the bot kept leaving two Tentacles
+                    // stacked together (South Pacific) instead of thinning the
+                    // stack out. Moving this bonus to the live leaf.
+                    cultist.uclass == Tentacle && self.at(game.unit(cultist).region, Tentacle).num >= 2 |=> 450 -> "stalk: relocate a tentacle out of a crowded area (creator priority 2026-11-14)"
                     // 2026-11-09 creator priority (game "Curse and decay"): Stalk must
                     // never relocate a Tentacle into an Area that already holds a
                     // Tentacle -- the bot had done exactly that, crowding Tentacles
