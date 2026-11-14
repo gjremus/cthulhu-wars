@@ -462,7 +462,20 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     uc == Chthonian                              && !twmAvailable |=> 400  -> "summon chthonian"
 
                 case BuildGateAction(f, r) =>
-                    self.gates.num < 3                           |=> 900  -> "need more gates"
+                    // 2026-11-14 fix (creator report, game "Ritual through Curse",
+                    // rowId unknown -- game expired off the server before this could
+                    // be replayed): action 93 recruited two Cadavolytes via Thousand
+                    // Writhing Maws instead of building an available Gate, derailing
+                    // the opening gate-rush strategy. Root cause: this score (900)
+                    // was below TBWrithingMawsAction's "pair toward Overlay Mantle
+                    // SBR" Cadavolyte-recruit score (950, BotTB.scala TBWrithingMawsAction
+                    // case) -- that 950 was only ever meant to outrank the plain
+                    // Tentacle-SBR recruit lines (650/680), not an actual legal Gate
+                    // build, but both are real (non-Soft) committed actions that
+                    // compete directly in the same comparison. Raised above 950 so
+                    // building toward the 3-Gate minimum always wins over any TWM
+                    // Cadavolyte recruit.
+                    self.gates.num < 3                           |=> 1000 -> "need more gates"
                     self.doom < 10                               |=> 500  -> "build gate for doom"
 
                 case AttackAction(f, r, e, _) =>
@@ -1081,6 +1094,27 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     r.ownGate           |=> 1000 -> "retreat to own gate"
                     r.freeGate          |=> 800  -> "retreat to free gate"
                     u.cultist && r.freeGate |=> 1500 -> "cultist retreats to free gate"
+
+                // 2026-11-14 fix (creator report, tasks referencing games "Ritual through
+                // Curse" and "Continuum in Space"): TB paid 6 power into CC's Thousand Forms
+                // demand in one game and paid again in another. No case existed for this
+                // action before (fell through to the catch-all below, so every candidate
+                // scored the same -1000 and the engine's own random tiebreak decided, which
+                // could pick an expensive offer). Hard rule: never offer more than 2 power.
+                // Round-based escalation using `time` (starts at forum.num*3 and ticks down
+                // ~1 per ask across the whole table) as a round proxy: round 1 offer nothing,
+                // round 2 may offer 1, round 3+ rarely offers 2, otherwise refuse.
+                case ThousandFormsAskAction(_, _, _, forum, time, _, n) =>
+                    val roundsLeft = time.toDouble / forum.num.max(1)
+                    val round = math.max(1, math.round(3.0 - roundsLeft).toInt)
+
+                    n > 2                 |=> -3000                                    -> "never pay more than 2 power"
+                    n < 0                 |=> 200 + math.min(round, 3) * 300           -> "refuse to negotiate"
+                    n == 0                |=> math.max(400, 1200 - round * 100)        -> "offer nothing"
+                    n == 1 && round >= 2  |=> math.max(300, 900 - (round - 2) * 200)   -> "offer 1, not too early"
+                    n == 1 && round < 2   |=> -300                                     -> "too early to offer 1"
+                    n == 2 && round >= 3  |=> 300 + (math.random() * 200).round.toInt -> "rarely offer 2, late round"
+                    n == 2 && round < 3   |=> -600                                     -> "too early to offer 2"
 
                 case _ =>
                     true |=> -1000 -> "unknown"
