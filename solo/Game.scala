@@ -1623,6 +1623,9 @@ case class AbandonGateAction(self : Faction, r : Region, then : ForcedAction) ex
 
 case class RitualAction(self : Faction, cost : Int, k : Int) extends OptionFactionAction(implicit g => {
     val ipDiscount = if (self == FB) min(g.fbEffectiveIPDiscount, cost) else 0
+    // [LEGACY REPLAY ONLY] fbeOverlordDiscount: HB Fix 127 cost-discount mechanic,
+    // retired in the v16 FBE redesign — no fresh-play offer site can set it > 0
+    // anymore, kept only so an old in-progress save's pending discount still previews.
     val oodDiscount = if (self == FBE) min(g.fbeOverlordDiscount, cost) else 0
     val effectiveCost = cost - ipDiscount - oodDiscount
     val base = "Perform " + "Ritual of Annihilation".styled("doom") + " for " + effectiveCost.power +
@@ -2104,19 +2107,24 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     //  • fbeCardDice : Faction-Card dice pool, stored as pip values 1-6. The combat
     //    FACE is derived (6=Kill, 4/5=Pain, else Miss). Byagoona's Combat = count of
     //    pips >= 4; Shapestealing compares a pip directly to a Monster Cost.
-    //  • fbeSelfConsumingDeaths : Self Consuming per-Action death tally; one entry
-    //    per Unit of ANY faction that died this Action, holding WHERE it died and
-    //    the faction that CONTROLLED it (None = controller not tracked). Creator-
-    //    corrected 2026-09-23: triggers at 2+ IN THE SAME AREA (deaths in different
-    //    Areas within one Action do not combine); the +1 Doom clause needs 3+
-    //    same-Area entries controlled by the faction collecting the ability (FBE,
-    //    or an enemy that copied it via Ancient Sorcery).
+    //  • fbeFeastDeaths : Feast Upon Death (v16, was Self Consuming) per-Action
+    //    death tally — one entry per Area holding a Unit Eliminated this Action by
+    //    a means other than Capture (capture exclusion via fbeCaptureInProgress).
+    //    Flat trigger: afterAction awards 1 Power per distinct Area in this list
+    //    where the collecting faction has a Unit present.
     //  • fbeShapestolen : enemy Monsters temporarily fighting for FBE this Battle only.
     //    Shapestealing is a hard ability (once per Action Phase), but control is
     //    battle-scoped — stolen units revert to original owner at battle-end.
+    //  • fbeLastRecruitOrSummon : the (UnitClass, Region, Cost) of FBE's just-resolved
+    //    Recruit/Summon, recorded for Dimorphic Gestation's free-repeat offer (v16,
+    //    Succor identifier). Self-contained (mirrors the recording half of DC's
+    //    dcLastActionForTenebrosum, but the repeat itself does NOT reuse Game.scala's
+    //    shared Recruit/Summon handlers — see FBEExpansion for why). Cleared once
+    //    offered/consumed/expired so a stale repeat can't be clicked twice.
     var fbeCardDice : $[Int] = $
-    var fbeSelfConsumingDeaths : $[(Region, |[Faction])] = $
+    var fbeFeastDeaths : $[Region] = $
     var fbeShapestolen : $[UnitRef] = $
+    var fbeLastRecruitOrSummon : Option[(UnitClass, Region, Int)] = None
     var dcSatiateCaptureFactions : $[Faction] = $
 
     // Permeation (PRM) state — spellbook manipulation and Ycgn'àgnnisssz control
@@ -2170,8 +2178,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Applied to the NEXT power-spending action, then reset to 0 in afterAction.
     var fbeOverlordDiscount : Int = 0
     // High Priest sacrifice suppress flag — set during Unspeakable Oath HP
-    // sacrifices so Self Consuming ignores the death (not part of an Action).
+    // sacrifices so Feast Upon Death ignores the death (not part of an Action).
     var fbeHPSacrificeInProgress : Boolean = false
+    // Capture suppress flag — set around every Capture-flow eliminate() call so
+    // Feast Upon Death's "Eliminated by a means OTHER than Capture" exclusion
+    // (v16 redesign) can tell a Capture-caused death from any other elimination.
+    var fbeCaptureInProgress : Boolean = false
     // Self Consuming action-scope flag: true only while an Action is resolving
     // (between action start and AfterAction). Deaths outside this window (CG,
     // triggers, phase transitions) do not count.
@@ -4747,7 +4759,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case DoomPhaseAction =>
             doomPhase = true
             fbeActionInProgress = false
-            fbeSelfConsumingDeaths = $
+            fbeFeastDeaths = $
             dcSatiateCaptureFactions = $
 
             // Oct 2026: snapshot doom values for Watcher 12-doom crossing detection
@@ -4881,7 +4893,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // every Action Phase; it is re-accumulated within the phase (see takeES).
             tiElderSignDoomThisActionPhase = 0
             fbGhatoLastMoveOrigin = None
-            fbeSelfConsumingDeaths = $
+            fbeFeastDeaths = $
             fbeActionInProgress = true
             if (doomOrder.any)
                 factions = doomOrder
@@ -6789,7 +6801,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val restored = origFac./~(of => of.at(r, Acolyte).lastOption)
                 if (restored.any) {
                     val victim = restored.get
+                    fbeCaptureInProgress = true
                     eliminate(victim)
+                    fbeCaptureInProgress = false
                     victim.region = f.prison
                     f.log("captured", victim, "in", r, effect./("with " + _).|(""))
                 } else {
@@ -6797,7 +6811,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 }
                 afterCapture(f, r, yithPresent, overrideUsed, effect)
             } else {
+                fbeCaptureInProgress = true
                 eliminate(unitFig)
+                fbeCaptureInProgress = false
                 unitFig.region = f.prison
                 f.log("captured", unitFig, "in", r, effect./("with " + _).|(""))
                 afterCapture(f, r, yithPresent, overrideUsed, effect)
@@ -6810,7 +6826,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val unitFig = unit(ur)
             val region = unitFig.region
             val onGate = unitFig.onGate
+            fbeCaptureInProgress = true
             eliminate(unitFig)
+            fbeCaptureInProgress = false
             val bcIndex = self.units.%(_.uclass == BrainCylinderCultist).num
             val bc = new UnitFigure(self, BrainCylinderCultist, bcIndex, region, onGate)
             self.units ::= bc
@@ -6822,7 +6840,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // Convert, or forced when self is already at their own 4-Cylinder cap.
         case BrainCylinderSacrificeAction(self, r, victimOwner, ur, yithPresent, overrideUsed, effect) =>
             val unitFig = unit(ur)
+            fbeCaptureInProgress = true
             eliminate(unitFig)
+            fbeCaptureInProgress = false
             unitFig.region = self.prison
             self.log("captured", unitFig, "in", r, effect./("with " + _).|(""))
             afterCapture(self, r, yithPresent, overrideUsed, effect)
@@ -6850,7 +6870,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     .add(MindParasiteBlockCaptureAction(origFac.get, self, r, ur))
                     .add(MindParasiteAllowCaptureAction(origFac.get, self, r, ur))
             } else {
+                fbeCaptureInProgress = true
                 eliminate(unitFig)
+                fbeCaptureInProgress = false
                 unitFig.region = self.prison
                 self.log("captured", unitFig, "in", r)
                 self.satisfy(CaptureCultist, "Capture Cultist")
@@ -6872,7 +6894,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val restored = self.at(r, Acolyte)
             if (restored.any) {
                 val victim = restored.last
+                fbeCaptureInProgress = true
                 eliminate(victim)
+                fbeCaptureInProgress = false
                 victim.region = captor.prison
                 captor.log("captured", victim, "in", r)
                 captor.satisfy(CaptureCultist, "Capture Cultist")
@@ -6921,7 +6945,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 val restored = origFac./~(of => of.at(r, Acolyte).lastOption)
                 if (restored.any) {
                     val victim = restored.get
+                    fbeCaptureInProgress = true
                     eliminate(victim)
+                    fbeCaptureInProgress = false
                     f.power += 1
                     f.log("Honeymoon".styled("nt") + ":", CatFromVenus.styled(f), "captured", victim, "in", r + ",", f, "gained", 1.power + ",", victim, "returned to", victimOwner.name + "'s Pool")
                 } else {
@@ -6929,7 +6955,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     f.log("Honeymoon".styled("nt") + ":", CatFromVenus.styled(f), "captured an Acolyte in", r + ",", f, "gained", 1.power + ", Acolyte returned to", victimOwner.name + "'s Pool")
                 }
             } else {
+                fbeCaptureInProgress = true
                 eliminate(unitFig)
+                fbeCaptureInProgress = false
                 f.power += 1
                 f.log("Honeymoon".styled("nt") + ":", CatFromVenus.styled(f), "captured", unitFig, "in", r + ",", f, "gained", 1.power + ",", unitFig, "returned to", victimOwner.name + "'s Pool")
             }

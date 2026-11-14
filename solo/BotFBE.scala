@@ -92,14 +92,28 @@ class GameEvaluationFBE(implicit game : Game) extends GameEvaluation(FBE)(game) 
                 case ChangelingAdherentsRollAction(f, _, _) =>
                     true                                         |=> 100  -> "changeling roll"
 
-                // Necromantic Spores requirement (Eliminate Two Fungal Thralls).
-                case EliminateTwoFungalThrallsMainAction(f) =>
-                    self.needs(NecromanticSporesReq)             |=> 900  -> "eliminate two thralls for SBR"
-                case EliminateTwoFungalThrallsPickAction(f, picked, remaining) =>
-                    picked.num < 2                               |=> 300  -> "pick thrall"
-                    picked.num == 2                              |=> 200  -> "two thralls picked"
-                case EliminateTwoFungalThrallsDoneAction(f, picked) =>
-                    true                                         |=> 200  -> "done two thralls"
+                // Necromantic Spores / Animated Rush requirement (Eliminate Thrall(s) + Discard Dice).
+                case FungalThrallDiceMainAction(f) =>
+                    (self.needs(NecromanticSporesReq) || self.needs(AnimatedRushReq)) |=> 900  -> "eliminate thrall(s) + discard dice for SBR"
+                case FungalThrallDicePickAction(f, picked, remaining) =>
+                    (self.needs(NecromanticSporesReq) && self.needs(AnimatedRushReq) && picked.num < 2) |=> 300 -> "pick toward both SBRs"
+                    picked.num >= 1                              |=> 200  -> "enough thralls picked"
+                case FungalThrallDiceDoneAction(f, picked) =>
+                    true                                         |=> 200  -> "done thrall/dice SBR"
+
+                // Faceless Ones (v16 new mechanic, NecromanticSpores identifier).
+                case FacelessOnesMainAction(f, l) =>
+                    true                                         |=> 500  -> "faceless ones"
+                case FacelessOnesTargetAction(f, r, target, e) =>
+                    true                                         |=> 100  -> "faceless ones target"
+                case FacelessOnesRetreatAction(f, r, target, e) =>
+                    true                                         |=> 150  -> "force enemy retreat"
+                case FacelessOnesEliminateMainAction(f, r, target, e) =>
+                    true                                         |=> 50   -> "force enemy elimination instead"
+                case FacelessOnesRetreatPickAction(f, r, target, e, dest) =>
+                    true                                         |=> 100  -> "retreat destination"
+                case FacelessOnesEliminatePickAction(f, r, target, e, victim) =>
+                    true                                         |=> 100  -> "eliminate victim"
 
                 // Overlord of Death — discount the next action by eliminating Monsters.
                 // Prefer when power is tight and a high-cost action is affordable with discount.
