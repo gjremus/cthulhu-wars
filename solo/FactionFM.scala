@@ -427,7 +427,16 @@ object FMExpansion extends Expansion {
         case MannedBattlementsDestPickAction(self, source, units) =>
             val destAreas = contiguousWallGroup(source).but(source)
             if (destAreas.none)
-                Force(CancelAction)
+                // Bug 542: CancelAction is a leaf Ask() menu option (handled specially only
+                // when it's the TOP-LEVEL action passed into Game.performContinue), not a
+                // legal Force(...) target - Force feeds straight into internalPerform's
+                // action @@ { case ... } pattern match, which has no case for bare
+                // CancelAction, so this crashed with scala.MatchError whenever source's
+                // Screaming Wall had no wall-bearing neighbor (an isolated 1-Area group,
+                // e.g. a wall built in a region with no adjacent wall). Return to MainAction
+                // instead, matching the idiom used elsewhere (e.g. IGOOs.scala) for "nothing
+                // to do here, bail out to the main menu" with a Force.
+                Force(MainAction(self))
             else if (destAreas.num == 1 || units.num == 1)
                 Ask(self).each(destAreas)(r => MannedBattlementsDestAction(self, source, units, r)).cancel
             else
