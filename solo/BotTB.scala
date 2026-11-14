@@ -957,6 +957,31 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     numSB < 5                                    |=> -1000 -> "three glyphs confirm deprioritized below 5 spellbooks, creator priority"
                     numSB >= 5                                   |=> 400  -> "three glyphs confirm"
 
+                // 2026-11-13: creator asked to port YS's Ritual of Annihilation
+                // threshold logic and tweak later, since TB had none at all (fell
+                // through to the generic "unknown" -1000 case below). Ported
+                // directly from BotYS.scala's RitualAction case, dropping only the
+                // Hastur-specific "5 SB and less than half available power" line
+                // (TB has no Hastur unit) in favor of the equivalent allSB check.
+                case RitualAction(_, cost, _) =>
+                    instantDeathNow |=> 10000 -> "instant death now"
+                    instantDeathNext && self.allSB && others.all(!_.allSB) |=> 10000 -> "ritual if ID next and all SB"
+
+                    self.allSB && self.realDoom + maxDoomGain >= 30 |=> 1100 -> "can break 30, and all SB"
+                    instantDeathNext && !self.allSB && others.%(_.allSB).any |=> -1000 -> "don't ritual if ID next and not all SB"
+                    instantDeathNext && !self.allSB && others.all(!_.allSB) && self.realDoom < others./(_.aprxDoom).max |=> 900 -> "ritual so ID next and nobody wins"
+                    !self.allSB && self.doom + self.gates.num >= 30 |=> -5000 -> "will break 30, but not all SB"
+                    !self.allSB && self.doom + self.gates.num < 30 && self.realDoom < 29 && self.realDoom + maxDoomGain >= 29 |=> 700 -> "won't break 30, but come near"
+                    self.numSB >= 5 && cost * 2 <= power |=> 800 -> "5 SB and less than half available power"
+                    self.numSB >= 2 && aprxDoomGain / cost > 1 |=> 600 -> "very sweet deal"
+                    self.numSB >= 3 && aprxDoomGain / cost > 0.75 |=> 400 -> "sweet deal"
+                    self.numSB >= 4 && aprxDoomGain / cost > 0.5 |=> 200 -> "ok deal"
+                    cost == 5 |=> 100 -> "ritual first"
+                    self.pool.goos.any |=> -200 -> "not all goos in play"
+                    true |=> -250 -> "don't ritual unless have reasons"
+
+                    !self.allSB |=> -1000 -> "spellbooks first"
+
                 case EndTurnAction(f) =>
                     f == self                                    |=> 0    -> "end turn"
 
