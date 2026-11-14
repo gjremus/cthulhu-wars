@@ -671,6 +671,30 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                         r2.freeGate && self.at(r2, Tentacle).any |=> 1000 -> "maws commit: two cadavolytes onto open gates held by our tentacles (creator priority 2026-11-13, item 8)"
                     uc == Cadavolyte &&
                         ((r1.freeGate && self.at(r1, Tentacle).any) || (r2.freeGate && self.at(r2, Tentacle).any)) |=> 970 -> "maws commit: cadavolyte onto an open gate held by our tentacle (creator priority 2026-11-13, item 8)"
+                    // 2026-11-14 fix (creator report, game "Power and Space", rowId
+                    // 1017, action 960): "with 6 spellbooks earned TB bot could
+                    // thousand writhing maws recruit cadavolytes to 2 uncontrolled
+                    // gates but doesnt... preferentially highest priority recruit
+                    // cadavolytes to any uncontrolled gates when on 6 spellbooks and
+                    // especially when Shudde M'ell part is present at gate." The
+                    // bonuses above all require a Tentacle already sitting on the
+                    // free Gate first -- with no Tentacle there yet (as in the
+                    // reported game, where TB had no Tentacle on the open North
+                    // America gate), none of them applied and the Cadavolytes went
+                    // elsewhere. These unconditional (no-Tentacle-required) versions
+                    // fill that gap, kept above the Shudde-M'ell-part bonuses (950/
+                    // 900) so the explicit "especially when Shudde M'ell part is
+                    // present" case always outranks a bare uncontrolled Gate, and a
+                    // bare uncontrolled Gate still outranks those Shudde M'ell bonuses
+                    // on their own since an open Gate is strictly better progress.
+                    uc == Cadavolyte && numSB >= 6 &&
+                        r1.freeGate && (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any) &&
+                        r2.freeGate && (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any) |=> 1450 -> "maws commit: two cadavolytes onto uncontrolled gates with a shudde m'ell part present (creator priority 2026-11-14)"
+                    uc == Cadavolyte && numSB >= 6 &&
+                        ((r1.freeGate && (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any)) ||
+                         (r2.freeGate && (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any))) |=> 1420 -> "maws commit: cadavolyte onto an uncontrolled gate with a shudde m'ell part present (creator priority 2026-11-14)"
+                    uc == Cadavolyte && numSB >= 6 && r1.freeGate && r2.freeGate |=> 1050 -> "maws commit: two cadavolytes onto uncontrolled gates (creator priority 2026-11-14)"
+                    uc == Cadavolyte && numSB >= 6 && (r1.freeGate || r2.freeGate) |=> 1020 -> "maws commit: cadavolyte onto an uncontrolled gate (creator priority 2026-11-14)"
                     // 2026-11-13 (task: 6-spellbook behavior spec, item 3): once on 6
                     // Spellbooks and holding a good number of Gates (3+), recruit
                     // Chthonians onto Gate Areas that already hold a Cadavolyte or a
