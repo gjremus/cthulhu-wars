@@ -453,9 +453,7 @@ object SLExpansion extends Expansion {
 
         case CaptureMonsterUnitAction(self, r, f, uc) =>
             val m = f.at(r).one(uc)
-            game.fbeCaptureInProgress = true
             game.eliminate(m)
-            game.fbeCaptureInProgress = false
             m.region = self.prison
             self.log("captured", m, "in", r)
             // Round 8 Bug 76: register as a CG edge case. CaptureMonster is a

@@ -3001,12 +3001,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                // Faceless Blight (FBE) — v16 "Necromantic Spores" (Post-Battle, now
-                // bound to identifier AnimatedRush — see FactionFBE.scala header note):
+                // Faceless Blight (FBE) — Necromantic Spores (Post-Battle, §3.14.4):
                 // if FBE participated, has the SB, controls a Monster in the arena, and
                 // an enemy Unit was Killed, offer to Eliminate a controlled Monster and
                 // spawn 1 Fungal Thrall per enemy Killed. FBEExpansion resolves it.
-                if (factions.has(FBE) && FBE.can(AnimatedRush) && sides.has(FBE) && !FBE.oncePerAction.has(AnimatedRush)) {
+                if (factions.has(FBE) && FBE.can(NecromanticSpores) && sides.has(FBE) && !FBE.oncePerAction.has(NecromanticSpores)) {
                     val enemy = if (attacker == FBE) defender else attacker
                     // A Shapestolen enemy Monster fought FOR FBE this Battle, so if it died it
                     // was NOT an "enemy Killed" — exclude it from the Fungal-Thrall spawn count
@@ -3015,7 +3014,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     val enemyKilled = eliminated.%(u => u.faction == enemy && !game.fbeShapestolen.contains(u.ref)).num
                     val fbeMonstersHere = FBE.at(arena).%(_.uclass.utype == Monster).any
                     if (enemyKilled > 0 && fbeMonstersHere) {
-                        FBE.oncePerAction :+= AnimatedRush
+                        FBE.oncePerAction :+= NecromanticSpores
                         return Ask(FBE)
                             .add(NecromanticSporesMainAction(FBE, enemyKilled))
                             .add(NecromanticSporesSkipAction(FBE))

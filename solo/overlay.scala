@@ -3010,11 +3010,9 @@ object Overlays {
         // (ByagoonaAwakenMainAction); this is the informational overlay only.
         case $("FBE", "ByagoonaAwaken") => fbeByagoonaAwakenOverlay()
 
-        case $("FBE", "Setup") => requirement("After Progenitus, 8 Power, 6 Acolytes and a Controlled Gate in an Area not adjacent to another faction's Start Area.")
+        case $("FBE", "Setup") => requirement("After Progenitus, 8 Power, 6 Acolytes and a Controlled Gate in an empty Area not adjacent to another faction's Start Area.")
 
-        case $("FBE", ChangelingAdherentsReq.text) => requirement("3+ Kills are Rolled in Any Battle you Participate in.")
-        // NecromanticSporesReq and AnimatedRushReq share identical v16 text, so a
-        // single case covers both (see FungalThrallDiceMainAction in FactionFBE.scala).
+        case $("FBE", ChangelingAdherentsReq.text) => requirement("A total of 3 Kills are Rolled in a Battle you Participate in.")
         case $("FBE", NecromanticSporesReq.text)   =>
             val locationInfo = currentGame match {
                 case Some(g) =>
@@ -3027,19 +3025,19 @@ object Overlays {
                         "<br/><br/><span class=cost-color>No Fungal Thralls on map.</span>"
                 case None => ""
             }
-            requirement("As an Action, Eliminate a Fungal Thrall and Discard a die from your Faction Card. " +
-                "Eliminating 2 Thralls and Discarding 2 Dice in one Action satisfies both this and the Animated Rush requirement." + locationInfo)
+            requirement("As an Action, Eliminate Two Fungal Thralls." + locationInfo)
         case $("FBE", ShapestealingReq.text)        => requirement("Have 3 Units in an Enemy Start Area.")
+        case $("FBE", AnimatedRushReq.text)         => requirement("As an Action, Discard 2 Dice from your Faction Card.")
         case $("FBE", SuccorReq.text)               => requirement("Byagoona Dies in Battle. Do not fulfill if the Kill/Elimination is prevented.")
         case $("FBE", OverlordOfDeathReq.text)      => requirement("Awaken Byagoona.")
 
-        case $("FBE", FeastUponDeath.name)       => spellbook(FeastUponDeath.name,       "Ongoing (Faction Ability)", "Whenever one or more Units are Eliminated by a means other than Capture in an Area with your Units, gain 1 Power.")
-        case $("FBE", ChangelingAdherents.name)  => spellbook(ChangelingAdherents.name,  "Move", "When Byagoona Moves, Discard any number of Dice from your Faction Card to move exactly twice that many other Units for free.")
-        case $("FBE", NecromanticSpores.name)    => spellbook(NecromanticSpores.name,    "Action", "Choose an Area with your Acolyte and an Enemy Acolyte Controlling a Gate. Your opponent must retreat that Acolyte to an adjacent Area unless they Eliminate another Unit Present.")
-        case $("FBE", Shapestealing.name)        => spellbook(Shapestealing.name,        "Pre-Battle", "Choose an enemy Unit Type Present. If a Unit of that Type is Killed, place a Fungal Thrall in the Area Post-Battle.")
-        case $("FBE", AnimatedRush.name)         => spellbook(AnimatedRush.name,         "Post-Battle", "If an Enemy Unit was Killed, Eliminate a Monster you Own which remained in the Battle Area to create a Fungal Thrall for each enemy Unit Killed.")
-        case $("FBE", Succor.name)               => spellbook(Succor.name,               "Ongoing", "Whenever you Summon a Monster or Recruit a Cultist, Discard Dice from your Faction Card equal to its Cost to repeat the Action for free in the same Area.")
-        case $("FBE", OverlordOfDeath.name)      => spellbook(OverlordOfDeath.name,      "Doom Phase", "Eliminate any number of your Units to choose 1, then roll that many dice: gain an Elder Sign if their total value exceeds that of the Ritual Marker, then place those dice on your Faction Card.")
+        case $("FBE", SelfConsuming.name)        => spellbook(SelfConsuming.name,        "Ongoing (Faction Ability)", "Whenever an Action causes two or more Units to be Killed or Eliminated in the same Area, if you had a Unit Present, gain 1 Power. Also gain 1 Doom if you controlled at least three of those Units.")
+        case $("FBE", ChangelingAdherents.name)  => spellbook(ChangelingAdherents.name,  "Gather Power", "Roll a die for each of your Acolytes controlling Gates and place them on your Faction Card.")
+        case $("FBE", NecromanticSpores.name)    => spellbook(NecromanticSpores.name,    "Post-Battle", "Eliminate a Monster Present to create a Fungal Thrall for each enemy Unit Killed.")
+        case $("FBE", Shapestealing.name)        => spellbook(Shapestealing.name,        "Pre-Battle", "Choose an Enemy Monster and roll a die from your Faction Card. If the value exceeds that Monster's Cost, it fights for you this Combat.")
+        case $("FBE", AnimatedRush.name)         => spellbook(AnimatedRush.name,         "Move", "When Byagoona Moves, discard dice from your Faction Card to move twice that many Units for free.")
+        case $("FBE", Succor.name)               => spellbook(Succor.name,               "Doom Phase", "Eliminate any number of your Units and roll that many dice. If the total value exceeds that of the Ritual Marker, gain an Elder Sign.")
+        case $("FBE", OverlordOfDeath.name)      => spellbook(OverlordOfDeath.name,      "Ongoing", "If Byagoona is in play, Eliminate Monsters to pay Costs as though they were Power. Each Monster Eliminated is worth 1 Power.")
 
         case _ => ""
     }
@@ -3084,29 +3082,28 @@ object Overlays {
     def fbeByagoonaAwakenOverlay() = {
         spellbook("Awaken " + Byagoona.name, "Action",
             s"""<div class=p>${cost("How to Awaken " + Byagoona.name + ":")}</div>
-                <div class=p>${cost("1)")} Eliminate one or more of your Monsters in a single Area, then roll dice equal to their total Cost.</div>
-                <div class=p>${cost("2)")} Set all of those dice on your Faction Card.</div>
+                <div class=p>${cost("1)")} Eliminate one or more of your Monsters in a single Area and roll that many dice.</div>
+                <div class=p>${cost("2)")} Set all of the dice on your Faction Card.</div>
                 <div class=p>${cost("3)")} Pay Power equal to <span class=cost-color>max(0, ${FBEValues.Byagoona_awakenCost} - the number of Monsters Eliminated)</span>.</div>
                 <div class=p>${cost("4)")} ${Byagoona.name} appears in the Area.</div>
                 <div class=p>${combat} Equal to the number of Results (Kills and Pains) on dice on your Faction Card.</div>""")
     }
 
     // Faceless Blight (FBE) — Homebrew faction info card (§G14). Unique ability:
-    // Feast Upon Death (Ongoing, v16, was Self Consuming). Byagoona awakens via a
-    // Monster-sacrifice procedure; his Combat = the count of Kill/Pain faces on the
-    // Faction-Card dice pool.
+    // Self Consuming (Ongoing). Byagoona awakens via a Monster-sacrifice procedure;
+    // his Combat = the count of Kill/Pain faces on the Faction-Card dice pool.
     def fbeFactionOverlay() = {
         def fbeRef(sb : Spellbook) =
             s"""<span class="ability-color pointer" onclick="onExternalClick('FBE', '${sb.name}')">${sb.name}</span>"""
-        faction(FBE, "info:fbe-background", FeastUponDeath, "Ongoing",
-            "Whenever one or more Units are Eliminated by a means other than Capture in an Area with your Units, gain 1 Power.",
+        faction(FBE, "info:fbe-background", SelfConsuming, "Ongoing",
+            "Whenever an Action causes two or more Units to be Killed or Eliminated in the same Area, if you had a Unit Present, gain 1 Power. Also gain 1 Doom if you controlled at least three of those Units.",
             $(ChangelingAdherents, NecromanticSpores, Shapestealing, AnimatedRush, Succor, OverlordOfDeath), $(
             (Acolyte,      FBEValues.Acolyte_count, "1", "0", s"""<div class=p>Setup: 6 Acolytes + a Controlled Gate in an empty area not adjacent to another faction's start area. Spellbook: ${fbeRef(ChangelingAdherents)}</div>"""),
             (FungalThrall, FBEValues.FungalThrall_count, "" + FBEValues.FungalThrall_cost, "" + FBEValues.FungalThrall_combat, s"""<div class=p>Spellbooks: ${fbeRef(NecromanticSpores)}, ${fbeRef(Succor)}</div>"""),
             (Byagoona,     FBEValues.Byagoona_count, "?", calc(g => g.fbeCardDice.count(_ >= 4)), s"""
                 <div class=p>${cost(s"How to Awaken ${Byagoona.name}:")}</div>
-                <div class=p>${cost("1)")} Eliminate one or more of your Monsters in a single area, then roll dice equal to their total Cost.</div>
-                <div class=p>${cost("2)")} Set all of those dice on your Faction Card.</div>
+                <div class=p>${cost("1)")} Eliminate one or more of your Monsters in a single area and roll that many dice.</div>
+                <div class=p>${cost("2)")} Set all of the dice on your Faction Card.</div>
                 <div class=p>${cost("3)")} Pay Power equal to ${FBEValues.Byagoona_awakenCost} minus the number of Monsters Eliminated (floored at 0).</div>
                 <div class=p>${cost("4)")} Byagoona appears in the Area.</div>
                 <div class=p>${combat} Equal to the number of Results (Kills and Pains) on dice on your Faction Card.</div>
