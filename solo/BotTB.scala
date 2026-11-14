@@ -142,6 +142,17 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
             val tbDefenseTargets = others./~(e => e.allInPlay.%(u => tbWeaklyProtected(u) && self.at(u.region, Tentacle).any))
             val tbOffenseTargets = others./~(e => e.allInPlay.%(tbWeaklyProtected))
 
+            // 2026-11-13 (task: 6-spellbook behavior spec, item 12): "if on 6
+            // spellbooks and 27 doom and more than 4 power left during action phase,
+            // maximum priority on ensnare GOO battle autotomy loop and move tentacle
+            // and shudde to GOO battle autotomy loop." The existing items 5/7 chain
+            // scoring (1000-1950) only outranks the OTHER early/mid-game tiers in this
+            // file -- it does not outrank Psychic Shriek's late-game 7000 (item 4) or
+            // Awaken's 5000. This flag marks the literal late-game endgame-push window
+            // the creator described, used below to boost the same chain actions to
+            // the top of the file once it's active.
+            val ensnareAutotomyLoopMaxPriority = numSB >= 6 && self.realDoom >= 27 && power > 4
+
             a match {
 
                 case FirstPlayerAction(_, f) =>
@@ -401,6 +412,14 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     u.is(Tentacle) && numSB >= 6 && tbOffenseTargets.exists(_.region == to) |=> 1000 -> "move tentacle to a weakly-protected enemy goo/terror area (creator priority 2026-11-13, item 7)"
                     (u.goo || u.is(ShuddeMellSegment)) && numSB >= 6 &&
                         tbOffenseTargets.exists(_.region == to) && self.at(to, Tentacle).any |=> 1950 -> "move shudde m'ell to a weakly-protected enemy goo/terror area already held by our tentacle (creator priority 2026-11-13, item 7)"
+                    // 2026-11-13 (task: 6-spellbook behavior spec, item 12): once the
+                    // 6SB/27-Doom/>4-Power endgame window is open, the creator wants
+                    // "maximum priority on... move tentacle and shudde to GOO battle
+                    // autotomy loop" -- outranks even Psychic Shriek's 7000 (item 4),
+                    // since the whole point of this window is to close out the game.
+                    u.is(Tentacle) && ensnareAutotomyLoopMaxPriority && tbOffenseTargets.exists(_.region == to) |=> 7500 -> "endgame push: move tentacle to a weakly-protected enemy goo/terror area, maximum priority (creator priority 2026-11-13, item 12)"
+                    (u.goo || u.is(ShuddeMellSegment)) && ensnareAutotomyLoopMaxPriority &&
+                        tbOffenseTargets.exists(_.region == to) && self.at(to, Tentacle).any |=> 7600 -> "endgame push: move shudde m'ell to a weakly-protected enemy goo/terror area already held by our tentacle, maximum priority (creator priority 2026-11-13, item 12)"
 
                 // 2026-11-13 fix (creator report, game "Failure against Colour", rowId
                 // 1007, item 4): every other faction's bot scores MoveDoneAction with a
@@ -457,6 +476,10 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // this is the surviving AttackAction leaf for both the plain-Attack
                     // and the Soft TBUnlimitedBattleMainAction->AttackMainAction route.
                     numSB >= 6 && (tbDefenseTargets.exists(_.region == r) || tbOffenseTargets.exists(_.region == r)) |=> 1250 -> "attack/unlimited-battle a weakly-protected enemy goo/terror (creator priority 2026-11-13, items 5/7)"
+                    // 2026-11-13 (task: 6-spellbook behavior spec, item 12): endgame
+                    // push window -- "maximum priority on ensnare GOO battle autotomy
+                    // loop." Outranks Psychic Shriek's 7000 (item 4).
+                    ensnareAutotomyLoopMaxPriority && (tbDefenseTargets.exists(_.region == r) || tbOffenseTargets.exists(_.region == r)) |=> 7500 -> "endgame push: attack/unlimited-battle a weakly-protected enemy goo/terror, maximum priority (creator priority 2026-11-13, item 12)"
 
                 // Thousand Writhing Maws: double recruit/summon. Creator-specified
                 // priority (2026-11-01): recruit 2 Tentacles while short of the
@@ -646,6 +669,10 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                 // above (dead-Soft-action pattern, same as Psychic Shriek/Writhing Maws).
                 case TBMovePartToMantlePickAction(f, _) =>
                     numSB >= 6 && (tbDefenseTargets.any || tbOffenseTargets.any) |=> 1450 -> "abyssal cline: stage shudde m'ell parts on the mantle to open the attack/defense chain (creator priority 2026-11-13, items 5/7)"
+                    // 2026-11-13 (task: 6-spellbook behavior spec, item 12): endgame
+                    // push window -- "maximum priority on... move tentacle and shudde
+                    // to GOO battle autotomy loop." Outranks Psychic Shriek's 7000.
+                    ensnareAutotomyLoopMaxPriority && (tbDefenseTargets.any || tbOffenseTargets.any) |=> 7500 -> "endgame push: abyssal cline: stage shudde m'ell parts on the mantle, maximum priority (creator priority 2026-11-13, item 12)"
                     // 2026-11-13 (item 4 backup): offer to pull a glyph-duplicated
                     // Part back to the Mantle for redeployment -- see glyphDuplicateParts
                     // above. Must outrank the generic fallback Move options (TWM commit
@@ -655,6 +682,7 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 100  -> "pick part for mantle"
                 case TBMovePartToMantleAction(f, part) =>
                     numSB >= 6 && (tbDefenseTargets.any || tbOffenseTargets.any) |=> 300 -> "abyssal cline: move part to mantle for the attack/defense chain (creator priority 2026-11-13, items 5/7)"
+                    ensnareAutotomyLoopMaxPriority && (tbDefenseTargets.any || tbOffenseTargets.any) |=> 7500 -> "endgame push: abyssal cline: move part to mantle, maximum priority (creator priority 2026-11-13, item 12)"
                     // 2026-11-13 fix (creator report, game "Failure against Colour",
                     // rowId 1007, item 4 backup): "if TB has 2 parts on the same glyph,
                     // abyssal cline to the mantle and move head or segments to a glyph
@@ -772,6 +800,10 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // TBEnsnareRollAction's headArea fallback -- setting up the
                     // Unlimited Battle + Autotomy finish.
                     numSB >= 6 && enemy.at(area).exists(tbWeaklyProtected) |=> 1300 -> "ensnare target: drag a weakly-protected enemy goo/terror toward shudde m'ell (creator priority 2026-11-13, item 5)"
+                    // 2026-11-13 (task: 6-spellbook behavior spec, item 12): endgame
+                    // push window -- "maximum priority on ensnare GOO battle autotomy
+                    // loop." Outranks Psychic Shriek's 7000 (item 4).
+                    ensnareAutotomyLoopMaxPriority && enemy.at(area).exists(tbWeaklyProtected) |=> 7500 -> "endgame push: ensnare target: drag a weakly-protected enemy goo/terror toward shudde m'ell, maximum priority (creator priority 2026-11-13, item 12)"
                     true                                         |=> 200  -> "ensnare target commit"
 
                 // Psychic Shriek
@@ -981,6 +1013,26 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true |=> -250 -> "don't ritual unless have reasons"
 
                     !self.allSB |=> -1000 -> "spellbooks first"
+
+                // 2026-11-13 (task: 6-spellbook behavior spec, item 13): "if ever more
+                // than 30 doom from doom plus elder signs reveal to win immediately."
+                // TB had no RevealESAction case at all -- every other faction's bot
+                // (BotWW/BotYS/BotTI/etc.) already scores this; ported the same
+                // standard pattern directly so TB reveals to break 30 Doom instead of
+                // falling through to the generic "unknown" -1000 default.
+                case RevealESAction(_, es, false, _) if self.es != es =>
+                    true |=> -10000 -> "better reveal all"
+
+                case RevealESAction(_, _, _, next) if next == DoomAction(self) =>
+                    self.allSB && self.realDoom >= 30 |=> 1000 -> "reveal and try to win"
+                    true |=> -100 -> "don't reveal"
+                    canRitual |=> -2000 -> "ritual first"
+
+                case RevealESAction(_, _, _, _) =>
+                    self.allSB && self.realDoom >= 30 |=> 1000 -> "reveal and try to win"
+                    self.allSB && self.realDoom < 30 && self.realDoom < self.aprxDoom && self.realDoom < others./(_.aprxDoom).max |=> 900 -> "reveal bad ESs to take off heat"
+                    !self.allSB && self.realDoom >= 30 && others.all(!_.allSB) && others./(_.aprxDoom).max >= 27 |=> 800 -> "reveal so 30 broken and nobody wins"
+                    true |=> -100 -> "don't reveal"
 
                 case EndTurnAction(f) =>
                     f == self                                    |=> 0    -> "end turn"
