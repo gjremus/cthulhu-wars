@@ -137,6 +137,16 @@ case class MannedBattlementsDestPickAction(self : Faction, source : Region, unit
 }
 case class MannedBattlementsDestAction(self : Faction, source : Region, units : $[UnitRef], dest : Region)
     extends BaseFactionAction(MannedBattlements.styled(FM), dest)
+case class MannedBattlementsSeparatelyAction(self : Faction, source : Region, units : $[UnitRef], destinations : $[Region])
+    extends OptionFactionAction("Move separately") with More {
+    override def question(implicit game : Game) = MannedBattlements.styled(FM)
+}
+case class MannedBattlementsUnitPickDestAction(self : Faction, source : Region, unit : UnitRef, remaining : $[UnitRef], destinations : $[Region])
+    extends ForcedAction with Soft {
+    override def question(implicit game : Game) = MannedBattlements.styled(FM)
+}
+case class MannedBattlementsUnitMoveAction(self : Faction, source : Region, unit : UnitRef, remaining : $[UnitRef], destinations : $[Region], dest : Region)
+    extends BaseFactionAction(MannedBattlements.styled(FM), dest)
 
 case class SpitefulChiselMainAction(self : Faction, enemyFaction : Faction)
     extends ForcedAction with PowerNeutral with Soft {
@@ -177,6 +187,24 @@ object FMExpansion extends Expansion {
         val hasActualWall = FM.at(r).exists(_.uclass == ScreamingWall)
         val hasArchitectSubstitute = FM.has(BlueprintsInBlood) && FM.at(r).exists(_.uclass == BodyArchitect) && !hasActualWall
         hasActualWall || hasArchitectSubstitute
+    }
+
+    // Manned Battlements (Bug 540): "contiguous" Screaming Walls means Areas with a
+    // Screaming Wall (or Blueprints in Blood substitute) that chain together through
+    // board adjacency ONLY via other wall-bearing Areas — e.g. A-B-C-D are all one
+    // contiguous group if each neighbors the next, even though D never directly
+    // neighbors A. A wall Area with no wall-bearing neighbor is its own isolated
+    // group of one and has no legal Manned Battlements destination. BFS outward from
+    // `start`, only stepping into Areas that themselves have a Screaming Wall.
+    def contiguousWallGroup(start : Region)(implicit game : Game) : $[Region] = {
+        var visited : $[Region] = $(start)
+        var frontier : $[Region] = $(start)
+        while (frontier.any) {
+            val next = frontier./~(_.connected).distinct.%(hasScreamingWall).%!(visited.has)
+            visited = visited ++ next
+            frontier = next
+        }
+        visited
     }
 
     def strengthBonus(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
@@ -390,9 +418,22 @@ object FMExpansion extends Expansion {
         case MannedBattlementsUnitDoneAction(self, source, units) =>
             Force(MannedBattlementsDestPickAction(self, source, units))
 
+        // Destinations = every OTHER Area in source's contiguous Screaming Wall group
+        // (BFS via contiguousWallGroup — see FMExpansion). This is the Bug 540 fix:
+        // the group chains through any wall-bearing Area (A-B-C-D are all one group
+        // if each neighbors the next, even though D never directly neighbors A), not
+        // just source's immediate neighbors, and no longer requires FM to already have
+        // units standing there.
         case MannedBattlementsDestPickAction(self, source, units) =>
-            val destAreas = game.board.regions.filter(r => r != source && hasScreamingWall(r) && self.at(r).any)
-            Ask(self).each(destAreas)(r => MannedBattlementsDestAction(self, source, units, r)).cancel
+            val destAreas = contiguousWallGroup(source).but(source)
+            if (destAreas.none)
+                Force(CancelAction)
+            else if (destAreas.num == 1 || units.num == 1)
+                Ask(self).each(destAreas)(r => MannedBattlementsDestAction(self, source, units, r)).cancel
+            else
+                // Pain-menu pattern: default "move all to..." plus a "move separately" option.
+                Ask(self).each(destAreas)(r => MannedBattlementsDestAction(self, source, units, r))
+                    .add(MannedBattlementsSeparatelyAction(self, source, units, destAreas)).cancel
 
         case MannedBattlementsDestAction(self, source, units, dest) =>
             self.power -= FMValues.MannedBattlements_cost
@@ -404,6 +445,26 @@ object FMExpansion extends Expansion {
             }
             self.log(MannedBattlements.styled(FM) + ": moved", units.num, "units from", source, "to", dest)
             Then(MainAction(self))
+
+        // "Move separately" — pay the cost once up front (same as moving all units
+        // together), then ask destination-per-unit, one at a time, like RetreatSeparatelyAction.
+        case MannedBattlementsSeparatelyAction(self, source, units, destinations) =>
+            self.power -= FMValues.MannedBattlements_cost
+            Force(MannedBattlementsUnitPickDestAction(self, source, units.head, units.tail, destinations))
+
+        case MannedBattlementsUnitPickDestAction(self, source, unit, remaining, destinations) =>
+            Ask(self).each(destinations)(r => MannedBattlementsUnitMoveAction(self, source, unit, remaining, destinations, r))
+
+        case MannedBattlementsUnitMoveAction(self, source, unit, remaining, destinations, dest) =>
+            val u = game.unit(unit)
+            u.region = dest
+            u.onGate = false
+            u.add(Moved)
+            self.log(MannedBattlements.styled(FM) + ": moved", u.full, "from", source, "to", dest)
+            if (remaining.any)
+                Force(MannedBattlementsUnitPickDestAction(self, source, remaining.head, remaining.tail, destinations))
+            else
+                Then(MainAction(self))
 
         case TendonFlayingReqMainAction(self, cost) =>
             self.power -= cost
