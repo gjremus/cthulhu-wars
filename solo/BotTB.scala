@@ -573,6 +573,19 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // and by glyphPushActive already blocking this Tentacle recruit once
                     // a glyph move is actually available to make instead.
                     uc == Tentacle && game.tbShuddeMellEverAwakened && !glyphPushActive && self.needs(TenTentaclesReq) |=> 1050 -> "maws commit: tentacle double-recruit (post-awaken, toward 10-tentacle SBR, outranks moving a tentacle, creator priority 2026-11-09, deferred to glyph push 2026-11-11, 0-segment case confirmed correct 2026-11-12)"
+                    // 2026-11-14 fix (creator report, game "Power and Space", rowId
+                    // 1017, action 342): glyphPushActive already hard-blocks a
+                    // competing Tentacle/Chthonian MOVE (see MoveAction above), but had
+                    // no counterpart here for a TWM recruit -- so the instant Remove-
+                    // Gate-Place-Chthonian banked its 2 Power (action 341), the bot
+                    // spent it on a TWM Cadavolyte recruit (action 342) instead of a
+                    // Shudde M'ell glyph-area move, the same misdirected-Power mistake
+                    // the creator has now reported for Move actions and TWM alike.
+                    // Hard-block every TWM recruit during the glyph push, same
+                    // magnitude/style as the Move-based block, so it cannot win against
+                    // this window's glyph-move Move scores (1900) no matter which unit
+                    // type or Gate/Cadavolyte bonus above would otherwise apply.
+                    glyphPushActive                                                     |=> -2000 -> "avoid thousand writhing maws recruit while the three-glyphs push is active (creator priority 2026-11-14)"
                     // 2026-11-10 fix (task: "more foolproof sequence"): new creator step
                     // after Gates-at-GOOs (5th SBR) -- with Power still available, use TWM
                     // to place Cadavolytes defending Areas that already hold a Shudde
