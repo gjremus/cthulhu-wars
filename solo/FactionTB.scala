@@ -820,7 +820,11 @@ object TBExpansion extends Expansion {
             // destination on that enemy's turn. Stalk chained off TB's own Move
             // (mover == self, the "...TB moves a Unit" condition) is TB's own turn
             // and still gains the gate normally.
-            game.checkGatesGained(self, (mover != self).$(dest))
+            // Per creator ruling (Q7, 2026-11-15): gate control is itself an
+            // unlimited action, which (per the rules) requires an active/powered
+            // turn except for TI's Eternal Servitude. TB at 0 Power has no turn
+            // to attach the gain to, so suppress it regardless of who moved.
+            game.checkGatesGained(self, (mover != self || self.power == 0).$(dest))
 
             // TB: immediately trigger Mantle overlay if 2 adjacent gates now exist
             val mantleReady =
