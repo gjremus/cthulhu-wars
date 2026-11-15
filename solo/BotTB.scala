@@ -847,8 +847,19 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     true                                         |=> 200  -> "deny subterrane for enemy retreat"
 
                 // Ensnare
+                // 2026-11-14 fix (creator report, game "Power and Space", rowId
+                // 1017, paragraph [50]): "only use ensnare if TB has 4 or more
+                // power, and has 2 units protecting shudde mell head." This used
+                // to be an unconditional flat 600, so the bot would cast Ensnare
+                // even with too little Power to make good use of the drag, or with
+                // the Head left exposed. Gate the main cast on both conditions;
+                // heavily penalize casting Ensnare otherwise so the bot spends that
+                // Power elsewhere (e.g. the Abyssal Cline staging below) instead.
                 case TBEnsnareMainAction(f) =>
-                    true                                         |=> 600  -> "ensnare enemy"
+                    val headRegion = self.all(ShuddeMellHead).headOption./(_.region)
+                    val headProtectors = headRegion./(r => self.at(r).%(_.uclass != ShuddeMellHead).num).|(0)
+                    power >= 4 && headProtectors >= 2             |=> 1300 -> "ensnare enemy (4+ power, shudde mell head well-protected, creator priority 2026-11-14)"
+                    true                                           |=> -1500 -> "avoid ensnare without 4+ power and 2 units protecting shudde mell head (creator priority 2026-11-14)"
                 case TBEnsnarePickEnemyAction(f, _) =>
                     true                                         |=> 100  -> "pick ensnare target"
                 case TBEnsnareTargetAction(f, enemy, area) =>
@@ -1114,6 +1125,19 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
 
                 case AbandonGateAction(_, r, _) =>
                     true |=> -1000000 -> "never abandon gate"
+
+                // 2026-11-14 fix (creator report, game "Power and Space", rowId
+                // 1017, paragraph [49]): "TB bot mistakes if enemy acolyte in an
+                // area that can be captured, capture it with very high priority
+                // if on 6 spellbooks in particular." BotTB had no CaptureAction
+                // case at all -- every Capture fell through to the generic
+                // "unknown" -1000 default below, so the bot never had any reason
+                // to prefer capturing over any other legal action. Flat high
+                // priority for any capture, boosted further once on 6 spellbooks
+                // (the creator's explicit emphasis).
+                case CaptureAction(_, r, f, _) =>
+                    true |=> 5000 -> "capture a capturable enemy acolyte"
+                    numSB >= 6 |=> 3000 -> "capture extra priority on 6 spellbooks (creator priority 2026-11-14)"
 
                 case _ =>
                     true |=> -1000 -> "unknown"
