@@ -2653,6 +2653,22 @@ object Overlays {
             </tbody>
         </table>"""
 
+    def requirementH(heading : String, text : String) = s"""
+        <table class="requirement-table" style="">
+            <tbody>
+                <tr>
+                    <td style="width:20%"></td>
+                    <td style="width:60%; vertical-align:middle; text-align:center;">
+                        <div class="h1 black-border"><span class="lb inline-block">${heading}</span></div>
+                        <div class="white-border">
+                            ${text}
+                        </div>
+                    </td>
+                    <td style="width:20%"></td>
+                </tr>
+            </tbody>
+        </table>"""
+
     def ref(spellbook : Spellbook) = s"""<span class=ability-color>${spellbook.name}</span>"""
 
     def reference(f : Faction, spellbook : Spellbook) = s"""<span class="ability-color pointer" onclick="onExternalClick('${f.short}', '${spellbook.name.replace("'", "\\'")}')">${spellbook.name}</span>"""
@@ -2937,13 +2953,17 @@ object Overlays {
 
         // Setup (guide §1.6). LAYER 1 note: the Lord's Shadow is stood in by an
         // ordinary Controlled Gate and the opponent Portent-placement step is deferred.
-        case $("TI", "Setup") => requirement("After Windwalker, start with 8 Power and place a Lord's Shadow, a Fiend and 6 Demon Larvae in any unoccupied Area (following any Map restrictions that would apply to Opener of the Way). You can only Awaken Independent Great Old Ones if doing so would not have you Control more total Great Old Ones than Lord's Shadows.")
+        case $("TI", "Setup") => requirementH("Setup", "After Windwalker, start with 8 Power and place a Lord's Shadow, a Fiend and 6 Demon Larvae in any unoccupied Area (following any Map restrictions that would apply to Opener of the Way). You can only Awaken Independent Great Old Ones if doing so would not have you Control more total Great Old Ones than Lord's Shadows.")
 
         // Portents reference card (§1.6 area) — verbatim text, owner-supplied image.
-        case $("TI", "Portents") => requirement("At the end of your setup (after you've chosen your Start location and before Opener of the Way has set up), in turn order, each non-Invasion Player (including Opener of the Way) places one Portent in any Area not containing a Gate or Portent, and also not adjacent to The Invasion's Start Area (max 5 Portents may be placed in this way).")
+        case $("TI", "Portents") => requirementH("Portents", "At the end of your setup (after you've chosen your Start location and before Opener of the Way has set up), in turn order, each non-Invasion Player (including Opener of the Way) places one Portent in any Area not containing a Gate or Portent, and also not adjacent to The Invasion's Start Area (max 5 Portents may be placed in this way).")
 
         // Lord's Shadows reference card — verbatim text, owner-supplied image.
-        case $("TI", "Lord's Shadows") => requirement("Lord's Shadows are identical to Gates for all purposes except the following:<br>1) Lord's Shadows cannot be moved.<br>2) Gates may be built in Areas with Lord's Shadows (however, they still may not be moved there by abilities like <i>The Beyond One</i>, as that ability specifies that the Gate moved can't be moved to another Area with a Gate).<br>3) Lord's Shadows are Controlled by The Invasion player by default (without a Controlling Unit) unless there is a Controlled Gate in the same Area, in which case that player Controls the Shadow as an additional Gate. Yog-Sothoth counts as a Gate for this purpose if he's the only non-Shadow Gate in the Area.<br><br>If an Invasion-Controlled Lord's Shadow is destroyed (e.g. Ithaqua, the Dhole, etc.), Invasion gain 2 Elder Signs instead of any other reward or effect. If an Area with Portents is destroyed (e.g. Shaggai), Invasion gains 1 Elder Sign.")
+        // Dispatch key deliberately omits the apostrophe ("Lords Shadows", not "Lord's Shadows"):
+        // an apostrophe here breaks the onclick="onExternalClick('TI', '...')" HTML attribute,
+        // since the browser's HTML-attribute parsing happens before the JS string is read, so
+        // neither a raw apostrophe nor an &#39; entity survives as a literal character in time.
+        case $("TI", "Lords Shadows") => requirementH("Lord's Shadows", "Lord's Shadows are identical to Gates for all purposes except the following:<br>1) Lord's Shadows cannot be moved.<br>2) Gates may be built in Areas with Lord's Shadows (however, they still may not be moved there by abilities like <i>The Beyond One</i>, as that ability specifies that the Gate moved can't be moved to another Area with a Gate).<br>3) Lord's Shadows are Controlled by The Invasion player by default (without a Controlling Unit) unless there is a Controlled Gate in the same Area, in which case that player Controls the Shadow as an additional Gate. Yog-Sothoth counts as a Gate for this purpose if he's the only non-Shadow Gate in the Area.<br><br>If an Invasion-Controlled Lord's Shadow is destroyed (e.g. Ithaqua, the Dhole, etc.), Invasion gain 2 Elder Signs instead of any other reward or effect. If an Area with Portents is destroyed (e.g. Shaggai), Invasion gains 1 Elder Sign.")
 
         // Spellbook requirements (guide §1.9) — the six brown boxes.
         case $("TI", TIAwakenBaphomet.text)      => requirement("Awaken Baphomet.")
@@ -3367,7 +3387,7 @@ object Overlays {
                     // and Lord's Shadows (verbatim rules text pasted from the faction's own
                     // reference cards), placed between Setup and the Spellbooks line.
                     val tiExtraLinks =
-                        if (f == TI) s"""<span class="ability-color pointer" onclick="onExternalClick('TI', 'Portents')">Portents</span>&nbsp;&nbsp;&nbsp;<span class="ability-color pointer" onclick="onExternalClick('TI', 'Lord\'s Shadows')">Lord's Shadows</span>&nbsp;&nbsp;&nbsp;"""
+                        if (f == TI) s"""<span class="ability-color pointer" onclick="onExternalClick('TI', 'Portents')">Portents</span>&nbsp;&nbsp;&nbsp;<span class="ability-color pointer" onclick="onExternalClick('TI', 'Lords Shadows')">Lord's Shadows</span>&nbsp;&nbsp;&nbsp;"""
                         else ""
                     val sbPart =
                         if (sbLine.nonEmpty) sbLine
