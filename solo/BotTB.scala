@@ -151,6 +151,19 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
             val tbDefenseTargets = others./~(e => e.allInPlay.%(u => tbWeaklyProtected(u) && self.at(u.region, Tentacle).any))
             val tbOffenseTargets = others./~(e => e.allInPlay.%(tbWeaklyProtected))
 
+            // 2026-11-15 fix (creator report, game "Might for Blindness", rowId 1021,
+            // paragraph [48]): the combat>2 gate above (2026-11-14 fix) correctly let
+            // Hastur (combat 6 via ritualCost) through as a legitimate target, but
+            // nothing capped how many Segments joined the chain once a target
+            // qualified -- all 3 Segments moved in to battle a 6-combat Hastur, which
+            // the creator called "massive overkill" for a target that size. Creator's
+            // literal tiering: 0 Segments for a <=6-combat target, 1 Segment for 7-12,
+            // 2 Segments for 13+. The Head is unaffected by this cap -- only Segments.
+            def tbTargetCombatAt(r : Region) : Int =
+                tbOffenseTargets.%(_.region == r)./(u => u.faction.strength($(u), self)).maxOr(0)
+            def tbSegmentCap(combat : Int) : Int =
+                if (combat >= 13) 2 else if (combat >= 7) 1 else 0
+
             // 2026-11-13 (task: 6-spellbook behavior spec, item 12): "if on 6
             // spellbooks and 27 doom and more than 4 power left during action phase,
             // maximum priority on ensnare GOO battle autotomy loop and move tentacle
@@ -419,16 +432,26 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // only follows once a TB Tentacle has already reached that Area, so
                     // this does not fire both legs in the same turn out of order.
                     u.is(Tentacle) && numSB >= 6 && tbOffenseTargets.exists(_.region == to) |=> 1000 -> "move tentacle to a weakly-protected enemy goo/terror area (creator priority 2026-11-13, item 7)"
-                    (u.goo || u.is(ShuddeMellSegment)) && numSB >= 6 &&
-                        tbOffenseTargets.exists(_.region == to) && self.at(to, Tentacle).any |=> 1950 -> "move shudde m'ell to a weakly-protected enemy goo/terror area already held by our tentacle (creator priority 2026-11-13, item 7)"
+                    u.is(ShuddeMellHead) && numSB >= 6 &&
+                        tbOffenseTargets.exists(_.region == to) && self.at(to, Tentacle).any |=> 1950 -> "move shudde m'ell head to a weakly-protected enemy goo/terror area already held by our tentacle (creator priority 2026-11-13, item 7)"
+                    // 2026-11-15 fix (creator report, game "Might for Blindness", rowId
+                    // 1021, paragraph [48]): cap Segments joining the chain by the
+                    // target's own combat value (0 for <=6, 1 for 7-12, 2 for 13+) so TB
+                    // doesn't waste Power overcommitting Segments against a weak target.
+                    u.is(ShuddeMellSegment) && numSB >= 6 &&
+                        tbOffenseTargets.exists(_.region == to) && self.at(to, Tentacle).any &&
+                        self.at(to, ShuddeMellSegment).num < tbSegmentCap(tbTargetCombatAt(to)) |=> 1950 -> "move shudde m'ell segment to a weakly-protected enemy goo/terror area already held by our tentacle, within the combat-tiered segment cap (creator priority 2026-11-13, item 7; segment cap 2026-11-15)"
                     // 2026-11-13 (task: 6-spellbook behavior spec, item 12): once the
                     // 6SB/27-Doom/>4-Power endgame window is open, the creator wants
                     // "maximum priority on... move tentacle and shudde to GOO battle
                     // autotomy loop" -- outranks even Psychic Shriek's 7000 (item 4),
                     // since the whole point of this window is to close out the game.
                     u.is(Tentacle) && ensnareAutotomyLoopMaxPriority && tbOffenseTargets.exists(_.region == to) |=> 7500 -> "endgame push: move tentacle to a weakly-protected enemy goo/terror area, maximum priority (creator priority 2026-11-13, item 12)"
-                    (u.goo || u.is(ShuddeMellSegment)) && ensnareAutotomyLoopMaxPriority &&
-                        tbOffenseTargets.exists(_.region == to) && self.at(to, Tentacle).any |=> 7600 -> "endgame push: move shudde m'ell to a weakly-protected enemy goo/terror area already held by our tentacle, maximum priority (creator priority 2026-11-13, item 12)"
+                    u.is(ShuddeMellHead) && ensnareAutotomyLoopMaxPriority &&
+                        tbOffenseTargets.exists(_.region == to) && self.at(to, Tentacle).any |=> 7600 -> "endgame push: move shudde m'ell head to a weakly-protected enemy goo/terror area already held by our tentacle, maximum priority (creator priority 2026-11-13, item 12)"
+                    u.is(ShuddeMellSegment) && ensnareAutotomyLoopMaxPriority &&
+                        tbOffenseTargets.exists(_.region == to) && self.at(to, Tentacle).any &&
+                        self.at(to, ShuddeMellSegment).num < tbSegmentCap(tbTargetCombatAt(to)) |=> 7600 -> "endgame push: move shudde m'ell segment to a weakly-protected enemy goo/terror area already held by our tentacle, within the combat-tiered segment cap, maximum priority (creator priority 2026-11-13, item 12; segment cap 2026-11-15)"
 
                 // 2026-11-13 fix (creator report, game "Failure against Colour", rowId
                 // 1007, item 4): every other faction's bot scores MoveDoneAction with a
