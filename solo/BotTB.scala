@@ -135,10 +135,19 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
             // Item 5 (defense) additionally requires the Area already hold a TB
             // Tentacle (the defensive trigger); item 7 (offense) does not, since TB
             // has to move a Tentacle there first as part of the chain itself.
+            //
+            // 2026-11-14 fix (creator report, game "Power and Space", rowId 1017,
+            // paragraph [48]): this had no minimum combat-value check at all, so a
+            // 0-combat GOO (e.g. Yellow Sign's King in Yellow, which contributes
+            // nothing to YS.strength -- see FactionYS.scala) counted as "weakly
+            // protected" just as readily as a genuinely dangerous one, sending TB's
+            // Head/Segments on a pointless move-and-battle chain. The creator's
+            // literal ask: "only move segments there if enemy GOO has combat greater
+            // than 2." Gate on the unit's own strength contribution against TB.
             def tbProtectingCount(u : UnitFigure) : Int =
                 u.faction.at(u.region).num - u.faction.at(u.region).%(x => x.goo || x.terror).num
             def tbWeaklyProtected(u : UnitFigure) : Boolean =
-                (u.goo || u.terror) && tbProtectingCount(u) <= 2
+                (u.goo || u.terror) && tbProtectingCount(u) <= 2 && u.faction.strength($(u), self) > 2
             val tbDefenseTargets = others./~(e => e.allInPlay.%(u => tbWeaklyProtected(u) && self.at(u.region, Tentacle).any))
             val tbOffenseTargets = others./~(e => e.allInPlay.%(tbWeaklyProtected))
 
