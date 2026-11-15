@@ -40,9 +40,15 @@ import html._
 //     may instead draw and look at (Lord's Shadow count + 1) real cards from the
 //     shared pool and keep only the amount originally owed, returning the rest.
 //     Hooked once, centrally, at Game.scala's CheckSpellbooksAction ES-resolution
-//     seam (every real TI ES gain already funnels there via Faction.takeES), so
-//     no individual call site needed touching. See the TIInfernolatreiaMainAction
-//     declaration below for the full mechanic and edge-case notes.
+//     seam. IMPORTANT: calling Faction.takeES alone does NOT reach that seam —
+//     takeES only records the Elder Sign(s); the caller's continuation must still
+//     pass through CheckSpellbooksAction afterward for Infernolatreia to be
+//     offered. (Bug found 2026-11-14: Sacrament of Flesh's own ES grant called
+//     takeES and then jumped straight to Force(DoomAction(TI)), skipping that
+//     seam entirely — fixed by routing through CheckSpellbooksAction(DoomAction(TI))
+//     below.) Any new call site that grants TI an Elder Sign must do the same.
+//     See the TIInfernolatreiaMainAction declaration below for the full mechanic
+//     and edge-case notes.
 //
 // DEFERRED to LAYER 3 (documented, each a distinct piece, mostly Battle.scala /
 // cross-faction / payment-layer surface): Sacrament of Flesh forced Doom-Phase
@@ -730,8 +736,14 @@ object TIExpansion extends Expansion {
                 if (esGain > 0) {
                     TI.takeES(esGain)
                     TI.log(SacramentOfFlesh.styled(TI) + ": gained", esGain.es)
+                    // Route through CheckSpellbooksAction (same pattern as every other
+                    // faction's own-ability Elder Sign grant, e.g. FactionBG/FactionDC)
+                    // so Infernolatreia's draw-and-choose offer actually applies here,
+                    // not just to the Doom Phase's own blind-draw queue.
+                    Force(CheckSpellbooksAction(DoomAction(TI)))
                 }
-                Force(DoomAction(TI))
+                else
+                    Force(DoomAction(TI))
             }
             else {
                 implicit val asking = Asking(TI)
