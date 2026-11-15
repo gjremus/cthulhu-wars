@@ -635,7 +635,7 @@ object FBEExpansion extends Expansion {
 
             // Faceless Ones (v16 new mechanic, NecromanticSpores identifier): choose
             // an Area with your Acolyte and an enemy Acolyte controlling a Gate there.
-            if (f.can(NecromanticSpores) && f.power >= 2) {
+            if (f.can(NecromanticSpores) && f.power >= FBEValues.FacelessOnes_cost) {
                 val targets = f.onMap(Acolyte)./(_.region).distinct./~{ r =>
                     f.enemies./~(e => e.at(r, Acolyte).%(_.onGate)./(u => (r, u.ref, e)))
                 }
@@ -1016,7 +1016,7 @@ object FBEExpansion extends Expansion {
             asking
 
         case FacelessOnesTargetAction(self, r, target, e) =>
-            self.power -= 2
+            self.power -= FBEValues.FacelessOnes_cost
             self.payTax(r)
             self.log(NecromanticSpores.styled(FBE) + ": targeted", game.unit(target).full, "in", r)
             implicit val asking = Asking(e)

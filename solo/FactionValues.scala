@@ -53,6 +53,7 @@ object FactionValuesMapping {
             "units.rows.wrXwlATc.qty" -> "Pestilence_count",
         ),
         "FBE" -> Map(
+            "sb.rows.2viqfsi5.cost" -> "FacelessOnes_cost",
             "units.rows.m9m23bqh.qty" -> "Acolyte_count",
             "units.rows.mlbgdkt6.cost" -> "FungalThrall_cost",
             "units.rows.mlbgdkt6.dice" -> "FungalThrall_combat",
@@ -245,6 +246,7 @@ object FBEValues {
     def FungalThrall_combat = LiveValues.get("FBE", "FungalThrall_combat", 2)  // Fungal Thrall combat dice
     def Byagoona_count      = LiveValues.get("FBE", "Byagoona_count", 1)  // Byagoonas in the faction
     def Byagoona_awakenCost = LiveValues.get("FBE", "Byagoona_awakenCost", 8)  // Power to Awaken Byagoona
+    def FacelessOnes_cost   = LiveValues.get("FBE", "FacelessOnes_cost", 2)  // Faceless Ones action cost (Power)
 }
 
 // Fleshmason (FM) - from faction-values/fm.json
