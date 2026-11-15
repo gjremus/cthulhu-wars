@@ -599,7 +599,16 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // after Gates-at-GOOs (5th SBR) -- with Power still available, use TWM
                     // to place Cadavolytes defending Areas that already hold a Shudde
                     // M'ell Part and are one of TB's own Gates (dual Gate+GOO defense).
-                    uc == Cadavolyte && !self.needs(GatesAtGOOsReq) &&
+                    // 2026-11-14 fix (creator report, game "Might for Blindness", rowId
+                    // 1021, action 446): none of the "two X" dual-region bonuses below
+                    // ever required r1 != r2, so placing BOTH Cadavolytes into the
+                    // SAME single region (which happened to hold a Shudde M'ell part)
+                    // scored the full "two areas" bonus against itself, tying with (or
+                    // beating) a genuinely spread placement across two different part-
+                    // holding Areas. Added r1 != r2 to every dual-region bonus in this
+                    // ladder so a degenerate same-region double-placement only ever
+                    // earns the single-region version of each bonus.
+                    uc == Cadavolyte && !self.needs(GatesAtGOOsReq) && r1 != r2 &&
                         self.gates.has(r1) && (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any) &&
                         self.gates.has(r2) && (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any) |=> 1150 -> "maws commit: two cadavolytes defending shudde m'ell gate areas (creator priority 2026-11-10)"
                     uc == Cadavolyte && !self.needs(GatesAtGOOsReq) &&
@@ -618,7 +627,7 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // or SBR condition at all, so this unconditional pair fills that
                     // early-game gap; kept below the more specific Gate-defense bonuses
                     // so those still win once they also apply.
-                    uc == Cadavolyte &&
+                    uc == Cadavolyte && r1 != r2 &&
                         (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any) &&
                         (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any) |=> 950 -> "maws commit: two cadavolytes in areas with shudde m'ell parts (creator priority 2026-11-13, item 5)"
                     uc == Cadavolyte &&
@@ -627,7 +636,7 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // 2026-11-10 fix (task: "more foolproof sequence"): new creator step
                     // heading into the 6th (final) Spellbook pick -- place Tentacles into
                     // Areas a Shudde M'ell Part already occupies, to protect it.
-                    uc == Tentacle && numSB >= 5 &&
+                    uc == Tentacle && numSB >= 5 && r1 != r2 &&
                         (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any) &&
                         (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any) |=> 1075 -> "maws commit: two tentacles protecting shudde m'ell areas (creator priority 2026-11-10)"
                     uc == Tentacle && numSB >= 5 &&
@@ -659,7 +668,7 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // capture-safe (the capture-avoidance block above already rejects any
                     // r1/r2 where the Cadavolyte could be captured, so it fires first and
                     // this bonus is never reached for an unsafe Area).
-                    uc == Cadavolyte && numSB >= 6 && r1.freeGate && self.at(r1, Tentacle).any &&
+                    uc == Cadavolyte && numSB >= 6 && r1 != r2 && r1.freeGate && self.at(r1, Tentacle).any &&
                         r2.freeGate && self.at(r2, Tentacle).any |=> 1400 -> "maws commit: two cadavolytes onto open gates held by our tentacles (creator priority 2026-11-13, items 1/9)"
                     uc == Cadavolyte && numSB >= 6 &&
                         ((r1.freeGate && self.at(r1, Tentacle).any) || (r2.freeGate && self.at(r2, Tentacle).any)) |=> 1350 -> "maws commit: cadavolyte onto an open gate held by our tentacle (creator priority 2026-11-13, items 1/9)"
@@ -676,7 +685,7 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // literal request has no Spellbook-count condition, so these
                     // unconditional (lower-weight) duplicates fill that gap; kept
                     // below the numSB >= 6 versions so those still win once reached.
-                    uc == Cadavolyte && r1.freeGate && self.at(r1, Tentacle).any &&
+                    uc == Cadavolyte && r1 != r2 && r1.freeGate && self.at(r1, Tentacle).any &&
                         r2.freeGate && self.at(r2, Tentacle).any |=> 1000 -> "maws commit: two cadavolytes onto open gates held by our tentacles (creator priority 2026-11-13, item 8)"
                     uc == Cadavolyte &&
                         ((r1.freeGate && self.at(r1, Tentacle).any) || (r2.freeGate && self.at(r2, Tentacle).any)) |=> 970 -> "maws commit: cadavolyte onto an open gate held by our tentacle (creator priority 2026-11-13, item 8)"
@@ -696,19 +705,19 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     // present" case always outranks a bare uncontrolled Gate, and a
                     // bare uncontrolled Gate still outranks those Shudde M'ell bonuses
                     // on their own since an open Gate is strictly better progress.
-                    uc == Cadavolyte && numSB >= 6 &&
+                    uc == Cadavolyte && numSB >= 6 && r1 != r2 &&
                         r1.freeGate && (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any) &&
                         r2.freeGate && (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any) |=> 1450 -> "maws commit: two cadavolytes onto uncontrolled gates with a shudde m'ell part present (creator priority 2026-11-14)"
                     uc == Cadavolyte && numSB >= 6 &&
                         ((r1.freeGate && (self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any)) ||
                          (r2.freeGate && (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any))) |=> 1420 -> "maws commit: cadavolyte onto an uncontrolled gate with a shudde m'ell part present (creator priority 2026-11-14)"
-                    uc == Cadavolyte && numSB >= 6 && r1.freeGate && r2.freeGate |=> 1050 -> "maws commit: two cadavolytes onto uncontrolled gates (creator priority 2026-11-14)"
+                    uc == Cadavolyte && numSB >= 6 && r1 != r2 && r1.freeGate && r2.freeGate |=> 1050 -> "maws commit: two cadavolytes onto uncontrolled gates (creator priority 2026-11-14)"
                     uc == Cadavolyte && numSB >= 6 && (r1.freeGate || r2.freeGate) |=> 1020 -> "maws commit: cadavolyte onto an uncontrolled gate (creator priority 2026-11-14)"
                     // 2026-11-13 (task: 6-spellbook behavior spec, item 3): once on 6
                     // Spellbooks and holding a good number of Gates (3+), recruit
                     // Chthonians onto Gate Areas that already hold a Cadavolyte or a
                     // Shudde M'ell Part, to protect them.
-                    uc == Chthonian && numSB >= 6 && self.gates.num >= 3 &&
+                    uc == Chthonian && numSB >= 6 && self.gates.num >= 3 && r1 != r2 &&
                         self.gates.has(r1) && (self.at(r1, Cadavolyte).any || self.at(r1, ShuddeMellHead).any || self.at(r1, ShuddeMellSegment).any) &&
                         self.gates.has(r2) && (self.at(r2, Cadavolyte).any || self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any) |=> 1300 -> "maws commit: two chthonians protecting gates (creator priority 2026-11-13, item 3)"
                     uc == Chthonian && numSB >= 6 && self.gates.num >= 3 &&
