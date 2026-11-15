@@ -6400,7 +6400,8 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             Ask(self)
                 .each(l3)(to => MoveAction(self, u, from, to, adjustedCost).as
                     (ConnectionGlyph(from, to) + to.toString, self.iced(to),
-                     (isOffMapMove || to == BB.moon || to.is[MantleHold]).?("").|( s"""<img class=direction src="${Overlays.imageSource("move-deg-" + direction(from, to))}" />""" ))
+                     (isOffMapMove || to == BB.moon || to.is[MantleHold]).?("").|( s"""<img class=direction src="${Overlays.imageSource("move-deg-" + direction(from, to))}" />""" ),
+                     (self == TB).??(TBExpansion.tbSubterraneTag(from, to)))
                     ("Move", u, (cost == 0).??("for free"), "from", from, "to")
                 )
                 .cancelIf(cost > 0)
