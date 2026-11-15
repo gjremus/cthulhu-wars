@@ -454,6 +454,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // is re-entered after the player chooses N.
     var fbeDistributedDeathOffered : Boolean = false
 
+    // Faceless Blight (FBE): Grinning Ghouls (Shapestealing identifier, v16,
+    // Pre-Battle, §1.10 SB3) — the enemy UnitClass FBE chose this battle, used by
+    // the Post-Battle check (place a Fungal Thrall if a Unit of that type was
+    // Killed). None until FBE actually picks a type; Skip/no-offer leaves it None.
+    var fbeGrinningGhoulsChosenType : Option[UnitClass] = None
+    var fbeGrinningGhoulsOffered : Boolean = false
+
     // Kill/Pain assignment order for THIS battle. Standard CW is attacker-first.
     // Decided exactly once, at the AssignDefenderKills entry, via a recorded
     // BattleAssignOrderAction so that games recorded under the older defender-first
@@ -835,14 +842,15 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             options :+= SavagerySkipAction(s)
         }
 
-        // Faceless Blight (FBE): Shapestealing (Pre-Battle, §1.10 SB3 / §3.14.2).
-        // Offer if FBE has the SB, has at least one card die to roll, there is
-        // an enemy Monster present in the battle, and it hasn't been used this Action Phase.
-        // Hard ability: once used/skipped, remains unavailable until next Action Phase.
-        if (s == FBE && s.can(Shapestealing) && !game.fbeShapestealingUsedThisActionPhase && game.fbeCardDice.nonEmpty &&
-            s.opponent.forces.%(_.uclass.utype == Monster).any) {
-            options :+= ShapestealingPreBattleAction(FBE)
-            options :+= ShapestealingSkipAction(FBE)
+        // Faceless Blight (FBE): Grinning Ghouls (Shapestealing identifier, v16,
+        // Pre-Battle, §1.10 SB3). Offer once per battle if FBE has the SB and an
+        // enemy Unit is present; FBE picks an enemy UnitClass, and if a Unit of
+        // that type is Killed this battle, a Fungal Thrall is placed Post-Battle
+        // (see PostBattlePhase handler below).
+        if (s == FBE && s.can(Shapestealing) && !fbeGrinningGhoulsOffered && s.opponent.forces.any) {
+            fbeGrinningGhoulsOffered = true
+            options :+= GrinningGhoulsPreBattleAction(FBE)
+            options :+= GrinningGhoulsSkipAction(FBE)
         }
 
         // Xyrious Storm (XSS): Static Accumulator (Pre-Battle, §1.10 SB2).
@@ -3001,11 +3009,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     }
                 }
 
-                // Faceless Blight (FBE) — Necromantic Spores (Post-Battle, §3.14.4):
+                // Faceless Blight (FBE) — v16 "Necromantic Spores" (Post-Battle, now
+                // bound to identifier AnimatedRush — see FactionFBE.scala header note):
                 // if FBE participated, has the SB, controls a Monster in the arena, and
                 // an enemy Unit was Killed, offer to Eliminate a controlled Monster and
                 // spawn 1 Fungal Thrall per enemy Killed. FBEExpansion resolves it.
-                if (factions.has(FBE) && FBE.can(NecromanticSpores) && sides.has(FBE) && !FBE.oncePerAction.has(NecromanticSpores)) {
+                if (factions.has(FBE) && FBE.can(AnimatedRush) && sides.has(FBE) && !FBE.oncePerAction.has(AnimatedRush)) {
                     val enemy = if (attacker == FBE) defender else attacker
                     // A Shapestolen enemy Monster fought FOR FBE this Battle, so if it died it
                     // was NOT an "enemy Killed" — exclude it from the Fungal-Thrall spawn count
@@ -3014,11 +3023,25 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     val enemyKilled = eliminated.%(u => u.faction == enemy && !game.fbeShapestolen.contains(u.ref)).num
                     val fbeMonstersHere = FBE.at(arena).%(_.uclass.utype == Monster).any
                     if (enemyKilled > 0 && fbeMonstersHere) {
-                        FBE.oncePerAction :+= NecromanticSpores
+                        FBE.oncePerAction :+= AnimatedRush
                         return Ask(FBE)
                             .add(NecromanticSporesMainAction(FBE, enemyKilled))
                             .add(NecromanticSporesSkipAction(FBE))
                     }
+                }
+
+                // Faceless Blight (FBE) — Grinning Ghouls (Shapestealing identifier, v16,
+                // Pre-Battle, §1.10 SB3): if FBE chose an enemy UnitClass this battle and
+                // a Unit of that type was Killed, place a Fungal Thrall in the arena
+                // (pool-capped, mirroring Necromantic Spores' spawn cap above).
+                if (fbeGrinningGhoulsChosenType.any) {
+                    val chosenType = fbeGrinningGhoulsChosenType.get
+                    val typeKilled = eliminated.%(u => u.faction != FBE && u.uclass == chosenType).any
+                    if (typeKilled && FBE.pool(FungalThrall).any) {
+                        FBE.place(FungalThrall, arena)
+                        log(Shapestealing.styled(FBE) + " (Grinning Ghouls): placed a", FungalThrall.name.styled(FBE), "in", arena, "—", chosenType.styled(FBE), "was Killed")
+                    }
+                    fbeGrinningGhoulsChosenType = None
                 }
 
                 // Bubastis (BB) Carnivore (alt spellbook): BB gains 1 Doom for each enemy Monster
@@ -4584,9 +4607,22 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // ── FACELESS BLIGHT (FBE) battle-action resume cases ──────────────────
         // FBEExpansion performs the FBE-side logic and returns UnknownContinue (or
         // an Ask/Force for sub-menus). These cases resume the battle via proceed().
-        // For Shapestealing, the actual control swap is applied here (Battle owns
-        // the live forces lists): the resolved enemy Monster (recorded in
-        // game.fbeShapestolen) is moved into FBE's side for this Combat.
+        // Grinning Ghouls (v16, Shapestealing identifier): the chosen UnitClass is
+        // tracked in fbeGrinningGhoulsChosenType; the payoff check (place a Fungal
+        // Thrall if a Unit of that type was Killed) happens in PostBattlePhase below.
+        case GrinningGhoulsPreBattleAction(self) =>
+            proceed()
+
+        case GrinningGhoulsChooseTypeAction(self, _) =>
+            proceed()
+
+        case GrinningGhoulsSkipAction(self) =>
+            proceed()
+
+        // [LEGACY REPLAY ONLY] old Shapestealing die-roll-steal mechanic, retired in
+        // v16. The actual control swap is applied here (Battle owns the live forces
+        // lists): the resolved enemy Monster (recorded in game.fbeShapestolen) is
+        // moved into FBE's side for this Combat.
         case ShapestealingPreBattleAction(self) =>
             proceed()
 

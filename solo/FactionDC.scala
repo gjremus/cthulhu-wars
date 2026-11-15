@@ -1146,12 +1146,10 @@ object DCExpansion extends Expansion {
             // was silent. Add an explicit explanatory log line.
             if (capturedSoFar > 0 && bonus == 0)
                 self.log(Satiate.styled(DC) + ": no Elder Sign because no captures beyond the first")
-            // HB Fix SC-Satiate: multi-capture procs Self Consuming. Each captured
-            // cultist counts as a unit removed for Self Consuming purposes. Record the
-            // faction that controlled each cultist so FBE's Self Consuming can properly
-            // award power to FBE if FBE units died here.
-            if (game.setup.has(FBE) && capturedSoFar > 0)
-                game.dcSatiateCaptureFactions.foreach(f => game.fbeSelfConsumingDeaths :+= (area, |(f)))
+            // v16: Feast Upon Death (was Self Consuming) explicitly excludes Capture-caused
+            // eliminations, and Satiate IS a Capture — so unlike the old Self Consuming,
+            // captured cultists here must NOT feed Feast Upon Death. (Removed the former
+            // dcSatiateCaptureFactions -> fbeSelfConsumingDeaths relay.)
             game.dcSatiateCaptureFactions = $
             EndAction(self)
 
