@@ -3497,10 +3497,11 @@ object CthulhuWarsSolo {
                 } else ""
                 // The Invasion (TI): Baphomet's Fury is a transferable two-sided card —
                 // show which player currently holds it on their status panel (§1.8).
-                val tiFuryHolder = game.tiFuryActive && game.tiFuryOwnerF == f
-                val furyStr  = tiFuryHolder.?(" | " + "Baphomet's Fury".styled(TI)).|("")
-                val furyMStr = tiFuryHolder.?(" | " + "Fury".styled(TI)).|("")
-                val furySStr = tiFuryHolder.?(" " + "Fury".styled(TI)).|("")
+                val tiFuryHolder = game.factions.has(TI) && game.tiFuryOwnerF == f
+                val tiFuryActiveTag = game.tiFuryActive.?(" (Active)").|(" (Inactive)")
+                val furyStr  = tiFuryHolder.?(" | " + "Baphomet's Fury".styled(TI) + tiFuryActiveTag).|("")
+                val furyMStr = tiFuryHolder.?(" | " + "Fury".styled(TI) + tiFuryActiveTag).|("")
+                val furySStr = tiFuryHolder.?(" " + "Fury".styled(TI) + tiFuryActiveTag).|("")
                 val power  = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthStr + dcSinStr + slSinStr + swHungerStr + fbeDiceStr + fbeByagoonaStr + furyStr)
                 val powerM = div()(f.hibernating.?(("" + f.power + " Power").styled("hibernate")).|((f.power > 0).?(f.power.power).|("0 Power")) + dhStr + fbIPDiscStr + ttGrowthMStr + dcSinMStr + slSinMStr + swHungerMStr + fbeDiceStr + fbeByagoonaStr + furyMStr)
                 val powerS = div()(f.hibernating.?(("" + f.power + "P").styled("hibernate")).|((f.power > 0).?(("" + f.power + "P").styled("power")).|("0P")) + (f == TS).?(" " + (game.deathsHead.toString + " DH").styled(TS)).|("") + fbIPDiscSStr + ttGrowthSStr + dcSinSStr + slSinSStr + (f == SW).?(" " + (game.swHunger.toString + "H").styled(SW)).|("") + fbeDiceStr + fbeByagoonaStr + furySStr)

@@ -2886,17 +2886,8 @@ object Overlays {
         }
         val flipped = fury._1
         val owner   = fury._2
-        def cardCol(id : String, label : String, active : Boolean) = {
-            val border = if (active) "3px solid #ff6a3d" else "3px solid transparent"
-            val glow   = if (active) "box-shadow:0 0 14px #ff6a3d;" else ""
-            val op     = if (active) "1" else "0.5"
-            s"""<td style="width:50%;text-align:center;vertical-align:top;padding:0 1ex;">
-                    <div class=p style="font-weight:bold;opacity:${op}">${label}</div>
-                    <img class="img" src=${imageSource(id)} style="max-width:100%;height:auto;border:${border};${glow}border-radius:6px;opacity:${op}" />
-                </td>"""
-        }
         val status =
-            if (flipped) s"""<b>Status:</b> ACTIVE (the Ritual Track has reached 7) — currently owned by ${owner.full}."""
+            if (flipped) s"""<span style="font-size:160%;font-weight:bold;color:red;">Status: ACTIVE</span> (the Ritual Track has reached 7) — currently owned by ${owner.full}."""
             else         s"""<b>Status:</b> INACTIVE — flips permanently the first time the Ritual Track Marker reaches 7."""
         s"""
             <table class="spellbook-table" style="">
@@ -2915,13 +2906,9 @@ object Overlays {
                         <td>
                         </td>
                         <td>
-                            <div class="h1 black-border" style="margin-right:-3ex;margin-left:-3ex;"><span class="ability-color inline-block">${BaphometsFury.name}</span> <span class="cost-color inline-block">(Baphomet, two-sided card)</span></div>
+                            <div class="h1 black-border" style="margin-right:-3ex;margin-left:-3ex;"><span class="ability-color inline-block">${BaphometsFury.name}</span></div>
                             <div class="white-border">
                                 <div class=p>${status}</div>
-                                <table style="width:100%;border-collapse:collapse;margin:0.6ex 0"><tr>
-                                    ${cardCol("info:ti-fury-front", "Front (inactive)", !flipped)}
-                                    ${cardCol("info:ti-fury-back",  "Back (active)",     flipped)}
-                                </tr></table>
                                 <div class=p><b>Torment (Ongoing):</b> When you would Kill or Eliminate enemy Unit(s) (except via Capture), the enemy instead loses Power for each Unit lost, equal to half the original cost of the Unit rounded up. If the enemy cannot pay the total Power loss, this has no effect. This is not optional.</div>
                                 <div class=p><b>Transference (Ongoing):</b> When an enemy Faction Kills or Eliminates one of your Units (not via Capture), transfer ownership of Baphomet's Fury to that enemy at the end of the current Action. When it changes ownership, The Invasion gains 1 Doom. Not optional.</div>
                             </div>
