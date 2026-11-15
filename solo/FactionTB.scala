@@ -1458,13 +1458,35 @@ object TBExpansion extends Expansion {
             $
     }
 
+    // -- HELPER: Abyssal Cline + Subterrane 1-hop shortcut for a Shudde M'ell
+    // Part (§1.8 Behemoth / §1.10 Subterrane). Abyssal Cline lets a Part move
+    // to the Mantle from ANYWHERE for free; Subterrane then lets it leave the
+    // Mantle into any Tentacle's Area. Chained together that is a legal 2-hop
+    // path, but scoring code (and a human skimming the menu) only ever sees it
+    // as two separate Move actions one turn apart. Owner request 2026-11-15:
+    // surface the combined destination directly in the ordinary Move menu for
+    // Shudde M'ell's Head/Segments so it can be picked (and scored) as one
+    // option. Only Parts qualify (ordinary TB units don't have Abyssal Cline);
+    // only once Shudde M'ell has been awakened and the Mantle is in play.
+    def tbAbyssalClineSubterraneEdges(from : Region, uc : UnitClass)(implicit game : Game) : $[Region] = {
+        val isPart = uc == ShuddeMellHead || uc == ShuddeMellSegment
+        if (!isPart || !game.tbMantleInPlay || !game.tbShuddeMellEverAwakened || !TB.has(Subterrane) || from == TB.mantle)
+            return $
+        val tentacleAreas = TB.onMap(Tentacle)./(_.region).distinct
+        (game.tbMantleAreas ++ tentacleAreas).but(from)
+    }
+
     // -- HELPER: log tag for a Move/Retreat that crossed the Mantle using the
     // Subterrane-only Tentacle edge (owner request: make it visible in the log
     // when Subterrane, not the nominated tbMantleAreas, is what made the move
-    // legal). Returns "" when Subterrane wasn't the reason this edge existed.
-    def tbSubterraneTag(from : Region, to : Region)(implicit game : Game) : String = {
+    // legal), or that used the combined Abyssal Cline + Subterrane shortcut
+    // above (a direct 1-hop Move between two ordinary Areas). Returns "" when
+    // neither was the reason this edge existed.
+    def tbSubterraneTag(from : Region, to : Region, uc : UnitClass = null)(implicit game : Game) : String = {
         if (!game.tbMantleInPlay || !TB.has(Subterrane)) return ""
         val tentacleAreas = TB.onMap(Tentacle)./(_.region).distinct
+        if (from != TB.mantle && to != TB.mantle && tbAbyssalClineSubterraneEdges(from, uc).has(to))
+            return " (via " + AbyssalCline.styled(TB) + " + " + Subterrane.styled(TB) + ")"
         val viaSubterrane =
             (from == TB.mantle && tentacleAreas.has(to) && !game.tbMantleAreas.has(to)) ||
             (to == TB.mantle && tentacleAreas.has(from) && !game.tbMantleAreas.has(from))

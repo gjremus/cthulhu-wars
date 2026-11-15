@@ -6329,6 +6329,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     val mantleEdges = TBExpansion.tbMantleEdges(from)
                     if (mantleEdges.any)
                         destinations = (destinations ++ mantleEdges).distinct
+                    // Owner request 2026-11-15: for a Shudde M'ell Part, also surface the
+                    // combined Abyssal Cline (free move to Mantle) + Subterrane (Mantle to
+                    // any Tentacle Area) shortcut as direct 1-hop destinations, so the bot's
+                    // Move-scoring can pick the 2-hop path as a single option.
+                    val clineEdges = TBExpansion.tbAbyssalClineSubterraneEdges(from, u.uclass)
+                    if (clineEdges.any)
+                        destinations = (destinations ++ clineEdges).distinct
                 } else if (from.is[MantleHold]) {
                     destinations = (destinations ++ tbMantleAreas).distinct
                 } else if (tbMantleAreas.has(from)) {
@@ -6398,12 +6405,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             val l3 = if (tenebrosumMoveSin) l2 else l2.%(self.affords(adjustedCost))
 
             Ask(self)
-                .each(l3)(to => MoveAction(self, u, from, to, adjustedCost).as
-                    (ConnectionGlyph(from, to) + to.toString, self.iced(to),
-                     (isOffMapMove || to == BB.moon || to.is[MantleHold]).?("").|( s"""<img class=direction src="${Overlays.imageSource("move-deg-" + direction(from, to))}" />""" ),
-                     (self == TB).??(TBExpansion.tbSubterraneTag(from, to)))
-                    ("Move", u, (cost == 0).??("for free"), "from", from, "to")
-                )
+                .each(l3)(to => {
+                    val viaCline = self == TB && TBExpansion.tbAbyssalClineSubterraneEdges(from, u.uclass).has(to)
+                    MoveAction(self, u, from, to, adjustedCost).as(
+                        ConnectionGlyph(from, to) + to.toString, self.iced(to),
+                        (isOffMapMove || viaCline || to == BB.moon || to.is[MantleHold]).?("").|( s"""<img class=direction src="${Overlays.imageSource("move-deg-" + direction(from, to))}" />""" ),
+                        (self == TB).??(TBExpansion.tbSubterraneTag(from, to, u.uclass))
+                    )("Move", u, (cost == 0).??("for free"), "from", from, "to")
+                })
                 .cancelIf(cost > 0)
                 .skipIf(cost == 0)(MoveContinueAction(self, true))
 
@@ -6525,7 +6534,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 dcTenebrosumPrefixCost = 1
             }
 
-            self.log("moved", u, "from", o, "to", r, (self == TB).??(TBExpansion.tbSubterraneTag(o, r)))
+            self.log("moved", u, "from", o, "to", r, (self == TB).??(TBExpansion.tbSubterraneTag(o, r, u.uclass)))
 
             // Catnapping refund: if a non-BB unit moves OFF the Moon and its owner paid
             // Power, BB gains that same amount of Power. Logged AFTER the move so the
