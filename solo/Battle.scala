@@ -2009,7 +2009,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 if (kf == attacker && attacker == TB && TB.hasAllSB && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
                     val opponentRolledKill = defenders.rolls.has(Kill)
                     val segmentsExist = TB.all(ShuddeMellSegment).any
-                    if (opponentRolledKill && segmentsExist) {
+                    val headPresent = attackers.forces.exists(_.uclass == ShuddeMellHead)
+                    if (opponentRolledKill && segmentsExist && headPresent) {
                         tbAutotomyOffered = true
                         return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
                     }
@@ -2019,13 +2020,17 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             case AssignAttackerKills =>
                 // Second kill phase — assigns the side that did NOT go first.
                 // Autotomy fires in Unlimited Battles immediately before TB applies kills,
-                // provided a Segment is anywhere in play and at least 1 kill is rolled against TB.
+                // provided a Segment is anywhere in play, Shudde M'ell's Head is present in
+                // THIS battle (per the guide: "with Head present" — Autotomy transfers a Kill
+                // that landed on the Head to a Segment instead, which only makes sense if the
+                // Head was actually in the fight), and at least 1 kill is rolled against TB.
                 // TB.hasAllSB is the Unlimited Battle condition (pre-action or post-action).
                 val kf = if (assignAttackerFirst) defender else attacker
                 if (kf == attacker && attacker == TB && TB.hasAllSB && !tbAutotomyOffered && factions.has(TB) && TB.can(Autotomy)) {
                     val opponentRolledKill = defenders.rolls.has(Kill)
                     val segmentsExist = TB.all(ShuddeMellSegment).any
-                    if (opponentRolledKill && segmentsExist) {
+                    val headPresent = attackers.forces.exists(_.uclass == ShuddeMellHead)
+                    if (opponentRolledKill && segmentsExist && headPresent) {
                         tbAutotomyOffered = true
                         return Ask(TB).add(TBAutotomyUseAction(TB)).add(TBAutotomySkipAction(TB))
                     }
