@@ -23,15 +23,27 @@ import html._
 // f.can(OverlordOfDeath)); NecromanticSpores identifier's new "Faceless Ones"
 // retreat-or-eliminate mechanic DONE; Succor identifier's new "Dimorphic Gestation"
 // free-repeat-Summon/Recruit mechanic DONE; Shapestealing identifier's new
-// "Grinning Ghouls" choose-type/post-battle-thrall mechanic DONE. "Distributed
-// Death" is confirmed UNCHANGED and NOT superseded — the design's own menus
-// catalog (menu004) still names it as an active, separate mechanic that coexists
-// with Byagoona's new innate ability below. STILL NOT IMPLEMENTED: Byagoona's new
-// innate "Overlord of Death" post-battle result-swap unit ability (distinct from
-// the OverlordOfDeath Spellbook) — INPUT NEEDED, exact exchange mechanics (what
-// happens to swapped-out results, whether card dice are consumed) are not
-// specified precisely enough to implement safely, and the design's menus catalog
-// has no entry describing a "swap results" UI for it.
+// "Grinning Ghouls" choose-type/post-battle-thrall mechanic DONE.
+// v17 UPDATE (2026-11-16, designer zehk answers r_4rKNinva + r_PeKyXqoW):
+//  • "Distributed Death" is RETIRED — designer confirms it "is no longer a mechanic
+//    within the Faction and is a legacy only tool which can be discontinued." The
+//    fresh-play offer site in Battle.scala (AllKillsAssignedPhase) is now gated on
+//    replay only; the handler classes below + their Battle.scala cases are kept
+//    [LEGACY REPLAY ONLY] so already-recorded games replay identically. No menu row.
+//  • Byagoona's innate "Overlord of Death" post-battle result-swap IS NOW IMPLEMENTED
+//    (design menu row hs33vbvu). Per designer r_4rKNinva: a 1-for-1 EXCHANGE of a
+//    rolled Battle result face with a die on the Faction Card — the card die's face
+//    (6=Kill, 4-5=Pain, 1-3=Miss) replaces the Battle result, and the swapped-out
+//    Battle result becomes a card pip (Kill->6, Pain->4, Miss->1). Dice are NOT
+//    consumed (pool size unchanged; only faces move). Optional, any number, only in
+//    a Battle Byagoona is in, resolved at PostRoll "before results are Assigned."
+//    Each swap is one recorded (non-Soft) action — replay/undo-safe, no Soft picker
+//    (mirrors FB Augury, FactionFB.scala FBAuguryBattleReplaceAction). See
+//    OverlordSwap* below + Battle.scala PostRoll offer + perform cases.
+//    ASSUMPTION (designer to confirm on verify): a Kill swapped IN counts toward the
+//    "3 Kills rolled" Changeling Adherents SBR, since the swap resolves at PostRoll
+//    (before AllKillsAssignedPhase reads raw rolled Kills) and produces a real Battle
+//    result.
 //
 // IMPLEMENTATION NOTES
 //  • Faction-Card dice pool (FBE's pseudo-currency, §1.6/§2.4) lives on Game.scala
@@ -168,7 +180,33 @@ case class ByagoonaAwakenDoneAction(self : Faction, r : Region, picked : $[UnitR
 case class ByagoonaAwakenRollAction(self : Faction, r : Region, picked : $[UnitRef], rolls : $[Int])
     extends ForcedAction
 
-// ── DISTRIBUTED DEATH (Post-Battle Kill mitigation, §1.8 / §3.4.4 / §4.6) ────
+// ── OVERLORD OF DEATH — Byagoona innate (v17, Post-Battle result swap, §1.8) ──
+// Design menu row hs33vbvu: "Overlord of Death: swap any number of your Battle
+// results with results on your Faction Card." Designer r_4rKNinva: a 1-for-1
+// EXCHANGE — a rolled Battle result face is swapped with a Faction-Card die; the
+// card die's FACE (6=Kill, 4-5=Pain, 1-3=Miss) replaces the Battle result, and the
+// swapped-out Battle result becomes a card pip (Kill->6, Pain->4, Miss->1). Dice are
+// NOT consumed (pool size unchanged; only faces move). Offered at PostRoll, "before
+// results are Assigned," only when Byagoona is in the Battle and FBE has card dice.
+// Each swap is ONE recorded (non-Soft) action with both choices baked in (battleFace
+// + cardPip) so it is replay/undo-safe with no Soft picker. The actual rolls/card
+// mutation + re-offer loop live in Battle.scala (which owns live Battle state);
+// these arms resume via Battle.scala's perform cases. Mirrors FB Augury's single-
+// recorded-action result-replacement idiom (FBAuguryBattleReplaceAction).
+case class OverlordSwapMainAction(self : Faction, battleFace : BattleRoll, cardPip : Int)
+    extends OptionFactionAction(implicit g =>
+        "Overlord of Death".styled(FBE) + ": swap a " + battleFace + " for " +
+        FBEExpansion.face(cardPip) + " (die " + cardPip + ") from your Faction Card")
+    with PowerNeutral { def question(implicit game : Game) = "Overlord of Death".styled(FBE) }
+case class OverlordSwapDoneAction(self : Faction)
+    extends OptionFactionAction("Done".styled("power")) with PowerNeutral { def question(implicit game : Game) = "Overlord of Death".styled(FBE) }
+
+// ── DISTRIBUTED DEATH — [LEGACY REPLAY ONLY] (retired v17; was Post-Battle Kill
+// mitigation, §1.8 / §3.4.4 / §4.6). Designer r_PeKyXqoW: "Distributed Death is no
+// longer a mechanic within the Faction and is a legacy only tool which can be
+// discontinued." The fresh-play offer site (Battle.scala AllKillsAssignedPhase) is
+// now gated on replay only; these classes + their Battle.scala/FactionFBE.scala
+// handlers are kept ONLY so already-recorded games replay identically. ────────────
 case class DistributedDeathMainAction(self : Faction, n : Int)
     extends OptionFactionAction(implicit g => ("Distributed Death".styled(FBE) + ": discard " + n + " dice to prevent " + n + " " + ("Kill".s(n)).styled("kill"))) with PostBattleQuestion
 case class DistributedDeathPickAction(self : Faction, toSave : $[UnitRef], remaining : $[UnitRef], diceToDiscard : Int)
@@ -419,6 +457,17 @@ object FBEExpansion extends Expansion {
 
     // Derive a combat FACE from a stored card-die pip value (§1.8 / §2.4).
     def face(pip : Int) : BattleRoll = if (pip >= 6) Kill else if (pip >= 4) Pain else Miss
+
+    // Inverse of face(): the representative card pip a swapped-out Battle result face
+    // becomes when exchanged onto the Faction Card (§1.8 / designer r_4rKNinva —
+    // "kills are 6s, pains are 4-5, misses are 1-3"). Within a band the exact pip is
+    // mechanically irrelevant (Byagoona's Combat counts only pip >= 4), so pick one
+    // canonical value per band: Kill->6, Pain->4, Miss->1.
+    def pipFor(result : BattleRoll) : Int = result match {
+        case Kill => 6
+        case Pain => 4
+        case _    => 1
+    }
 
     // ── FEAST UPON DEATH (v16, was Self Consuming) (§1.5.1 / §3.6) ───────────
     // Universal death hook: every Unit Eliminated during the active Action (battle
@@ -721,10 +770,21 @@ object FBEExpansion extends Expansion {
                 EndAction(self)
             }
 
-        // ── DISTRIBUTED DEATH (§1.8 / §3.4.4) ────────────────────────────────
+        // ── OVERLORD OF DEATH swap (Byagoona innate, v17, §1.8) ──────────────
+        // The actual rolls/card-dice exchange + the "any number" re-offer loop are
+        // performed in Battle.scala, which owns live Battle state (side.rolls). These
+        // arms are pure pass-throughs so battle flow resumes there.
+        case OverlordSwapMainAction(self, battleFace, cardPip) =>
+            UnknownContinue
+
+        case OverlordSwapDoneAction(self) =>
+            UnknownContinue
+
+        // ── DISTRIBUTED DEATH — [LEGACY REPLAY ONLY] (retired v17, §1.8 / §3.4.4) ──
         // The actual Kill-prevention (cancelling assigned Kills + discarding dice)
         // is performed in Battle.scala, which owns live Battle state. These arms
-        // are pure pass-throughs so the battle flow resumes via proceed().
+        // are pure pass-throughs so the battle flow resumes via proceed(). Kept for
+        // replay of already-recorded games only — no fresh-play offer site remains.
         case DistributedDeathMainAction(self, n) =>
             UnknownContinue
 

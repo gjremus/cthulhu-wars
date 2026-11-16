@@ -454,6 +454,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     // is re-entered after the player chooses N.
     var fbeDistributedDeathOffered : Boolean = false
 
+    // Faceless Blight (FBE): once-per-battle guard so Byagoona's "Overlord of Death"
+    // innate result-swap offer (v17, PostRoll "before results are Assigned", §1.8) is
+    // presented only once per entry to PostRoll. The swap itself loops via its own
+    // re-offer in perform (fbeOfferOverlordSwap), not by re-entering PostRoll.
+    var fbeOverlordSwapOffered : Boolean = false
+
     // Faceless Blight (FBE): Grinning Ghouls (Shapestealing identifier, v16,
     // Pre-Battle, §1.10 SB3) — the enemy UnitClass FBE chose this battle, used by
     // the Post-Battle check (place a Fungal Thrall if a Unit of that type was
@@ -1964,6 +1970,21 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         }
     }
 
+    // Faceless Blight (FBE) — Byagoona "Overlord of Death" innate (v17, §1.8). BEFORE
+    // results are Assigned, FBE may swap any number of its Battle result faces with
+    // dice on its Faction Card (1-for-1 EXCHANGE, designer r_4rKNinva). Offered only
+    // when Byagoona is in this Battle and FBE has Faction-Card dice and rolled at
+    // least one result. The exchange + "any number" re-offer loop live in perform
+    // (fbeOfferOverlordSwap); each swap is one recorded action (replay/undo-safe, no
+    // Soft picker — mirrors FB Augury). Offered once per PostRoll entry via the guard.
+    if (factions.has(FBE) && sides.has(FBE) && !fbeOverlordSwapOffered) {
+        val fbeSide : Side = if (attacker == FBE) attackers else defenders
+        if (fbeSide.forces.%(_.uclass == Byagoona).any && game.fbeCardDice.nonEmpty && fbeSide.rolls.nonEmpty) {
+            fbeOverlordSwapOffered = true
+            return fbeOfferOverlordSwap()
+        }
+    }
+
     jump(AssignDefenderKills)
 
             case AssignDefenderKills =>
@@ -2055,11 +2076,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     FBE.satisfyIf(ChangelingAdherentsReq, ChangelingAdherentsReq.text, killsRolled >= 3)
                 }
 
-                // Faceless Blight (FBE) — Distributed Death (§3.14.3 / §4.6): if FBE
-                // has card dice, Byagoona is present in the Battle, and any Kill is
-                // assigned to an FBE Unit, offer to discard N dice to prevent N Kills.
+                // Faceless Blight (FBE) — Distributed Death [LEGACY REPLAY ONLY]
+                // (retired v17, designer r_PeKyXqoW: "no longer a mechanic within the
+                // Faction ... a legacy only tool which can be discontinued"). The offer
+                // is now gated on `replayExpectsDD` so it fires ONLY while replaying an
+                // already-recorded game whose log expects a DistributedDeath action at
+                // this point — fresh play never sees it. The DistributedDeath* handler
+                // classes + perform cases are retained so those old games replay
+                // identically. Do NOT re-enable for fresh play without designer sign-off.
                 val replayExpectsDD = game.nextReplayActionHint.exists(_.startsWith("DistributedDeath"))
-                if (factions.has(FBE) && sides.has(FBE) && !fbeDistributedDeathOffered && (game.fbeCardDice.nonEmpty || replayExpectsDD) &&
+                if (replayExpectsDD && factions.has(FBE) && sides.has(FBE) && !fbeDistributedDeathOffered && (game.fbeCardDice.nonEmpty || replayExpectsDD) &&
                     ((FBE : Side).forces.%(_.uclass == Byagoona).any || replayExpectsDD)) {
                     val fbeKilled = sides./~(fac => (if (fac == attacker) attackers else defenders).forces)
                         .%(u => u.faction == FBE && u.health == Killed).num
@@ -4743,6 +4769,29 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         case NecromanticSporesEliminateAction(self, _, _, _) =>
             proceed()
 
+        // Faceless Blight (FBE) — Byagoona "Overlord of Death" innate result swap
+        // (v17, §1.8). One recorded swap: exchange ONE rolled Battle result face with
+        // ONE Faction-Card die (1-for-1, pool size unchanged). The card die's face
+        // replaces the Battle result; the swapped-out result becomes a card pip. Then
+        // re-offer (for "swap any number"). Defensive contains-checks keep replay from
+        // diverging if the exact value is somehow absent. Mirrors FB Augury's recorded
+        // result-replacement; choices are baked into the action, so replay is exact.
+        case OverlordSwapMainAction(self, battleFace, cardPip) =>
+            val fbeSide : Side = if (attacker == FBE) attackers else defenders
+            if (fbeSide.rolls.contains(battleFace) && game.fbeCardDice.contains(cardPip)) {
+                fbeSide.rolls = fbeSide.rolls.diff($(battleFace)) :+ FBEExpansion.face(cardPip)
+                game.fbeCardDice = game.fbeCardDice.diff($(cardPip)) :+ FBEExpansion.pipFor(battleFace)
+                log(FBE, "Overlord of Death".styled(FBE) + ": swapped a " + battleFace + " for " +
+                    FBEExpansion.face(cardPip) + " (die " + cardPip + ") from the Faction Card")
+            }
+            else
+                log(FBE, "Overlord of Death".styled(FBE) + ": swap skipped (result or die no longer present)")
+            fbeOfferOverlordSwap()
+
+        case OverlordSwapDoneAction(self) =>
+            log(FBE, "Overlord of Death".styled(FBE) + ": done swapping")
+            jump(AssignDefenderKills)
+
         case DistributedDeathMainAction(self, n) =>
             val fbeKilled = sides./~(fac => (if (fac == attacker) attackers else defenders).forces)
                 .%(u => u.faction == FBE && u.health == Killed)
@@ -4796,6 +4845,24 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // XSSExpansion moved unit to pool; re-enter CloudOfAshesPromptPhase for next
             jump(CloudOfAshesPromptPhase)
 
+    }
+
+    // Faceless Blight (FBE) — Byagoona "Overlord of Death" innate (v17, §1.8): build
+    // the swap offer from the current Battle results and Faction-Card dice. Lists every
+    // distinct (Battle result face, card die pip) exchange that would actually change
+    // the Battle result (no-op swaps where the card die's face already equals the
+    // Battle face are omitted), plus a Done. Called first from PostRoll and then again
+    // after each OverlordSwapMainAction so the player may "swap any number." Returns
+    // Done-only (jumps to kill assignment) when nothing useful remains.
+    def fbeOfferOverlordSwap() : Continue = {
+        val fbeSide : Side = if (attacker == FBE) attackers else defenders
+        val faces = fbeSide.rolls.distinct
+        val pips  = game.fbeCardDice.distinct
+        val swaps = faces./~(bf => pips.%(pip => FBEExpansion.face(pip) != bf)./(pip => OverlordSwapMainAction(FBE, bf, pip)))
+        if (swaps.none)
+            jump(AssignDefenderKills)
+        else
+            Ask(FBE).list(swaps).add(OverlordSwapDoneAction(FBE))
     }
 
     // Faceless Blight (FBE) Distributed Death (§1.8 / §3.4.4): cancel n Kills

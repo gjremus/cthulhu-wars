@@ -200,7 +200,22 @@ class GameEvaluationFBE(implicit game : Game) extends GameEvaluation(FBE)(game) 
                     (mon.uclass.cost <= 3)                       |=> 600  -> "shapesteal low-cost monster"
                     true                                         |=> 300  -> "shapesteal monster"
 
-                // Distributed Death — prevent Kills on FBE units (prefer saving more).
+                // Overlord of Death (v17) — Byagoona's innate result swap. Only ever
+                // worth it to turn a weaker Battle result into a stronger one using a
+                // card die; swapping toward a Kill is best, toward a Pain is modest,
+                // and swapping a result DOWN (card face weaker than the Battle face)
+                // is never wanted. Done is always available so the bot stops cleanly.
+                case OverlordSwapMainAction(f, battleFace, cardPip) =>
+                    val got = FBEExpansion.face(cardPip)
+                    def rank(r : BattleRoll) = r match { case Kill => 2; case Pain => 1; case _ => 0 }
+                    val gain = rank(got) - rank(battleFace)
+                    (gain > 0 && got == Kill)                    |=> 300  -> "overlord swap -> kill"
+                    (gain > 0 && got == Pain)                    |=> 120  -> "overlord swap -> pain"
+                    (gain <= 0)                                  |=> -500 -> "overlord swap not an upgrade"
+                case OverlordSwapDoneAction(f) =>
+                    true                                         |=> 60   -> "done swapping (overlord)"
+
+                // Distributed Death [LEGACY REPLAY ONLY] — retired v17, kept for replay.
                 case DistributedDeathMainAction(f, n) =>
                     true                                         |=> (200 * n) -> "distributed death prevent"
                 case DistributedDeathSkipAction(f) =>
