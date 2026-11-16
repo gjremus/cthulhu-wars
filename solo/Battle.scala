@@ -1248,12 +1248,21 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // tbMantleAreas member, was wrongly never added because the whole mantleDest
         // block (including the TB-only-in-name-but-universal-in-practice base edge)
         // was hard-gated to s == TB below.
-        val mantleAllowed = retreater(s) == TB || tbSubterranePainConsent || game.tbMantleAreas.has(arena)
-        val tbMantleGeneralGate = s != TB || mantleAllowed
-        val mantleDest : $[Region] = (tbMantleGeneralGate && game.tbMantleInPlay).?? {
-            val tentacleAreas = (s == TB && TB.has(Subterrane)).??(TB.onMap(Tentacle)./(_.region).distinct)
-            if (arena == TB.mantle) (game.tbMantleAreas ++ tentacleAreas).distinct
-            else if (game.tbMantleAreas.has(arena) || tentacleAreas.has(arena)) $(TB.mantle)
+        // The base nominated-Area edge must never be gated at all, even for TB's own
+        // units under Madness: it is universal map geometry, not a Subterrane benefit.
+        // Only the Tentacle-Area shortcut (genuinely TB-only, genuinely a Subterrane
+        // bonus) stays behind the consent check. Bug reported live: game "Desperation
+        // against Eternity" (admin row 1023), battle fought IN the Mantle itself with
+        // Crawling Chaos's Madness controlling TB's retreat; TB declined Subterrane
+        // consent and the whole mantleDest block — including the nominated-Area edge —
+        // was wrongly zeroed, producing a false "nowhere to retreat" elimination.
+        val tentacleAreas = (s == TB && TB.has(Subterrane)).??(TB.onMap(Tentacle)./(_.region).distinct)
+        val tentacleShortcutAllowed = s != TB || retreater(s) == TB || tbSubterranePainConsent || game.tbMantleAreas.has(arena)
+        val gatedTentacleAreas = tentacleShortcutAllowed.??(tentacleAreas)
+        val mantleDest : $[Region] = game.tbMantleInPlay.?? {
+            if (arena == TB.mantle) (game.tbMantleAreas ++ gatedTentacleAreas).distinct
+            else if (game.tbMantleAreas.has(arena)) $(TB.mantle)
+            else if (tentacleShortcutAllowed && tentacleAreas.has(arena)) $(TB.mantle)
             else $
         }
         val standardDest = (arena.connectedForRetreat ++ mantleDest).%(r => s.opponent.at(r).none)
