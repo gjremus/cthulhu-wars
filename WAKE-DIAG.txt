@@ -1,0 +1,60 @@
+CWO PIPELINE — COLD WAKE ACCESS DIAGNOSTIC
+===========================================
+Run context: fresh cold-wake scheduled session (no user watching, cloud-only, no device bridge)
+
+STEP 1 — date -u
+  Mon Nov 16 22:37:17 UTC 2026
+  EXIT=0
+
+STEP 2 — tool availability: mcp__claude-code-remote__add_repo
+  NOT-AVAILABLE
+  (ToolSearch "select:mcp__claude-code-remote__add_repo" -> "No matching deferred tools found";
+   broader search "add_repo list_repos claude-code-remote" returned only
+   mcp__github__list_repository_collaborators, not the claude-code-remote add_repo/list_repos tools.)
+
+STEP 3 — PUBLIC clone test
+  cmd: git clone --depth 1 https://github.com/gjremus/cthulhu-wars /tmp/pub
+  Cloning into '/tmp/pub'...
+  EXIT=0
+  RESULT: SUCCESS
+
+STEP 4 — PRIVATE clone test
+  cmd: git clone --depth 1 -b pipeline https://github.com/gjremus/cthulhu-wars-pipeline /tmp/priv
+  Cloning into '/tmp/priv'...
+  EXIT=0
+  RESULT: SUCCESS
+
+STEP 5 — PRIVATE REST test
+  cmd: gh api repos/gjremus/cthulhu-wars-pipeline --jq .full_name
+  gjremus/cthulhu-wars-pipeline
+  EXIT=0
+  RESULT: SUCCESS
+
+STEP 6 — PRIVATE push test (ran because step 4 succeeded)
+  --- commit ---
+  [pipeline 7729e4f] diag push test
+   1 file changed, 1 insertion(+)
+   create mode 100644 DIAG-PUSH-TEST.txt
+  --- push ---
+  To https://github.com/gjremus/cthulhu-wars-pipeline
+     4d2f0a4..7729e4f  pipeline -> pipeline
+  PUSH_EXIT=0
+  --- revert + push (cleanup) ---
+  [pipeline d22e100] Revert "diag push test"
+   1 file changed, 1 deletion(-)
+   delete mode 100644 DIAG-PUSH-TEST.txt
+  To https://github.com/gjremus/cthulhu-wars-pipeline
+     7729e4f..d22e100  pipeline -> pipeline
+  REVERT_PUSH_EXIT=0
+  RESULT: SUCCESS — push worked; DIAG-PUSH-TEST.txt committed then reverted, pipeline branch left clean.
+
+SUMMARY
+  PUBLIC  clone:        OK (exit 0)
+  PRIVATE clone:        OK (exit 0)
+  PRIVATE REST (gh api):OK (exit 0)
+  PRIVATE push:         OK (push + revert both exit 0, branch clean)
+  add_repo tool:        NOT-AVAILABLE
+
+CONCLUSION
+  From a cold wake, all three private-repo access paths (clone, REST, push) WORK.
+  The mcp__claude-code-remote__add_repo tool is NOT exposed to this cold-wake session.
