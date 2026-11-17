@@ -51,3 +51,12 @@ ACTION NEEDED (human / Opus session)
   no deploy can be signalled, no triage or build can happen.
 
 No build was started or resumed this run (the wip/ state lives in the unreachable private repo).
+
+-------------------------------------------------------------------------------
+SUBSEQUENT WAKES (same blocker, confirmed still present — not re-diagnosed in full)
+  2026-11-17 06:31 UTC — reviewer wake: private clone retried x2, both fail identically
+    ("could not read Username ... terminal prompts disabled"); github MCP still scoped to public
+    repo only (get_file_contents on cthulhu-wars-pipeline -> "repository not configured for this
+    session"); GH_TOKEN still invalid. No pipeline work possible. PUSH NOTIFICATION SENT to user
+    this run (NOTIFIED=2026-11-17). Future hourly wakes should NOT re-notify unless the blocker
+    clears or changes; just append a one-line confirmation here to avoid alert spam.
