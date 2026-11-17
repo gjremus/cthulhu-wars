@@ -164,6 +164,13 @@ class GameEvaluationFBE(implicit game : Game) extends GameEvaluation(FBE)(game) 
                     picked.any                                   |=> 50   -> "succor units picked"
                 case SuccorRollStartAction(f, _) =>
                     true                                         |=> 50   -> "succor roll"
+                // r_seSV5zYd: post-roll branch — take the Elder Sign when the roll
+                // beats the Ritual Marker, otherwise bank the dice on the Faction Card.
+                case SuccorElderSignAction(f, sum, ritual) =>
+                    (sum > ritual)                               |=> 300  -> "succor: take elder sign"
+                    true                                         |=> 40   -> "succor: elder sign (no gain)"
+                case SuccorPlaceDiceAction(f, rolls) =>
+                    true                                         |=> 120  -> "succor: bank dice on card"
 
                 case EndTurnAction(f) =>
                     f == self                                    |=> 0    -> "end turn"
