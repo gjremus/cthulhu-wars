@@ -329,6 +329,19 @@ case class SuccorPickAction(self : Faction, picked : $[UnitRef], remaining : $[U
 case class SuccorRollAction(self : Faction, picked : $[UnitRef], rolls : $[Int])
     extends ForcedAction
 
+// r_seSV5zYd (v17): Succor's two post-roll branching options. The design text is
+// "Eliminate any number of your Units … then roll that many dice: 1) Gain an Elder
+// Sign if their total value exceeds that of the Ritual Marker. 2) Place those dice
+// on your Faction Card." The v16 code implemented only branch 1 (auto-resolved), so
+// the choice never appeared. These present branch 1 vs branch 2 after the roll.
+// Non-Soft so the chosen branch is recorded and replays deterministically.
+case class SuccorElderSignAction(self : Faction, sum : Int, ritual : Int)
+    extends OptionFactionAction(OverlordOfDeath.styled(FBE) + ": Gain an Elder Sign (rolled " + sum + (sum > ritual).?(" > ").|(" <= ") + "Ritual Marker " + ritual + ")")
+    { def question(implicit game : Game) = OverlordOfDeath.styled(FBE) + ": choose one" }
+case class SuccorPlaceDiceAction(self : Faction, rolls : $[Int])
+    extends OptionFactionAction(OverlordOfDeath.styled(FBE) + ": Place " + rolls.num + " " + (rolls.num == 1).?("die").|("dice") + " on your Faction Card (" + rolls.mkString("+") + ")")
+    { def question(implicit game : Game) = OverlordOfDeath.styled(FBE) + ": choose one" }
+
 // ── DIMORPHIC GESTATION (code identifier Succor; v16 new mechanic, Ongoing,
 // §1.10 SB5 new text) — "Whenever you Summon a Monster or Recruit a Cultist,
 // Discard Dice from your Faction Card equal to its Cost to repeat the Action
@@ -1196,17 +1209,33 @@ object FBEExpansion extends Expansion {
                 val ritual = game.ritualCost
                 // Format rolls as "1+2+2 = 5" for display (user request 2026-07-22)
                 val rollDisplay = if (rolls.num > 1) rolls.mkString("+") + " = " + sum.toString else sum.toString
-                if (sum > ritual) {
-                    self.takeES(1)
-                    self.log(OverlordOfDeath.styled(FBE) + ": Eliminated", y, "Units, rolled", rollDisplay,
-                        "vs Ritual Marker", ritual.toString + " — gained", 1.es)
-                }
-                else
-                    self.log(OverlordOfDeath.styled(FBE) + ": Eliminated", y, "Units, rolled", rollDisplay,
-                        "vs Ritual Marker", ritual.toString + " — no Elder Sign")
-                FBE.oncePerAction :+= OverlordOfDeath
-                Force(DoomAction(FBE))
+                self.log(OverlordOfDeath.styled(FBE) + ": Eliminated", y, "Units, rolled", rollDisplay,
+                    "vs Ritual Marker", ritual.toString)
+                // r_seSV5zYd (v17): offer the design's two branching options after the
+                // roll (previously branch 1 auto-resolved, so the choice never showed).
+                Ask(self)
+                    .add(SuccorElderSignAction(self, sum, ritual))
+                    .add(SuccorPlaceDiceAction(self, rolls))
             }
+
+        case SuccorElderSignAction(self, sum, ritual) =>
+            if (sum > ritual) {
+                self.takeES(1)
+                self.log(OverlordOfDeath.styled(FBE) + ": total", sum.toString, "exceeds Ritual Marker",
+                    ritual.toString + " — gained", 1.es)
+            }
+            else
+                self.log(OverlordOfDeath.styled(FBE) + ": total", sum.toString, "does not exceed Ritual Marker",
+                    ritual.toString + " — no Elder Sign")
+            FBE.oncePerAction :+= OverlordOfDeath
+            Force(DoomAction(FBE))
+
+        case SuccorPlaceDiceAction(self, rolls) =>
+            game.fbeCardDice = game.fbeCardDice ++ rolls
+            self.log(OverlordOfDeath.styled(FBE) + ": placed", rolls.num, (rolls.num == 1).?("die").|("dice"),
+                "on Faction Card", "(" + rolls.mkString("+") + ")")
+            FBE.oncePerAction :+= OverlordOfDeath
+            Force(DoomAction(FBE))
 
         // ── OVERLORD OF DEATH — [LEGACY REPLAY ONLY] (§1.10 SB6 / §3.10.6, HB Fix 127)
         // Infernal-Pact-style cost discount, retired in v16 (unreachable from fresh
