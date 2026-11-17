@@ -134,3 +134,27 @@ Because the bus is unreachable, inbox/ cannot be listed and the two claimed
 DESIGN-ANSWERS cannot be read, verified, or processed. Per protocol the reviewer
 does NOT fabricate processing of items it cannot see. No triage/build/deploy done.
 ACTION NEEDED unchanged: restore private-repo access for wake sessions. STOPPING.
+
+
+===========================================
+STEP 1 — date -u
+  Tue Nov 17 01:30 UTC 2026 (approx)
+
+*** STILL UNREACHABLE (3rd consecutive wake) ***
+Run context: fresh hourly cold-wake reviewer session (Opus), no user watching, cloud-only.
+Same failure as the Nov 17 00:45 and 00:47 entries above — private bus still gated.
+
+  PRIVATE clone (x2): git clone -b pipeline https://github.com/gjremus/cthulhu-wars-pipeline
+                      fatal: could not read Username for 'https://github.com' (EXIT=128)
+  PRIVATE REST:       gh api repos/gjremus/cthulhu-wars-pipeline
+                      HTTP 403 "GitHub access to this repository is not enabled... Use add_repo"
+  add_repo tool:      NOT-AVAILABLE (ToolSearch finds no claude-code-remote add_repo/list_repos)
+  PUBLIC clone:       OK (control)
+  proxy status:       gitConfigInjection=true but governedGitTools=false; scope = gjremus/cthulhu-wars only
+
+CONCLUSION
+  The coordination bus (gjremus/cthulhu-wars-pipeline) cannot be read or written this wake.
+  No inbox/triage/build/deploy work was possible. Reviewer STOPPING per protocol.
+  >>> ACTION NEEDED (George): restore private-repo access for wake sessions — re-enable the
+      transparent proxy auth that worked Nov 16 22:37 UTC, OR expose add_repo to wake sessions,
+      OR add cthulhu-wars-pipeline to the session's allowed-repository scope.
