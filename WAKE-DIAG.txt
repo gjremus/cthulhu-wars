@@ -58,3 +58,60 @@ SUMMARY
 CONCLUSION
   From a cold wake, all three private-repo access paths (clone, REST, push) WORK.
   The mcp__claude-code-remote__add_repo tool is NOT exposed to this cold-wake session.
+
+
+===========================================
+STEP 1 — date -u
+  Tue Nov 17 00:45:32 UTC 2026
+  EXIT=0
+
+*** REGRESSION — PRIVATE BUS NOW UNREACHABLE ***
+Run context: fresh cold-wake scheduled reviewer session (Opus), no user watching, cloud-only.
+Contradicts the Nov 16 22:37 UTC result above: every private-repo access path that
+worked yesterday FAILS today. The coordination bus (gjremus/cthulhu-wars-pipeline)
+cannot be read or written this wake, so NO triage/build/deploy could be done.
+
+STEP 2 — PRIVATE clone test
+  cmd: git clone -b pipeline https://github.com/gjremus/cthulhu-wars-pipeline bus
+  Cloning into 'bus'...
+  fatal: could not read Username for 'https://github.com': terminal prompts disabled
+  EXIT=128
+  (retried once per protocol — identical failure; not a transient hang)
+
+STEP 3 — PRIVATE REST test
+  cmd: gh api repos/gjremus/cthulhu-wars-pipeline
+  HTTP 403: "GitHub access to this repository is not enabled for this session.
+             Use add_repo to request access."
+  RESULT: FAIL
+
+STEP 4 — PRIVATE via github MCP
+  mcp__github__get_file_contents owner=gjremus repo=cthulhu-wars-pipeline
+  Access denied: repository not configured for this session.
+  Allowed repositories: gjremus/cthulhu-wars.
+  RESULT: FAIL
+
+STEP 5 — add_repo tool availability
+  mcp__claude-code-remote__add_repo / list_repos: NOT-AVAILABLE (not exposed this wake)
+
+STEP 6 — PUBLIC clone (control)
+  cmd: git clone https://github.com/gjremus/cthulhu-wars cwcode
+  EXIT=0  RESULT: SUCCESS (public repo still fine; github MCP scoped to it works)
+
+SUMMARY (Nov 17 00:45 UTC)
+  PRIVATE clone:         FAIL (exit 128, no credentials; add_repo-gated)
+  PRIVATE REST (gh api): FAIL (403, add_repo required)
+  PRIVATE via github MCP:FAIL (403, out of scope, add_repo required)
+  add_repo tool:         NOT-AVAILABLE
+  PUBLIC  clone:         OK
+
+CONCLUSION
+  The transparent private-repo access the pipeline depends on is GONE this wake.
+  Proxy status shows governedGitTools=false and git credential injection provides
+  only url insteadOf rewrites (no credential helper), so plain git has no way to
+  authenticate to the private bus, and the gh REST + github MCP paths are both
+  gated behind add_repo, which is not exposed to wake sessions.
+  >>> ACTION NEEDED (George): the reviewer cannot reach the bus until private-repo
+      access is restored for wake sessions — either re-enable the transparent
+      proxy auth that worked on Nov 16, expose add_repo to the wake session, or
+      add cthulhu-wars-pipeline to the session's allowed-repository scope.
+  No inbox/build/deploy work was possible this wake. Reviewer STOPPING per protocol.
