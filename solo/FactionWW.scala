@@ -225,6 +225,7 @@ object WWExpansion extends Expansion {
             self.power -= 1
             self.iceAge = |(r)
             game.anyIceAge = true
+            self.payTax(r)
 
             // Round 8 Bug 33/54: record Ice Age region for Cyclopean Gaze.
             // Ice Age places a token without moving WW units (snapshot delta = 0),
