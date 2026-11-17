@@ -93,13 +93,13 @@ case class CrumblingYawpOption1Action(self : Faction)
     extends OptionFactionAction(implicit g => {
         val count = g.board.regions.count(r => g.gates.contains(r) && g.factions.find(_.gates.has(r)).exists(_ != FM) && FMExpansion.hasScreamingWall(r)(g)) * FMValues.CrumblingYawp_powerPerArea
         CrumblingYawp.styled(FM) + ": Gain " + count + " Power"
-    }) { def question(implicit game : Game) = CrumblingYawp.styled(FM) }
+    }) with DoomQuestion
 case class CrumblingYawpOption2Action(self : Faction)
     extends OptionFactionAction(implicit g => {
         val walls = FM.gates./~(r => FM.at(r).%(_.uclass == ScreamingWall)).num
         val es = (walls + 1) / 2
         CrumblingYawp.styled(FM) + ": Destroy " + walls + " Screaming Wall" + (walls != 1).??("s") + ", Gain " + es + " Elder Sign" + (es != 1).??("s")
-    }) { def question(implicit game : Game) = CrumblingYawp.styled(FM) }
+    }) with DoomQuestion
 
 case class TerrifyingShriekApplyAction(self : Faction, preBattle : Boolean)
     extends ForcedAction
@@ -254,7 +254,14 @@ object FMExpansion extends Expansion {
             val justRitualed = f.acted  // f.acted=true only after performing a ritual in this doom phase
             game.rituals(f)
             if (justRitualed && f.can(CrumblingYawp) && !f.oncePerAction.has(CrumblingYawp)) {
-                + CrumblingYawpMainAction(f)
+                // r_kHww-86n: show Crumbling Yawp's two options directly in the Doom
+                // menu after a Ritual, instead of behind an intermediate button. The
+                // recorded decision is still Option1/Option2 (both non-Soft); the
+                // dropped CrumblingYawpMainAction was Soft/unrecorded, so replays of
+                // existing games are unaffected. (MainAction handler kept below.)
+                + CrumblingYawpOption1Action(f)
+                + CrumblingYawpOption2Action(f)
+                + CrumblingYawpSkipAction(f)
             }
             game.reveals(f)
             game.highPriests(f)
