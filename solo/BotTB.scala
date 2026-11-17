@@ -736,6 +736,26 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                          (r2.freeGate && (self.at(r2, ShuddeMellHead).any || self.at(r2, ShuddeMellSegment).any))) |=> 1420 -> "maws commit: cadavolyte onto an uncontrolled gate with a shudde m'ell part present (creator priority 2026-11-14)"
                     uc == Cadavolyte && numSB >= 6 && r1 != r2 && r1.freeGate && r2.freeGate |=> 1050 -> "maws commit: two cadavolytes onto uncontrolled gates (creator priority 2026-11-14)"
                     uc == Cadavolyte && numSB >= 6 && (r1.freeGate || r2.freeGate) |=> 1020 -> "maws commit: cadavolyte onto an uncontrolled gate (creator priority 2026-11-14)"
+                    // 2026-11-17 fix (creator report, game "Continuum for Space",
+                    // https://cwo.freeddns.org/HB/play/mgzznaqxgdyfvzos): creator
+                    // explicitly asked to "increase priority of this to highest" for
+                    // recruiting Cadavolytes onto uncontrolled Gates once 6 Spellbooks
+                    // are earned. Confirmed via SimReplayOrphan audit replay of game
+                    // 1025 that the four bonuses just above, while present and firing
+                    // (totalW up to 9408 at action idx 594), were only a ~1% margin
+                    // above Psychic Shriek's competing 6-spellbook bonus (9307,
+                    // BotTB.scala:956) -- well inside Bot3's +/-3% per-decision
+                    // randomization (Host.scala, error=0.03), so the bot's choice
+                    // between them was effectively a coin flip rather than the
+                    // deterministic "highest priority" the creator asked for. These
+                    // flat add-on bonuses fire under the identical guards as the four
+                    // rules just above and sum with them (every |=> rule for a
+                    // candidate action sums, per Bot3.scala:61), preserving their
+                    // existing Shudde-M'ell-part-preferred ordering while lifting the
+                    // combined total safely clear of every other 6-spellbook-tier
+                    // competitor (Psychic Shriek's ~9400 ceiling, Capture's 8000).
+                    uc == Cadavolyte && numSB >= 6 && r1 != r2 && r1.freeGate && r2.freeGate |=> 12000 -> "maws commit: two cadavolytes onto uncontrolled gates, highest priority once 6 spellbooks earned (creator priority 2026-11-17)"
+                    uc == Cadavolyte && numSB >= 6 && (r1.freeGate || r2.freeGate) |=> 12000 -> "maws commit: cadavolyte onto an uncontrolled gate, highest priority once 6 spellbooks earned (creator priority 2026-11-17)"
                     // 2026-11-13 (task: 6-spellbook behavior spec, item 3): once on 6
                     // Spellbooks and holding a good number of Gates (3+), recruit
                     // Chthonians onto Gate Areas that already hold a Cadavolyte or a
