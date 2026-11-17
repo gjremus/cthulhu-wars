@@ -1116,6 +1116,8 @@ object IGOOsExpansion extends Expansion {
                 game.dcTenebrosumPrefixCost = cost
             }
 
+            self.payTax(r)
+
             if (game.dcTenebrosumGuard)
                 self.log("awakened", lc.unit.name.styled("nt"), "in", r)
             else
