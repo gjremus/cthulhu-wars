@@ -158,3 +158,24 @@ CONCLUSION
   >>> ACTION NEEDED (George): restore private-repo access for wake sessions — re-enable the
       transparent proxy auth that worked Nov 16 22:37 UTC, OR expose add_repo to wake sessions,
       OR add cthulhu-wars-pipeline to the session's allowed-repository scope.
+===========================================
+STEP 1 — date -u
+  Tue Nov 17 02:30:59 UTC 2026
+  EXIT=0
+
+*** OUTAGE PERSISTS — 4th consecutive reviewer wake blocked (00:45, 00:47, 01:30, 02:30 UTC) ***
+Run context: fresh cold-wake scheduled reviewer session (Opus), no user watching, cloud-only.
+No change since the Nov 17 00:45 UTC regression entry above. Re-verified this wake:
+  - PRIVATE gh api repos/gjremus/cthulhu-wars-pipeline -> HTTP 403 "access not enabled, use add_repo"
+  - PRIVATE git clone (pipeline branch)              -> exit 128, "could not read Username" (retried, same)
+  - github MCP (private repo)                        -> 403, out of scope (allowed: gjremus/cthulhu-wars only)
+  - mcp__claude-code-remote__add_repo / list_repos   -> NOT-AVAILABLE (not exposed to wake)
+  - PUBLIC control (ls-remote homebrew)              -> OK
+  - public build branches present: build/r_4rKNinva (cannot be deployed: deploy signal lives on the private bus, and its submission in inbox/ cannot be read to audit)
+
+CONCLUSION
+  Coordination bus still unreachable. NO triage / build / deploy possible for the 4th wake running.
+  Same fix required (George): restore transparent private-repo proxy auth that worked Nov 16,
+  OR expose add_repo to wake sessions, OR add cthulhu-wars-pipeline to this session's repo scope.
+  Reviewer STOPPING per protocol. NOT re-firing the chain (no in-progress build is reachable;
+  re-firing would only spin into the same access failure and burn the token budget).
