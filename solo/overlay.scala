@@ -3119,7 +3119,7 @@ object Overlays {
                 <div class=p>${combat} Equal to the number of Results (Kills and Pains) on dice on your Faction Card.</div>
                 <div class=p>${ref(Shapestealing)} ${cost("(Pre-Battle):")} Choose an Enemy Monster and roll a die from your Faction Card. If the value exceeds that Monster's Cost, it fights for you this Combat.</div>
                 <div class=p>${ref(AnimatedRush)} ${cost("(Move):")} When Byagoona Moves, discard dice from your Faction Card to move twice that many Units for free.</div>
-                <div class=p>Distributed Death ${cost("(Post-Battle):")} Prevent any number of Kills assigned to your Units by discarding that many Dice from your Faction Card.</div>
+                <div class=p>Overlord of Death ${cost("(Post-Battle):")} Before Battle results are assigned, swap any number of your rolled Battle results one-for-one with dice on your Faction Card (die value 6 = Kill, 4-5 = Pain, 1-3 = Miss). Each swapped-out result takes its die's place on your Faction Card.</div>
                 <div class=p>Spellbooks: ${fbeRef(OverlordOfDeath)}</div>""")
         ), setup = true)
     }

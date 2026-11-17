@@ -201,6 +201,19 @@ case class OverlordSwapMainAction(self : Faction, battleFace : BattleRoll, cardP
 case class OverlordSwapDoneAction(self : Faction)
     extends OptionFactionAction("Done".styled("power")) with PowerNeutral { def question(implicit game : Game) = "Overlord of Death".styled(FBE) }
 
+// ── ELIMINATE TWO FUNGAL THRALLS — [LEGACY REPLAY ONLY] (retired in the v16
+// redesign, commit 415b9f2c; was the old Necromantic Spores requirement action,
+// §3.12.2). Re-added so already-recorded FBE games that logged these actions can
+// deserialize + replay (e.g. "Anything versus Colour"). NO fresh-play offer site is
+// restored — the v16 Necromantic Spores redesign stands; these arms run only when an
+// old log replays them.
+case class EliminateTwoFungalThrallsMainAction(self : Faction)
+    extends OptionFactionAction(("Eliminate two " + FungalThrall.name + "s").styled(FBE)) with MainQuestion with Soft
+case class EliminateTwoFungalThrallsPickAction(self : Faction, picked : $[UnitRef], remaining : $[UnitRef])
+    extends ForcedAction with PowerNeutral with Soft
+case class EliminateTwoFungalThrallsDoneAction(self : Faction, picked : $[UnitRef])
+    extends BaseFactionAction(("Eliminate two " + FungalThrall.name + "s").styled(FBE), "Done".styled("power"))
+
 // ── DISTRIBUTED DEATH — [LEGACY REPLAY ONLY] (retired v17; was Post-Battle Kill
 // mitigation, §1.8 / §3.4.4 / §4.6). Designer r_PeKyXqoW: "Distributed Death is no
 // longer a mechanic within the Faction and is a legacy only tool which can be
@@ -779,6 +792,31 @@ object FBEExpansion extends Expansion {
 
         case OverlordSwapDoneAction(self) =>
             UnknownContinue
+
+        // ── ELIMINATE TWO FUNGAL THRALLS — [LEGACY REPLAY ONLY] (retired v16, §3.12.2).
+        // Real elimination logic kept (not a pass-through) so a recorded log replays to
+        // the identical game state; no fresh-play offer site is restored.
+        case EliminateTwoFungalThrallsMainAction(self) =>
+            Force(EliminateTwoFungalThrallsPickAction(self, $, self.units.%(u => u.uclass == FungalThrall && (u.region.onMap || u.region == BB.moon))./(_.ref)))
+
+        case EliminateTwoFungalThrallsPickAction(self, picked, remaining) =>
+            implicit val asking = Asking(self)
+            if (picked.num < 2)
+                remaining.foreach { ur =>
+                    val u = game.unit(ur)
+                    + EliminateTwoFungalThrallsPickAction(self, picked :+ ur, remaining.but(ur))
+                        .as("Add " + u.full + " in " + u.region + " (Cost " + u.uclass.cost + ")")
+                }
+            if (picked.num == 2)
+                + EliminateTwoFungalThrallsDoneAction(self, picked)
+            + CancelAction
+            asking
+
+        case EliminateTwoFungalThrallsDoneAction(self, picked) =>
+            picked.foreach(ur => game.eliminate(game.unit(ur)))
+            self.log(("Eliminated two " + FungalThrall.name + "s").styled(FBE))
+            self.satisfy(NecromanticSporesReq, NecromanticSporesReq.text)
+            EndAction(self)
 
         // ── DISTRIBUTED DEATH — [LEGACY REPLAY ONLY] (retired v17, §1.8 / §3.4.4) ──
         // The actual Kill-prevention (cancelling assigned Kills + discarding dice)

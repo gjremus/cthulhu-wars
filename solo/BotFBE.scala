@@ -101,6 +101,16 @@ class GameEvaluationFBE(implicit game : Game) extends GameEvaluation(FBE)(game) 
                 case FungalThrallDiceDoneAction(f, picked) =>
                     true                                         |=> 200  -> "done thrall/dice SBR"
 
+                // Eliminate Two Fungal Thralls — [LEGACY REPLAY ONLY] (retired v16).
+                // Kept so the bot never MatchErrors if an old log replays these.
+                case EliminateTwoFungalThrallsMainAction(f) =>
+                    self.needs(NecromanticSporesReq)             |=> 900  -> "eliminate two thralls for SBR"
+                case EliminateTwoFungalThrallsPickAction(f, picked, remaining) =>
+                    picked.num < 2                               |=> 300  -> "pick thrall"
+                    picked.num == 2                              |=> 200  -> "two thralls picked"
+                case EliminateTwoFungalThrallsDoneAction(f, picked) =>
+                    true                                         |=> 200  -> "done two thralls"
+
                 // Faceless Ones (v16 new mechanic, NecromanticSpores identifier).
                 case FacelessOnesMainAction(f, l) =>
                     true                                         |=> 500  -> "faceless ones"
