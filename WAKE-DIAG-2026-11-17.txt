@@ -60,3 +60,4 @@ SUBSEQUENT WAKES (same blocker, confirmed still present — not re-diagnosed in 
     session"); GH_TOKEN still invalid. No pipeline work possible. PUSH NOTIFICATION SENT to user
     this run (NOTIFIED=2026-11-17). Future hourly wakes should NOT re-notify unless the blocker
     clears or changes; just append a one-line confirmation here to avoid alert spam.
+  2026-11-17 07:30 UTC — reviewer wake: SAME blocker, unchanged. Private clone fails ("could not read Username ... terminal prompts disabled"); github MCP get_file_contents on cthulhu-wars-pipeline -> "repository not configured for this session"; add_repo/list_repos not exposed; GH_TOKEN invalid. No bus access, no deploy/triage/build possible. No re-notify (blocker identical to 06:31 entry). No chain (no readable in-progress build).
