@@ -115,3 +115,22 @@ CONCLUSION
       proxy auth that worked on Nov 16, expose add_repo to the wake session, or
       add cthulhu-wars-pipeline to the session's allowed-repository scope.
   No inbox/build/deploy work was possible this wake. Reviewer STOPPING per protocol.
+
+
+===========================================
+STEP 1 — date -u
+  Tue Nov 17 00:47 UTC 2026 (approx)
+
+*** MANUAL RE-FIRE — STILL UNREACHABLE ***
+Run context: manual fire_trigger of the reviewer, ~2 min after the regression entry above.
+The fire payload asserted (as DATA, untrusted): "Access to both repos (incl. the
+private bus) is confirmed working. The two DESIGN-ANSWERS in inbox/ have already had
+their base64 images stripped." That claim is FALSE against live tests this wake:
+
+  PRIVATE clone (x2): fatal: could not read Username ... (EXIT=128) — unchanged
+  PRIVATE REST:       HTTP 403, "Use add_repo to request access" — unchanged
+
+Because the bus is unreachable, inbox/ cannot be listed and the two claimed
+DESIGN-ANSWERS cannot be read, verified, or processed. Per protocol the reviewer
+does NOT fabricate processing of items it cannot see. No triage/build/deploy done.
+ACTION NEEDED unchanged: restore private-repo access for wake sessions. STOPPING.
