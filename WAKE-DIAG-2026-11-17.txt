@@ -1,0 +1,53 @@
+CWO PIPELINE — COLD WAKE ACCESS DIAGNOSTIC
+===========================================
+Run context: scheduled cold-wake reviewer session (no user watching, cloud-only, no device bridge)
+Date: 2026-11-17 ~04:28 UTC
+Model: claude-opus-4-8
+
+RESULT: RUN BLOCKED — private coordination repo is NOT authorized for this session.
+
+The reviewer cannot do any pipeline work (deploy sweep, deploy results, triage,
+builds) because ALL of that state lives in the private repo
+gjremus/cthulhu-wars-pipeline, which this session cannot reach.
+
+EVIDENCE
+  STEP 1 — PUBLIC clone (gjremus/cthulhu-wars)
+    git clone https://github.com/gjremus/cthulhu-wars  -> EXIT 0, SUCCESS (anonymous read works)
+
+  STEP 2 — PRIVATE clone (gjremus/cthulhu-wars-pipeline, branch pipeline), 2 attempts
+    git clone -b pipeline https://github.com/gjremus/cthulhu-wars-pipeline
+    -> both attempts: "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
+    (no git credentials are injected for this repo, so git falls back to an interactive prompt and fails)
+
+  STEP 3 — PRIVATE REST probe
+    gh api repos/gjremus/cthulhu-wars-pipeline
+    -> HTTP 403: "GitHub access to this repository is not enabled for this session.
+       Use add_repo to request access. ... call add_repo again with access:\"push\" ..."
+
+  STEP 4 — add_repo availability
+    mcp__claude-code-remote__add_repo is NOT exposed to this wake session (unchanged from 2026-11-16 diag).
+    gh is policy-restricted to search-only this session; gh repo clone / gh auth setup-git were auto-denied.
+    Token extraction (gh auth token) was auto-denied. No sanctioned path to obtain private-repo credentials.
+
+  PROXY STATE (http://127.0.0.1:36447/__agentproxy/status)
+    gitConfigInjection: true, but injected keys are only credential.interactive + two insteadOf rules;
+    NO credential helper for github.com is injected, consistent with the private repo being out of scope.
+    gh auth status reports: "The token in GH_TOKEN is invalid."
+
+WHAT CHANGED SINCE YESTERDAY
+  On 2026-11-16 22:37 UTC (see WAKE-DIAG.txt) the private clone, private REST, and private push ALL
+  succeeded from a cold wake. As of 2026-11-17 the private repo returns 403 "access not enabled" and
+  git gets no credentials. The session's GitHub access scope no longer includes
+  gjremus/cthulhu-wars-pipeline, and/or the GH_TOKEN has gone invalid/expired.
+
+WHAT IS STILL WORKING
+  - Public repo gjremus/cthulhu-wars: anonymous git read OK; MCP github tools (this file is proof) can write.
+  - gh api user OK (returns gjremus).
+
+ACTION NEEDED (human / Opus session)
+  Re-authorize this session's GitHub access to include the PRIVATE repo gjremus/cthulhu-wars-pipeline
+  (refresh the GitHub connection / token, or re-grant add_repo push access for the pipeline repo).
+  Until then every hourly reviewer wake will no-op on this same 403 — nothing in the bus can be read,
+  no deploy can be signalled, no triage or build can happen.
+
+No build was started or resumed this run (the wip/ state lives in the unreachable private repo).
