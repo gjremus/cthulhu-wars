@@ -844,6 +844,12 @@ object IGOOsExpansion extends Expansion {
 
             self.payPower(cost, "on iGOO awaken")
 
+            // Ice Age tax: the menu label shows the tax-inclusive cost (forNPowerWithTax),
+            // but the generic iGOO awaken only paid the base cost — the Ice Age tax was never
+            // deducted (e.g. Nyogtha in a WW Ice Age region on "Betrayal and Shift"). Match
+            // the region-specific awakens (NightmareWeb, Dire Yog) which already payTax(r).
+            self.payTax(r)
+
             self.log("awakened", lc.unit.name.styled("nt"), "in", r, "for", cost.power)
 
             // Bokrug re-awakening: move existing pool unit instead of creating new
