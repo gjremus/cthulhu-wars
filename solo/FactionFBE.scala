@@ -1203,7 +1203,18 @@ object FBEExpansion extends Expansion {
                     pip => SuccorRollAction(self, picked, rolls :+ pip))
             else {
                 picked.foreach(ur => game.eliminate(game.unit(ur)))
-                // Doom Phase eliminations do NOT trigger Feast Upon Death (Actions only).
+                // r_6TiYiwf0: Succor eliminations are non-Capture eliminations, so Feast Upon
+                // Death DOES apply (1 Power per Area with a death; the eliminating faction
+                // counts as present even if all its Units there just died). Resolved here
+                // because the Doom Phase has no afterAction.
+                game.fbeFeastDeaths.distinct.foreach { r =>
+                    game.factions.%(_.has(FeastUponDeath)).foreach { f =>
+                        if (f.at(r).any || f == self) {
+                            f.power += 1
+                            f.log(FeastUponDeath.styled(FBE) + ": a Unit was Eliminated (other than by Capture) in", r, "— gained", 1.power)
+                        }
+                    }
+                }
                 game.fbeFeastDeaths = $
                 val sum = rolls.sum
                 val ritual = game.ritualCost
