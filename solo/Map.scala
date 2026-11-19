@@ -102,6 +102,8 @@ object EarthMap3 extends Board {
         case XSS => $()
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
         case TB => $()
+        // Permeation (PRM): no map starting area — Setup handled by PRMExpansion (picks an empty Sea Area)
+        case PRM => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -226,6 +228,8 @@ object EarthMap4v35 extends Board {
         case XSS => $()
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
         case TB => $()
+        // Permeation (PRM): no map starting area — Setup handled by PRMExpansion (picks an empty Sea Area)
+        case PRM => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -354,6 +358,8 @@ object EarthMap4v53 extends Board {
         case XSS => $()
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
         case TB => $()
+        // Permeation (PRM): no map starting area — Setup handled by PRMExpansion (picks an empty Sea Area)
+        case PRM => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -490,6 +496,8 @@ object EarthMap5 extends Board {
         case XSS => $()
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
         case TB => $()
+        // Permeation (PRM): no map starting area — Setup handled by PRMExpansion (picks an empty Sea Area)
+        case PRM => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -636,6 +644,8 @@ object EarthMap6 extends Board {
         case XSS => $()
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
         case TB => $()
+        // Permeation (PRM): no map starting area — Setup handled by PRMExpansion (picks an empty Sea Area)
+        case PRM => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -908,6 +918,8 @@ object LibraryCelaeno55 extends Board {
         case XSS => $()
         // The Burrowers Beneath (TB): no map starting area — TB handles own setup (8 Tentacles placed in TBExpansion)
         case TB => $()
+        // Permeation (PRM): no map starting area — Setup handled by PRMExpansion (picks an empty Sea Area)
+        case PRM => $()
     }
 
     def gateXYO(r : Region) : (Int, Int) = r match {
@@ -1019,7 +1031,7 @@ object LibraryCelaeno33 extends Board {
         case GC => $(Hyperquarium); case CC => $(BlueHall); case BG => $(Fountain); case YS => $(FloatingTower)
         case SL => $(ChamberOfSngac); case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case TB => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case TB => $(); case PRM => $()
         case CS => regions
         case _ => regions
     }
@@ -1101,7 +1113,7 @@ object LibraryCelaeno53 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case TB => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case TB => $(); case PRM => $()
         case CS => regions
         case _ => regions
     }
@@ -1204,7 +1216,7 @@ object LibraryCelaeno35 extends Board {
         case YS => $(FloatingTower); case SL => $(ChamberOfSngac)
         case WW => $(LakeOfHaliOverlook, Oubliette)
         case OW => regions.diff(tomeRegions); case AN => nonFactionRegions
-        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case TB => $()
+        case TS => nonFactionRegions.%(_.glyph == Ocean); case FB => regions.diff(tomeRegions); case DS => $(); case BB => $(); case TT => starting(GC) ++ starting(CC) ++ starting(BG) ++ starting(YS) ++ starting(SL) ++ starting(WW); case DC => $(); case FBE => regions; case XSS => $(); case TB => $(); case PRM => $()
         case CS => regions
         case _ => regions
     }

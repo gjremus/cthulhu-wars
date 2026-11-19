@@ -302,9 +302,9 @@ object PRMExpansion extends Expansion {
 
                 implicit val asking = Asking(PRM)
                 if (emptySeaAreas.any)
-                    Ask(PRM, emptySeaAreas./(r => StartingRegionAction(PRM, r)))
+                    Ask(PRM, emptySeaAreas./(r => StartingRegionAction(PRM, r).as(r)(PRM, "starts in")))
                 else
-                    Ask(PRM, seaAreas.%(r => !otherStarts.contains(r))./(r => StartingRegionAction(PRM, r)))
+                    Ask(PRM, seaAreas.%(r => !otherStarts.contains(r))./(r => StartingRegionAction(PRM, r).as(r)(PRM, "starts in")))
 
             // ── YCGN'ÀGNNISSSZ AWAKEN ──────────────────────────────────
             case YcgnaAwakenMainAction(f) =>
