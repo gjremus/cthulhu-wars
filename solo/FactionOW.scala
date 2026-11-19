@@ -4,6 +4,8 @@ import hrf.colmat._
 
 import html._
 
+import scala.util.Try
+
 
 case object Mutant extends FactionUnitClass(OW, "Mutant", Monster, 2)
 case object Abomination extends FactionUnitClass(OW, "Abomination", Monster, 3)
@@ -222,15 +224,48 @@ object OWExpansion extends Expansion {
         case BeyondOneAction(self, o, uc, r) =>
             self.power -= 1
             self.payTax(r)
+            println(s"[BEYOND-ONE-TRACE] START: game.gates=${{game.gates}}, moving from $o to $r")
+
+            // Check if this is a Despoiler chaos gate
+            val isChaosGate = factions.%(_.short == "DS").exists { ds =>
+                Try(ds.asInstanceOf[{def chaosGateRegions: $[Region]}].chaosGateRegions.contains(o)).getOrElse(false)
+            }
+            println(s"[BEYOND-ONE-TRACE] isChaosGate=$isChaosGate")
+
             game.gates :-= o
             game.gates :+= r
             factions.%(_.gates.contains(o)).foreach { f =>
+                println(s"[BEYOND-ONE-TRACE] Updating faction ${f.short}: gates before=${f.gates}")
                 f.gates :-= o
                 f.gates :+= r
-                f.at(o).%(_.onGate).only.region = r
+                println(s"[BEYOND-ONE-TRACE] Updating faction ${f.short}: gates after=${f.gates}")
+
+                // If this is a chaos gate, also update DS.chaosGateRegions
+                if (isChaosGate && f.short == "DS") {
+                    val ds = f.asInstanceOf[{def chaosGateRegions: $[Region]; def chaosGateRegions_=(v: $[Region]): Unit}]
+                    println(s"[BEYOND-ONE-TRACE] DS.chaosGateRegions before=${ds.chaosGateRegions}")
+                    ds.chaosGateRegions = ds.chaosGateRegions.%(c => c != o)
+                    ds.chaosGateRegions = ds.chaosGateRegions :+ r
+                    println(s"[BEYOND-ONE-TRACE] DS.chaosGateRegions after=${ds.chaosGateRegions}")
+                }
+
+                f.at(o).%(_.onGate).single.foreach(_.region = r)
             }
-            self.at(o).one(uc).region = r
-            self.log("moved gate with", uc.styled(self), "from", o, "to", r)
+            // 2026-05-27 (mirrored from Library 2026-05-11 fix): use
+            // `headOption` instead of `.one` here. When OW Beyond One's its
+            // own gate, the only OW unit OW can use to occupy the gate
+            // (cost-3+) is a High Priest, which IS the on-gate keeper. The
+            // loop above already moved that HP to `r`, so
+            // `self.at(o).one(uc)` would crash with head-of-empty-list. The
+            // intent of this line is "also move the unit OW spent to power
+            // Beyond One" — but when that unit was the keeper, the loop did
+            // it already, so we no-op. Yog-Sothoth IS a gate (not on a gate)
+            // and can't be the `uc` here.
+            self.at(o).%(_.uclass == uc).headOption.foreach(_.region = r)
+
+            val gateType = if (isChaosGate) "Chaos Gate" else "Gate"
+            self.log("moved", gateType, "with", uc.styled(self), "from", o, "to", r)
+            println(s"[BEYOND-ONE-TRACE] END: game.gates=${{game.gates}}")
             EndAction(self)
 
         // DREAD CURSE
