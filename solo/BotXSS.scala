@@ -79,6 +79,21 @@ class GameEvaluationXSS(implicit game : Game) extends GameEvaluation(XSS)(game) 
                     extras.any                                   |=> 300  -> "tsunami with extras"
                     true                                         |=> 200  -> "tsunami commit"
 
+                // Katabatic Winds — 0-Power trigger, move Twisters Land -> one Sea Area
+                case KatabaticWindsMainAction(f, _) =>
+                    true                                         |=> 500  -> "use katabatic winds"
+                case KatabaticWindsSkipAction(f, _) =>
+                    true                                         |=> -100 -> "skip katabatic winds"
+                case KatabaticWindsPickTwistersAction(f, _, picked, remaining) =>
+                    remaining.any && picked.num < 2              |=> 200  -> "pick twisters to move"
+                    picked.any                                   |=> 100  -> "twisters picked"
+                case KatabaticWindsToggleAction(f, _, _, picked, remaining) =>
+                    remaining.any && picked.num < 2              |=> 200  -> "toggle twister in"
+                case KatabaticWindsDoneAction(f, _, picked) =>
+                    picked.any                                   |=> 300  -> "confirm katabatic winds"
+                case KatabaticWindsDestAction(f, _, picked, dest) =>
+                    dest.glyph == Ocean && picked.any            |=> 200  -> "move twisters to sea"
+
                 // Static Accumulator — pre-battle reinforcement (multi-source)
                 case StaticAccumulatorPreBattleMainAction(f) =>
                     true                                         |=> 500  -> "static accumulator reinforce"

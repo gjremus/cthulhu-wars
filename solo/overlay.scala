@@ -2108,12 +2108,12 @@ object Overlays {
         case $("XSS", LandGatesReq.text) => requirement("Control 3 Gates in Land Areas<br/>OR<br/>Control 3 Gates in Areas with Faction Glyphs.")
         case $("XSS", MonsterMassReq.text) => requirement("Have 10 Cost worth of Monsters in play (sum of Monster Costs on map).")
         case $("XSS", AwakenPetrichorReq.text) => requirement("Awaken Petrichor.")
-        case $("XSS", Whirlwind.name) => spellbook(Whirlwind.name, "Post-Battle", "While in Land Areas, Twisters may Retreat to Sea Areas containing enemy Units.")
-        case $("XSS", StaticAccumulator.name) => spellbook(StaticAccumulator.name, "Pre-Battle", "Move Units with total Cost up to 4 from one adjacent Area into the Battle Area.")
-        case $("XSS", CloudOfAshes.name) => spellbook(CloudOfAshes.name, "Ongoing", "When one of your Monsters is Killed, you may place it on your Faction Card instead of returning it to Pool. In the Doom Phase, return one Monster from the Faction Card to a Controlled Gate; remaining Monsters return to Pool.")
-        case $("XSS", Tsunami.name) => spellbook(Tsunami.name, s"Action: Cost ${XSSValues.Tsunami_cost}", "Move an Eye of the Storm from a Sea Area to an adjacent Land Area. Any or all of your other Units in the Sea Area may move with it.")
-        case $("XSS", FrozenSolid.name) => spellbook(FrozenSolid.name, "Ongoing", "Your Acolytes controlling Gates in Areas with Faction Glyphs cannot be captured by Monsters. Cultist-source, GOO-ability, and Terror captures still apply.")
-        case $("XSS", TorrentialDownpour.name) => spellbook(TorrentialDownpour.name, "Gather Power", "Gain 1 Power if you have Amphibian Crawlers in BOTH a Land Area AND a Sea Area. Gain +1 additional Power for each of those Amphibian Crawler Areas that contain an Enemy-Controlled Gate.")
+        case $("XSS", KatabaticWinds.name) => spellbook(KatabaticWinds.name, "Ongoing", "When you drop to 0 Power during the Action Phase, Move any number of Twisters from Land Areas into a Single Sea Area.")
+        case $("XSS", StaticAccumulator.name) => spellbook(StaticAccumulator.name, "Pre-Battle", "If Petrichor is Present, Move up to 4 Total Cost worth of your Units from Adjacent Areas into the Battle Area.")
+        case $("XSS", CloudOfAshes.name) => spellbook(CloudOfAshes.name, "Post-Battle", "Choose one of your Monsters that Died and place it on your Faction Card. During the Doom Phase, return one of those Monsters to an Area with your Controlled Gate and return the rest to your Pool.")
+        case $("XSS", Tsunami.name) => spellbook(Tsunami.name, s"Action: Cost ${XSSValues.Tsunami_cost}", "Move an Eye of the Storm and any number of your other Units in the same Sea Area into an adjacent Land Area.")
+        case $("XSS", FrozenSolid.name) => spellbook(FrozenSolid.name, "Ongoing", "Your Acolytes controlling Gates in Areas with Faction Glyphs cannot be Captured by Monsters.")
+        case $("XSS", TorrentialDownpour.name) => spellbook(TorrentialDownpour.name, "Gather Power Phase", "Gain 1 Power if you have Amphibian Crawlers in both Land and Sea Areas. Gain an Additional Power for each of those Units at Enemy Controlled Gates.")
         case $("TB") =>
             faction(TB, "info:tb-background", ThousandWrithingMaws, "Ongoing",
             "2 Power Action: may Recruit/Summon two upto 2 Cost Units of same type.",

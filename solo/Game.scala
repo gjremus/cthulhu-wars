@@ -2150,6 +2150,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Xyrious Storm (XSS) state — Cloud Of Ashes holding zone (§1.10 SB3).
     // Monsters placed on the Faction Card during elimination; returned to map at Doom.
     var xssFactionCardMonsters : $[UnitRef] = $
+    // Katabatic Winds edge-trigger latch (designer v18 SB1). The ability fires
+    // WHEN XSS drops to 0 Power during the Action Phase, so it must fire once per
+    // 0-crossing — not once per action while XSS sits at 0. Set when the offer is
+    // made; cleared as soon as XSS has Power again (and at Gather).
+    var xssKatabaticZeroLatched : Boolean = false
 
     // Fleshmason (FM) state — designer faction dcylxgn1wkqs.
     // fmGateJustCreated: tracks the region where FM just created a Gate so the
@@ -4338,6 +4343,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // TB Behemoth: re-arm the 0-crossing latch for the new turn.
                 tbBehemothZeroLatched = false
 
+                // XSS Katabatic Winds: re-arm the 0-crossing latch for the new turn.
+                xssKatabaticZeroLatched = false
+
                 // Faceless Blight (FBE): re-arm Changeling Adherents for this Gather.
                 fbeChangelingDoneThisGather = false
 
@@ -4566,19 +4574,21 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // Gain +1 additional Power for each of those Amphibian Crawler Areas that
                 // contain an Enemy-Controlled Gate.
                 if (f == XSS && f.can(TorrentialDownpour)) {
-                    val crawlerRegions = f.onMap(AmphibianCrawler)./(_.region).distinct
+                    val crawlers = f.onMap(AmphibianCrawler)
+                    val crawlerRegions = crawlers./(_.region).distinct
                     val crawlersInLand = crawlerRegions.%(_.glyph != Ocean).any
                     val crawlersInSea = crawlerRegions.%(_.glyph == Ocean).any
                     if (crawlersInLand && crawlersInSea) {
                         // Base: 1 Power for having Crawlers in both Land and Sea
                         var bonus = 1
-                        // Bonus: +1 per Crawler-occupied area with an enemy gate
-                        val enemyGateAreas = crawlerRegions.%(r =>
-                            factions.but(f).exists(e => e.gates.has(r)))
-                        bonus += enemyGateAreas.num
+                        // v18 text: "+1 additional Power for each of those Units at
+                        // Enemy Controlled Gates" — per Crawler, not per Area.
+                        val crawlersAtEnemyGates = crawlers.%(u =>
+                            factions.but(f).exists(e => e.gates.has(u.region))).num
+                        bonus += crawlersAtEnemyGates
                         f.power += bonus
                         f.log(TorrentialDownpour.styled(XSS) + ": gained", bonus.power,
-                            "(Crawlers in Land + Sea" + (enemyGateAreas.any).??(", " + enemyGateAreas.num + " enemy gate" + (enemyGateAreas.num > 1).??("s")) + ")")
+                            "(Crawlers in Land + Sea" + (crawlersAtEnemyGates > 0).??(", " + crawlersAtEnemyGates + " at enemy gate" + (crawlersAtEnemyGates > 1).??("s")) + ")")
                     }
                 }
 
@@ -5990,6 +6000,21 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             // Checked after the negative-power clamps so a -1 -> 0 correction counts.
             if (setup.has(TB))
                 TBExpansion.tbBehemothWatch()
+
+            // XSS Katabatic Winds (designer v18 SB1): "When you drop to 0 Power
+            // during the Action Phase, Move any number of Twisters from Land Areas
+            // into a Single Sea Area." Generic 0-crossing watcher (same shape as
+            // TB Behemoth): XSS's Power can reach 0 through its own spend or an
+            // enemy effect, and AfterAction is the only per-action boundary. The
+            // latch makes it an edge trigger and re-arms as soon as XSS has Power.
+            if (setup.has(XSS)) {
+                if (XSS.power > 0)
+                    xssKatabaticZeroLatched = false
+                else if (!xssKatabaticZeroLatched && XSSExpansion.katabaticEligible) {
+                    xssKatabaticZeroLatched = true
+                    return Force(KatabaticWindsMainAction(XSS, self))
+                }
+            }
 
             expansions.foreach(_.afterAction())
 

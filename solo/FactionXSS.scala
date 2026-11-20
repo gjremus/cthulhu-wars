@@ -42,9 +42,9 @@ case object Petrichor        extends FactionUnitClass(XSS, "Petrichor",         
 
 
 // -- SPELLBOOKS (§1.10) -------------------------------------------------------
-case object Whirlwind           extends FactionSpellbook(XSS, "Whirlwind")
+case object KatabaticWinds      extends FactionSpellbook(XSS, "Katabatic Winds")
 case object StaticAccumulator   extends FactionSpellbook(XSS, "Static Accumulator") with BattleSpellbook
-case object CloudOfAshes        extends FactionSpellbook(XSS, "Cloud Of Ashes")
+case object CloudOfAshes        extends FactionSpellbook(XSS, "Cloud of Ashes")
 case object Tsunami             extends FactionSpellbook(XSS, "Tsunami")
 case object FrozenSolid         extends FactionSpellbook(XSS, "Frozen Solid")
 case object TorrentialDownpour  extends FactionSpellbook(XSS, "Torrential Downpour")
@@ -78,7 +78,9 @@ case object XSS extends Faction { f =>
 
     // Condensation is the always-on unique ability (§1.5).
     override def abilities = $(Condensation)
-    override def library   = $(Whirlwind, StaticAccumulator, CloudOfAshes, Tsunami, FrozenSolid, TorrentialDownpour)
+    // Order matches the designer v18 faction-card slot order (sb.rows):
+    // Frozen Solid, Torrential Downpour, Tsunami, Katabatic Winds, Static Accumulator, Cloud of Ashes.
+    override def library   = $(FrozenSolid, TorrentialDownpour, Tsunami, KatabaticWinds, StaticAccumulator, CloudOfAshes)
     override def requirements(options : $[GameOption]) =
         $(PetrichorBattlesAloneReq, FourGlyphFootprintReq, SeaGatesReq, LandGatesReq, MonsterMassReq, AwakenPetrichorReq)
 
@@ -205,10 +207,30 @@ case class CondensationPlacePickAction(self : Faction, area : Region, first : Un
 case class CondensationAction(self : Faction, area : Region, first : UnitRef, second : UnitRef, uc : UnitClass)
     extends BaseFactionAction(Condensation.styled(XSS) + ": eliminate two Units and place", uc.styled(XSS) + " in " + area)
 
-// -- WHIRLWIND (§1.10 SB1 / Retreat expansion) --------------------------------
-// Post-Battle: Twisters in Land Areas may Retreat to Sea Areas containing enemy
-// Units. This is a passive retreat-destination expansion — no action needed.
-// Hooked into Battle.scala retreat logic (retreat destination computation).
+// -- KATABATIC WINDS (designer v18 SB1, Ongoing) ------------------------------
+// "When you drop to 0 Power during the Action Phase, Move any number of Twisters
+// from Land Areas into a Single Sea Area." Triggered from Game.scala AfterAction
+// (edge-latched on the 0-crossing, mirroring TB Behemoth's zero-power watcher).
+// The old Whirlwind Post-Battle retreat expansion is gone in v18.
+case class KatabaticWindsMainAction(self : Faction, orig : Faction)
+    extends OptionFactionAction(KatabaticWinds.styled(XSS)) with MainQuestion with Soft
+// NOT Soft: the decline must be recorded so a replay makes the same choice.
+case class KatabaticWindsSkipAction(self : Faction, orig : Faction)
+    extends OptionFactionAction("Skip " + KatabaticWinds.name) with MainQuestion
+case class KatabaticWindsPickTwistersAction(self : Faction, orig : Faction, picked : $[UnitRef], remaining : $[UnitRef])
+    extends ForcedAction with PowerNeutral with Soft {
+    override def question(implicit game : Game) = KatabaticWinds.styled(XSS) + ": choose Twisters to move (picked: " + picked.num + ")"
+}
+case class KatabaticWindsToggleAction(self : Faction, orig : Faction, ur : UnitRef, picked : $[UnitRef], remaining : $[UnitRef])
+    extends OptionFactionAction(implicit g => KatabaticWinds.styled(XSS) + ": " + g.unit(ur).uclass.styled(XSS) + " in " + g.unit(ur).region) with Soft {
+    override def question(implicit game : Game) = KatabaticWinds.styled(XSS) + ": choose Twisters to move"
+}
+case class KatabaticWindsDoneAction(self : Faction, orig : Faction, picked : $[UnitRef])
+    extends OptionFactionAction("Done".styled("power")) with Soft {
+    override def question(implicit game : Game) = KatabaticWinds.styled(XSS) + ": choose destination Sea Area"
+}
+case class KatabaticWindsDestAction(self : Faction, orig : Faction, picked : $[UnitRef], dest : Region)
+    extends BaseFactionAction(KatabaticWinds.styled(XSS) + ": move Twisters to", dest)
 
 // -- DISTANT THUNDERCLAP (§1.8 / §3.4.3 / §4.6) ------------------------------
 // Post-Battle: assign XSS's own excess Pains to XSS's own units (adds to normal
@@ -247,6 +269,14 @@ object XSSExpansion extends Expansion {
         val factionGlyphAreas = (printedGlyphs ++ chosenAreas).distinct
         factionGlyphAreas.has(r)
     }
+
+    // -- KATABATIC WINDS helpers (designer v18 SB1, Ongoing) ------------------
+    // Twisters currently in Land Areas — the only Units the ability may move.
+    def katabaticTwisters(implicit game : Game) : $[UnitRef] =
+        XSS.onMap(Twister).%(_.region.glyph != Ocean)./(_.ref)
+
+    def katabaticEligible(implicit game : Game) : Boolean =
+        XSS.can(KatabaticWinds) && katabaticTwisters.any && game.board.regions.%(_.glyph == Ocean).any
 
     // -- CONDENSATION helpers (§1.5, Doom Phase) ------------------------------
     // Units that can be placed from Pool: anything currently in reserve except a
@@ -588,6 +618,56 @@ object XSSExpansion extends Expansion {
                 Force(DCProselytizeCheckAction(source, dest, CronophageAfterMoveAction(self, EndAction(self))))
             else
                 CronophageAfterMoveAction(self, EndAction(self))
+
+        // -- KATABATIC WINDS (designer v18 SB1, Ongoing) ----------------------
+        // Triggered from Game.scala AfterAction when XSS drops to 0 Power. The
+        // trigger forces KatabaticWindsMainAction; declining re-enters AfterAction
+        // with the 0-crossing latch already set, so it does not re-offer.
+        case KatabaticWindsMainAction(self, orig) =>
+            val twisters = XSSExpansion.katabaticTwisters
+            if (twisters.none)
+                Force(AfterAction(orig))
+            else
+                Force(KatabaticWindsPickTwistersAction(self, orig, $, twisters))
+
+        case KatabaticWindsSkipAction(self, orig) =>
+            self.log(KatabaticWinds.styled(XSS) + ": declined")
+            Force(AfterAction(orig))
+
+        case KatabaticWindsPickTwistersAction(self, orig, picked, remaining) =>
+            implicit val asking = Asking(self)
+            remaining.foreach { ur =>
+                + KatabaticWindsToggleAction(self, orig, ur, picked, remaining)
+            }
+            if (picked.any)
+                + KatabaticWindsDoneAction(self, orig, picked)
+            asking
+
+        case KatabaticWindsToggleAction(self, orig, ur, picked, remaining) =>
+            Force(KatabaticWindsPickTwistersAction(self, orig, picked :+ ur, remaining.but(ur)))
+
+        case KatabaticWindsDoneAction(self, orig, picked) =>
+            val seas = game.board.regions.%(_.glyph == Ocean)
+            if (seas.num == 1)
+                Force(KatabaticWindsDestAction(self, orig, picked, seas.head))
+            else {
+                implicit val asking = Asking(self)
+                seas.foreach { r =>
+                    + KatabaticWindsDestAction(self, orig, picked, r)
+                }
+                asking
+            }
+
+        case KatabaticWindsDestAction(self, orig, picked, dest) =>
+            val sources = picked./(ur => game.unit(ur).region).distinct
+            picked.foreach { ur =>
+                val u = game.unit(ur)
+                u.region = dest
+                u.onGate = false
+            }
+            self.log(KatabaticWinds.styled(XSS) + ": moved", picked.num,
+                "Twister" + (picked.num > 1).??("s"), "from", sources.mkString(", "), "to", dest)
+            Force(AfterAction(orig))
 
         // -- STATIC ACCUMULATOR (§1.10 SB2 / §3.10.2) -------------------------
         // Pre-Battle: handled via PreBattleQuestion. Perform logic here for the
