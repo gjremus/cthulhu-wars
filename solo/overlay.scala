@@ -2089,16 +2089,16 @@ object Overlays {
             faction(XSS, "info:xss-background", Condensation, "Doom Phase",
             "Eliminate two of your Units in a Single Area to place a Unit with Cost equal to the combined cost of the Units eliminated in that Area.",
             $(), $(
-            (Acolyte,           XSSValues.Acolyte_count, "1", "0", s""""""),
-            (AmphibianCrawler,  XSSValues.AmphibianCrawler_count, "" + XSSValues.AmphibianCrawler_cost, "" + XSSValues.AmphibianCrawler_combat, s"""<div class=p>Monster. ${XSSValues.AmphibianCrawler_combat} Combat.</div>"""),
-            (Twister,           XSSValues.Twister_count, "" + XSSValues.Twister_cost, "1-3", s"""<div class=p>Combat: 3 in Land Areas, 1 elsewhere.</div>"""),
-            (EyeOfTheStorm,     XSSValues.EyeOfTheStorm_count, "" + XSSValues.EyeOfTheStorm_cost, "1-4", s"""<div class=p>Combat: 4 in Sea Areas, 1 elsewhere.</div><div class=p>Spellbook: ${reference(XSS, Tsunami)}</div>"""),
+            (Acolyte,           XSSValues.Acolyte_count, "1", "0", s"""<div class=p>Spellbook: ${reference(XSS, FrozenSolid)}</div>"""),
+            (AmphibianCrawler,  XSSValues.AmphibianCrawler_count, "" + XSSValues.AmphibianCrawler_cost, "" + XSSValues.AmphibianCrawler_combat, s"""<div class=p>Spellbook: ${reference(XSS, TorrentialDownpour)}</div>"""),
+            (Twister,           XSSValues.Twister_count, "" + XSSValues.Twister_cost, "1-3", s"""<div class=p>Combat is 3 in Land Areas. Spellbook: Katabatic Winds</div>"""),
+            (EyeOfTheStorm,     XSSValues.EyeOfTheStorm_count, "" + XSSValues.EyeOfTheStorm_cost, "1-4", s"""<div class=p>Combat is 4 in Ocean/Sea Areas. Spellbook: ${reference(XSS, Tsunami)}</div>"""),
             (Petrichor,         XSSValues.Petrichor_count, "" + XSSValues.Petrichor_awakenCost, "?", s"""
                 <div class=p>${cost(s"How to Awaken ${Petrichor.name}:")}</div>
-                <div class=p>${cost("1)")} You must Control a Unit with Cost 3+ in the target Area.</div>
-                <div class=p>${cost("2)")} Pay ${power(XSSValues.Petrichor_awakenCost)}. ${Petrichor.name} appears in the Area.</div>
+                <div class=p>${cost("1)")} You must control a Unit which Costs 3 or More.</div>
+                <div class=p>${cost("2)")} Pay ${power(XSSValues.Petrichor_awakenCost)}. ${Petrichor.name} appears in an Area with one of those Units.</div>
                 <div class=p>${combat} Equals the count of XSS Units in play with Cost 2 or greater (includes Petrichor).</div>
-                <div class=p><span class=ability-color>Distant Thunderclap</span> ${cost("(Post-Battle, Optional):")} Assign your excess Pains to yourself. If no participating Units remain in the Battle Area and your opponent had a non-Cultist Unit present, gain an Elder Sign.</div>
+                <div class=p><span class=ability-color>Distant Thunderclap</span> ${cost("(Post-Battle, Optional):")} You may assign your excess Pains to yourself. If no participating Units remain in the Battle Area and your opponent had a non-Cultist Unit present, gain an Elder Sign.</div>
                 <div class=p>Spellbooks: ${reference(XSS, StaticAccumulator)}, ${reference(XSS, CloudOfAshes)}</div>""")
         ), setup = true)
         case $("XSS", "Setup") => requirement("After Firstborn, 8 Power, 6 Acolytes and a Controlled Gate in an empty Sea Area with no Faction Glyph.")
