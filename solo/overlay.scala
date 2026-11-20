@@ -2101,6 +2101,7 @@ object Overlays {
                 <div class=p><span class=ability-color>Distant Thunderclap</span> ${cost("(Post-Battle, Optional):")} Assign your excess Pains to yourself. If no participating Units remain in the Battle Area and your opponent had a non-Cultist Unit present, gain an Elder Sign.</div>
                 <div class=p>Spellbooks: ${reference(XSS, StaticAccumulator)}, ${reference(XSS, CloudOfAshes)}</div>""")
         ))
+        case $("XSS", "Setup") => requirement("After Firstborn, 8 Power, 6 Acolytes and a Controlled Gate in an empty Sea Area with no Faction Glyph.")
         case $("XSS", PetrichorBattlesAloneReq.text) => requirement("Petrichor is alone (no other XSS Units) in a Battle.")
         case $("XSS", FourGlyphFootprintReq.text) => requirement("Have Units in 4 Areas with Faction Glyphs (any in-game or off-board core faction's Start Area / Glyph).")
         case $("XSS", SeaGatesReq.text) => requirement("Control 3 Gates in Sea Areas<br/>OR<br/>Control 3 Gates in Areas with Faction Glyphs.")

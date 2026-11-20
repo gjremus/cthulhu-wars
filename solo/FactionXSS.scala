@@ -335,6 +335,17 @@ object XSSExpansion extends Expansion {
         // XSS Setup: pick an empty Sea Area with no Faction Glyph, place 6 Acolytes
         // + Controlled Gate. Starting Power = 8 (set by faction power table in Game.scala).
         // XSS uses StartingRegionAction flow with region filtering handled by Game.scala.
+        // Seating order (designer update v18, 2026-11-19): XSS sets up AFTER Firstborn
+        // (setup.constraints.follows = 5 = Firstborn). Until then this handler returns
+        // UnknownContinue so the generic minBy placement keeps seating the others.
+        // If Firstborn is not in the game (or has no legal starting areas), wait until
+        // every faction placed by the generic solver has seated — FBE/OW have their own
+        // late tiebreaks and must still place after XSS.
+        case SetupFactionsAction if game.setup.has(XSS) && !game.starting.contains(XSS)
+                && ((game.setup.has(FB) && game.board.starting(FB).any && !game.starting.contains(FB))
+                    || game.setup.%!(game.starting.contains).%(g => g != FBE && g != OW && game.board.starting(g).any).any) =>
+            UnknownContinue
+
         case SetupFactionsAction if game.setup.has(XSS) && !game.starting.contains(XSS) =>
             val f = XSS
             // Find eligible Sea Areas: empty of Units, no Faction Glyph (§1.6 / §2.0a)
