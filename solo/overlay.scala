@@ -2086,8 +2086,8 @@ object Overlays {
 
     def xssTbOverlay(s : $[Any]) : String = { println("xssTbOverlay called with: " + s.mkString(",")); s match {
         case $("XSS") =>
-            faction(XSS, "info:xss-background", Precipitation, "Post-Battle",
-            "You always Pain out of a Battle first, even if you are the Defender. Fully cancelled by Crawling Chaos Madness.",
+            faction(XSS, "info:xss-background", Condensation, "Doom Phase",
+            "Eliminate two of your Units in a Single Area to place a Unit with Cost equal to the combined cost of the Units eliminated in that Area.",
             $(), $(
             (Acolyte,           XSSValues.Acolyte_count, "1", "0", s""""""),
             (AmphibianCrawler,  XSSValues.AmphibianCrawler_count, "" + XSSValues.AmphibianCrawler_cost, "" + XSSValues.AmphibianCrawler_combat, s"""<div class=p>Monster. ${XSSValues.AmphibianCrawler_combat} Combat.</div>"""),

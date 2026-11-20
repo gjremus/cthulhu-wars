@@ -10,15 +10,17 @@ import html._
 // Spec: "XyriousStorm Faction Implementation Guide" (all sections Creator Audited)
 // Faction color #3371d7 (storm blue), style "xss".
 // Led by the Great Old One Petrichor. An elemental storm faction with terrain-
-// sensitive Monsters and Pain-assignment ordering dominance via Precipitation.
+// sensitive Monsters and a Doom-Phase unit-conversion ability.
 //
 // IMPLEMENTATION NOTES
 //  * Faction-Card Monster holding zone (Cloud Of Ashes, SB 3) lives on Game.scala
 //    as game.xssFactionCardMonsters : $[UnitRef] (undo/replay-safe — mirrors the
 //    DC dcSin / FBE fbeCardDice pattern that keeps faction state on Game.scala).
 //    Appended in eliminate() hook; drained by CloudOfAshesDoomReturnAction at Doom.
-//  * Precipitation (§1.5) reorders Battle pain-assignment so XSS picks first,
-//    regardless of Attacker/Defender role. Fully cancelled by CC Madness.
+//  * Condensation (§1.5, Doom Phase, optional): eliminate two of your Units in a
+//    single Area, then place a Unit from your Pool whose Cost equals their
+//    combined Cost into that Area. Replaces the old Precipitation pain-ordering
+//    ability (designer update v18, 2026-11-19).
 //  * Petrichor Combat = count of XSS Units in play with Cost >= 2 (includes self).
 //  * Twister Combat = combatLand in Land Areas, combatOther elsewhere (from XSSValues).
 //  * Eye of the Storm Combat = combatSea in Sea Areas, combatOther elsewhere (from XSSValues).
@@ -47,9 +49,14 @@ case object Tsunami             extends FactionSpellbook(XSS, "Tsunami")
 case object FrozenSolid         extends FactionSpellbook(XSS, "Frozen Solid")
 case object TorrentialDownpour  extends FactionSpellbook(XSS, "Torrential Downpour")
 
-// XSS Unique Ability -- Precipitation (Ongoing). Declared as a FactionSpellbook so
-// it can be shown in the faction status panel / borrowed via Ancient Sorcery.
-case object Precipitation extends FactionSpellbook(XSS, "Precipitation")
+// XSS Unique Ability -- Condensation (Doom Phase, optional). Declared as a
+// FactionSpellbook so it can be shown in the faction status panel.
+case object Condensation extends FactionSpellbook(XSS, "Condensation")
+
+// Distant Thunderclap once-per-action marker. Declared as a FactionSpellbook so it
+// can key oncePerAction (typed $[Spellbook]); not a real spellbook and not in
+// library/abilities, same pattern as FM's SpitefulChisel.
+case object DistantThunderclap extends FactionSpellbook(XSS, "Distant Thunderclap")
 
 
 // -- SPELLBOOK REQUIREMENTS (§1.9) --------------------------------------------
@@ -69,8 +76,8 @@ case object XSS extends Faction { f =>
     def short = "XSS"
     def style = "xss"
 
-    // Precipitation is the always-on unique ability (§1.5).
-    override def abilities = $(Precipitation)
+    // Condensation is the always-on unique ability (§1.5).
+    override def abilities = $(Condensation)
     override def library   = $(Whirlwind, StaticAccumulator, CloudOfAshes, Tsunami, FrozenSolid, TorrentialDownpour)
     override def requirements(options : $[GameOption]) =
         $(PetrichorBattlesAloneReq, FourGlyphFootprintReq, SeaGatesReq, LandGatesReq, MonsterMassReq, AwakenPetrichorReq)
@@ -178,6 +185,26 @@ case class CloudOfAshesDoomReturnAreaAction(self : Faction, monster : UnitRef)
 case class CloudOfAshesDoomReturnAction(self : Faction, monster : UnitRef, dest : Region)
     extends BaseFactionAction(CloudOfAshes.styled(XSS) + ": return Monster to", dest)
 
+// -- CONDENSATION (§1.5, Doom Phase) ------------------------------------------
+// Optional Doom Phase ability: eliminate two of your Units in a single Area, then
+// place a Unit from your Pool whose Cost equals their combined Cost into that Area.
+case class CondensationMainAction(self : Faction)
+    extends OptionFactionAction(Condensation.styled(XSS)) with DoomQuestion with Soft
+case class CondensationFirstUnitPickAction(self : Faction, area : Region, units : $[UnitRef])
+    extends ForcedAction with Soft {
+    override def question(implicit game : Game) = Condensation.styled(XSS) + ": choose the first Unit in " + area
+}
+case class CondensationSecondUnitPickAction(self : Faction, area : Region, first : UnitRef, units : $[UnitRef])
+    extends ForcedAction with Soft {
+    override def question(implicit game : Game) = Condensation.styled(XSS) + ": choose the second Unit in " + area
+}
+case class CondensationPlacePickAction(self : Faction, area : Region, first : UnitRef, second : UnitRef, classes : $[UnitClass])
+    extends ForcedAction with Soft {
+    override def question(implicit game : Game) = Condensation.styled(XSS) + ": choose the Unit to place in " + area
+}
+case class CondensationAction(self : Faction, area : Region, first : UnitRef, second : UnitRef, uc : UnitClass)
+    extends BaseFactionAction(Condensation.styled(XSS) + ": eliminate two Units and place", uc.styled(XSS) + " in " + area)
+
 // -- WHIRLWIND (§1.10 SB1 / Retreat expansion) --------------------------------
 // Post-Battle: Twisters in Land Areas may Retreat to Sea Areas containing enemy
 // Units. This is a passive retreat-destination expansion — no action needed.
@@ -220,6 +247,27 @@ object XSSExpansion extends Expansion {
         val factionGlyphAreas = (printedGlyphs ++ chosenAreas).distinct
         factionGlyphAreas.has(r)
     }
+
+    // -- CONDENSATION helpers (§1.5, Doom Phase) ------------------------------
+    // Units that can be placed from Pool: anything currently in reserve except a
+    // GOO (GOOs are Awakened, never placed from Pool).
+    private def condensationPoolCosts(self : Faction)(implicit game : Game) : $[Int] =
+        self.pool.%(_.uclass.utype != GOO)./(_.uclass.cost).distinct
+
+    private def condensationPoolClasses(self : Faction, cost : Int)(implicit game : Game) : $[UnitClass] =
+        self.pool.%(u => u.uclass.utype != GOO && u.uclass.cost == cost)./(_.uclass).distinct
+
+    // All valid (first, second) pairs of alive XSS Units in `area` whose combined
+    // Cost matches a Unit available in the Pool.
+    private def condensationPairs(self : Faction, area : Region)(implicit game : Game) : $[(UnitRef, UnitRef)] = {
+        val refs = self.at(area).%(_.health == Alive)./(_.ref)
+        val costs = condensationPoolCosts(self)
+        refs.combinations(2).filter(p =>
+            costs.has(game.unit(p.head).uclass.cost + game.unit(p.last).uclass.cost))./(p => (p.head, p.last))
+    }
+
+    private def condensationAreas(self : Faction)(implicit game : Game) : $[Region] =
+        self.units.%(u => u.region.onMapOrMoon && u.health == Alive)./(_.region).distinct.%(r => condensationPairs(self, r).any)
 
     // -- CLOUD OF ASHES kill-path hook (§3.10.3 / §3.14.8) --------------------
     // Called on every Unit elimination. If an XSS Monster dies and SB 3 is on
@@ -327,6 +375,10 @@ object XSSExpansion extends Expansion {
         case DoomAction(f : XSS.type) =>
             implicit val asking = Asking(f)
 
+            // Condensation: optional, offered whenever a valid pair exists.
+            if (condensationAreas(f).any)
+                + CondensationMainAction(f)
+
             // Cloud Of Ashes: find Monsters held on the Faction Card by scanning the
             // hold region directly. xssFactionCardMonsters is cleared during the
             // per-kill Hold prompts, so Doom Phase scans the region instead.
@@ -384,6 +436,51 @@ object XSSExpansion extends Expansion {
             remaining.foreach { ur => game.unit(ur).region = self.reserve }
             if (remaining.any)
                 self.log(CloudOfAshes.styled(XSS) + ": remaining Monsters returned to Pool")
+            Force(DoomAction(self))
+
+        // -- CONDENSATION (§1.5, Doom Phase) ----------------------------------
+        case CondensationMainAction(self) =>
+            val areas = condensationAreas(self)
+            if (areas.none)
+                UnknownContinue
+            else
+                Ask(self).each(areas)(r => {
+                    val firsts = condensationPairs(self, r)./~((a : UnitRef, b : UnitRef) => $(a, b)).distinct
+                    CondensationFirstUnitPickAction(self, r, firsts)
+                        .as("Two Units in " + r)
+                }).cancel
+
+        case CondensationFirstUnitPickAction(self, area, units) =>
+            Ask(self).each(units)(ur =>
+                CondensationSecondUnitPickAction(self, area, ur,
+                    condensationPairs(self, area).%((a : UnitRef, b : UnitRef) => a == ur || b == ur)
+                        ./((a : UnitRef, b : UnitRef) => if (a == ur) b else a).distinct)).cancel
+
+        case CondensationSecondUnitPickAction(self, area, first, units) =>
+            Ask(self).each(units)(ur => {
+                val cost = game.unit(first).uclass.cost + game.unit(ur).uclass.cost
+                val classes = condensationPoolClasses(self, cost)
+                if (classes.num == 1)
+                    CondensationAction(self, area, first, ur, classes.head)
+                else
+                    CondensationPlacePickAction(self, area, first, ur, classes)
+                        .as("Eliminate " + game.unit(first).uclass.styled(XSS) + " + " + game.unit(ur).uclass.styled(XSS))
+            }).cancel
+
+        case CondensationPlacePickAction(self, area, first, second, classes) =>
+            Ask(self).each(classes)(uc =>
+                CondensationAction(self, area, first, second, uc)).cancel
+
+        case CondensationAction(self, area, first, second, uc) =>
+            val a = game.unit(first)
+            val b = game.unit(second)
+            val cost = a.uclass.cost + b.uclass.cost
+            self.log(Condensation.styled(XSS) + ": eliminated", a.uclass.styled(XSS), "and", b.uclass.styled(XSS),
+                "in", area, "to place", uc.styled(XSS), "(Cost " + cost + ")")
+            game.eliminate(a)
+            game.eliminate(b)
+            game.checkGatesLost()
+            self.place(uc, area)
             Force(DoomAction(self))
 
         // -- MAIN ACTION (§2.7 / §3.10) ----------------------------------------

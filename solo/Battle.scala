@@ -2556,7 +2556,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // is computed against un-pained opponent forces. After XSS resolves, battle
                 // continues to AssignDefenderPains. Pained XSS units retreat in the normal
                 // retreat phase. ES check is independent (PostBattlePhase).
-                if (factions.has(XSS) && sides.has(XSS) && !XSS.oncePerAction.has(Precipitation)) {
+                if (factions.has(XSS) && sides.has(XSS) && !XSS.oncePerAction.has(DistantThunderclap)) {
                     val xssSide = if (attacker == XSS) attackers else defenders
                     val opponentSide = if (attacker == XSS) defenders else attackers
                     val opponent = if (attacker == XSS) defender else attacker
@@ -2569,7 +2569,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                             .%(_.uclass.utype != Cultist).any
                         val xssAlive = xssSide.forces.%(_.faction == XSS).%(_.health == Alive)
                         if (excessPains > 0 && xssAlive.any) {
-                            XSS.oncePerAction :+= Precipitation
+                            XSS.oncePerAction :+= DistantThunderclap
                             return Ask(XSS)
                                 .add(DistantThunderclapOfferAction(XSS, excessPains, arena, opponent, opponentHadNonCultist))
                                 .add(DistantThunderclapSkipAction(XSS))
@@ -2611,22 +2611,14 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 jump(AssignDefenderPains)
 
             case AssignDefenderPains =>
-                // Standard CW assigns pains attacker-first (per-battle order set at the
-                // kill phase). Xyrious Storm Precipitation (§1.5): XSS assigns pains FIRST
-                // regardless of Attacker/Defender role; fully cancelled by CC Madness.
-                // With defender-first (old replay) this formula reproduces the prior
-                // behavior exactly, including XSS-as-defender going first by default.
-                val precipitationActive = factions.has(XSS) && sides.has(XSS) &&
-                    XSS.abilities.has(Precipitation) &&
-                    !factions.exists(f => f != XSS && f.can(Madness))
-                val painFirst = if (precipitationActive) XSS else if (assignAttackerFirst) attacker else defender
+                // Standard CW pain-assignment order (per-battle order set at the kill
+                // phase). XSS no longer reorders this: Precipitation was replaced by
+                // Condensation in the v18 designer update (2026-11-19).
+                val painFirst = if (assignAttackerFirst) attacker else defender
                 assignPains(painFirst, AssignAttackerPains)
 
             case AssignAttackerPains =>
-                val precipitationActive = factions.has(XSS) && sides.has(XSS) &&
-                    XSS.abilities.has(Precipitation) &&
-                    !factions.exists(f => f != XSS && f.can(Madness))
-                val painFirst = if (precipitationActive) XSS else if (assignAttackerFirst) attacker else defender
+                val painFirst = if (assignAttackerFirst) attacker else defender
                 val painSecond = if (painFirst == attacker) defender else attacker
                 assignPains(painSecond, AllPainsAssignedPhase)
 
@@ -2748,18 +2740,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
                     Ask(f).add(RetreatOrderAction(f, attacker, defender)).add(RetreatOrderAction(f, defender, attacker))
                 }
-                else {
-                    // Xyrious Storm Precipitation (§1.5): XSS retreats FIRST regardless
-                    // of Attacker/Defender role. Fully cancelled by CC Madness.
-                    val precipitationActive = factions.has(XSS) && sides.has(XSS) &&
-                        XSS.abilities.has(Precipitation) &&
-                        !factions.exists(f => f != XSS && f.can(Madness))
-                    if (precipitationActive && defender == XSS)
-                        // XSS is Defender but retreats first via Precipitation
-                        jump(DefenderAttackerRetreats)
-                    else
-                        jump(AttackerDefenderRetreats)
-                }
+                else
+                    jump(AttackerDefenderRetreats)
 
             case AttackerDefenderRetreats =>
                 if (attackers.forces.%(_.health == Pained).any)
