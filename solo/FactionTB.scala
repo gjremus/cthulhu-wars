@@ -1038,8 +1038,12 @@ object TBExpansion extends Expansion {
         // PSYCHIC SHRIEK (§3.10.6)
         // ====================================================================
         case TBPsychicShriekMainAction(self) =>
+            // The spellbook says "choose enemy (not Hibernating)". The action menu
+            // already applies that filter, but this pick list used to omit it, so a
+            // Hibernating Windwalker (or a Sleeper Hibernating via Ancient Sorcery)
+            // could still be selected once Shriek was offered for some other enemy.
             val validEnemies = game.factions.but(self).%(e =>
-                !game.tbShriekTargetedThisPhase.has(e) && e.allInPlay.any)
+                !game.tbShriekTargetedThisPhase.has(e) && e.allInPlay.any && !e.hibernating)
             Force(TBPsychicShriekPickEnemyAction(self, validEnemies))
 
         case TBPsychicShriekPickEnemyAction(self, enemies) =>
