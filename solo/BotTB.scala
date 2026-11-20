@@ -1227,6 +1227,30 @@ class GameEvaluationTB(implicit game : Game) extends GameEvaluation(TB)(game) {
                     r.freeGate          |=> 800  -> "retreat to free gate"
                     u.cultist && r.freeGate |=> 1500 -> "cultist retreats to free gate"
 
+                // 2026-11-19 fix (creator report, game "Pain against Lunacy", action
+                // 1997): "TB bot should never decline autotomy". The Autotomy offer is
+                // made DURING a battle, so the TBAutotomy* cases in the non-battle
+                // branch above never run for it -- Use (Soft, exploded into
+                // PickSegment) and Skip both fell through to this branch's catch-all
+                // "unknown" -1000, and the random tiebreak declined Autotomy about a
+                // third of the time (this game used it twice, then declined once).
+                // Mirror the non-battle scoring here; Skip is hard-blocked (-5000) so
+                // "never decline" holds in battle too.
+                case TBAutotomyUseAction(_) =>
+                    true |=> 800 -> "use autotomy (ES farming)"
+                case TBAutotomySkipAction(_) =>
+                    true |=> -5000 -> "never decline autotomy (creator priority 2026-11-13, item 6)"
+                case TBAutotomyPickSegmentAction(_, _) =>
+                    true |=> 100 -> "pick segment for autotomy"
+                case TBAutotomyAction(_, segment, _, _) =>
+                    numSB >= 6 && game.unit(segment).region != TB.mantle |=> 150 -> "autotomy: kill a segment not on the mantle, preserve the mantle stockpile (creator priority 2026-11-13, items 5/7)"
+                    true |=> 500 -> "autotomy commit"
+                case TBAutotomyRetreatAction(_, _, _) =>
+                    true |=> 100 -> "pick autotomy retreat"
+                case TBAutotomyRetreatExecuteAction(_, retreatDest, _) =>
+                    numSB >= 6 && retreatDest.foes.exists(u => u.goo || u.terror) |=> 150 -> "autotomy retreat: toward another area with an enemy goo/terror to re-engage (creator priority 2026-11-13, items 5/7)"
+                    true |=> 100 -> "autotomy retreat commit"
+
                 // 2026-11-14 fix (creator report, tasks referencing games "Ritual through
                 // Curse" and "Continuum in Space"): TB paid 6 power into CC's Thousand Forms
                 // demand in one game and paid again in another. No case existed for this
