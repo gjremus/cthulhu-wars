@@ -1171,7 +1171,13 @@ class Player(private val f : Faction)(implicit game : Game) {
 
     def canAccessGate(r : Region) = gates.contains(r) || f.unitGate.?(_.region == r) || (has(TheyBreakThrough) && game.gates.contains(r)) || (f == BB && r == BB.moon)
 
-    def canAttack(r : Region)(e : Faction) = e.at(r).any && f.strength(at(r), e) > 0 && at(r).%(_.canBattle).any
+    // A Battle is only legal against a faction that actually has a Unit in the Area.
+    // e.at(r) includes figures that are currently just Buildings (AN Cathedral until
+    // Holy Ground, FM Screaming Wall), so use AN.figureIsUnit — the single source of
+    // truth for "does this figure count as a Unit right now?" (r_d_homebrews_2e02ab6b:
+    // a lone Cathedral could be attacked because the Building still satisfied `any`).
+    def canAttack(r : Region)(e : Faction) =
+        e.at(r).%(u => AN.figureIsUnit(u)).any && f.strength(at(r), e) > 0 && at(r).%(_.canBattle).any
 
     def canCapture(r : Region)(e : Faction) : Boolean =
         if (f == e)
@@ -5296,7 +5302,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (power)
                 f.power += sum
 
-            f.log("revealed", es./(_.short).mkString(" "), "for", sum.doom, power.??("and " + sum.power))
+            // The Invasion (TI): make the Baphomet Combat link traceable in the game log
+            // (d_homebrews_7cea2750). The generic line already says what was revealed and
+            // for how much Doom; append the effect on Baphomet's Combat so a reader can
+            // tie the reveal to the Combat increase without cross-referencing the card.
+            if (f == TI && game.inActionPhase)
+                f.log("revealed", es./(_.short).mkString(" "), "for", sum.doom,
+                      "which increased", Baphomet.styled(TI), "'s combat by", sum)
+            else
+                f.log("revealed", es./(_.short).mkString(" "), "for", sum.doom, power.??("and " + sum.power))
 
             Force(next)
 
