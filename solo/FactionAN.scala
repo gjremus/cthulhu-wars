@@ -78,7 +78,10 @@ case object AN extends Faction { f =>
     // True for any figure that counts as a Unit right now — i.e. everything except a
     // Cathedral that is currently just a Building. Only AN has Building-type figures,
     // so this is a no-op (always true) for every other faction's units.
-    def figureIsUnit(u : UnitFigure)(implicit game : Game) : Boolean = u.uclass != Cathedral || cathedralCountsAsUnit
+    def figureIsUnit(u : UnitFigure)(implicit game : Game) : Boolean =
+        // FM Screaming Wall is a Building-only Building (never a Unit) — same treatment as a
+        // dormant Cathedral, so it does not block Pain retreats (reports r_PJ07n_Fq).
+        if (u.uclass == ScreamingWall) false else (u.uclass != Cathedral || cathedralCountsAsUnit)
     // A faction's figures in a region that currently count as Units — i.e. dropping any
     // AN Cathedral that is still just a Building. For every non-AN faction (and for AN once
     // Holy Ground is earned in the Action Phase) this is exactly f.at(r), so callers can use
