@@ -1077,6 +1077,14 @@ object YuggothExpansion extends Expansion {
         case WatcherDoomPhaseCheckAction(then) =>
             if (!game.board.isYuggothMap || !game.watcherAsleep)
                 Force(then)
+            // I5: "It never re-rolls the Awaken check on the same Doom Phase it died."
+            // The decay roll above can destroy it and reset it to Asleep at 12; if so,
+            // stay Asleep until the NEXT Doom Phase's check instead of re-Awakening now.
+            else if (game.watcherEliminatedThisDoom) {
+                game.watcherEliminatedThisDoom = false
+                log("The Watcher".styled("nt") + ": destroyed this Doom Phase — remains Asleep until the next Awaken check")
+                Force(then)
+            }
             // Oct 2026: detect 12-doom CROSSING (from <12 to >=12), not just >=12
             else if (game.watcherDoomCrossingPending || factions.exists(f => game.watcherPrevDoomValues.getOrElse(f, 0) < 12 && f.doom >= 12)) {
                 log("The Watcher".styled("nt") + ": a Faction's Doom has crossed 12 —")
@@ -1137,6 +1145,9 @@ object YuggothExpansion extends Expansion {
                 game.watcherAsleep = true
                 game.watcherPosition = 12
                 game.watcherAttackQueue = $
+                // I5: the awaken check runs immediately after this decay action in the
+                // same Doom Phase — latch so it cannot re-Awaken the Watcher now.
+                game.watcherEliminatedThisDoom = true
             }
             Force(then)
 

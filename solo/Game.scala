@@ -1866,6 +1866,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var watcherForcedBattleThen : |[ForcedAction] = None
     // Oct 2026 bug fixes: track Watcher state for proper decay/wake/battle behavior
     var watcherAwakenedThisDoom : Boolean = false  // Skip decay on awakening Doom Phase
+    // I5: "It never re-rolls the Awaken check on the same Doom Phase it died."
+    // The decay roll (which can destroy it) runs immediately BEFORE the awaken check
+    // at the end of the Doom Phase, so without this latch a decay-kill followed by a
+    // 12-Doom crossing re-Awakens it in the very same Doom Phase. Set by
+    // WatcherDecayRollAction, consumed by WatcherDoomPhaseCheckAction, cleared at
+    // DoomPhaseAction start.
+    var watcherEliminatedThisDoom : Boolean = false
     var watcherDoomCrossingPending : Boolean = false  // Detect 12-doom crossing once
     var watcherKillsThisBattle : Int = 0  // Count kills for Harbinger/spellbooks
     var watcherPrevDoomValues : Map[Faction, Int] = Map()  // Track doom at start of Doom Phase
@@ -4786,6 +4793,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
             // Oct 2026: snapshot doom values for Watcher 12-doom crossing detection
             watcherPrevDoomValues = factions.map(f => f -> f.doom).toMap
+            watcherEliminatedThisDoom = false  // I5 latch: fresh Doom Phase
 
             // The Invasion (TI): count Doom Phases so Spellbook Requirement 2 can fire
             // at the second one (§1.9/§3.12). The award itself (and "all other players
