@@ -3695,6 +3695,15 @@ object CthulhuWarsSolo {
                     d
                 }.mkString("")
 
+                // Xyrious Storm: designer v18 SBR multi-requirement note. The two
+                // starred SBR boxes (Sea Gates / Land Gates) can also be met by
+                // Controlling 3 Gates in Areas with Faction Glyphs. The popups repeat
+                // this line, but the card carries the reminder next to the asterisks.
+                val sbrFootnote =
+                    if (f == XSS)
+                        "<div style='font-size:80%;line-height:1.15;padding:0 0.3vh;margin-top:0.2vh;'>*These Spellbooks may also be fulfilled by Controlling 3 Gates in Areas with Faction Glyphs</div>"
+                    else ""
+
                 val iconSpacing = 30
                 val baseRightOffset = 3
 
@@ -3835,7 +3844,7 @@ object CthulhuWarsSolo {
                     onpointerover='event.stopPropagation(); onExternalOver("${f.short}")'
                     onpointerout='event.stopPropagation(); onExternalOut("${f.short}")'
                     style='position:relative; z-index:2;'
-                    >${div("top")(s) + sb + lcis}</div>"""
+                    >${div("top")(s) + sb + sbrFootnote + lcis}</div>"""
 
                 val bitmap = b.get(w, h)
 

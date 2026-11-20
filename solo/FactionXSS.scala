@@ -62,9 +62,9 @@ case object DistantThunderclap extends FactionSpellbook(XSS, "Distant Thundercla
 // -- SPELLBOOK REQUIREMENTS (§1.9) --------------------------------------------
 case object PetrichorBattlesAloneReq extends Requirement("Petrichor is alone (no other of your Units) in a Battle")
 case object FourGlyphFootprintReq    extends Requirement("Have Units in 4 Areas with Faction Glyphs")
-case object SeaGatesReq              extends Requirement("Control 3 Gates in Sea Areas OR Control 3 Gates in Areas with Faction Glyphs")
-case object LandGatesReq             extends Requirement("Control 3 Gates in Land Areas OR Control 3 Gates in Areas with Faction Glyphs")
-case object MonsterMassReq           extends Requirement("Have 10 Cost worth of Monsters in play")
+case object SeaGatesReq              extends Requirement("Control 3 Gates in Ocean/Sea Areas*")
+case object LandGatesReq             extends Requirement("Control 3 Gates in Land Areas*")
+case object MonsterMassReq           extends Requirement("Have 10 Cost worth of Monsters in Play")
 case object AwakenPetrichorReq       extends Requirement("Awaken Petrichor")
 
 
