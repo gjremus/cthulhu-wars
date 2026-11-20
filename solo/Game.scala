@@ -6434,6 +6434,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 }
             }
 
+            // Yuggoth map: Slime Molds may not use a Move Action to enter the
+            // Slime Sea Overlook ("No Slime Mold Area"). Paining and movement-like
+            // abilities may still put them there — only the plain Move is barred —
+            // so this filter lives here in destination generation, not in the
+            // MoveAction handler.
+            if (u.uclass == SlimeMoldMonster)
+                destinations = destinations.%(_.name != "Slime Sea Overlook")
+
             val arriving = self.units.%(_.region.glyph.onMap).tag(Moved)./(_.region).distinct
 
             val l1 = destinations.%(arriving.contains) ++ destinations.%!(arriving.contains)
