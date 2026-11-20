@@ -2868,6 +2868,16 @@ object Overlays {
         case _ => ""
     }
 
+    // The Invasion (TI) — the Elder Sign values Baphomet has collected this Action
+    // Phase, printed after his Combat line as "(2,2)". "(-)" when he has none, which
+    // is the state at the start of every Action Phase and throughout the Doom Phase
+    // (Game.tiElderSignValuesThisActionPhase is cleared at both). Read live from
+    // Overlays.currentGame, same idiom as dsAvatarCombat/trbRiderFlipped.
+    def tiElderSignBracket : String = Overlays.currentGame match {
+        case Some(g) if g.tiElderSignValuesThisActionPhase.any => " (" + g.tiElderSignValuesThisActionPhase.mkString(",") + ")"
+        case _                                                 => " (-)"
+    }
+
     // The Invasion (TI) — faction info card. All text VERBATIM from the Invasion
     // implementation guide §1.5–§1.10. Do not paraphrase.
     def tiFactionOverlay() = {
@@ -2881,7 +2891,7 @@ object Overlays {
                 <div class=p>${cost("How to Awaken Baphomet:")}</div>
                 <div class=p>${cost("1)")} Permanently remove your Faction Unit in an Area from the game.</div>
                 <div class=p>${cost("2)")} Baphomet appears in that Area.</div>
-                <div class=p>${combat} 4 plus the total Doom you have earned from Elder Signs this Action Phase.</div>
+                <div class=p>${combat} 4 plus the total Doom you have earned from Elder Signs this Action Phase.${tiElderSignBracket}</div>
                 <div class=p>${reference(TI, UnquenchableThirst)}</div>
                 <div class=p>${reference(TI, SacramentOfFlesh)}</div>
                 <div class=p>${reference(TI, BaphometsFury)}</div>""")

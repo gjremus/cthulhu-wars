@@ -1122,9 +1122,10 @@ class Player(private val f : Faction)(implicit game : Game) {
             // The Invasion (TI): Baphomet's Combat = 4 + Doom earned from Elder Signs
             // this Action Phase (§1.8). Elder Signs that overflow the 36-pool convert to
             // Doom — that is Doom earned from Elder Signs — so accumulate it for TI
-            // within the Action Phase (the counter resets each Action Phase).
+            // within the Action Phase (the counter resets each Action Phase). Overflow
+            // Signs convert 1:1 to Doom, so record one 1-value entry per converted Sign.
             if (f == TI && game.inActionPhase)
-                game.tiElderSignDoomThisActionPhase += (total + count - 36)
+                game.tiElderSignValuesThisActionPhase ++= (total + count - 36).times(1)
             count = 36 - total
         }
 
@@ -1948,10 +1949,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Setup-placed Shadow does NOT count (creator-confirmed §3.12) — this drives
     // Spellbook Requirements 5 and 6 only.
     var tiLordsShadowCreated : Int = 0
-    // Doom TI has earned from Elder Signs during the current Action Phase. Baphomet's
-    // Combat = 4 + this (guide §1.8/§2.12); recomputed live at battle time, reset at
-    // the start of each Action Phase.
-    var tiElderSignDoomThisActionPhase : Int = 0
+    // Elder Sign values TI has earned Doom from during the current Action Phase —
+    // revealed Signs (RevealESAction) plus Signs converted to Doom because the pool
+    // was empty (which count 1 each). Baphomet's Combat = 4 + the sum (guide
+    // §1.8/§2.12), recomputed live at battle time. The list itself is also what the
+    // faction card prints in brackets, e.g. "(2,2)", so it must stay per-Sign.
+    // Reset at the start of each Doom Phase and each Action Phase.
+    var tiElderSignValuesThisActionPhase : $[Int] = $
+    def tiElderSignDoomThisActionPhase : Int = tiElderSignValuesThisActionPhase.sum
     // Number of Doom Phases elapsed. Spellbook Requirement 2 auto-awards at the end
     // of the SECOND Doom Phase (guide §1.9/§3.12).
     var tiDoomPhaseCount : Int = 0
@@ -4791,6 +4796,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             fbeFeastDeaths = $
             dcSatiateCaptureFactions = $
 
+            // The Invasion (TI): Baphomet's Combat bonus is "this Action Phase" only, so
+            // it is spent once the Doom Phase begins. Clearing here (not just at the next
+            // Action Phase) means the faction card shows "(-)" throughout the Doom Phase.
+            tiElderSignValuesThisActionPhase = $
+
             // Oct 2026: snapshot doom values for Watcher 12-doom crossing detection
             watcherPrevDoomValues = factions.map(f => f -> f.doom).toMap
             watcherEliminatedThisDoom = false  // I5 latch: fresh Doom Phase
@@ -4919,9 +4929,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             doomPhase = false
             endActionPhasePrompts = false
             // The Invasion (TI): Baphomet's Combat = 4 + Doom earned from Elder Signs
-            // THIS Action Phase (§1.8/§2.12). Reset the running counter at the start of
-            // every Action Phase; it is re-accumulated within the phase (see takeES).
-            tiElderSignDoomThisActionPhase = 0
+            // THIS Action Phase (§1.8/§2.12). Reset the running list at the start of
+            // every Action Phase; it is re-accumulated within the phase (see takeES
+            // and RevealESAction). Also reset at the start of the Doom Phase so the
+            // faction card shows "(-)" there.
+            tiElderSignValuesThisActionPhase = $
             fbGhatoLastMoveOrigin = None
             fbeFeastDeaths = $
             fbeActionInProgress = true
@@ -5269,6 +5281,14 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         case RevealESAction(f, es, power, next) =>
             val sum = es./(_.value).sum
             f.doom += sum
+
+            // The Invasion (TI): Baphomet's Combat = 4 + Doom earned from Elder Signs
+            // this Action Phase (§1.8). Revealing Signs IS earning Doom from Elder
+            // Signs, so accumulate their face values for TI. Keep them per-Sign so the
+            // faction card can print "(2,2)". Only during the Action Phase — a reveal
+            // in the Doom Phase (Stars Are Right) belongs to no Action Phase.
+            if (f == TI && game.inActionPhase)
+                game.tiElderSignValuesThisActionPhase ++= es./(_.value)
 
             f.revealed ++= es
             f.es = f.es.diff(es)

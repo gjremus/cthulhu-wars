@@ -1191,8 +1191,10 @@ object TIExpansion extends Expansion {
                 val shortfall = stillOwed - drawn.num
                 TI.es = TI.es.%(_.value > 0) ++ drawn
                 TI.doom += shortfall
+                // Overflow Signs convert 1:1 to Doom — count one 1-value entry each,
+                // same as takeES's 36-pool overflow.
                 if (game.inActionPhase)
-                    game.tiElderSignDoomThisActionPhase += shortfall
+                    game.tiElderSignValuesThisActionPhase ++= shortfall.times(1)
                 // HB Fix (2026-11-02): Elder Signs are secret until a faction chooses to
                 // reveal them (ElderSignAction only logs the face value when `public`);
                 // this log used to print the specific Signs looked at (.short) to the
