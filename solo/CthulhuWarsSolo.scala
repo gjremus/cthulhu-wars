@@ -6403,7 +6403,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // Homebrew factions with explicit stability levels
             "TI" -> "alpha",   // The Invasion
             "CS" -> "beta",    // Colour Out of Space
-            "TB" -> "beta",    // The Burrowers Beneath
+            "TB" -> "stable",  // The Burrowers Beneath (owner: has a functional bot, 2026-11-19)
             "FBE" -> "beta",   // Faceless Blight
             // Designer factions (alpha)
             "FM" -> "alpha",   // Fleshmason
