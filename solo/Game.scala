@@ -2102,6 +2102,15 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     // Player names per faction (absent = default, not shown). See PlayerNames.
     var playerNames : Map[Faction, String] = Map()
 
+    // Factions driven by a bot in this game (set by the UI from Setup.difficulty
+    // before StartAction; empty in JVM harnesses). Used by StartAction to give
+    // bot factions the "Cling to the gates" Gate Diplomacy command instead of
+    // "Display all options": bots should never voluntarily abandon a gate, and
+    // a bot that abandons one also loses auto-control of that region forever
+    // (Player.abandoned suppresses checkGatesGained), which is what left CC
+    // sitting on uncontrolled gates in game "Destiny of Space" (2026-11-19).
+    var botFactions : $[Faction] = $
+
     // Faceless Blight (FBE) state (§1.6 / §2.4 / §3.6) — kept on Game.scala for
     // undo/replay safety (mirrors the DC dcSin pattern), NOT on FBEExpansion.
     //  • fbeCardDice : Faction-Card dice pool, stored as pip values 1-6. The combat
@@ -4184,7 +4193,10 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                         GateDiplomacyOnlyManual,
                     )
 
-                    if (options.has(QuickGame))
+                    // Bots default to Cling: never abandon a gate (and protect the
+                    // gate keeper from capture). Humans keep the prompt and can
+                    // switch to "Cling to the gates" in the Commands menu.
+                    if (options.has(QuickGame) || botFactions.has(f))
                         f.commands :+= GateDiplomacyCling
                     else
                         f.commands :+= GateDiplomacyPrompt

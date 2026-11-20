@@ -668,7 +668,15 @@ object CthulhuWarsSolo {
                 case 5 => RitualTrack.for5
             }
 
+            // Factions the UI drives with a bot. StartAction uses this to give
+            // them the "Cling to the gates" Gate Diplomacy command (see
+            // Game.botFactions). Derived from Setup.difficulty, which is also
+            // parsed from the game header on replay, so every client agrees.
+            def botFactions : $[Faction] =
+                setup.difficulty.collect { case (f, d) if d == Easy || d == Normal || d == AllVsHuman => f }.toList
+
             var game = new Game(board, track, seating, true, setup.options)
+            game.botFactions = botFactions
             // Local games have no creation log, so apply the picker's names directly.
             if (hash == "") game.playerNames = setup.playerNames
             var overrideGame : |[Game] = None
@@ -4902,6 +4910,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 undoDiv.appendChild(newDiv("option" + style./(" " + _).|(""), "Cancel", () => { cancelUndo() }))
 
                 val g = new Game(board, track, seating, true, setup.options)
+                g.botFactions = botFactions
                 if (hash == "") g.playerNames = setup.playerNames
 
                 actions.reverse.take(n).foreach { a =>
@@ -4926,6 +4935,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                 var cc : Continue = StartContinue
 
                 val g = new Game(board, track, seating, true, setup.options)
+                g.botFactions = botFactions
                 if (hash == "") g.playerNames = setup.playerNames
 
                 actions.reverse.indexed./ { (a, i) =>
@@ -5472,7 +5482,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         replayMenu()
                     case 1 =>
                         paused = true
+                        val restartBots = game.botFactions
                         game = new Game(game.board, game.ritualTrack, game.factions, game.logging, $)
+                        game.botFactions = restartBots
                         actions = $
                         clear(logDiv)
                         updateStatus()
