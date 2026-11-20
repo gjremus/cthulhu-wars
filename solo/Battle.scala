@@ -1224,7 +1224,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
         // Guide §2.6c: "The moon is adjacent to all regions." Pain-retreat FROM a
         // Moon battle therefore expands destinations to every map area where the
         // opponent has no unit (the Moon has no ordinary connectedForRetreat set).
-        val moonRetreatDests = (arena == BB.moon).??(areas.%(r => s.opponent.at(r).none))
+        // AN.unitsAt drops a still-Building AN Cathedral: it is not a Unit and must
+        // not block a retreat (no-op for every other faction).
+        val moonRetreatDests = (arena == BB.moon).??(areas.%(r => AN.unitsAt(s.opponent, r).none))
         // Subterrane / Mantle pain-retreat edges (TB units only). Bidirectional: from
         // the Mantle out to burrow & tentacle areas, AND from a burrow/tentacle area
         // back to the Mantle. Previously only the Mantle-out direction was offered, so
@@ -1270,7 +1272,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             else if (tentacleShortcutAllowed && tentacleAreas.has(arena)) $(TB.mantle)
             else $
         }
-        val standardDest = (arena.connectedForRetreat ++ mantleDest).%(r => s.opponent.at(r).none)
+        // A still-Building AN Cathedral is NOT a Unit, so it must not disqualify a
+        // retreat destination. Live bug (game mffwyagoreishbqg, action 1063): GC
+        // Starspawn pained in North Atlantic could not retreat to West Africa, whose
+        // only AN presence was a Cathedral with no Holy Ground. AN.unitsAt is a
+        // strict no-op for every other faction (and once Holy Ground is earned).
+        val standardDest = (arena.connectedForRetreat ++ mantleDest).%(r => AN.unitsAt(s.opponent, r).none)
 
         // Xyrious Storm v18: Whirlwind's Land-to-Sea retreat expansion is gone
         // (the spellbook became Katabatic Winds, an Ongoing 0-Power trigger).
@@ -2744,7 +2751,9 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // eliminated, mirroring the normal "nowhere to retreat" rule.
                 if (csInsanityReflectedRetreatUnits.any) {
                     csInsanityReflectedRetreatUnits.%(u => !eliminated.has(u) && u.region == arena && u.health != Killed).foreach { u =>
-                        val dests = arena.connectedForRetreat.%(r => u.faction.opponent.at(r).none)
+                        // AN.unitsAt: a still-Building Cathedral is not a Unit and does
+                        // not block this forced retreat (no-op for every other faction).
+                        val dests = arena.connectedForRetreat.%(r => AN.unitsAt(u.faction.opponent, r).none)
                         if (dests.any) {
                             val r = dests.first
                             retreat(u, r)
