@@ -417,7 +417,7 @@ object XSSExpansion extends Expansion {
             implicit val asking = Asking(f)
 
             // Condensation: optional, offered whenever a valid pair exists.
-            if (condensationAreas(f).any)
+            if (f.oncePerTurn.has(Condensation).not && condensationAreas(f).any)
                 + CondensationMainAction(f)
 
             // Cloud Of Ashes: find Monsters held on the Faction Card by scanning the
@@ -482,7 +482,7 @@ object XSSExpansion extends Expansion {
         // -- CONDENSATION (§1.5, Doom Phase) ----------------------------------
         case CondensationMainAction(self) =>
             val areas = condensationAreas(self)
-            if (areas.none)
+            if (areas.none || self.oncePerTurn.has(Condensation))
                 UnknownContinue
             else
                 Ask(self).each(areas)(r => {
@@ -495,17 +495,20 @@ object XSSExpansion extends Expansion {
             Ask(self).each(units)(ur =>
                 CondensationSecondUnitPickAction(self, area, ur,
                     condensationPairs(self, area).%((a : UnitRef, b : UnitRef) => a == ur || b == ur)
-                        ./((a : UnitRef, b : UnitRef) => if (a == ur) b else a).distinct)).cancel
+                        ./((a : UnitRef, b : UnitRef) => if (a == ur) b else a).distinct)
+                    .as("Eliminate " + game.unit(ur).full + " (Cost " + game.unit(ur).uclass.cost + ")")).cancel
 
         case CondensationSecondUnitPickAction(self, area, first, units) =>
             Ask(self).each(units)(ur => {
                 val cost = game.unit(first).uclass.cost + game.unit(ur).uclass.cost
                 val classes = condensationPoolClasses(self, cost)
+                val label = "Eliminate " + game.unit(first).full + " + " + game.unit(ur).full
                 if (classes.num == 1)
                     CondensationAction(self, area, first, ur, classes.head)
+                        .as(label, "and place", classes.head.styled(XSS))
                 else
                     CondensationPlacePickAction(self, area, first, ur, classes)
-                        .as("Eliminate " + game.unit(first).uclass.styled(XSS) + " + " + game.unit(ur).uclass.styled(XSS))
+                        .as(label)
             }).cancel
 
         case CondensationPlacePickAction(self, area, first, second, classes) =>
@@ -516,7 +519,8 @@ object XSSExpansion extends Expansion {
             val a = game.unit(first)
             val b = game.unit(second)
             val cost = a.uclass.cost + b.uclass.cost
-            self.log(Condensation.styled(XSS) + ": eliminated", a.uclass.styled(XSS), "and", b.uclass.styled(XSS),
+            self.oncePerTurn :+= Condensation
+            self.log(Condensation.styled(XSS) + ": eliminated", a.full, "and", b.full,
                 "in", area, "to place", uc.styled(XSS), "(Cost " + cost + ")")
             game.eliminate(a)
             game.eliminate(b)
