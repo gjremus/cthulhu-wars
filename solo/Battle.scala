@@ -4291,8 +4291,11 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // adjacent Area is occupied, the unit is eliminated for having nowhere to go,
             // exactly as a regular Pain would (bugHistory 14/31).
             val dests = arena.connectedForRetreat.%(r => AN.unitsAt(self.opponent, r).none)
-            if (dests.none)
+            if (dests.none) {
+                // The ability is still spent even when the unit has nowhere to go.
+                FM.oncePerAction :+= TerrifyingShriek
                 Ask(self).add(EliminateNoWayAction(self, u).as(u)("Nowhere to retreat, a terrified unit is eliminated"))
+            }
             else
                 Ask(self).each(dests)(r => TerrifyingShriekRetreatAction(self, u, r).as(r)("Retreat", u.ref.full, "to"))
 

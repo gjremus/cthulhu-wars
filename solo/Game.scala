@@ -5993,14 +5993,12 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             asking
 
         case EndAction(self) =>
-            self.log("[FMDBG] EndAction ran for", self, "acted:", self.acted)
             self.acted = true
             mindParasiteCaptureRejected = $
             elderThingBlockGuard = $
             AfterAction(self)
 
         case AfterAction(self) =>
-            self.log("[FMDBG] AfterAction for", self, "acted:", self.acted)
             fbeActionInProgress = false
             checkGatesGained(self)
 
@@ -6128,7 +6126,6 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             CheckSpellbooksAction(GameOverPhaseAction)
 
         case NextPlayerAction(prev) =>
-            log("[FMDBG] NextPlayerAction prev=" + prev + " -> resetting acted for all")
             factions.foreach(_.acted = false)
             factions.foreach(_.battled = $)
             factions.foreach(_.oncePerRound = $)

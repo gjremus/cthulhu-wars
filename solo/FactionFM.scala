@@ -317,11 +317,9 @@ object FMExpansion extends Expansion {
             UnknownContinue
 
         case MainAction(f : FM.type) if f.acted =>
-            f.log("[FMDBG] FM MainAction -> ACTED branch (acted=true), power:", f.power)
             UnknownContinue
 
         case MainAction(f : FM.type) =>
-            f.log("[FMDBG] FM MainAction -> NOT-ACTED branch (acted=false), power:", f.power)
             implicit val asking = Asking(f)
 
             game.moves(f)
