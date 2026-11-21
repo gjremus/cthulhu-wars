@@ -2962,8 +2962,12 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 // must choose a different option; options reset after all three are used.
                 if (factions.has(FM) && FM.can(TendonFlaying) && sides.has(FM) && !FM.oncePerAction.has(TendonFlaying)) {
                     val fmSide = if (attacker == FM) attackers else defenders
+                    // A Pain-retreat resets health to Alive (retreat(u, r)), so by
+                    // PostBattlePhase a Stitcher that merely retreated no longer reads
+                    // Pained — it carries the Retreated tag until BattleEnd. Without that
+                    // test Tendon Flaying only ever fired on a Killed Stitcher.
                     val painedStitchers = (fmSide.forces ++ eliminated.%(_.faction == FM)).%(u =>
-                        u.uclass == MuscleStitcher && (u.health == Pained || u.health == Killed))
+                        u.uclass == MuscleStitcher && (u.health == Pained || u.health == Killed || u.tag(Retreated)))
                     if (painedStitchers.any) {
                         FM.oncePerAction :+= TendonFlaying
                         return Ask(FM).add(TendonFlayingMainAction(FM, painedStitchers./(_.ref)))
@@ -4281,7 +4285,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             Ask(e.real.?(e).|(self)).each(retreatableUnits)(u => TerrifyingShriekUnitAction(e, u).as(u)("Retreat unit from", TerrifyingShriek))
 
         case TerrifyingShriekUnitAction(self, u) =>
-            Ask(self).each(arena.connectedForRetreat)(r => TerrifyingShriekRetreatAction(self, u, r).as(r)("Retreat", u.ref.full, "to"))
+            // This is a PAIN retreat, so it uses the normal Pain adjacency rule: the unit
+            // may not retreat into an Area containing the opponent's (FM's) Units. Howl
+            // offers every connected Area unfiltered; Terrifying Shriek must not. If every
+            // adjacent Area is occupied, the unit is eliminated for having nowhere to go,
+            // exactly as a regular Pain would (bugHistory 14/31).
+            val dests = arena.connectedForRetreat.%(r => AN.unitsAt(self.opponent, r).none)
+            if (dests.none)
+                Ask(self).add(EliminateNoWayAction(self, u).as(u)("Nowhere to retreat, a terrified unit is eliminated"))
+            else
+                Ask(self).each(dests)(r => TerrifyingShriekRetreatAction(self, u, r).as(r)("Retreat", u.ref.full, "to"))
 
         case TerrifyingShriekRetreatAction(self, u, r) =>
             self.forces :-= u

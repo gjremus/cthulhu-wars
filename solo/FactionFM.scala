@@ -460,7 +460,10 @@ object FMExpansion extends Expansion {
                 u.add(Moved)
             }
             self.log(MannedBattlements.styled(FM) + ": moved", units.num, "units from", source, "to", dest)
-            Then(MainAction(self))
+            // Manned Battlements is a full Main Action (design + bugHistory 24/31): it must
+            // consume the action. Then(MainAction(self)) re-opened the main menu and granted
+            // a second action.
+            EndAction(self)
 
         // "Move separately" — pay the cost once up front (same as moving all units
         // together), then ask destination-per-unit, one at a time, like RetreatSeparatelyAction.
@@ -480,7 +483,9 @@ object FMExpansion extends Expansion {
             if (remaining.any)
                 Force(MannedBattlementsUnitPickDestAction(self, source, remaining.head, remaining.tail, destinations))
             else
-                Then(MainAction(self))
+                // Final unit of a "move separately" Manned Battlements: end the action, do
+                // not re-open the main menu (bugHistory 31 — extra action granted).
+                EndAction(self)
 
         case TendonFlayingReqMainAction(self, cost) =>
             self.power -= cost
