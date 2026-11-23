@@ -4404,7 +4404,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             }
         }
 
-        def startOnlineSetup(factions : $[Faction], bbAlt : Boolean = false) {
+        def startOnlineSetup(factions : $[Faction], bbAlt : Boolean = false, dsAlt : Boolean = false, owAlt : Boolean = false, slAlt : Boolean = false) {
             val all = allSeatings(factions)
 
             val seatings = all.%(s => all.indexOf(s) <= all.indexOf(s.take(1) ++ s.drop(1).reverse))
@@ -4425,6 +4425,21 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // The user can still toggle it from the Variants row if they want.
             if (bbAlt && factions.has(BB))
                 setup.options :+= BBAlternateSpellbooks
+            // [2026-11-22] alt-faction picker can pre-select the OW / SL / DS
+            // variants too. Same option bundles the Homebrew build applies.
+            def addOpt(o : GameOption) { if (!setup.options.has(o)) setup.options :+= o }
+            if (owAlt && factions.has(OW)) {
+                addOpt(OpenerCheapMutants)
+                addOpt(OpenerYogCurseDie)
+                if (factions.num == 4) addOpt(Opener4P10Gates)
+            }
+            if (slAlt && factions.has(SL)) {
+                addOpt(DemandTsathoggua)
+                addOpt(SleeperEasierSBR)
+                addOpt(SleeperEnergyNexusPreBattle)
+            }
+            if (dsAlt && factions.has(DS))
+                addOpt(DSAlternateSpellbooks)
 
             // [2026-06-15] Apply any pending Random Neutrals selection from the
             // alt faction picker, then clear so it doesn't leak to a later setup.
@@ -4748,7 +4763,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             askTop()
         }
 
-        def startSetup(factions : $[Faction], bbAlt : Boolean = false) {
+        def startSetup(factions : $[Faction], bbAlt : Boolean = false, dsAlt : Boolean = false, owAlt : Boolean = false, slAlt : Boolean = false) {
             val all = allSeatings(factions)
 
             val seatings = all.%(s => all.indexOf(s) <= all.indexOf(s.take(1) ++ s.drop(1).reverse))
@@ -4760,6 +4775,21 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
             // via the Variants row in the setup screen.
             if (bbAlt && factions.has(BB))
                 setup.options :+= BBAlternateSpellbooks
+            // [2026-11-22] alt-faction picker can pre-select the OW / SL / DS
+            // variants too. Same option bundles the Homebrew build applies.
+            def addOpt(o : GameOption) { if (!setup.options.has(o)) setup.options :+= o }
+            if (owAlt && factions.has(OW)) {
+                addOpt(OpenerCheapMutants)
+                addOpt(OpenerYogCurseDie)
+                if (factions.num == 4) addOpt(Opener4P10Gates)
+            }
+            if (slAlt && factions.has(SL)) {
+                addOpt(DemandTsathoggua)
+                addOpt(SleeperEasierSBR)
+                addOpt(SleeperEnergyNexusPreBattle)
+            }
+            if (dsAlt && factions.has(DS))
+                addOpt(DSAlternateSpellbooks)
 
             // [2026-06-15] Apply any pending Random Neutrals selection from the
             // alt faction picker, then clear so it doesn't leak to a later setup.
@@ -5127,7 +5157,12 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         val altPickerFactions = $(GC, CC, BG, YS, OW, SL, WW, TT, AN, DS, BB, TS, FB)
         val altPickerEntries : $[PickerEntry] =
             altPickerFactions./(f => PickerEntry(f, false)).flatMap {
-                // Insert the BB-alt entry immediately after standard BB.
+                // Insert the alt entry immediately after each faction that has
+                // one. Main only carries DS and BB alternate spellbooks, so only
+                // those two get an alt glyph.
+                case e if e.faction == OW => $(e, PickerEntry(OW, true))
+                case e if e.faction == SL => $(e, PickerEntry(SL, true))
+                case e if e.faction == DS => $(e, PickerEntry(DS, true))
                 case e if e.faction == BB => $(e, PickerEntry(BB, true))
                 case e                    => $(e)
             }
@@ -5140,7 +5175,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
         // the desired seating order) is fed to startSetup, which builds the
         // standard Setup object and proceeds to the normal player-order +
         // game-flags + start flow.
-        def altFactionPicker(pn : Int, onContinue : ($[Faction], Boolean) => Unit = (fs, bbAlt) => startSetup(fs, bbAlt)) {
+        def altFactionPicker(pn : Int, onContinue : ($[Faction], Boolean, Boolean, Boolean, Boolean) => Unit = (fs, bbAlt, dsAlt, owAlt, slAlt) => startSetup(fs, bbAlt, dsAlt, owAlt, slAlt)) {
             clear(actionDiv)
             // Inject the alt-picker stylesheet once per page load — keyed by id
             // so subsequent picker entries don't duplicate it.
@@ -5328,6 +5363,30 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                     val player = bbIdx
                     val wantsAlt      = enabledEntries(player).exists(e => e.faction == BB && e.alt)
                     val wantsStandard = enabledEntries(player).exists(e => e.faction == BB && !e.alt)
+                    wantsAlt && !wantsStandard
+                }
+            }
+
+            def owAltForAssignment(picked : $[Faction]) : Boolean = {
+                val idx = picked.indexOf(OW)
+                if (idx < 0) false
+                else enabledEntries(idx).exists(e => e.faction == OW && e.alt) &&
+                     !enabledEntries(idx).exists(e => e.faction == OW && !e.alt)
+            }
+
+            def slAltForAssignment(picked : $[Faction]) : Boolean = {
+                val idx = picked.indexOf(SL)
+                if (idx < 0) false
+                else enabledEntries(idx).exists(e => e.faction == SL && e.alt) &&
+                     !enabledEntries(idx).exists(e => e.faction == SL && !e.alt)
+            }
+
+            def dsAltForAssignment(picked : $[Faction]) : Boolean = {
+                val idx = picked.indexOf(DS)
+                if (idx < 0) false
+                else {
+                    val wantsAlt      = enabledEntries(idx).exists(e => e.faction == DS && e.alt)
+                    val wantsStandard = enabledEntries(idx).exists(e => e.faction == DS && !e.alt)
                     wantsAlt && !wantsStandard
                 }
             }
@@ -5600,6 +5659,9 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                         // seating and reorder the PAIRS so the factions match
                         // it (carrying each player name with its faction).
                         val bbAlt = bbAltForAssignment(picked)
+                        val dsAlt = dsAltForAssignment(picked)
+                        val owAlt = owAltForAssignment(picked)
+                        val slAlt = slAltForAssignment(picked)
                         val pairs : $[(String, Faction)] =
                             picked.zipWithIndex.map { case (f, idx) => (playerNames(idx), f) }
                         val orderedPairs : $[(String, Faction)] =
@@ -5611,11 +5673,11 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                     chosen.map(f => pairs.find(_._2 == f).get)
                                 } else pairs
                             } else pairs
-                        showConfirmation(orderedPairs, bbAlt)
+                        showConfirmation(orderedPairs, bbAlt, dsAlt, owAlt, slAlt)
                 }
             }
 
-            def showConfirmation(ordered : $[(String, Faction)], bbAlt : Boolean) {
+            def showConfirmation(ordered : $[(String, Faction)], bbAlt : Boolean, dsAlt : Boolean = false, owAlt : Boolean = false, slAlt : Boolean = false) {
                 clear(actionDiv)
                 val box = dom.document.createElement("div").asInstanceOf[html.Div]
                 // [2026-05-23] Per user: each player is centered, name above
@@ -5678,7 +5740,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                             setup.options ++= (IGOOs +: picks)
                         }
                     })
-                    onContinue(ordered.map(_._2), bbAlt)
+                    onContinue(ordered.map(_._2), bbAlt, dsAlt, owAlt, slAlt)
                 }
                 val backBtn = dom.document.createElement("button").asInstanceOf[html.Button]
                 backBtn.innerHTML = "Back to picker"
@@ -6001,7 +6063,7 @@ case (DimensionalShamblerUnit, Filth) => DrawItem(null, f, Filth, Alive, $, 53 +
                                                     topMenu()
                                             })
                                         case 1 =>
-                                            altFactionPicker(pn, (fs, bbAlt) => startOnlineSetup(fs, bbAlt))
+                                            altFactionPicker(pn, (fs, bbAlt, dsAlt, owAlt, slAlt) => startOnlineSetup(fs, bbAlt, dsAlt, owAlt, slAlt))
                                         case 2 =>
                                             topMenu()
                                     }
