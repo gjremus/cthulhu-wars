@@ -644,6 +644,8 @@ object XSSExpansion extends Expansion {
             }
             if (picked.any)
                 + KatabaticWindsDoneAction(self, orig, picked)
+            // r_x2d3rp7l: Skip was never offered; also lets the player back out before moving.
+            + KatabaticWindsSkipAction(self, orig)
             asking
 
         case KatabaticWindsToggleAction(self, orig, ur, picked, remaining) =>
@@ -730,22 +732,23 @@ object XSSExpansion extends Expansion {
 
         case DistantThunderclapSkipAction(self) =>
             self.log("Distant Thunderclap".styled(XSS) + ": declined")
-            Force(BattleProceedAction(AssignDefenderPains))
+            Force(BattleProceedAction(TBAutotomyPhase))
 
+        // r_x2d3rp7l: excess Pains are ADDED to XSS's own pain pool (Battle.xssThunderclapPains,
+        // read by assignPains) instead of pre-marking units Pained, which made the opponent's
+        // Pains vanish (already-Pained units could not absorb them). XSS assigns the combined
+        // total through the normal AssignPain prompts, so all its units can pain out at once.
         case DistantThunderclapPainAction(self, remaining, candidates, arena, opponent, opponentHadNonCultist) =>
-            if (remaining <= 0 || candidates.none)
-                Force(BattleProceedAction(AssignDefenderPains))
-            else if (candidates.num == 1)
-                Force(DistantThunderclapPainTargetAction(self, candidates.head, remaining, candidates, arena, opponent, opponentHadNonCultist))
-            else
-                Ask(self).each(candidates)(ur =>
-                    DistantThunderclapPainTargetAction(self, ur, remaining, candidates, arena, opponent, opponentHadNonCultist))
+            game.battle.foreach(_.xssThunderclapPains = remaining)
+            self.log("Distant Thunderclap".styled(XSS) + ":", remaining, "excess Pain" + (remaining != 1).??("s"), "added to own Pains")
+            Force(BattleProceedAction(TBAutotomyPhase))
 
+        // Legacy (pre-r_x2d3rp7l recordings only): direct per-unit assignment.
         case DistantThunderclapPainTargetAction(self, target, remaining, candidates, arena, opponent, opponentHadNonCultist) =>
             val u = game.unit(target)
             u.health = Pained
             self.log("Distant Thunderclap".styled(XSS) + ": excess Pain assigned to", u.uclass.styled(XSS))
-            Force(DistantThunderclapPainAction(self, remaining - 1, candidates.but(target), arena, opponent, opponentHadNonCultist))
+            Force(BattleProceedAction(AssignDefenderPains))
 
         // -- AWAKEN PETRICHOR SBR (§3.12.6) ------------------------------------
         case AwakenedAction(self : XSS.type, Petrichor, _, _) =>

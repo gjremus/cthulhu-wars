@@ -516,6 +516,8 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     var csInsanityKillFoldArmed : Boolean = false
     var csInsanityPainFoldDecided : Boolean = false
     var csInsanityPainFoldArmed : Boolean = false
+    // XSS Distant Thunderclap: excess Pains XSS added to its own pool (r_x2d3rp7l)
+    var xssThunderclapPains : Int = 0
     var csInsanityFoldAtkKills : Int = 0
     var csInsanityFoldDefKills : Int = 0
     var csInsanityFoldAtkPains : Int = 0
@@ -1054,7 +1056,7 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
         // CS Insanity fold: when armed, add this side's own unassignable Pain overflow to its pool
         // so it assigns those reflected Pains to units of its choice (retreat via normal phase).
-        val pains = s.opponent.rolls.count(_ == Pain) + csInsanityPainFoldArmed.??(csInsanityFoldedPains(s))
+        val pains = s.opponent.rolls.count(_ == Pain) + csInsanityPainFoldArmed.??(csInsanityFoldedPains(s)) + (s == XSS).??(xssThunderclapPains)
         val assigned = s.forces./(assignedPains).sum + (s == CS).??(csVermiculitePainsConverted)
         val canAssign = s.forces./(canAssignPains).sum
 
