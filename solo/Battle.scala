@@ -4872,6 +4872,23 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
             // XSSExpansion moved unit to pool; re-enter CloudOfAshesPromptPhase for next
             jump(CloudOfAshesPromptPhase)
 
+        // Sphinx Worshippers (SW) — Kidnap (Post-Battle, from PostBattleKidnapPhase).
+        // SWExpansion performs the kidnap/decline logic and returns UnknownContinue; these
+        // cases resume the battle via proceed(). Phase is still PostBattleKidnapPhase and
+        // SW.oncePerAction already holds Kidnap, so proceed() skips the offer and advances
+        // to retreat. WITHOUT these cases the action returns UnknownContinue, falls through
+        // the expansion dispatch to the core Game handler, and routes here to Battle.perform,
+        // which has no default case — crashing with a scala.MatchError on the SWKidnap action
+        // (the reported crash: SWKidnapAction of a killed enemy monster).
+        case SWKidnapAction(self, _, _) =>
+            proceed()
+
+        case SWKidnapDeclineAction(self, _) =>
+            proceed()
+
+        case SWKidnapSkipAction(self, _) =>
+            proceed()
+
     }
 
     // Faceless Blight (FBE) — Byagoona "Overlord of Death" innate (v17, §1.8): build
