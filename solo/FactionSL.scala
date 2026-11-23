@@ -267,8 +267,15 @@ object SLExpansion extends Expansion {
             if (f.can(CursedSlumber) && game.gates.%(_.glyph == Slumber).none && f.gates.nex.onMap.any)
                 + CursedSlumberSaveMainAction(f)
 
+            // The Invasion's Lord's Shadows are "identical to Gates for all purposes
+            // except where stated" (Lord's Shadows card): a Gate may be BUILT in a
+            // Shadow's Area but may not be MOVED there. `game.gates` does not contain
+            // Shadows (they live in `game.tiLordsShadowRegions`), so Cursed Slumber's
+            // load destinations must exclude them explicitly, exactly as The Beyond
+            // One does (FactionOW.beyondOneDestinations). Reported in game
+            // "Power and Colour" (Entry 625).
             if (f.has(CursedSlumber) && game.gates.%(_.glyph == Slumber).any)
-                areas.nex.%!(game.gates.has).%(f.affords(1)).some.foreach { l =>
+                areas.nex.%!(game.gates.has).diff(game.tiLordsShadowRegions).%(f.affords(1)).some.foreach { l =>
                     + CursedSlumberLoadMainAction(f, l)
                 }
 
