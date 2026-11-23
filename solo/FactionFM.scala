@@ -306,7 +306,12 @@ object FMExpansion extends Expansion {
 
         case AfterPowerGatherAction if game.setup.has(FM) && FM.can(HymnOfSuffering) && !FM.oncePerAction.has(HymnOfSuffering) =>
             FM.oncePerAction :+= HymnOfSuffering
-            val power = game.board.regions.count(r => FM.at(r).exists(_.uclass == Acolyte) && hasScreamingWall(r)) * FMValues.HymnOfSuffering_powerPerArea
+            // Hymn of Suffering: +Power for each Start Area (of a player IN THE GAME)
+            // containing both an FM Acolyte and the Screaming Wall. `game.starting`
+            // holds one start Region per faction in the setup, so an absent faction's
+            // printed start area never counts. Do NOT widen this to all board regions
+            // (regression 43cd3af3) — that paid Power for absent players' start areas.
+            val power = game.starting.values.$.count(r => FM.at(r).exists(_.uclass == Acolyte) && hasScreamingWall(r)) * FMValues.HymnOfSuffering_powerPerArea
             if (power > 0) {
                 FM.power += power
                 FM.log(HymnOfSuffering.styled(FM) + ": gained", power.power)
