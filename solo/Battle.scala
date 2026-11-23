@@ -555,12 +555,18 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
     }
 
     def retreat(u : UnitFigure, r : Region) = {
+        val origin = u.region
+        val wasPained = u.health == Pained
         game.fbSuppressCGForPlacement = true
         u.region = r
         game.fbSuppressCGForPlacement = false
         u.onGate = false
         u.add(Retreated)
         u.health = Alive
+        // Sphinx Worshippers (SW): Kidnapped units follow Queen Nitokris automatically,
+        // including when she is Pained and retreats ("moved/ pained with Queen Nitokris").
+        if (u.faction == SW && u.uclass == QueenNitokris)
+            SWExpansion.followKidnapped(origin, r, wasPained.?("moved/pained to").|("moved to"))
     }
 
     def assignedKills(unit : UnitFigure) : Int =
@@ -1471,6 +1477,13 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
 
                 attacker.forces = attacker.at(arena)
                 defender.forces = defender.at(arena)
+
+                // Sphinx Worshippers (SW): Kidnapped units lie sideways and are exempt from
+                // Battle entirely (including abilities), even though they are SW-controlled.
+                if (factions.has(SW)) {
+                    attacker.forces = attacker.forces.%(u => !game.swKidnapped.has(u.ref))
+                    defender.forces = defender.forces.%(u => !game.swKidnapped.has(u.ref))
+                }
 
                 // Colour Out of Space (CS) Excrescences fight for their CONTROLLER, not their
                 // physical faction. An Effervescent Excrescence is ALWAYS physically a CS unit
@@ -2705,11 +2718,16 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     val swSide = if (attacker == SW) attackers else defenders
                     val enemy = if (attacker == SW) defender else attacker
                     val enemySide = if (attacker == SW) defenders else attackers
-                    val mummiesHere = swSide.forces.%(_.uclass == HybridMummy).num
                     val nitokrisHere = swSide.forces.%(_.uclass == QueenNitokris).any
-                    val candidates = enemySide.forces.%(u => u.uclass.utype == Monster && u.health == Pained)./(_.ref)
-                    if (nitokrisHere && mummiesHere >= SWValues.Kidnap_minMummies && candidates.any) {
+                    // Design v75: the enemy chooses one of their PAINED or KILLED monsters.
+                    // Killed monsters are already in the `eliminated` list (EliminatePhase ran
+                    // before this phase); their figures sit in the enemy's pool.
+                    val painedMonsters = enemySide.forces.%(u => u.uclass.utype == Monster && u.health == Pained)
+                    val killedMonsters = eliminated.%(u => u.faction == enemy && u.uclass.utype == Monster && !u.region.onMap)
+                    val candidates = (painedMonsters ++ killedMonsters)./(_.ref).distinct
+                    if (nitokrisHere && candidates.any) {
                         SW.oncePerAction :+= Kidnap
+                        game.swKidnapCandidates = candidates
                         return Ask(SW).add(SWKidnapOfferAction(SW, enemy)).add(SWKidnapDeclineAction(SW, enemy))
                     }
                 }
@@ -3014,6 +3032,27 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                     if (painedMummies.any) {
                         SW.oncePerAction :+= MummiesCurse
                         return Ask(SW).each(painedMummies)(m => SWMummiesCurseAction(SW, m)).add(SWMummiesCurseSkipAction(SW))
+                    }
+                }
+
+                // Sphinx Worshippers (SW) — Convert the faithless (Post-Battle SB, design v75).
+                // In a battle with Pharoah Kephren: replace one killed/eliminated enemy Cultist
+                // with a Hybrid Mummy from the pool, OR take one killed/eliminated enemy Monster
+                // as an SW-controlled mummified monster.
+                if (factions.has(SW) && SW.can(ConvertTheFaithless) && sides.has(SW) && !SW.oncePerAction.has(ConvertTheFaithless)) {
+                    val swSide = if (attacker == SW) attackers else defenders
+                    val kephrenHere = (swSide.forces ++ eliminated.%(_.faction == SW)).%(_.uclass == PharoahKephren).any
+                    val enemy = if (attacker == SW) defender else attacker
+                    val killedEnemy = eliminated.%(u => u.faction == enemy && !u.region.onMap)
+                    val killedCultists = killedEnemy.%(_.uclass.utype == Cultist)./(_.ref)
+                    val killedMonsters = killedEnemy.%(_.uclass.utype == Monster)./(_.ref)
+                    var opts : $[Action] = $
+                    if (killedCultists.any && SW.pool(HybridMummy).any)
+                        opts :+= SWConvertCultistAction(SW, killedCultists.head)
+                    killedMonsters.foreach(ur => opts :+= SWConvertMonsterAction(SW, ur))
+                    if (kephrenHere && opts.any) {
+                        SW.oncePerAction :+= ConvertTheFaithless
+                        return Ask(SW).list(opts).add(SWConvertSkipAction(SW))
                     }
                 }
 
@@ -3681,19 +3720,32 @@ class Battle(val arena : Region, val attacker : Faction, val defender : Faction,
                 log(HagargRyonis.styled(f), "adds", pains.mkString(" "))
             }
 
-            // Sphinx Worshippers (SW) — Queen Nitokris now rolls (combatBase + current Hunger)
-            // real dice (design change, 2026-10-26; counted in SW.strength instead), so she no
-            // longer adds automatic Pains here.
+            // Sphinx Worshippers (SW) — Queen Nitokris rolls (combatBase + current Hunger)
+            // real dice (counted in SW.strength) AND adds Pains equal to the current Hunger
+            // Track (design v75: resultsCalc "Adds pains = Current Hunger Track").
             if (game.factions.has(SW)) {
-                // Sphinx Worshippers (SW) — Black Sphinx: adds (1 + current Hunger) Pains
-                // automatically (rolls no dice). Elder Thing Mind Control can fully suppress
-                // this (Ceaseless Hunger is an Ongoing ability) — see ability interaction below.
+                val nk = f.forces(QueenNitokris).not(Zeroed)
+                if (nk.any) {
+                    val n = game.swHunger * SWValues.QueenNitokris_painsPerHunger
+                    if (n > 0) {
+                        val pains = n.times(Pain)
+                        f.rolls ++= pains
+                        log(QueenNitokris.styled(f), "adds", pains.mkString(" "))
+                    }
+                }
+
+                // Sphinx Worshippers (SW) — Black Sphinx: adds 1 Kill plus Pains equal to the
+                // current Hunger Track automatically (rolls no dice; design v75 resultsCalc
+                // "Adds 1 kill + pains = current Hunger Track"). Elder Thing Mind Control can
+                // fully suppress this (Ceaseless Hunger is an Ongoing ability).
                 val bs = f.forces(BlackSphinx).not(Zeroed)
                 if (bs.any && !ElderThingMindControl.suppresses(bs.head)) {
-                    val n = SWValues.BlackSphinx_painsBase + game.swHunger
-                    val pains = n.times(Pain)
-                    f.rolls ++= pains
-                    log(BlackSphinx.styled(f), "adds", pains.mkString(" "))
+                    val kills = SWValues.BlackSphinx_kills.times(Kill)
+                    val pains = (game.swHunger * SWValues.BlackSphinx_painsPerHunger).times(Pain)
+                    if (kills.any || pains.any) {
+                        f.rolls ++= kills ++ pains
+                        log(BlackSphinx.styled(f), "adds", (kills ++ pains).mkString(" "))
+                    }
                 }
             }
 

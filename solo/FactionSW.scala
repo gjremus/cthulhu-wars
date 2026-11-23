@@ -33,7 +33,11 @@ case object Kidnap extends FactionSpellbook(SW, "Kidnap")
 case object FuneralProcession extends FactionSpellbook(SW, "Funeral Procession")
 case object BottomlessPit     extends FactionSpellbook(SW, "Bottomless Pit")
 case object AncientEmetic     extends FactionSpellbook(SW, "Ancient Emetic")
+// Legacy object, kept for replaying games played before the 2026-11-19 designer update
+// (v63 -> v75 replaced "Monstrous Forepaw" with "Convert the faithless"). It is no longer
+// in SW's library; only old save/replay action streams can still reference it.
 case object MonstrousForepaw  extends FactionSpellbook(SW, "Monstrous Forepaw")
+case object ConvertTheFaithless extends FactionSpellbook(SW, "Convert the faithless")
 case object Starvation        extends FactionSpellbook(SW, "Starvation")
 // SB6 is ONE dual-power spellbook: Mummies Curse (Post-Battle) / Life from Death (Pre-Battle).
 // Modelled as a single FactionSpellbook (one SBR earns both sides); the two abilities are two
@@ -62,7 +66,7 @@ case object SW extends Faction { f =>
     def style = "sw"
 
     override def abilities = $(Kidnap)
-    override def library   = $(FuneralProcession, BottomlessPit, AncientEmetic, MonstrousForepaw, Starvation, MummiesCurse)
+    override def library   = $(FuneralProcession, BottomlessPit, AncientEmetic, ConvertTheFaithless, Starvation, MummiesCurse)
     override def requirements(options : $[GameOption]) =
         $(KidnapReq, BottomlessPitReq, HungerReq2, HungerReq4, NitokrisReq, AwakenSphinxReq)
 
@@ -84,13 +88,15 @@ case object SW extends Faction { f =>
     // Hybrid Mummy / Pharoah Kephren roll dice (combat read from SWValues, same combatOf
     // idiom as FMExpansion.combatOf — combat is NOT always equal to cost, so it must be read
     // separately rather than reusing .uclass.cost). Queen Nitokris rolls (combatBase + current
-    // Hunger) dice (design change, 2026-10-26: previously rolled NO dice and added that many
-    // automatic Pains instead, same idiom as Hagarg Ryonis — see Battle.scala BattleRollAction,
-    // where her auto-Pain case was removed to match). Black Sphinx still rolls NO dice — he adds
-    // automatic Pains in Battle.scala's BattleRollAction (unchanged, same idiom as Hagarg Ryonis).
+    // Hunger) dice AND adds Pains equal to the current Hunger Track (design change, 2026-11-19:
+    // her resultsCalc became "Adds pains = Current Hunger Track" — see Battle.scala
+    // BattleRollAction). Black Sphinx rolls NO dice — he adds 1 Kill plus Pains equal to the
+    // current Hunger Track in Battle.scala's BattleRollAction. Monsters taken by Convert the
+    // faithless fight for SW at one less combat than they had originally.
     def strength(units : $[UnitFigure], opponent : Faction)(implicit game : Game) : Int = {
         units.%(u => u.uclass == HybridMummy || u.uclass == PharoahKephren).not(Zeroed)./(u => SWExpansion.combatOf(u.uclass)).sum +
         units.%(_.uclass == QueenNitokris).not(Zeroed).num * (SWValues.QueenNitokris_combatBase + game.swHunger) +
+        units.%(u => game.swMummified.has(u.ref)).not(Zeroed)./(u => math.max(0, u.uclass.cost - 1 - neutralStrength($(u), opponent))).sum +
         neutralStrength(units, opponent)
     }
 }
@@ -104,7 +110,7 @@ case class SWAwakenSphinxMainAction(self : Faction) extends OptionFactionAction(
 case class SWAwakenSphinxRegionAction(self : Faction, r : Region) extends BaseFactionAction(("Awaken " + BlackSphinx.name).styled(SW) + " in", implicit g => r + self.iced(r))
 
 // Kidnap (UFA, Post-Battle — two menus: first SW decides whether to kidnap,
-// then if yes, enemy chooses which pained monster gets kidnapped).
+// then if yes, enemy chooses which pained or killed monster gets kidnapped).
 // MENU 1: Ask SW whether to kidnap
 case class SWKidnapOfferAction(self : Faction, enemy : Faction) extends OptionFactionAction("Kidnap a pained enemy monster?") with PowerNeutral {
     def question(implicit game : Game) = Kidnap.styled(SW)
@@ -151,6 +157,22 @@ case class SWStarvationSkipAction(self : Faction) extends OptionFactionAction("S
 }
 
 // Mummies Curse (Post-Battle) / Life from Death (Pre-Battle) — one dual-power SB.
+// Convert the faithless (Post-Battle SB, v75): in a battle with Pharoah Kephren, replace a
+// killed/eliminated enemy Cultist with a Hybrid Mummy from the pool, OR take a killed/
+// eliminated enemy Monster as an SW-controlled "mummified" monster (one less combat, moves
+// for free with Kephren, returned to its owner's pool during Gather Power).
+case class SWConvertCultistAction(self : Faction, victim : UnitRef)
+    extends OptionFactionAction(implicit g => ConvertTheFaithless.styled(SW) + ": replace killed " + g.unit(victim).uclass.styled(g.unit(victim).faction) + " with " + HybridMummy.styled(SW)) with PowerNeutral {
+    def question(implicit game : Game) = ConvertTheFaithless.styled(SW)
+}
+case class SWConvertMonsterAction(self : Faction, victim : UnitRef)
+    extends OptionFactionAction(implicit g => ConvertTheFaithless.styled(SW) + ": mummify killed " + g.unit(victim).uclass.styled(g.unit(victim).faction)) with PowerNeutral {
+    def question(implicit game : Game) = ConvertTheFaithless.styled(SW)
+}
+case class SWConvertSkipAction(self : Faction) extends OptionFactionAction("Skip") with PowerNeutral {
+    def question(implicit game : Game) = ConvertTheFaithless.styled(SW)
+}
+
 case class SWMummiesCurseAction(self : Faction, mummy : UnitRef)
     extends OptionFactionAction(implicit g => "Eliminate " + HybridMummy.styled(SW) + " (+" + SWValues.MummiesCurse_pains + " Pains)") with PowerNeutral {
     def question(implicit game : Game) = "Mummies Curse".styled(SW)
@@ -222,17 +244,81 @@ object SWExpansion extends Expansion {
         }
     }
 
-    // "Ceaseless Hunger" Hunger gain (Black Sphinx awaken/pained/killed/start of Action Phase)
+    // "Ceaseless Hunger" Hunger gain (Black Sphinx awakened / assigned a pain / killed)
     // — fully blocked by an enemy-controlled Elder Thing sharing Black Sphinx's region.
     def gainHunger(n : Int, why : String)(implicit game : Game) {
         if (ceaselessHungerActive) changeHunger(n, why)
     }
 
-    // Regions where Bottomless Pit can be performed: Black Sphinx's own region, plus (once
-    // Monstrous Forepaw is earned) regions adjacent to it.
-    def bottomlessPitRegions(implicit game : Game) : $[Region] = {
-        val sphinxRegions = SW.onMap(BlackSphinx).not(Zeroed)./(_.region).distinct
-        (sphinxRegions ++ (SW.can(MonstrousForepaw).??(sphinxRegions./~(game.board.connected)))).distinct
+    // Regions where Bottomless Pit can be performed: Black Sphinx's own region only
+    // (design v75 removed the "adjacent Areas" extension along with Monstrous Forepaw).
+    def bottomlessPitRegions(implicit game : Game) : $[Region] =
+        SW.onMap(BlackSphinx).not(Zeroed)./(_.region).distinct
+
+    // ── Units controlled by SW taken from another faction ────────────────────
+    // Kidnap (UFA) and Convert the faithless (SB) both move an enemy figure under SW
+    // control. The figure is re-created under SW (UnitFigure.faction is immutable, same
+    // idiom as MindParasite.parasitize) and the original owner/index are tracked so it
+    // can be handed back. Kidnapped units stay with SW; mummified monsters go back to
+    // their owner's pool during Gather Power.
+    def takeControl(u : UnitFigure, to : Region, mummified : Boolean)(implicit game : Game) : UnitFigure = {
+        val owner = u.faction
+        val origIndex = u.index
+        owner.units :-= u
+        val idx = game.swControlledNextIndex
+        game.swControlledNextIndex += 1
+        val fig = new UnitFigure(SW, u.uclass, idx, to)
+        fig.add(Mummified)
+        SW.units :+= fig
+        game.swControlledOriginalFaction += (fig.ref -> owner)
+        game.swControlledOriginalIndex += (fig.ref -> origIndex)
+        if (mummified)
+            game.swMummified :+= fig.ref
+        else
+            game.swKidnapped :+= fig.ref
+        fig
+    }
+
+    // Hand a controlled figure back to its original owner's pool (eliminated or returned).
+    def releaseControlled(u : UnitFigure)(implicit game : Game) {
+        val owner = game.swControlledOriginalFaction.getOrElse(u.ref, u.faction)
+        val origIndex = game.swControlledOriginalIndex.getOrElse(u.ref, u.index)
+        u.faction.units :-= u
+        owner.units :+= new UnitFigure(owner, u.uclass, origIndex, owner.reserve)
+        game.swControlledOriginalFaction -= u.ref
+        game.swControlledOriginalIndex -= u.ref
+        game.swKidnapped = game.swKidnapped.but(u.ref)
+        game.swMummified = game.swMummified.but(u.ref)
+    }
+
+    // Convert the faithless: mummified monsters are returned during Gather Power.
+    def returnMummified()(implicit game : Game) {
+        game.swMummified.foreach { ur =>
+            game.factions./~(_.units.%(_.ref == ur)).foreach { u =>
+                val owner = game.swControlledOriginalFaction.getOrElse(u.ref, u.faction)
+                SW.log(ConvertTheFaithless.styled(SW) + ": returned", u.uclass.styled(owner), "to", owner.full)
+                releaseControlled(u)
+            }
+        }
+        game.swMummified = $
+    }
+
+    // Kidnapped units follow Queen Nitokris automatically (moves and pain retreats), no menu.
+    def followKidnapped(from : Region, to : Region, why : String)(implicit game : Game) {
+        game.swKidnapped./~(ur => game.unitOpt(ur).$).%(u => u.region == from).foreach { u =>
+            u.region = to
+            u.onGate = false
+            SW.log(Kidnap.styled(SW) + ": kidnapped", u.uclass.styled(u.faction), why, to, "with", QueenNitokris.name)
+        }
+    }
+
+    // Convert the faithless: mummified monsters move for free with Pharoah Kephren.
+    def followMummified(from : Region, to : Region)(implicit game : Game) {
+        game.swMummified./~(ur => game.unitOpt(ur).$).%(u => u.region == from).foreach { u =>
+            u.region = to
+            u.onGate = false
+            SW.log(ConvertTheFaithless.styled(SW) + ": mummified", u.uclass.styled(u.faction), "moved to", to, "with", PharoahKephren.name)
+        }
     }
 
     override def triggers()(implicit game : Game) {
@@ -247,13 +333,6 @@ object SWExpansion extends Expansion {
         // StartingRegionAction handler in Game.scala (same as every base faction);
         // no SW-specific setup code is needed.
         // ────────────────────────────────────────────────────────────────
-
-        // ────────────────────────────────────────────────────────────────
-        // START OF ACTION PHASE — Hunger +1 while Black Sphinx is on the map.
-        // ────────────────────────────────────────────────────────────────
-        case ActionPhaseAction if game.setup.has(SW) && SW.onMap(BlackSphinx).any =>
-            gainHunger(SWValues.Hunger_actionPhaseGain, "start of Action Phase, " + BlackSphinx.name + " on map")
-            UnknownContinue
 
         // ────────────────────────────────────────────────────────────────
         // DOOM PHASE — forced Hunger sacrifice, then an optional Starvation step, then the
@@ -484,16 +563,15 @@ object SWExpansion extends Expansion {
         // Menu 2: Enemy chooses which monster (asks enemy, only if SW said yes)
         // ────────────────────────────────────────────────────────────────
         case SWKidnapOfferAction(self, enemy) =>
-            // SW agreed to kidnap. Now ask ENEMY which pained monster to kidnap (Battle.scala's
-            // gate already guarantees candidates.any before this menu is ever offered).
-            val swSide = if (game.battle.get.attacker == SW) game.battle.get.attackers else game.battle.get.defenders
-            val enemySide = if (game.battle.get.attacker == SW) game.battle.get.defenders else game.battle.get.attackers
-            val candidates = enemySide.forces.%(u => u.uclass.utype == Monster && u.health == Pained)./(_.ref)
+            // SW agreed to kidnap. Now ask ENEMY which pained or killed monster to kidnap.
+            // Battle.scala stored the candidate refs when it offered this menu (killed
+            // monsters are no longer in enemySide.forces, so they cannot be recomputed here).
+            val candidates = game.swKidnapCandidates
             if (candidates.num == 1) {
-                self.log(Kidnap.styled(SW) + ": offered to kidnap; only one pained enemy monster, kidnapped automatically")
+                self.log(Kidnap.styled(SW) + ": offered to kidnap; only one pained or killed enemy monster, kidnapped automatically")
                 Force(SWKidnapAction(SW, enemy, candidates.head))
             } else {
-                self.log(Kidnap.styled(SW) + ": offered to kidnap; enemy now chooses which pained monster")
+                self.log(Kidnap.styled(SW) + ": offered to kidnap; enemy now chooses which pained or killed monster")
                 Ask(enemy).each(candidates)(v => SWKidnapAction(SW, enemy, v))
             }
 
@@ -502,13 +580,39 @@ object SWExpansion extends Expansion {
             UnknownContinue
 
         case SWKidnapAction(self, enemy, victim) =>
-            game.swKidnapped :+= victim
-            self.log(Kidnap.styled(SW) + ": kidnapped", game.unit(victim).uclass.styled(enemy), "from", enemy.full)
+            val u = game.unit(victim)
+            val wasKilled = u.health != Pained && !u.region.onMap
+            if (u.health == Pained)
+                u.health = Alive  // the assigned pain is cancelled
+            val arena = game.battle./(_.arena).|(u.region)
+            val controlled = takeControl(u, arena, mummified = false)
+            self.log(Kidnap.styled(SW) + ": kidnapped", u.uclass.styled(enemy), "from", enemy.full + " — its " + (wasKilled.?("kill").|("pain")) + " is cancelled; it now lies sideways under " + SW.name + " control")
             self.satisfy(KidnapReq, KidnapReq.text)
             UnknownContinue
 
         case SWKidnapSkipAction(self, enemy) =>
             self.log(Kidnap.styled(SW) + ": declined")
+            UnknownContinue
+
+        // ────────────────────────────────────────────────────────────────
+        // CONVERT THE FAITHLESS (Post-Battle SB)
+        // ────────────────────────────────────────────────────────────────
+        case SWConvertCultistAction(self, victim) =>
+            val arena = game.battle.get.arena
+            val u = game.unit(victim)
+            self.log(ConvertTheFaithless.styled(SW) + ": replaced killed", u.uclass.styled(u.faction), "with a", HybridMummy.styled(SW), "in", arena)
+            if (self.pool(HybridMummy).any)
+                self.place(HybridMummy, arena)
+            UnknownContinue
+
+        case SWConvertMonsterAction(self, victim) =>
+            val arena = game.battle.get.arena
+            val u = game.unit(victim)
+            val controlled = takeControl(u, arena, mummified = true)
+            self.log(ConvertTheFaithless.styled(SW) + ": mummified", u.uclass.styled(u.faction), "in", arena, "— it fights for", SW.name, "at one less combat until the next Gather Power")
+            UnknownContinue
+
+        case SWConvertSkipAction(self) =>
             UnknownContinue
 
         // ────────────────────────────────────────────────────────────────
@@ -550,14 +654,23 @@ object SWExpansion extends Expansion {
         // ────────────────────────────────────────────────────────────────
 
         // ────────────────────────────────────────────────────────────────
-        // FUNERAL PROCESSION — free carry of Hybrid Mummies / Kidnapped units with Nitokris.
+        // FUNERAL PROCESSION — free carry of Hybrid Mummies with Nitokris.
+        // Kidnapped units follow Nitokris automatically (UFA, no menu); mummified monsters
+        // follow Pharoah Kephren automatically (Convert the faithless).
         // ────────────────────────────────────────────────────────────────
-        case MovedAction(self, u, o, r) if self == SW && u.uclass == QueenNitokris && SW.can(FuneralProcession) =>
-            Force(SWCarryOfferAction(o, r))
+        case MovedAction(self, u, o, r) if self == SW && u.uclass == QueenNitokris =>
+            followKidnapped(o, r, "moved to")
+            if (SW.can(FuneralProcession))
+                Force(SWCarryOfferAction(o, r))
+            else
+                UnknownContinue
+
+        case MovedAction(self, u, o, r) if self == SW && u.uclass == PharoahKephren =>
+            followMummified(o, r)
+            UnknownContinue
 
         case SWCarryOfferAction(o, to) =>
-            val carryable = (SW.at(o).%(_.uclass == HybridMummy).not(Zeroed)./(_.ref) ++
-                game.swKidnapped.%(ref => game.unit(ref).region == o)).distinct
+            val carryable = SW.at(o).%(_.uclass == HybridMummy).not(Zeroed)./(_.ref)
             if (carryable.isEmpty)
                 MoveContinueAction(SW, true)
             else {

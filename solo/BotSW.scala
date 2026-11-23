@@ -106,6 +106,13 @@ class GameEvaluationSW(implicit game : Game) extends GameEvaluation(SW)(game) {
                 case SWKidnapSkipAction(f, _) =>
                     true                   |=> 0     -> "skip kidnap"
 
+                case SWConvertCultistAction(f, _) =>
+                    true                    |=> 400   -> "convert killed cultist to hybrid mummy"
+                case SWConvertMonsterAction(f, _) =>
+                    true                    |=> 500   -> "convert killed monster"
+                case SWConvertSkipAction(f) =>
+                    true                    |=> 0     -> "skip convert the faithless"
+
                 case SWMummiesCurseAction(f, _) =>
                     true                   |=> 300   -> "use mummies curse"
                 case SWMummiesCurseSkipAction(f) =>

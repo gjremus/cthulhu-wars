@@ -3194,9 +3194,14 @@ object Overlays {
         case $("SW", NitokrisReq.text)      => requirement(s"${QueenNitokris.name} is Killed or Eliminated.")
         case $("SW", AwakenSphinxReq.text)  => requirement(s"Awaken ${BlackSphinx.name}.")
 
-        case $("SW", FuneralProcession.name) => spellbook(FuneralProcession.name, "Ongoing", s"${HybridMummy.plural} move for free with ${QueenNitokris.name} (and any Kidnapped Unit moves for free with her too).")
-        case $("SW", BottomlessPit.name)     => spellbook(BottomlessPit.name, s"Action: Cost ${SWValues.BottomlessPit_cost}", s"Any Faction may use this ability so long as the Hunger Track is not at 0. In ${BlackSphinx.name}'s Area (or, with ${MonstrousForepaw.name}, an adjacent Area), Eliminate a Monster you don't own to gain Elder Signs equal to its printed Cost minus ${SWValues.BottomlessPit_costMinus}, and reduce the Hunger Track by ${SWValues.Hunger_bottomlessPitSpend}. ${SW.name} gains ${SWValues.BottomlessPit_swBonusPower} Power and ${SWValues.BottomlessPit_swBonusES} Elder Sign when an opponent uses this ability.")
+        case $("SW", FuneralProcession.name) => spellbook(FuneralProcession.name, "Ongoing", s"${HybridMummy.plural} move for free with ${QueenNitokris.name}.")
+        case $("SW", BottomlessPit.name)     => spellbook(BottomlessPit.name, s"Action: Cost ${SWValues.BottomlessPit_cost}", s"Any Faction may use this ability so long as the Hunger Track is not at 0. In ${BlackSphinx.name}'s Area, Eliminate a Monster you don't own to gain Elder Signs equal to its printed Cost minus ${SWValues.BottomlessPit_costMinus}, and reduce the Hunger Track by the same amount. ${SW.name} gains ${SWValues.BottomlessPit_swBonusPower} Power and ${SWValues.BottomlessPit_swBonusES} Elder Sign when an opponent uses this ability.")
         case $("SW", AncientEmetic.name)     => spellbook(AncientEmetic.name, "Action", s"Advance the Hunger Track by ${SWValues.Hunger_ancientEmeticGain}. Summon a Monster or Terror from your pool, into an Area with your Controlled Gate, for ${SWValues.AncientEmetic_costDiscount} Power less than its printed Cost (minimum 0).")
+        case $("SW", ConvertTheFaithless.name) => spellbook(ConvertTheFaithless.name, "Post-Battle", s"""In a Battle with ${PharoahKephren.name}:
+            <div class=p>- replace one killed or eliminated enemy Cultist with a ${HybridMummy.name}, Or</div>
+            <div class=p>- Convert one killed or eliminated enemy Monster to your mummified Monster.</div>
+            <div class=p>Mummified Monsters move for free with ${PharoahKephren.name}, have one less Combat than they did originally, and are returned to their pool during the Gather Power phase.</div>""")
+        // Legacy pre-v75 spellbook — only reachable from old saved games/replays.
         case $("SW", MonstrousForepaw.name)  => spellbook(MonstrousForepaw.name, "Ongoing", s"${BottomlessPit.name} may be performed in Areas adjacent to ${BlackSphinx.name}.")
         case $("SW", Starvation.name)        => spellbook(Starvation.name, "Doom Phase", s"Rituals of Annihilation may be discounted by the current value of the Hunger Track. If you do: divide the current value of the Hunger Track by ${SWValues.Starvation_esDivisor} (rounded down) and take that many Elder Signs, then advance the Hunger Track by ${SWValues.Hunger_discountedRitualGain}.")
         case $("SW", MummiesCurse.name)      =>
@@ -3214,22 +3219,26 @@ object Overlays {
         def swRef(sb : Spellbook) = swRefAs(sb, sb.name)
         def combat = """<span class="combat-color">Combat</span>"""
         def cost(s : String) = s"""<span class="cost-color">$s</span>"""
+        def calcText(f : Game => String) : String = Overlays.currentGame match {
+            case Some(g) => f(g)
+            case None    => "?"
+        }
         faction(SW, "info:sw-background", Kidnap, "Post-Battle",
-            s"The enemy chooses one of their Pained Monsters. While it shares a region with ${QueenNitokris.name} and ${SWValues.Kidnap_minMummies}+ ${HybridMummy.plural}, it lies sideways: it is exempt from Battle (including abilities), moves for free with ${QueenNitokris.name}, and cannot be moved by any other means.",
+            s"The enemy chooses one of their pained or killed Monsters. Its pain/ kill is cancelled. While it shares a region with ${QueenNitokris.name}, it lays sideways, is controlled by ${SW.name}, is exempted from Battle (including abilities), is moved for free with ${QueenNitokris.name} including pains, and cannot be moved by any other means.",
             $(BottomlessPit, AncientEmetic, Starvation), $(
-            (Acolyte,       SWValues.Acolyte_count, "1", "0", s"""<div class=p>Spellbook: ${swRefAs(MummiesCurse, "Life from Death")}</div>"""),
-            (HybridMummy,   SWValues.HybridMummy_count, "" + SWValues.HybridMummy_cost, "" + SWValues.HybridMummy_combat, s"""<div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(MummiesCurse)}</div>"""),
-            (PharoahKephren, SWValues.PharoahKephren_count, "" + SWValues.PharoahKephren_cost, "" + SWValues.PharoahKephren_combat, ""),
+            (Acolyte,       SWValues.Acolyte_count, "1", "0", ""),
+            (HybridMummy,   SWValues.HybridMummy_count, "" + SWValues.HybridMummy_cost, "" + SWValues.HybridMummy_combat, s"""<div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(AncientEmetic)}, ${swRefAs(MummiesCurse, "Life/ Curse")}, ${swRef(ConvertTheFaithless)}</div>"""),
+            (PharoahKephren, SWValues.PharoahKephren_count, "" + SWValues.PharoahKephren_cost, "" + SWValues.PharoahKephren_combat, s"""<div class=p>Spellbooks: ${swRef(AncientEmetic)}, ${swRef(ConvertTheFaithless)}</div>"""),
             (QueenNitokris, SWValues.QueenNitokris_count, "" + SWValues.QueenNitokris_cost, calc(g => { implicit val gg : Game = g; SWValues.QueenNitokris_combatBase + g.swHunger }), s"""
-                <div class=p>${combat} Rolls dice equal to ${SWValues.QueenNitokris_combatBase} plus the current Hunger Track value.</div>
-                <div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(MonstrousForepaw)}, ${swRef(BottomlessPit)}</div>"""),
-            (BlackSphinx,   SWValues.BlackSphinx_count, calc(g => math.max(0, SWValues.BlackSphinx_awakenBaseCost - g.swHunger)), calc(g => { implicit val gg : Game = g; SWValues.BlackSphinx_painsBase + g.swHunger }), s"""
+                <div class=p>${combat} Rolls dice equal to ${SWValues.QueenNitokris_combatBase} plus the current Hunger Track value, and adds Pains equal to the current Hunger Track value.</div>
+                <div class=p>Spellbooks: ${swRef(FuneralProcession)}, ${swRef(AncientEmetic)}, ${swRef(BottomlessPit)}</div>"""),
+            (BlackSphinx,   SWValues.BlackSphinx_count, calc(g => math.max(0, SWValues.BlackSphinx_awakenBaseCost - g.swHunger)), calcText(g => s"${SWValues.BlackSphinx_kills} Kill + ${g.swHunger * SWValues.BlackSphinx_painsPerHunger} Pains"), s"""
                 <div class=p>${cost(s"How to Awaken ${BlackSphinx.name}:")}</div>
                 <div class=p>${cost("1)")} Pay ${SWValues.BlackSphinx_awakenBaseCost} Power minus the current Hunger Track value.</div>
                 <div class=p>${cost("2)")} ${BlackSphinx.name} appears in the Area with your Controlled Gate. ${BlackSphinx.name} cannot be moved by any means.</div>
-                <div class=p>${combat} Adds Pains equal to ${SWValues.BlackSphinx_painsBase} plus the current Hunger Track value (no dice).</div>
-                <div class=p><b>Ceaseless Hunger (Ongoing):</b> Whenever ${BlackSphinx.name} is Awakened, Pained, and at the start of each Action Phase (while on the map), advance the Hunger Track by ${SWValues.Hunger_awakenGain}. When he is Killed or Eliminated, advance it by ${SWValues.Hunger_killedGain} instead. Lose Doom and/or sacrifice Cultists equal to his Hunger in the Doom Phase. An enemy-controlled Elder Thing sharing his Area fully blocks this ability.</div>
-                <div class=p>Spellbook: ${swRef(MonstrousForepaw)}</div>""")
+                <div class=p>${combat} Adds ${SWValues.BlackSphinx_kills} Kill plus Pains equal to the current Hunger Track value (no dice).</div>
+                <div class=p><b>Ceaseless Hunger (Ongoing):</b> Whenever ${BlackSphinx.name} is Awakened or assigned a pain, advance the Hunger Track by ${SWValues.Hunger_awakenGain}. When he is Killed or Eliminated, advance it by ${SWValues.Hunger_killedGain} instead. Lose Doom and/or sacrifice Cultists equal to his Hunger in the Doom Phase. An enemy-controlled Elder Thing sharing his Area fully blocks this ability.</div>
+                <div class=p>Spellbooks: ${swRef(ConvertTheFaithless)}, ${swRef(BottomlessPit)}</div>""")
         ), setup = true)
     }
 

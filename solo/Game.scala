@@ -239,8 +239,8 @@ abstract class UnitClass(val name : String, val utype : UnitType, val cost : Int
     // moves only via SW's own direct carry (SWCarryAction in FactionSW.scala, which mutates
     // .region directly and so never calls through this gate). Same shared-gate idiom as
     // game.mummifiedCultists / MindParasite above.
-    def canMove(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !MindParasite.isParasitized(u) && !game.swKidnapped.has(u.ref)
-    def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !MindParasite.isParasitized(u) && !game.swKidnapped.has(u.ref)
+    def canMove(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !MindParasite.isParasitized(u) && !game.swKidnapped.has(u.ref) && !game.swMummified.has(u.ref)
+    def canBeMoved(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !MindParasite.isParasitized(u) && !game.swKidnapped.has(u.ref) && !game.swMummified.has(u.ref)
     def canBattle(u : UnitFigure)(implicit game : Game) : Boolean = !game.mummifiedCultists.has(u.ref) && !game.swKidnapped.has(u.ref)
     def canCapture(u : UnitFigure)(implicit game : Game) : Boolean = true
     def canBeCaptured(u : UnitFigure)(implicit game : Game) : Boolean = true
@@ -2469,15 +2469,30 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
     var messengerOfYigAsked : $[Faction] = $
 
     // Sphinx Worshippers (SW) state — all kept on Game so undo/replay rebuild it correctly.
-    // Hunger track (SW's alternate economy). +1 on Black Sphinx awaken/pained/action-phase
-    // start (while on map), +3 on kill/elimination, -1 on Bottomless Pit, +1 on Hunger
+    // Hunger track (SW's alternate economy). +1 on Black Sphinx awaken or assigned a pain,
+    // +3 on kill/elimination, -1 on Bottomless Pit, +1 on Hunger
     // Discounted Ritual (Starvation). Doom phase forces a sacrifice of cultists and/or doom
     // equal to this value (see swHungerSacrificeDoneThisDoom below / FactionSW DoomAction).
     var swHunger : Int = 0
     // Units kidnapped via SW's "Kidnap" UFA: exempt from battle, move only with Nitokris,
-    // cannot be moved by their own owner. Kept as a plain list (not Set) to match the
+    // cannot be moved by any other means. Kept as a plain list (not Set) to match the
     // existing $[UnitRef] convention used by fbCraters / fbWritheUsedUnits etc.
+    // The figures live in SW.units (re-created under SW control, same idiom as MindParasite);
+    // the original owner/index are tracked below so they can be handed back if eliminated.
     var swKidnapped : $[UnitRef] = $
+    // Monsters converted by SW's "Convert the faithless" spellbook: fight for SW at one less
+    // combat, move for free with Pharoah Kephren, returned to their owner's pool during
+    // Gather Power (see SWExpansion.returnMummified).
+    var swMummified : $[UnitRef] = $
+    // Original faction / unit index for every SW-controlled enemy figure (kidnapped OR
+    // mummified), so the figure can be returned to its owner's pool unchanged.
+    var swControlledOriginalFaction : Map[UnitRef, Faction] = Map()
+    var swControlledOriginalIndex : Map[UnitRef, Int] = Map()
+    // Index range for SW-controlled figures (SW's own units use small indices).
+    var swControlledNextIndex : Int = 10000
+    // Kidnap candidate refs captured when Battle.scala offers the post-battle menu (killed
+    // monsters are no longer in the battle forces by then, so they must be stored here).
+    var swKidnapCandidates : $[UnitRef] = $
     // Dual-power SB6 (Mummies Curse / Life from Death) same-battle mutual exclusion: true for
     // the rest of THIS battle once Life from Death is used in pre-battle. Cleared at battle end.
     var swLifeFromDeathUsedThisBattle : Boolean = false
@@ -2718,6 +2733,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         expansions.foreach(_.eliminate(u))
 
         if (u.tag(Eliminated)) {
+            // Sphinx Worshippers: a Kidnapped or Converted enemy figure eliminated while under
+            // SW control goes back to its ORIGINAL owner's pool (not SW's).
+            if (u.faction == SW && swControlledOriginalFaction.contains(u.ref)) {
+                SWExpansion.releaseControlled(u)(this)
+                return
+            }
+
             // Mind Parasite: unparasitize on elimination — return to original faction's reserve
             // BB Fix 80 (ported to HB) — restore using the tracked original UnitClass so an
             // Earth Cat parasitized by Insects from Shaggai returns to BB's pool as an Earth Cat.
@@ -4657,6 +4679,11 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                     return Force(TRBBlackRiderSacrificeCheckAction(TRB, last))
                 }
             }
+
+            // Sphinx Worshippers (SW) — Convert the faithless: mummified enemy monsters are
+            // returned to their original owner's pool during Gather Power.
+            if (setup.has(SW) && swMummified.any)
+                SWExpansion.returnMummified()
 
             factions.foreach { f =>
                 val captured = factions./~(_.at(f.prison))
