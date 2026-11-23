@@ -142,6 +142,18 @@ object OWExpansion extends Expansion {
             OW.unitGate = OW.unitGate.but(u)
     }
 
+    // The Invasion's Lord's Shadows are "identical to Gates for all purposes except
+    // where stated" (Lord's Shadows card). The card says a Gate may be BUILT in an
+    // Area holding a Lord's Shadow, but may NOT be MOVED there by abilities like The
+    // Beyond One — the ability forbids moving the Gate to another Area with a Gate.
+    // `game.gates` does not contain Shadows (they live in `game.tiLordsShadowRegions`),
+    // so they must be excluded from Beyond One's destinations explicitly.
+    // Reported in game "Power and Colour": Sleeper borrowed The Beyond One through
+    // Ancient Sorcery and moved a Gate into The Invasion's starting Shadow in North
+    // Atlantic. (Entry 615.)
+    def beyondOneDestinations(self : Faction)(implicit game : Game) : $[Region] =
+        areas.diff(game.gates).diff(game.tiLordsShadowRegions).%(self.affords(1))
+
     def perform(action : Action, soft : VoidGuard)(implicit game : Game) = action @@ {
         // DOOM
         case DoomAction(f : OW) =>
@@ -201,7 +213,7 @@ object OWExpansion extends Expansion {
 
             // Nov 2026: The Watcher (NeutralFaction, excluded from f.enemies) counts as an enemy
             // GOO disqualifying an origin Gate here too, when on the board.
-            if (f.can(BeyondOne) && game.gates.num < areas.num && areas.diff(game.gates).%(f.affords(1)).any)
+            if (f.can(BeyondOne) && game.gates.num < areas.num && beyondOneDestinations(f).any)
                 game.gates.%(r => f.enemies.%(_.at(r, GOO, ElderGod).any).none && !(game.board.isYuggothMap && TheWatcherFaction.at(r).any)).%(r => f.at(r).%(u => u.uclass.cost >= 3 && (u.canMove || u.uclass == HoundOfTindalos)).any).some.foreach {
                     + BeyondOneMainAction(f, _)
                 }
@@ -269,7 +281,7 @@ object OWExpansion extends Expansion {
             Ask(self).each(l./~(r => self.at(r).%(_.uclass.cost >= 3)).%(u => u.canMove || u.uclass == HoundOfTindalos))(u => BeyondOneUnitAction(self, u.region, u.uclass)).cancel
 
         case BeyondOneUnitAction(self, o, uc) =>
-            Ask(self).each(areas.diff(game.gates).%(self.affords(1)))(r => BeyondOneAction(self, o, uc, r)).cancel
+            Ask(self).each(beyondOneDestinations(self))(r => BeyondOneAction(self, o, uc, r)).cancel
 
         case BeyondOneAction(self, o, uc, r) =>
             self.power -= 1

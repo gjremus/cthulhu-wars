@@ -205,7 +205,7 @@ case class CondensationPlacePickAction(self : Faction, area : Region, first : Un
     override def question(implicit game : Game) = Condensation.styled(XSS) + ": choose the Unit to place in " + area
 }
 case class CondensationAction(self : Faction, area : Region, first : UnitRef, second : UnitRef, uc : UnitClass)
-    extends BaseFactionAction(Condensation.styled(XSS) + ": eliminate two Units and place", uc.styled(XSS) + " in " + area)
+    extends BaseFactionAction(Condensation.styled(XSS) + ": eliminate two Units and place", implicit g => "Eliminate " + g.unit(first).full + " + " + g.unit(second).full + " and place " + uc.styled(XSS) + " in " + area)
 
 // -- KATABATIC WINDS (designer v18 SB1, Ongoing) ------------------------------
 // "When you drop to 0 Power during the Action Phase, Move any number of Twisters
@@ -505,7 +505,6 @@ object XSSExpansion extends Expansion {
                 val label = "Eliminate " + game.unit(first).full + " + " + game.unit(ur).full
                 if (classes.num == 1)
                     CondensationAction(self, area, first, ur, classes.head)
-                        .as(label, "and place", classes.head.styled(XSS))
                 else
                     CondensationPlacePickAction(self, area, first, ur, classes)
                         .as(label)
