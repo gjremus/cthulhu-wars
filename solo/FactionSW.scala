@@ -584,6 +584,19 @@ object SWExpansion extends Expansion {
             val wasKilled = u.health != Pained && !u.region.onMap
             if (u.health == Pained)
                 u.health = Alive  // the assigned pain is cancelled
+            if (wasKilled) {
+                // Cancel the assigned KILL — same idea as Rhan-Tegoth's Eternal, which un-marks a
+                // Killed unit. A killed monster was already run through EliminatePhase (figure reset
+                // to the pool, added to the battle's `eliminated` list). Kidnapping it must pull it
+                // back OUT of that list and clear any Eliminated tag; otherwise the same figure is
+                // both "eliminated" and alive-under-SW, and post-battle cleanup crashes (the reported
+                // bug: kidnapping a unit that was already removed from the board and assigned a kill).
+                u.remove(Eliminated)
+                game.battle.foreach { b =>
+                    b.eliminated = b.eliminated.but(u)
+                    b.eliminatedByDice = b.eliminatedByDice.but(u)
+                }
+            }
             val arena = game.battle./(_.arena).|(u.region)
             val controlled = takeControl(u, arena, mummified = false)
             self.log(Kidnap.styled(SW) + ": kidnapped", u.uclass.styled(enemy), "from", enemy.full + " — its " + (wasKilled.?("kill").|("pain")) + " is cancelled; it now lies sideways under " + SW.name + " control")
