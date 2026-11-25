@@ -2714,7 +2714,13 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
 
     def ritualCost = min(10, ritualTrack(ritualMarker))
 
-    def abandonedGates = gates.%(g => factions.exists(_.gates.has(g)).not)
+    // A built Gate is held if a faction has it. Exception: TI's unit-less default hold on a
+    // Lord's Shadow (the entry triggers() keeps in TI.gates) is the Shadow, not the built
+    // Gate sharing its Area, so it must not hide that Gate from other factions.
+    def builtGateHeld(r : Region) : Boolean = factions.exists(f => f.gates.has(r) &&
+        (f == TI && tiLordsShadowRegions.has(r) && f.at(r).%(_.onGate).none).not)
+
+    def abandonedGates = gates.%(g => builtGateHeld(g).not)
 
     def eliminate(u : UnitFigure) {
         // Dunwich Lavinia "Bride of the Old Ones": while protected (shared an Area with a
@@ -3096,7 +3102,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
             if (r != BB.moon && suppressGainAt.has(r).not) {
                 if (self.abandoned.has(r).not) {
                     if (DS.chaosGateRegions.has(r).not || self == DS) {
-                        if (factions.%(_.gates.has(r)).none) {
+                        if (builtGateHeld(r).not) {
                             val blockers = gateControlBlockers(r)
                             if (r.toString.contains("Mantle")) {
                                 println(s"[GATE CONTROL TRACE] - No faction has gate at Mantle yet, blockers: ${blockers.mkString(", ")}")
@@ -3123,7 +3129,9 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                                     case HighPriest => 3
                                     case _ => 4
                                 }).starting.foreach { u =>
-                                    self.gates :+= r
+                                    // TI may already list r for its Lord's Shadow
+                                    if (self.gates.has(r).not)
+                                        self.gates :+= r
                                     u.onGate = true
 
                                     if (self.oncePerAction.has(UmrAtTawil).not)
@@ -3368,7 +3376,7 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
         // menu option is meaningless for BB and was offered redundantly. Suppress
         // for BB always, regardless of board state.
         if (f == BB) return
-        if (gates.nex.%(r => DS.chaosGateRegions.has(r).not || f == DS).exists(r => factions.%(_.gates.has(r)).none && f.at(r).exists(_.canControlGate))
+        if (gates.nex.%(r => DS.chaosGateRegions.has(r).not || f == DS).exists(r => builtGateHeld(r).not && f.at(r).exists(_.canControlGate))
             || f.gates.nex.exists(r => f.at(r).%(_.canControlGate)./(_.uclass).distinct.diff(f.commands.has(HighPriestGatesSkip).$(HighPriest)).num > 1)
             || (f.commands.has(GateDiplomacyPrompt) && f.gates.nex.any)
             || (f.commands.has(GateDiplomacyOnlyManual) && f.gates.nex.any)
