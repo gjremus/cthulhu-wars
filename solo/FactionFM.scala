@@ -183,6 +183,9 @@ object FMExpansion extends Expansion {
         actualWalls + architectSubstitutes
     }
 
+    // r_m7oDqZy3: a Body Architect (Blueprints in Blood substitute) must not block building the real Wall
+    def hasActualScreamingWall(r : Region)(implicit game : Game) : Boolean = FM.at(r).exists(_.uclass == ScreamingWall)
+
     def hasScreamingWall(r : Region)(implicit game : Game) : Boolean = {
         val hasActualWall = FM.at(r).exists(_.uclass == ScreamingWall)
         val hasArchitectSubstitute = FM.has(BlueprintsInBlood) && FM.at(r).exists(_.uclass == BodyArchitect) && !hasActualWall
@@ -338,13 +341,13 @@ object FMExpansion extends Expansion {
             game.independents(f)
 
             val wallAreas = game.board.regions.filter { r =>
-                f.at(r).cultists.any && f.pool.%(_.uclass == ScreamingWall).any && !hasScreamingWall(r)
+                f.at(r).cultists.any && f.pool.%(_.uclass == ScreamingWall).any && !hasActualScreamingWall(r)
             }
             if (f.power >= FMValues.ScreamingWall_createCost && wallAreas.any)
                 + CreateScreamingWallMainAction(f)
 
             val gateWallAreas = game.board.regions.nex.filter { r =>
-                !game.gates.contains(r) && !hasScreamingWall(r) && f.at(r).%(_.canControlGate).any
+                !game.gates.contains(r) && !hasActualScreamingWall(r) && f.at(r).%(_.canControlGate).any
             }.%(r => f.affords(FMValues.GateWithWall_cost)(r))
             if (f.power >= FMValues.GateWithWall_cost && f.pool.%(_.uclass == ScreamingWall).any && gateWallAreas.any)
                 + CreateGateWithWallMainAction(f, gateWallAreas)
@@ -371,7 +374,7 @@ object FMExpansion extends Expansion {
 
         case CreateScreamingWallMainAction(self) =>
             val wallAreas = game.board.regions.filter { r =>
-                self.at(r).cultists.any && self.pool.%(_.uclass == ScreamingWall).any && !hasScreamingWall(r)
+                self.at(r).cultists.any && self.pool.%(_.uclass == ScreamingWall).any && !hasActualScreamingWall(r)
             }
             Ask(self).each(wallAreas)(r => CreateScreamingWallAction(self, r)).cancel
 
