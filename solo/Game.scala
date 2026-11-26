@@ -4902,12 +4902,18 @@ class Game(val board : Board, val ritualTrack : $[Int], val setup : $[Faction], 
                 // paths and are unaffected. Guarded → never fires in a game without TI.
                 val tiEclipsed = factions.has(TI) && tiEclipseArmed && f != TI &&
                     !(f == SL && SL.has(EternalServitude))
-                val gateDoom = if (tiEclipsed) 0 else valid.num + tiShadowDoom
+                // Eclipse only denies UNIT-Controlled Gates. Yog-Sothoth (unitGate) is itself
+                // the Gate and a Lord's Shadow has no Controlling Unit, so both still pay.
+                // Counted from the unitGate part of `valid` (same suppression/Filth filters).
+                val yogDoom = if (yogDoomSuppressed) 0 else f.unitGate./(_.region).$.%!(r => brood.exists(_.at(r)(Filth).any)).num
+                val unitControlledDoom = valid.num - yogDoom
+                val eclipseDenied = if (tiEclipsed) unitControlledDoom else 0
+                val gateDoom = valid.num + tiShadowDoom - eclipseDenied
 
                 f.doom += gateDoom
-                if (tiEclipsed && (valid.num + tiShadowDoom) > 0)
+                if (eclipseDenied > 0)
                     f.log("gained no Doom from Unit-Controlled Gates —", Eclipse.styled(TI))
-                else
+                if (eclipseDenied == 0 || gateDoom > 0)
                     f.log("got", gateDoom.doom)
 
                 if (f.loyaltyCards.has(GnorriCard)) {
