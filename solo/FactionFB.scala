@@ -967,6 +967,7 @@ object FBExpansion extends Expansion {
             // IP intentionally does NOT discount this — see class docstring above.
             self.power -= cost
             val startArea = game.starting(FB)
+            self.payTax(startArea)  // Ice Age tax: awaken ending in an iced Area costs extra (matches generic AwakenAction)
             self.place(Ghatanothoa, startArea)
             game.fbGhatnothoaAwakenings += 1
             self.log("awakened", Ghatanothoa.styled(FB), "in", startArea, "for", cost.power)
