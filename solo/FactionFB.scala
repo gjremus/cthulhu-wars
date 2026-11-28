@@ -1670,7 +1670,7 @@ object FBExpansion extends Expansion {
 
         // ── CALL OF THE FAITHFUL ──
         case FBCallOfTheFaithfulMainAction(self) =>
-            val eligible = areas.%(r => (self.at(r, Ghatanothoa).any || self.at(r, RevenantOfKnaa).any) && self.at(r, Acolyte).none)
+            val eligible = areas.%(r => (self.at(r, Ghatanothoa).any || self.at(r, RevenantOfKnaa).any) && self.at(r, Acolyte).none && self.affords(0)(r))
             Ask(self).each(eligible)(r => FBCallOfTheFaithfulAction(self, r)).cancel
 
         case FBCallOfTheFaithfulAction(self, r) =>
@@ -1679,6 +1679,7 @@ object FBExpansion extends Expansion {
             // re-renders and multiple acolytes are at r).
             val placed = self.pool(Acolyte).first
             self.place(Acolyte, r)
+            self.payTax(r)  // Ice Age: placing into an iced Area costs the extra Power, even for this free action
             // If the region has a gate and no faction has a keeper on it, the
             // placed Acolyte should IMMEDIATELY claim the gate — matching the
             // hand-play rule "placing a cultist on a free gate claims that
